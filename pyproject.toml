@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "groundinsight"
+version = "0.1.0"
+description = "Simulation for grounding systems of electrical power grids"
+authors = ["Christian Ehlert <christian.ehlert@mailbox.org>"]
+license = "MIT"
+readme = "README.md"
+packages = [
+    { include = "groundinsight", from = "src" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pytest = "^8.3.2"
+pytest-cov = "^5.0.0"
+black = "^24.8.0"
+mypy = "^1.11.1"
+pydantic = "^2.8.2"
+numpy = "^2.1.0"
+sqlalchemy = "^2.0.32"
+polars = "^1.5.0"
+sympy = "^1.13.2"
+matplotlib = "^3.9.2"
+scipy = "^1.14.1"
+licensecheck = "^2024.3"
+
+
+[tool.poetry.group.dev.dependencies]
+alembic = "^1.13.2"
+sqlalchemy-stubs = "^0.4"
+ipykernel = "^6.29.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
