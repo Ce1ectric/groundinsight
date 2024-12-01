@@ -24,7 +24,7 @@ def test_network_assistant_creation():
     branch_type = BranchType(
         name="TestBranchType",
         description="A test branch type",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l"
     )
@@ -49,7 +49,7 @@ def test_bus_and_branch_creation():
 
     branch_type = BranchType(
         name="TestBranchType",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
     )
@@ -103,7 +103,7 @@ def test_path_definition():
 
     branch_type = BranchType(
         name="TestBranchType",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
     )
@@ -140,7 +140,7 @@ def test_fault_activation_and_simulation():
 
     branch_type = BranchType(
         name="TestBranchType",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
     )
@@ -184,7 +184,7 @@ def test_reduction_factor_between_0_1():
 
     branch_type = BranchType(
         name="TestBranchType",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
     )
@@ -238,7 +238,7 @@ def test_plot_bus_voltages_all_parameter():
 
     branch_type = BranchType(
         name="TestBranchType",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
     )
@@ -285,7 +285,7 @@ def test_plot_bus_voltages_default_parameter():
 
     branch_type = BranchType(
         name="TestBranchType",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
     )
@@ -328,7 +328,7 @@ def test_plot_branch_currents_default_parameter():
 
     branch_type = BranchType(
         name="TestBranchType",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
     )
@@ -371,7 +371,7 @@ def test_plot_branch_currents_all_parameter():
 
     branch_type = BranchType(
         name="TestBranchType",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
     )
@@ -415,7 +415,7 @@ def test_plot_bus_currents_default_parameter():
 
     branch_type = BranchType(
         name="TestBranchType",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
     )
@@ -458,7 +458,7 @@ def test_plot_bus_currents_all_parameter():
 
     branch_type = BranchType(
         name="TestBranchType",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
     )

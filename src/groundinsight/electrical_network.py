@@ -159,7 +159,7 @@ class ElectricalNetwork:
                 from_idx = self.bus_indices[branch.from_bus]
                 to_idx = self.bus_indices[branch.to_bus]
                 impedance = branch.self_impedance.get(freq)
-                if impedance and branch.type.carry_current:
+                if impedance and branch.type.grounding_conductor:
                     admittance = 1 / complex(impedance.real, impedance.imag)
                     # Off-diagonal elements
                     Y_matrix[from_idx, to_idx] -= admittance
@@ -350,7 +350,7 @@ class ElectricalNetwork:
                         # Use the parallel_coefficient
                         coefficient = branch.parallel_coefficient
                         # check if the branch can carry current
-                        if branch.type.carry_current:
+                        if branch.type.grounding_conductor:
                             # Calculate mutual current
                             i_mut = (
                                 sign
@@ -456,7 +456,7 @@ class ElectricalNetwork:
                 from_voltage = self.u_vectors[freq][from_idx]
                 to_voltage = self.u_vectors[freq][to_idx]
                 impedance = branch.self_impedance.get(freq)
-                if impedance and branch.type.carry_current:
+                if impedance and branch.type.grounding_conductor:
                     Z_self_complex = complex(impedance.real, impedance.imag)
                     Y_self_complex = 1 / Z_self_complex
                     delta_voltage = to_voltage - from_voltage

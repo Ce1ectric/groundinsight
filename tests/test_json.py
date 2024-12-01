@@ -24,7 +24,7 @@ def test_save_network_successful(tmp_path):
 
     branch_type = gi.BranchType(
         name="TestBranchType",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
     )

@@ -121,7 +121,7 @@ def close_dbsession():
         print("No database session to close.")
 
 
-def save_bustype(bus_type: BusType, overwrite: bool = False):
+def save_bustype_to_db(bus_type: BusType, overwrite: bool = False):
     """
     Save a BusType to the database.
 
@@ -153,7 +153,7 @@ def save_bustype(bus_type: BusType, overwrite: bool = False):
     db_session.close()
 
 
-def load_bustypes() -> Dict[str, BusType]:
+def load_bustypes_from_db() -> Dict[str, BusType]:
     """
     Load all BusTypes from the database.
 
@@ -176,7 +176,7 @@ def load_bustypes() -> Dict[str, BusType]:
     return bus_types
 
 
-def save_branchtype(branch_type: BranchType, overwrite: bool = False):
+def save_branchtype_to_db(branch_type: BranchType, overwrite: bool = False):
     """
     Save a BranchType to the database.
 
@@ -208,7 +208,7 @@ def save_branchtype(branch_type: BranchType, overwrite: bool = False):
     db_session.close()
 
 
-def load_branchtypes() -> Dict[str, BranchType]:
+def load_branchtypes_from_db() -> Dict[str, BranchType]:
     """
     Load all BranchTypes from the database.
 
@@ -231,7 +231,7 @@ def load_branchtypes() -> Dict[str, BranchType]:
     return branch_types
 
 
-def save_network(network: Network, overwrite: bool = False):
+def save_network_to_db(network: Network, overwrite: bool = False):
     """
     Save a Network to the database.
 
@@ -263,7 +263,7 @@ def save_network(network: Network, overwrite: bool = False):
     db_session.close()
 
 
-def load_network(name: str) -> Network:
+def load_network_from_db(name: str) -> Network:
     """
     Load a Network from the database by name.
 

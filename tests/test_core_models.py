@@ -199,7 +199,7 @@ def test_branchtype_initialization_valid():
     branch_type = BranchType(
         name="Type A",
         description="A high voltage branch type",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="1+roh+f",
         mutual_impedance_formula="1+roh+f",
     )
@@ -207,7 +207,7 @@ def test_branchtype_initialization_valid():
     assert branch_type.description == "A high voltage branch type"
     assert branch_type.self_impedance_formula == "1+roh+f"
     assert branch_type.mutual_impedance_formula == "1+roh+f"
-    assert branch_type.carry_current == True
+    assert branch_type.grounding_conductor == True
 
 def test_branchtype_initialization_missing_optional():
     """
@@ -215,14 +215,14 @@ def test_branchtype_initialization_missing_optional():
     """
     branch_type = BranchType(
         name="Type B",
-        carry_current=False,
+        grounding_conductor=False,
         self_impedance_formula="1+2",
         mutual_impedance_formula="1+2",
     )
     assert branch_type.description is None
     assert branch_type.self_impedance_formula == "1+2"
     assert branch_type.mutual_impedance_formula == "1+2"
-    assert branch_type.carry_current == False
+    assert branch_type.grounding_conductor == False
 
 def test_branchtype_initialization_invalid():
     """
@@ -233,7 +233,7 @@ def test_branchtype_initialization_invalid():
         BranchType(
             name="Type D",
             description="A low voltage branch type",
-            carry_current=True,
+            grounding_conductor=True,
             self_impedance_formula="1+2+",
             mutual_impedance_formula="1+2",
         )
@@ -243,17 +243,17 @@ def test_branchtype_initialization_invalid():
         BranchType(
             name=1,
             description="A low voltage branch type",
-            carry_current=True,
+            grounding_conductor=True,
             self_impedance_formula="1+2",
             mutual_impedance_formula="1+2",
         )
 
-    #invalid carry_current
+    #invalid grounding_conductor
     with pytest.raises(ValueError):
         BranchType(
             name="Type D",
             description="A low voltage branch type",
-            carry_current="ABC",
+            grounding_conductor="ABC",
             self_impedance_formula="1+2",
             mutual_impedance_formula="1+2",
         )
@@ -366,7 +366,7 @@ def test_branch_initialization_valid():
     branch_type = BranchType(
         name="Type A",
         description="A high voltage branch type",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="1+roh+f",
         mutual_impedance_formula="1+roh+f",
     )
@@ -400,7 +400,7 @@ def test_branch_initialization_missing_optional():
     branch_type = BranchType(
         name="Type A",
         description="A high voltage branch type",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="1+roh+f",
         mutual_impedance_formula="1+roh+f",
     )
@@ -436,7 +436,7 @@ def test_branch_initialization_invalid():
         branch_type = BranchType(
             name="Type A",
             description="A high voltage branch type",
-            carry_current=True,
+            grounding_conductor=True,
             self_impedance_formula="1+roh+f",
             mutual_impedance_formula="1+roh+f",
         )
@@ -457,7 +457,7 @@ def test_branch_initialization_invalid():
         branch_type = BranchType(
             name="Type A",
             description="A high voltage branch type",
-            carry_current=True,
+            grounding_conductor=True,
             self_impedance_formula="1+roh+f",
             mutual_impedance_formula="1+roh+f",
         )
@@ -478,7 +478,7 @@ def test_branch_initialization_invalid():
         branch_type = BranchType(
             name="Type A",
             description="A high voltage branch type",
-            carry_current=True,
+            grounding_conductor=True,
             self_impedance_formula="1+roh+f",
             mutual_impedance_formula="1+roh+f",
         )
@@ -499,7 +499,7 @@ def test_branch_initialization_invalid():
         branch_type = BranchType(
             name="Type A",
             description="A high voltage branch type",
-            carry_current=True,
+            grounding_conductor=True,
             self_impedance_formula="1+roh+f",
             mutual_impedance_formula="1+roh+f",
         )
@@ -1044,7 +1044,7 @@ def test_path_initialization_valid():
             type=BranchType(
                 name="Type A",
                 description="A high voltage branch type",
-                carry_current=True,
+                grounding_conductor=True,
                 self_impedance_formula="1+roh+f",
                 mutual_impedance_formula="1+roh+f",
             ),
@@ -1086,7 +1086,7 @@ def test_path_initialization_missing_optional():
             type=BranchType(
                 name="Type A",
                 description="A high voltage branch type",
-                carry_current=True,
+                grounding_conductor=True,
                 self_impedance_formula="1+roh+f",
                 mutual_impedance_formula="1+roh+f",
             ),
@@ -1131,7 +1131,7 @@ def test_path_initialization_invalid():
                 type=BranchType(
                     name="Type A",
                     description="A high voltage branch type",
-                    carry_current=True,
+                    grounding_conductor=True,
                     self_impedance_formula="1+roh+f",
                     mutual_impedance_formula="1+roh+f",
                 ),
@@ -1148,7 +1148,7 @@ def test_path_initialization_invalid():
                 type=BranchType(
                     name="Type A",
                     description="A high voltage branch type",
-                    carry_current=True,
+                    grounding_conductor=True,
                     self_impedance_formula="1+roh+f",
                     mutual_impedance_formula="1+roh+f",
                 ),
@@ -1175,7 +1175,7 @@ def test_path_initialization_invalid():
                 type=BranchType(
                     name="Type A",
                     description="A high voltage branch type",
-                    carry_current=True,
+                    grounding_conductor=True,
                     self_impedance_formula="1+roh+f",
                     mutual_impedance_formula="1+roh+f",
                 ),
@@ -1202,7 +1202,7 @@ def test_path_initialization_invalid():
                 type=BranchType(
                     name="Type A",
                     description="A high voltage branch type",
-                    carry_current=True,
+                    grounding_conductor=True,
                     self_impedance_formula="1+roh+f",
                     mutual_impedance_formula="1+roh+f",
                 ),
@@ -1229,7 +1229,7 @@ def test_path_initialization_invalid():
                 type=BranchType(
                     name="Type A",
                     description="A high voltage branch type",
-                    carry_current=True,
+                    grounding_conductor=True,
                     self_impedance_formula="1+roh+f",
                     mutual_impedance_formula="1+roh+f",
                 ),

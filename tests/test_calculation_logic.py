@@ -26,7 +26,7 @@ def test_reduction_factor_for_bus7_fault7():
     branch_type = BranchType(
         name="TestBranchType",
         description="A test branch type",
-        carry_current=True,
+        grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l"
     )
@@ -34,7 +34,7 @@ def test_reduction_factor_for_bus7_fault7():
     branch_ohl = BranchType(
         name="OHLine",
         description="An overhead line",
-        carry_current=False,
+        grounding_conductor=False,
         self_impedance_formula="NaN",
         mutual_impedance_formula="NaN"
     )

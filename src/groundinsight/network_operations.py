@@ -31,7 +31,7 @@ def create_network(name: str, frequencies: List, description: str = None) -> Net
         >>> from groundinsight.models.core_models import BusType, BranchType
         >>> import groundinsight as gi
         >>> bus_type = BusType(name="StandardBus", description="A standard bus type", system_type="Grounded", voltage_level=110.0, impedance_formula="1 + j * f / 50")
-        >>> branch_type = BranchType(name="StandardBranch", description="A standard branch type", carry_current=True, self_impedance_formula="(1 + j * f / 50)*l", mutual_impedance_formula="(0.5 + j * f / 100)*l")
+        >>> branch_type = BranchType(name="StandardBranch", description="A standard branch type", grounding_conductor=True, self_impedance_formula="(1 + j * f / 50)*l", mutual_impedance_formula="(0.5 + j * f / 100)*l")
         >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
     """
     return Network(name=name, description=description, frequencies=frequencies)
@@ -125,7 +125,7 @@ def create_branch(
     Examples:
         >>> from groundinsight.models.core_models import BranchType
         >>> import groundinsight as gi
-        >>> branch_type = BranchType(name="StandardBranch", description="A standard branch type", carry_current=True, self_impedance_formula="(1 + j * f / 50)*l", mutual_impedance_formula="(0.5 + j * f / 100)*l")
+        >>> branch_type = BranchType(name="StandardBranch", description="A standard branch type", grounding_conductor=True, self_impedance_formula="(1 + j * f / 50)*l", mutual_impedance_formula="(0.5 + j * f / 100)*l")
         >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
         >>> bus1 = gi.create_bus(name="Bus1", type=bus_type, specific_earth_resistance=100.0, network=network)
         >>> bus2 = gi.create_bus(name="Bus2", type=bus_type, specific_earth_resistance=100.0, network=network)
@@ -342,6 +342,10 @@ def run_fault(network: Network, fault_name: str):
     # Set the active fault
     network.set_active_fault(fault_name)
 
+    # Check if there are paths in the network if not run create_path
+    if network.paths == {}:
+        create_paths(network)
+
     # build the electrical network from the physical network
     build_electrical_network(network)
 
@@ -398,7 +402,7 @@ def create_network_assistant(
         >>> from groundinsight.models.core_models import BusType, BranchType
         >>> import groundinsight as gi
         >>> bus_type = BusType(name="StandardBus", description="A standard bus type", system_type="Grounded", voltage_level=230.0, impedance_formula="1 + j * f / 50")
-        >>> branch_type = BranchType(name="StandardBranch", description="A standard branch type", carry_current=True, self_impedance_formula="(1 + j * f / 50)*l", mutual_impedance_formula="(0.5 + j * f / 100)*l")
+        >>> branch_type = BranchType(name="StandardBranch", description="A standard branch type", grounding_conductor=True, self_impedance_formula="(1 + j * f / 50)*l", mutual_impedance_formula="(0.5 + j * f / 100)*l")
         >>> branch_lengths = [1.0 for _ in range(29)]
         >>> network = gi.create_network_assistant(name="Network2", frequencies=[50, 250], number_buses=30, bus_type=bus_type, branch_type=branch_type, branch_length=branch_lengths, specific_earth_resistance=100.0, description="A large test network")
         >>> print(network.name)

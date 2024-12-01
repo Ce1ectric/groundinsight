@@ -163,7 +163,7 @@ class BranchTypeDB(Base):
 
     name = Column(String, primary_key=True)
     description = Column(Text, nullable=True)
-    carry_current = Column(Boolean, nullable=False)
+    grounding_conductor = Column(Boolean, nullable=False)
     self_impedance_formula = Column(Text, nullable=False)
     mutual_impedance_formula = Column(Text, nullable=False)
 
@@ -171,7 +171,7 @@ class BranchTypeDB(Base):
         return BranchType(
             name=self.name,
             description=self.description,
-            carry_current=self.carry_current,
+            grounding_conductor=self.grounding_conductor,
             self_impedance_formula=self.self_impedance_formula,
             mutual_impedance_formula=self.mutual_impedance_formula,
         )
@@ -181,7 +181,7 @@ class BranchTypeDB(Base):
         return cls(
             name=branch_type.name,
             description=branch_type.description,
-            carry_current=branch_type.carry_current,
+            grounding_conductor=branch_type.grounding_conductor,
             self_impedance_formula=branch_type.self_impedance_formula,
             mutual_impedance_formula=branch_type.mutual_impedance_formula,
         )

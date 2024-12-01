@@ -263,14 +263,14 @@ class BranchType(BaseModel):
     Attributes:
         name (str): The name of the branch type.
         description (Optional[str]): A brief description of the branch type.
-        carry_current (bool): Indicates whether the branch carries current.
+        grounding_conductor (bool): Indicates whether the branch has a grounding wire or cable shield.
         self_impedance_formula (str): The formula used to calculate self-impedance.
         mutual_impedance_formula (str): The formula used to calculate mutual impedance.
     """
 
     name: str
     description: Optional[str] = None
-    carry_current: bool
+    grounding_conductor: bool
     self_impedance_formula: str
     mutual_impedance_formula: str
 
@@ -279,7 +279,7 @@ class BranchType(BaseModel):
         return validate_impedance_formula_value(value)
 
     def __str__(self):
-        return f"BranchType(name={self.name}, carry_current={self.carry_current})"
+        return f"BranchType(name={self.name}, grounding_conductor={self.grounding_conductor})"
 
 
 class Branch(BaseModel):

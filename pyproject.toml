@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Simulation for grounding systems of electrical power grids"
 authors = ["Christian Ehlert <christian.ehlert@mailbox.org>"]
 license = "MIT"
+repository = "https://github.com/Ce1ectric/groundinsight"
 readme = "README.md"
 packages = [
     { include = "groundinsight", from = "src" }
