@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "groundinsight"
-version = "0.1.0"
+version = "0.1.1"
 description = "Simulation for grounding systems of electrical power grids"
 authors = ["Christian Ehlert <christian.ehlert@mailbox.org>"]
 license = "MIT"
