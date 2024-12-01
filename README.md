@@ -293,6 +293,8 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 Please make sure to update tests as appropriate.
 
+Join me on GitHub [groundinsight](https://github.com/Ce1ectric/groundinsight).
+
 # License
 **MIT License** - see the license file for details. 
 
