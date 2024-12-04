@@ -36,15 +36,11 @@ def compute_impedance(
         # Create a dictionary with NaN values for all frequencies
         return {freq: ComplexNumber(real=np.inf, imag=np.inf) for freq in frequencies}
 
+    # Define symbols
+    f = sp.symbols("f")
+    additional_symbols = list(params.keys())
+    symbols_dict = {symbol: sp.symbols(symbol) for symbol in additional_symbols}
     try:
-        # Define all necessary symbols
-        # Start with frequency 'f' and include all keys from params
-        symbols = ["f"] + list(params.keys())
-        sympy_symbols = sp.symbols(' '.join(symbols))
-        
-        # Create a symbols dictionary for substitution if needed
-        symbols_dict = {str(s): s for s in sympy_symbols}
-        
         # Parse the formula string into a SymPy expression
         expr = sp.sympify(formula_str)
 
@@ -52,42 +48,29 @@ def compute_impedance(
         expr = expr.subs({"j": 1j})
 
         # Compile the function with parameters using lambdify
-        # Use 'numpy' modules to ensure compatibility with numpy arrays
+        # The variables are 'f' and any additional parameters
         compiled_func = sp.lambdify(
-            sympy_symbols,
+            [f] + [symbols_dict[symbol] for symbol in additional_symbols],
             expr,
-            modules=["numpy"]
+            modules="numpy",
         )
 
         # Prepare parameter values in the order of symbols
-        param_values = [1.0] * len(frequencies)  # Placeholder for 'f'
-        param_values = frequencies  # 'f' is the first symbol
+        param_values = [params[symbol] for symbol in additional_symbols]
 
-        # Extract additional parameter values
-        additional_params = [params[symbol] for symbol in symbols[1:]]  # Exclude 'f'
+        # Convert frequencies to a NumPy array for vectorized computation
+        freq_array = np.array(frequencies, dtype=float)
 
-        # Combine frequency array with additional parameters
-        # Broadcasting additional_params to match frequencies
-        # This ensures that parameters are constants across frequencies
-        # Create a list where each element is (f_i, param1, param2, ...)
+        # Evaluate the impedance function over all frequencies
+        impedance_values = compiled_func(freq_array, *param_values)
+
+        # Ensure impedance_values is a NumPy array for consistent iteration
+        impedance_values = np.array(impedance_values, dtype=complex)
+
+        # Store the results in a dictionary
         impedance_dict = {}
-        for freq in frequencies:
-            try:
-                # Evaluate the impedance for the current frequency
-                impedance = compiled_func(freq, *[params[key] for key in symbols[1:]])
-
-                # Check if the impedance is a number (constant) or an array
-                if np.isscalar(impedance):
-                    # If impedance is scalar, assign the constant value
-                    complex_impedance = ComplexNumber(real=impedance.real, imag=impedance.imag)
-                else:
-                    # If impedance is array-like, handle accordingly
-                    complex_impedance = ComplexNumber(real=impedance.real, imag=impedance.imag)
-
-                impedance_dict[freq] = complex_impedance
-
-            except Exception as e:
-                raise ValueError(f"Error computing impedance at frequency {freq} Hz: {e}")
+        for freq, imp in zip(frequencies, impedance_values):
+            impedance_dict[freq] = ComplexNumber(real=imp.real, imag=imp.imag)
 
         return impedance_dict
 
