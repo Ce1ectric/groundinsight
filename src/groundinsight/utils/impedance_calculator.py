@@ -44,7 +44,6 @@ def compute_impedance(
         
         # Create a symbols dictionary for substitution if needed
         symbols_dict = {str(s): s for s in sympy_symbols}
-        
         # Parse the formula string into a SymPy expression
         expr = sp.sympify(formula_str)
 

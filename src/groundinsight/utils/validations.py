@@ -1,7 +1,6 @@
 from sympy import sympify, I, symbols
 import ast
 
-
 def validate_impedance_formula_value(value: str) -> str:
     """
     Validate an impedance formula by attempting to parse it using SymPy.
