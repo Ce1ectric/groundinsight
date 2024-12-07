@@ -58,16 +58,6 @@ def compute_impedance(
             modules=["numpy"]
         )
 
-        # Prepare parameter values in the order of symbols
-        param_values = [1.0] * len(frequencies)  # Placeholder for 'f'
-        param_values = frequencies  # 'f' is the first symbol
-
-        # Extract additional parameter values
-        additional_params = [params[symbol] for symbol in symbols[1:]]  # Exclude 'f'
-
-        # Combine frequency array with additional parameters
-        # Broadcasting additional_params to match frequencies
-        # This ensures that parameters are constants across frequencies
         # Create a list where each element is (f_i, param1, param2, ...)
         impedance_dict = {}
         for freq in frequencies:

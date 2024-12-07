@@ -14,19 +14,20 @@ import matplotlib.pyplot as plt
 from typing import List, Dict, Optional
 from .models.core_models import Result, ComplexNumber
 
-
 def plot_bus_voltages(
     result: Result,
     frequencies: Optional[List[float]] = None,
     figsize: tuple = (12, 6),
     title: str = "UEPR vs Bus Name",
+    yscale: str = "linear",
     show=False,
 ):
     """
     Plot the UEPR (Earth Potential Rise) for each bus.
 
-    This function generates a plot of UEPR values for each bus in the network. It can plot
+    This function generates a bar plot of UEPR values for each bus in the network. It can plot
     either frequency-dependent UEPR magnitudes or RMS UEPR values based on the provided parameters.
+    Additionally, the y-axis scale can be linear or logarithmic.
 
     Args:
         result (Result): The `Result` object containing the calculation results.
@@ -37,6 +38,8 @@ def plot_bus_voltages(
             The size of the figure in inches as a (width, height) tuple. Defaults to `(12, 6)`.
         title (str, optional):
             The title of the plot. Defaults to `"UEPR vs Bus Name"`.
+        yscale (str, optional):
+            The scale for the y-axis. Can be `"linear"` or `"log"`. Defaults to `"linear"`.
         show (bool, optional):
             Whether to display the plot immediately. If `False`, the plot is returned for further manipulation.
             Defaults to `False`.
@@ -49,12 +52,10 @@ def plot_bus_voltages(
 
     Examples:
         >>> import groundinsight as gi
-        >>> # Assuming 'result' is a Result object obtained from network calculations
-        >>> fig = gi.plot_bus_voltages(result=result, frequencies=[50, 60], title="UEPR at 50Hz and 60Hz")
+        >>> fig = gi.plot_bus_voltages(result=result, frequencies=[50, 60], yscale="log")
         >>> fig.savefig("uepr_plot.png")
 
-        >>> # Plotting RMS UEPR values
-        >>> fig = gi.plot_bus_voltages(result=result, title="RMS UEPR across Buses")
+        >>> fig = gi.plot_bus_voltages(result=result, yscale="linear", title="RMS UEPR across Buses")
         >>> fig.show()
     """
     # Extract bus names
@@ -79,42 +80,38 @@ def plot_bus_voltages(
 
         # Plotting
         fig = plt.figure(figsize=figsize)
-        for freq, uepr_values in uepr_data.items():
-            plt.plot(bus_names, uepr_values, marker="o", label=f"{freq} Hz")
+        bar_width = 0.8 / len(frequencies)
+        indices = range(len(bus_names))
+        for i, (freq, uepr_values) in enumerate(uepr_data.items()):
+            positions = [x + i * bar_width for x in indices]
+            plt.bar(positions, uepr_values, width=bar_width, label=f"{freq} Hz")
 
-        plt.xlabel("Bus Name")
-        plt.ylabel("UEPR (V)")
-        plt.title(title)
-        plt.xticks(rotation=45, ha="right")
-        plt.legend(title="Frequency")
-        plt.grid(True)
-        plt.tight_layout()
-        if show:
-            plt.show()
-
+        plt.xticks(
+            [x + bar_width * (len(frequencies) - 1) / 2 for x in indices],
+            bus_names,
+            rotation=45,
+            ha="right",
+        )
     else:
         # Plot RMS values of UEPR
-        uepr_rms_values = []
-        for bus in result.buses:
-            uepr_rms = bus.uepr  # RMS value of UEPR
-            if uepr_rms is not None:
-                uepr_rms_values.append(uepr_rms)
-            else:
-                uepr_rms_values.append(0.0)  # Handle missing data
-
-        # Plotting
+        uepr_rms_values = [
+            bus.uepr if bus.uepr is not None else 0.0 for bus in result.buses
+        ]
         fig = plt.figure(figsize=figsize)
-        plt.plot(bus_names, uepr_rms_values, marker="o", linestyle="-", label="RMS")
+        plt.bar(bus_names, uepr_rms_values, label="RMS")
 
-        plt.xlabel("Bus Name")
-        plt.ylabel("UEPR RMS (V)")
-        plt.title(title)
-        plt.xticks(rotation=45, ha="right")
-        plt.legend()
-        plt.grid(True)
-        plt.tight_layout()
-        if show:
-            plt.show()
+    # Configure plot
+    plt.yscale(yscale)
+    plt.xlabel("Bus Name")
+    plt.ylabel("UEPR (V)")
+    plt.title(title)
+    plt.xticks(rotation=45, ha="right")
+    plt.legend(title="Frequency")
+    plt.grid(True, axis="y")
+    plt.tight_layout()
+
+    if show:
+        plt.show()
 
     return fig
 
@@ -124,6 +121,7 @@ def plot_branch_currents(
     frequencies: Optional[List[float]] = None,
     figsize: tuple = (12, 6),
     title: str = "Branch Currents",
+    yscale: str = "linear",
     show=False,
 ):
     """
@@ -141,6 +139,8 @@ def plot_branch_currents(
             The size of the figure in inches as a (width, height) tuple. Defaults to `(12, 6)`.
         title (str, optional):
             The title of the plot. Defaults to `"Branch Currents"`.
+        yscale (str, optional):
+            The scale for the y-axis. Can be `"linear"` or `"log"`. Defaults to `"linear"`.
         show (bool, optional):
             Whether to display the plot immediately. If `False`, the plot is returned for further manipulation.
             Defaults to `False`.
@@ -192,7 +192,7 @@ def plot_branch_currents(
         for i, (freq, current_values) in enumerate(current_data.items()):
             positions = [x + i * bar_width for x in indices]
             plt.bar(positions, current_values, width=bar_width, label=f"{freq} Hz")
-
+        plt.yscale(yscale)
         plt.xlabel("Branch Name")
         plt.ylabel("Current (A)")
         plt.title(title)
@@ -221,7 +221,7 @@ def plot_branch_currents(
         # Plotting
         fig = plt.figure(figsize=figsize)
         plt.bar(branch_names, current_rms_values, label="RMS")
-
+        plt.yscale(yscale)
         plt.xlabel("Branch Name")
         plt.ylabel("Current RMS (A)")
         plt.title(title)
@@ -240,6 +240,7 @@ def plot_bus_currents(
     frequencies: Optional[List[float]] = None,
     figsize: tuple = (12, 6),
     title: str = "Bus Currents",
+    yscale: str = "linear",
     show=False,
 ):
     """
@@ -257,6 +258,8 @@ def plot_bus_currents(
             The size of the figure in inches as a (width, height) tuple. Defaults to `(12, 6)`.
         title (str, optional):
             The title of the plot. Defaults to `"Bus Currents"`.
+        yscale (str, optional):
+            The scale for the y-axis. Can be `"linear"` or `"log"`. Defaults to `"linear"`.
         show (bool, optional):
             Whether to display the plot immediately. If `False`, the plot is returned for further manipulation.
             Defaults to `False`.
@@ -308,7 +311,7 @@ def plot_bus_currents(
         for i, (freq, current_values) in enumerate(current_data.items()):
             positions = [x + i * bar_width for x in indices]
             plt.bar(positions, current_values, width=bar_width, label=f"{freq} Hz")
-
+        plt.yscale(yscale)
         plt.xlabel("Bus Name")
         plt.ylabel("Current (A)")
         plt.title(title)
@@ -337,7 +340,7 @@ def plot_bus_currents(
         # Plotting
         fig = plt.figure(figsize=figsize)
         plt.bar(bus_names, current_rms_values, label="RMS")
-
+        plt.yscale(yscale)
         plt.xlabel("Bus Name")
         plt.ylabel("Current RMS (A)")
         plt.title(title)
