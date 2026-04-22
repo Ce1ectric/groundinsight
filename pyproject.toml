@@ -5,15 +5,15 @@ description = "Simulation for grounding systems of electrical power grids"
 authors = ["Christian Ehlert <christian.ehlert@mailbox.org>"]
 license = "MIT"
 repository = "https://github.com/Ce1ectric/groundinsight"
+documentation = "https://ce1ectric.github.io/groundinsight/"
 readme = "README.md"
 packages = [
-    { include = "groundinsight", from = "src" }
+    { include = "groundinsight", from = "src" },
+    { include = "scripts" },
 ]
 
 [tool.poetry.dependencies]
 python = "^3.12"
-pytest = "^8.3.2"
-pytest-cov = "^5.0.0"
 pydantic = "^2.8.2"
 numpy = "^2.1.0"
 sqlalchemy = "^2.0.32"
@@ -27,6 +27,27 @@ scipy = "^1.14.1"
 alembic = "^1.13.2"
 sqlalchemy-stubs = "^0.4"
 ipykernel = "^6.29.5"
+pytest = "^8.3.2"
+pytest-cov = "^5.0.0"
+black = "^24.8.0"
+
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+mkdocs = "^1.6.1"
+mkdocs-material = "^9.5.34"
+mkdocstrings = { extras = ["python"], version = "^0.26.1" }
+pymdown-extensions = "^10.9"
+mkdocs-jupyter = "^0.25.0"
+
+[tool.poetry.scripts]
+release = "scripts.release:main"
+generate-third-party-licenses = "scripts.generate_third_party_licenses:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
 
 [build-system]
 requires = ["poetry-core"]
