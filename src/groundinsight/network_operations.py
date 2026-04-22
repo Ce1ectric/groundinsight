@@ -95,7 +95,7 @@ def create_branch(
     specific_earth_resistance: Optional[float] = 100,
     description: str = None,
     network: Optional[Network] = None,
-    parallel_coefficient: Optional[float] = None,
+    parallel_coefficient: Optional[float] = 1.0,
 ) -> Branch:
     """
     Create a new Branch instance and optionally add it to the network.
@@ -286,7 +286,7 @@ def create_paths(network: Network):
     network.define_paths()
 
 
-def build_electrical_network(network: Network):
+def build_electrical_network(network: Network, auto_phase_currents: bool = False):
     """
     Build the electrical network from the physical network and attach it to the Network object.
 
@@ -295,6 +295,10 @@ def build_electrical_network(network: Network):
 
     Args:
         network (Network): The network instance for which the electrical network is to be built.
+        auto_phase_currents (bool, optional): If True, the phase current through each branch
+            is determined by solving a reduced phase-only network (topology-based split over
+            parallel paths). If False, the phase current is derived from the enumerated
+            source-to-fault paths using each branch's ``parallel_coefficient``. Defaults to False.
 
     Raises:
         ImportError: If the `ElectricalNetwork` class cannot be imported.
@@ -309,10 +313,57 @@ def build_electrical_network(network: Network):
     """
     from groundinsight.electrical_network import ElectricalNetwork
 
-    network.electrical_network = ElectricalNetwork(network)
+    network.electrical_network = ElectricalNetwork(
+        network, auto_phase_currents=auto_phase_currents
+    )
 
 
-def run_fault(network: Network, fault_name: str):
+def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
+    """
+    Create a warning message if the parallel coefficients are set to 1 and there are more than
+    1 path from sources to the fault.
+
+    Args:
+        network (Network): The network instance for which the warning is to be raised.
+        parallel_coefficients (bool): Whether to use parallel coefficients of the branches in
+                                      the calculations.
+
+    Raises:
+        Warning: If the parallel coefficients are not set to 1.
+
+    Examples:
+        >>> import groundinsight as gi
+        >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
+        >>> _warning_parallel_coeffcient(network=network, parallel_coefficients=False)
+    """
+    more_than_one_path = False
+    # Check if there are more than 1 path in the network
+    if len(network.paths) > 1:
+        more_than_one_path = True
+
+    parallel_coefficients_default = False
+    # Check if all of the parallel coefficients within the paths are set to 1 or None
+    for path in network.paths.values():
+        for branch in path.segments:
+            if (
+                branch.parallel_coefficient is None
+                or branch.parallel_coefficient == 1.0
+            ):
+                parallel_coefficients_default = True
+
+    if (
+        parallel_coefficients == False
+        and more_than_one_path == True
+        and parallel_coefficients_default == True
+    ):
+        print(
+            "Warning: The parallel coefficients are set to 1 or None and there are parallel paths in the network. Consider setting the parallel coefficients to the correct value for the branches in the network or using the auto_parallel_coefficients flag within run_fault()."
+        )
+
+
+def run_fault(
+    network: Network, fault_name: str, auto_parallel_coefficients: bool = False
+):
     """
     Execute fault calculations, including solving the network and computing branch currents.
 
@@ -323,6 +374,10 @@ def run_fault(network: Network, fault_name: str):
     Args:
         network (Network): The network instance on which the fault calculations are to be performed.
         fault_name (str): The name of the fault to activate and run calculations for.
+        auto_parallel_coefficients (bool, optional): If True, the phase current through each
+            branch is computed automatically from a reduced phase-only network solve (topology-
+            based split over parallel paths). When set, each branch's ``parallel_coefficient``
+            is ignored and the split is derived from the network topology. Defaults to False.
 
     Raises:
         ValueError: If the specified fault does not exist in the network.
@@ -346,8 +401,16 @@ def run_fault(network: Network, fault_name: str):
     if network.paths == {}:
         create_paths(network)
 
-    # build the electrical network from the physical network
-    build_electrical_network(network)
+    # Create a Warning if there are more than one path and the parallel coefficients are default or 1
+    if len(network.paths) > 1 and not auto_parallel_coefficients:
+        _warning_parallel_coeffcient(network, auto_parallel_coefficients)
+
+    # Build the electrical network from the physical network. The
+    # auto_parallel_coefficients flag is forwarded to the ElectricalNetwork as
+    # auto_phase_currents which switches the phase-current determination from
+    # the path-based scheme (parallel_coefficient per branch) to the automatic
+    # topology-based split.
+    build_electrical_network(network, auto_phase_currents=auto_parallel_coefficients)
 
     # Solve the network
     network.electrical_network.solve_network()

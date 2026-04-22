@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from typing import List, Dict, Optional
 from .models.core_models import Result, ComplexNumber
 
+
 def plot_bus_voltages(
     result: Result,
     frequencies: Optional[List[float]] = None,

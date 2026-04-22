@@ -308,7 +308,7 @@ class Branch(BaseModel):
     self_impedance: Dict[float, ComplexNumber]
     mutual_impedance: Dict[float, ComplexNumber]
     specific_earth_resistance: float = 100.0
-    parallel_coefficient: Optional[float] = None  # Default to None
+    parallel_coefficient: Optional[float] = 1.0  # Default to 1
 
     def calculate_impedance(self, frequencies: List[float]):
         """
