@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "groundinsight: Simulation of grounding systems in electrical power grids"
+abstract: >-
+  Python package for analyzing grounding systems during single-phase-to-ground
+  faults. Computes earth potential rise, reduction factors and grounding
+  impedances for networked grounding systems over arbitrary bus/branch
+  topologies (line, ring, mesh).
+type: software
+authors:
+  - family-names: Ehlert
+    given-names: Christian
+    email: christian.ehlert@mailbox.org
+    affiliation: Avacon Netz GmbH
+version: "0.2.0"
+license: MIT
+repository-code: "https://github.com/Ce1ectric/groundinsight"
+url: "https://ce1ectric.github.io/groundinsight/"
+keywords:
+  - grounding-system
+  - earth-potential-rise
+  - reduction-factor
+  - power-systems
+  - simulation
+  - python

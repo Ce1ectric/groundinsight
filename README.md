@@ -1,301 +1,231 @@
-# Project Title 
-**Groundinsight: Advanced Analytics in Grounding Systems**
+# groundinsight
 
-# Project Description
-Groundinsight is a Python package for analyzing the behavior of grounding systems during phase-to-ground faults. It allows you to create a network structure with buses, branches, and fault current sources. 
+**Simulation of grounding systems in electrical power grids.**
 
-The main concept of the project is the creation of Pydantic models representing the physical grid elements and a calculation core using NumPy and SciPy solvers for linear equations. 
+[![PyPI version](https://img.shields.io/pypi/v/groundinsight.svg)](https://pypi.org/project/groundinsight/)
+[![Python versions](https://img.shields.io/pypi/pyversions/groundinsight.svg)](https://pypi.org/project/groundinsight/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Documentation](https://img.shields.io/badge/docs-mkdocs--material-blue)](https://ce1ectric.github.io/groundinsight/)
 
-The SQLite interface enables saving and loading networks or element types from data storage using SQLAlchemy. Beyond storing to a database, the use of Pydantic models allows serialization of all elements and saving them as JSON files. 
+`groundinsight` is an open-source Python package for analysing the behaviour
+of networked grounding systems during single-phase-to-ground faults. It
+computes the earth-potential rise (EPR), branch (shield) currents, reduction
+factors and the resulting grounding impedance at the fault location for
+arbitrary bus/branch topologies including line, ring and mesh networks.
 
-Finally, the calculation results can be presented as plots using predefined Matplotlib functions or as a Polars DataFrame, making it easy to filter information or export results with the extensive range of Polars functions. 
+- **Documentation**: <https://ce1ectric.github.io/groundinsight/>
+- **Source**: <https://github.com/Ce1ectric/groundinsight>
+- **Issue tracker**: <https://github.com/Ce1ectric/groundinsight/issues>
 
-The project has some challenges to be addressed in the future. Large networks with a wide range of frequencies require significant computation time, which could be optimized in future versions with multithreading or multiprocessing. Another aspect is the addition of more interfaces, such as a REST API or additional database interfaces beyond SQLite. 
+## Why groundinsight
 
-In future versions, it could be directly used by other power system calculation tools to extend their functionality to grounding systems. 
+Medium-voltage distribution networks are meshed through shared grounding
+conductors (cable shields, overhead-line earth wires, substation grounding
+grids). During a single-phase-to-ground fault, the return current splits
+between the local earth path at the fault location and the metallic return
+path through the grounding conductors of the surrounding branches. To assess
+touch-voltage safety and EMC effects, two quantities have to be known:
 
-# Technical Background
-Electrical power grids consist of different elements like substations or towers, which are called bus elements, and the connections between them are cables or transmission lines. Below the conducting part for the power supply from the power plants to the consumers are grounding conductors—such as cable shields or grounding wires of an overhead line—which are part of the network. These grounding parts define the behavior of the whole system during phase-to-ground faults. 
+- the **reduction factor** $r$ describing the fraction of the fault current
+  that returns through earth, and
+- the **grounding impedance** $Z_G$ and the resulting EPR at the fault bus.
 
-```mermaid
-mindmap
-	root((Power Grids))
-		Power Supply System
-			Elements
-				Buses 
-					(Substations)
-				Branches
-					(cables)
-					(overhead lines)
-			Actions
-				(Loadflow)
-				(Short-Circuit)
-				
-		Grounding Systems
-			Elements
-				Grounding Branches
-					(cable shields)
-					(grounding wires)
-				Grounding Buses
-			Actions
-				(Current Injection)
-```
+`groundinsight` computes both by assembling a nodal-admittance model from
+user-defined frequency- and $\rho_E$-dependent impedance formulas and solving
+it for every harmonic of interest.
 
-The general structure of grounding networks and power supply networks is the same, and general methods like node analysis can be performed as in simple load flow analysis. 
+## Features
 
-To analyze a grounding network, the general procedure is: 
+- Bus, branch, source and fault objects modelled as Pydantic v2 classes.
+- Symbolic impedance formulas in `rho`, `f` and `l`, evaluated through
+  SymPy.
+- Sparse LU solver per frequency (`scipy.sparse.linalg.splu`).
+- Mutual coupling between faulted phase and grounding conductor treated as
+  Norton equivalents along the path from source to fault.
+- Reduction factor computed from the ratio of EPR with and without mutual
+  coupling at the fault bus.
+- Support for **ring and mesh** grounding topologies with multiple parallel
+  paths; the optional `auto_parallel_coefficients=True` flag on
+  `run_fault` derives the per-path current share from a reduced phase-only
+  solve.
+- SQLite persistence and JSON export/import of networks and type libraries.
+- Polars DataFrames for result access (`net.res_buses(...)`,
+  `net.res_branches(...)`, `net.res_all_impedances()`).
+- Matplotlib helpers for bar plots of EPR, branch currents and bus currents.
 
-1. Perform a short-circuit calculation.
-2. Use the results as input for the grounding network.
-3. Perform the current injection calculations in the grounding network.
+## Installation
 
-The physical models used in Groundinsight are based on the following ideas: 
-
-There are four different elements: 
-1. **Bus elements** which represent the connection to the remote earth (no influence of mutual coupling).
-2. **Branch elements** which represent the connection between two buses (influence of mutual coupling).
-3. **Current sources** at a bus.
-4. **Fault locations** at a bus.
-
-To generalize the variety of different buses (substations, towers, or perhaps the connections of a whole low-voltage grid), the relevant parameter is the grounding impedance as a function of two parameters: 
-1. The specific earth resistance ($\rho_E$).
-2. Frequency ($f$).
-
-$$
-Z_G = f(\rho_E, f)
-$$
-
-The branches have two different impedances: 
-1. **Self impedance**
-2. **Mutual impedance** (describes the mutual coupling between the fault current and the grounding conductor).
-
-Both impedances depend, like the grounding impedance, on $\rho_E$, $f$, and the length of the conductor. 
-
-The calculations are based on the general matrix form: 
-
-$$
-u = Y^{-1}i
-$$
-
-- **u** is the node voltage vector for each bus, representing the earth potential rise.
-- **Y** is the admittance matrix filled with the grounding impedances of buses and self impedances of the branches.
-- **i** is the fault current vector filled with the currents of the sources and the mutual coupling currents for each branch.
-
-All of the elements can be set as frequency-dependent values.
-
-# How to Install and Run the Project 
-The package can be installed using pip: 
+`groundinsight` requires **Python 3.12 or newer** and is published on PyPI:
 
 ```bash
 pip install groundinsight
 ```
 
-# How to Use the Project 
-The general workflow of the package is visualized in the diagram: 
+For a local development checkout with the test suite enabled:
 
-```mermaid
----
-title: Main Concept of Groundinsight
----
-flowchart TD
-	start((Start))
-	finish((End))
-	net[Creating a Network]
-	types[Creating Relevant Bus and Branch Types]
-	buses[Creating Bus Instances]
-	source[Creating Current Sources, Faults, and Branches]
-	db[(Database)]
-	run[Run Calculations]
-	analyze[Analyze the Results as DataFrames or Plots]
-	start --> net
-	net --> types
-	types --> buses
-	buses --> source
-	source --> run
-	run --> analyze
-	run --> db
-	db --> finish
-	analyze --> finish
+```bash
+git clone https://github.com/Ce1ectric/groundinsight.git
+cd groundinsight
+poetry install
 ```
 
-## Creating Networks and Calculations
+The documentation extras live in an optional Poetry group:
 
-First, import the main module:
+```bash
+poetry install --with docs
+```
+
+See the [installation page](https://ce1ectric.github.io/groundinsight/installation/)
+of the documentation for full details.
+
+## Quickstart
 
 ```python
 import groundinsight as gi
-```
 
-Create a network which serves as the base for all other elements and calculations. In this case, this network will perform calculations for different harmonic frequencies of 50 Hz. 
+net = gi.create_network(name="QuickstartNet", frequencies=[50, 250, 350])
 
-```python
-net = gi.create_network(name="MyTestNetwork", frequencies=[50, 250, 350, 450, 550])
-```
-
-The next step is to create a simple bus type and branch type:
-
-```python
 bus_type = gi.BusType(
-    name="BusTypeFormulaTest",
-    description="Example bus type with parameters",
+    name="SubstationBus",
+    description="Lumped substation grounding grid",
     system_type="Substation",
-    voltage_level=110,
-    impedance_formula="rho * 1 + j * f * 1/50",
+    voltage_level=20,
+    impedance_formula="rho * 0.01 + j * f * 1/50 * 0.1",
 )
 
-branch_type = gi.BranchType(
-    name="TestBranchType",
-    description="A test branch type",
+cable_type = gi.BranchType(
+    name="MSCable",
+    description="20 kV single-core cable with shield",
     grounding_conductor=True,
-    self_impedance_formula="(rho * 0 + 0.25 + j * f * 0.012)*l",
-    mutual_impedance_formula="(rho * 0 + 0.0 + j * f * 0.010)*l"
+    self_impedance_formula="(0.25 + j * f * 0.012) * l",
+    mutual_impedance_formula="(0.0  + j * f * 0.012) * l",
 )
-```
 
-Now, create instances of buses and branches:
-
-```python
-gi.create_bus(name="bus1", type=bus_type, network=net, specific_earth_resistance=100.0)
-gi.create_bus(name="bus2", type=bus_type, network=net, specific_earth_resistance=100.0)
+gi.create_bus(name="bus_source", type=bus_type, network=net, specific_earth_resistance=100.0)
+gi.create_bus(name="bus_fault",  type=bus_type, network=net, specific_earth_resistance=100.0)
 
 gi.create_branch(
-    name="branch1", 
-    type=branch_type, 
-    from_bus="bus1", 
-    to_bus="bus2", 
-    length=line_length, 
-    specific_earth_resistance=100.0, 
-    network=net
+    name="cable_1", type=cable_type,
+    from_bus="bus_source", to_bus="bus_fault",
+    length=5.0, specific_earth_resistance=100.0, network=net,
 )
-```
 
-Add a current source to `bus1`:
-
-```python
 gi.create_source(
-    name="source1", 
-    bus="bus1", 
-    values={50: 60, 250: 60, 350: 60, 450: 60, 550: 60}, 
-    network=net
+    name="infeed", bus="bus_source",
+    values={50: 1000.0, 250: 200.0, 350: 100.0}, network=net,
 )
-```
-
-Add a fault with corresponding fault scaling to `bus2`. The default scaling is 1 if no other coefficient is given, using a dictionary:
-
-```python
-fault_scaling = {50: 1.0, 250: 0.5, 350: 0.5}
 gi.create_fault(
-    name="fault1", 
-    bus="bus2", 
-    description="A fault at bus2", 
-    scalings=fault_scaling, 
-    network=net
+    name="fault1", bus="bus_fault",
+    description="single-phase-to-ground fault",
+    scalings={50: 1.0}, network=net,
+)
+
+gi.run_fault(network=net, fault_name="fault1")
+
+print(net.res_all_impedances())
+```
+
+For a ring/meshed network, enable the automatic parallel-path distribution:
+
+```python
+gi.run_fault(
+    network=net,
+    fault_name="fault1",
+    auto_parallel_coefficients=True,
 )
 ```
 
-After completing the network and all its components, it is necessary to create the paths from the sources to the faults. This step is optional; if there are no paths in the network object, the fault calculation will run this function:
+More worked examples — including the CIRED reference and a low-voltage
+network — are available as notebooks in the
+[documentation](https://ce1ectric.github.io/groundinsight/examples/).
 
-```python
-gi.create_paths(network=net)
+## Model overview
+
+All computations happen per frequency $f$ in the phasor domain:
+
+$$
+Y(f)\,\underline{u}(f) = \underline{i}(f)
+\quad\Longrightarrow\quad
+\underline{u}(f) = Y(f)^{-1}\,\underline{i}(f)
+$$
+
+where $Y$ is the nodal admittance matrix (bus grounding admittances on the
+diagonal, branch self-admittances off-diagonal), $\underline{u}$ is the EPR
+vector and $\underline{i}$ combines source currents and the Norton
+equivalents of the phase-to-shield mutual coupling. The reduction factor at
+the fault bus is obtained by re-solving the same system with all mutual
+Norton sources removed and taking the ratio
+$|u_{\text{fault}}^{\text{with}}|/|u_{\text{fault}}^{\text{without}}|$.
+
+For the full model — objects, path finding, reduction factor and grounding
+impedance — see the [Concepts](https://ce1ectric.github.io/groundinsight/concepts/)
+page of the documentation.
+
+## Workflow
+
+```mermaid
+---
+title: Main concept of groundinsight
+---
+flowchart TD
+    start((Start))
+    finish((End))
+    net[Create a Network]
+    types[Define BusType and BranchType]
+    buses[Add Buses and Branches]
+    source[Add Sources and Faults]
+    db[(SQLite / JSON)]
+    run[run_fault]
+    analyze[Analyse results as DataFrames or plots]
+    start --> net
+    net --> types
+    types --> buses
+    buses --> source
+    source --> run
+    run --> analyze
+    run --> db
+    db --> finish
+    analyze --> finish
 ```
 
-Now, the network object has all the information to calculate the electrical network representation: 
+## Development
 
-```python
-gi.run_fault(network=net, fault_name="fault1")
+```bash
+# run the test suite with coverage
+poetry run pytest --cov=groundinsight
+
+# format the code with black
+poetry run black src tests scripts
+
+# build the docs locally
+poetry install --with docs
+poetry run mkdocs serve
 ```
 
-The results are directly written into the Network object. The results are encapsulated in Pydantic classes as dictionaries within the network. 
+A release is cut via the built-in Poetry script, which bumps the version in
+`pyproject.toml`, `src/groundinsight/__init__.py` and `CITATION.cff`, creates
+an annotated tag and pushes the commit plus the tag. The GitHub Actions
+release workflow then takes over, builds sdist and wheel and publishes to
+PyPI via OIDC Trusted Publishing.
 
-To access the results of the buses or branches, use the available methods. These methods provide the results for all buses or branches during a specific fault:
-
-```python
-res_buses = net.res_buses(fault="fault1")
-res_branches = net.res_branches(fault="fault1")
+```bash
+poetry run release patch
+poetry run release minor
+poetry run release major
+poetry run release set 1.2.3
 ```
 
-If you want to get the results for a specific element, you can use the `filter` method from Polars DataFrames: 
+## Citation
 
-```python
-import polars as pl
-res_bus1 = res_buses.filter(pl.col("bus_name") == "bus1")
-```
+If you use `groundinsight` for scientific work, please cite it using the
+`CITATION.cff` metadata shipped with this repository.
 
-There is one special method that summarizes all faults of the network and returns a DataFrame with the grounding impedances and the reduction factors for each fault: 
+## Contributing
 
-```python
-net.res_all_impedances()
-```
+Pull requests are welcome. For major changes, please open an issue first to
+discuss what you would like to change. New code should come with tests;
+please run the full suite and check that coverage does not regress.
 
-## Import and Export
+## License
 
-In Groundinsight, it is possible to save and load bus or branch types in a SQLite database. The **overwrite** argument can be used to update an existing type. 
-
-```python
-gi.start_dbsession()  # Default project_path/grounding.db
-
-gi.save_bustype_to_db(bus_type, overwrite=True)
-gi.save_branchtype_to_db(branch_type)
-
-gi.close_dbsession()
-```
-
-To load types from the database, use a similar method. This will return a dictionary of all types stored in the database: 
-
-```python
-gi.start_dbsession(sqlite_path="path_to_data.db")
-bus_types = gi.load_bustypes_from_db()
-
-# Print all names of the bus types
-for name, bt in bus_types.items():
-    # Iterate over all properties of a bustype
-    for prop in bt.__dict__:
-        print(f"{prop}: {bt.__dict__[prop]}")
-    # Print a newline for readability
-    print("\n")
-```
-
-Saving an entire network to the SQLite database can be done with: 
-
-```python
-gi.start_dbsession(sqlite_path="path_to_data.db")
-gi.save_network_to_db(network=net, overwrite=False)
-loaded_net = gi.load_network_from_db(name="MyTestNetwork")
-```
-
-Another way to store the network you are currently working on is to export it as a JSON file: 
-
-```python
-gi.save_network_to_json(network=net, path="json_path.json")
-loaded_json_net = gi.load_network_from_json(path="json_path.json")
-```
-
-## Plot the Results
-Groundinsight has simple built-in plot functions. The plot functions are based on the concept that they read a result class and extract the relevant data from it. 
-
-The earth potential rise over each bus of the network can be visualized with:
-
-```python
-result_1 = net.results["fault1"]
-gi.plot_bus_voltages(result=result_1, title="EPR RMS Values")
-gi.plot_bus_voltages(result=result_1, frequencies=[50], title="EPR for 50 Hz")
-```
-
-Besides the bus voltages, the currents can be plotted as bar charts:
-
-```python
-gi.plot_branch_currents(result=result_1, title="Branch Currents RMS Values")
-gi.plot_bus_currents(result=result_1, title="Bus Currents RMS Values")
-```
-
-# Contributing
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-
-Please make sure to update tests as appropriate.
-
-Join me on GitHub [groundinsight](https://github.com/Ce1ectric/groundinsight).
-
-# License
-**MIT License** - see the license file for details. 
-
-
+`groundinsight` is released under the [MIT License](LICENSE).

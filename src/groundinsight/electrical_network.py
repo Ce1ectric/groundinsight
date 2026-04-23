@@ -4,14 +4,37 @@
 module for creating an electrical network based on the core models
 The network is used to perform calculations based on the matrix form of the network:
 
-Y * v = i
-v = Y^-1 * i
+Y * u = i
+u = Y^-1 * i
 
 where:
 
 Y - admittance matrix, branches and buses are used to build this matrix
-v - vector of bus voltages
-i - vector of current sources and the mutual copplings between current sources and branches
+u - vector of bus voltages (earth potential rise per bus)
+i - vector of source injections plus the Norton-equivalent injections that
+    represent the inductive coupling between phase conductors and shield
+    (grounding) conductors along each branch.
+
+Sign convention for the mutual coupling (see _add_mutual_currents):
+    U_from - U_to = Z_self * I_s  -  Z_mutual * I_p
+where I_p is the phase current through the branch in from->to direction and
+I_s is the shield current in the same direction. The induced EMF enters the
+nodal form as a Norton current i_mut = (Z_mutual / Z_self) * I_p which is
+injected as +i_mut out of the from bus (nodal: i_vector[from] -= i_mut) and
++i_mut into the to bus (nodal: i_vector[to] += i_mut).
+
+Two strategies are available to determine the phase current I_p per branch:
+1) Path-based (default). For every simple path from source to fault, the
+   branch direction is derived from the actual path traversal (no index
+   heuristic). The user may scale the contribution per branch via
+   Branch.parallel_coefficient, which is the legacy knob for splitting
+   current between parallel paths.
+2) Automatic distribution (auto_phase_currents=True). A reduced phase-only
+   network is solved per source with +I at the source bus and the fault bus
+   as reference. The resulting branch currents are used directly. In this
+   mode parallel_coefficient is ignored. This mode is topology-agnostic and
+   is the intended integration point for an external phase-current source
+   (e.g. pandapower single-phase short-circuit results).
 """
 
 import numpy as np
@@ -42,7 +65,7 @@ class ElectricalNetwork:
     reduction factors, and grounding impedances.
     """
 
-    def __init__(self, network: Network):
+    def __init__(self, network: Network, auto_phase_currents: bool = False):
         """
         Initialize the ElectricalNetwork with a given Network model.
 
@@ -50,8 +73,14 @@ class ElectricalNetwork:
 
         Args:
             network (Network): The Network instance containing buses, branches, sources, and faults.
+            auto_phase_currents (bool, optional): If True the phase current through each
+                branch is computed by solving a reduced phase-only network (Variant B).
+                If False (default) the phase current is derived from the enumerated
+                source-to-fault paths using each branch's ``parallel_coefficient``
+                (Variant A). Defaults to False.
         """
         self.network = network
+        self.auto_phase_currents = auto_phase_currents
         self.bus_indices = {}
         self.Y_matrices = {}  # Admittance matrices for each frequency
         self.u_vectors = {}  # Voltage vectors for each frequency
@@ -61,6 +90,7 @@ class ElectricalNetwork:
         self.results: Result = Result()  # Stores the calculation results
         self.i_mutuals = {}  # Store mutual currents per frequency per branch
         self.total_source_currents = {}  # Store total source currents per frequency
+        self.phase_currents = {}  # Signed phase current per branch per frequency
 
         self._initialize()
 
@@ -68,11 +98,10 @@ class ElectricalNetwork:
         """
         Initialize bus indices and other necessary data structures.
 
-        This method assigns indices to buses, handles parallel branch coefficients,
-        constructs admittance matrices, and builds voltage and current vectors.
+        This method assigns indices to buses, constructs admittance matrices,
+        and builds voltage and current vectors for each frequency.
         """
         self._assign_bus_indices()
-        self._assign_parallel_coefficients()
         self._construct_Y_matrices()
         self._construct_vectors()
 
@@ -86,87 +115,47 @@ class ElectricalNetwork:
         self.bus_indices = {bus_name: idx for idx, bus_name in enumerate(bus_names)}
         self.num_buses = len(bus_names)
 
-    def _detect_parallel_branches(self):
-        """
-        Detect parallel branches between buses and group them.
-
-        Identifies branches that connect the same pair of buses and groups them together.
-
-        Returns:
-            Dict[tuple, list]: A dictionary with keys as tuples of (from_bus, to_bus) and
-                               values as lists of branch names that are parallel between those buses.
-        """
-        parallel_branches = {}
-        for branch in self.network.branches.values():
-            key = (branch.from_bus, branch.to_bus)
-            if key in parallel_branches:
-                parallel_branches[key].append(branch.name)
-            else:
-                parallel_branches[key] = [branch.name]
-        return parallel_branches
-
-    def _assign_parallel_coefficients(self):
-        """
-        Validate and assign parallel coefficients to branches.
-
-        Ensures that the parallel coefficients of branches connecting the same pair of buses
-        sum up to approximately 1.0. If coefficients are undefined or inconsistent, assigns
-        equal splitting to each parallel branch.
-        """
-        parallel_branches = self._detect_parallel_branches()
-        for (from_bus, to_bus), branch_names in parallel_branches.items():
-            total_coefficient = 0.0
-            undefined_coefficients = []
-            for branch_name in branch_names:
-                branch = self.network.branches[branch_name]
-                if branch.parallel_coefficient is not None:
-                    total_coefficient += branch.parallel_coefficient
-                else:
-                    undefined_coefficients.append(branch_name)
-            # Check if total_coefficient is approximately 1.0
-            if abs(total_coefficient - 1.0) > 1e-6 or undefined_coefficients:
-                # Coefficients are not consistent or not fully defined
-                # Assign equal splitting
-                num_branches = len(branch_names)
-                equal_coefficient = 1.0 / num_branches
-                for branch_name in branch_names:
-                    branch = self.network.branches[branch_name]
-                    branch.parallel_coefficient = equal_coefficient
-            else:
-                # Coefficients sum to 1.0 and are defined
-                continue
-
     def _construct_Y_matrices(self):
         """
         Construct the admittance matrices Y for each frequency in the network.
 
-        Builds the admittance matrix by adding bus admittances to the diagonal and branch
-        admittances to the off-diagonal elements. Mutual admittances are also accounted for.
+        Builds the admittance matrix by adding bus grounding admittances to the diagonal
+        and branch self-admittances to the off-diagonal elements. Branches without a
+        grounding conductor (``grounding_conductor=False``) contribute no admittance to Y
+        because their shield path is absent; they only propagate the phase current for the
+        mutual coupling term.
         """
         frequencies = self.network.frequencies
         for freq in frequencies:
             Y_matrix = np.zeros((self.num_buses, self.num_buses), dtype=complex)
-            # add the bus admittances to the diagonal of the matrix
+            # Bus grounding admittances on the diagonal
             for bus_name, bus in self.network.buses.items():
                 idx = self.bus_indices[bus_name]
                 impedance = bus.impedance.get(freq)
-                if impedance:
-                    admittance = 1 / complex(impedance.real, impedance.imag)
-                    Y_matrix[idx, idx] += admittance
+                if impedance is None:
+                    continue
+                Z_complex = complex(impedance.real, impedance.imag)
+                if Z_complex == 0:
+                    continue
+                Y_matrix[idx, idx] += 1 / Z_complex
 
-            # Add branch admittances to Y_matrix
+            # Branch self-admittances
             for branch in self.network.branches.values():
+                if not branch.type.grounding_conductor:
+                    continue
+                impedance = branch.self_impedance.get(freq)
+                if impedance is None:
+                    continue
+                Z_complex = complex(impedance.real, impedance.imag)
+                if Z_complex == 0:
+                    continue
+                admittance = 1 / Z_complex
                 from_idx = self.bus_indices[branch.from_bus]
                 to_idx = self.bus_indices[branch.to_bus]
-                impedance = branch.self_impedance.get(freq)
-                if impedance and branch.type.grounding_conductor:
-                    admittance = 1 / complex(impedance.real, impedance.imag)
-                    # Off-diagonal elements
-                    Y_matrix[from_idx, to_idx] -= admittance
-                    Y_matrix[to_idx, from_idx] -= admittance
-                    # Diagonal elements
-                    Y_matrix[from_idx, from_idx] += admittance
-                    Y_matrix[to_idx, to_idx] += admittance
+                Y_matrix[from_idx, to_idx] -= admittance
+                Y_matrix[to_idx, from_idx] -= admittance
+                Y_matrix[from_idx, from_idx] += admittance
+                Y_matrix[to_idx, to_idx] += admittance
 
             self.Y_matrices[freq] = Y_matrix
 
@@ -174,8 +163,13 @@ class ElectricalNetwork:
         """
         Construct the voltage and current vectors for each frequency in the network.
 
-        Initializes voltage vectors and current vectors based on active faults and source
-        currents, including mutual currents between branches and sources.
+        For each frequency the source injections are placed at the source buses, the
+        combined fault current is placed at the fault bus, the phase current per branch
+        is computed (see :meth:`_compute_phase_currents`) and the Norton-equivalent
+        mutual currents are added on top.
+
+        Raises:
+            ValueError: If no active fault is set on the network.
         """
         frequencies = self.network.frequencies
         active_fault = self.network.active_fault
@@ -186,44 +180,37 @@ class ElectricalNetwork:
         fault = self.network.faults[active_fault]
         fault_bus_idx = self.bus_indices[fault.bus]
 
-        # Paths from sources to fault
-        paths_from_sources = self._get_paths_from_sources_to_fault()
+        # Set of source names that actually have at least one path to the active
+        # fault; sources without a path do not contribute to the injection.
+        sources_with_path = self._sources_with_path_to_active_fault()
 
         for freq in frequencies:
             u_vector = np.zeros(self.num_buses, dtype=complex)
             i_vector = np.zeros(self.num_buses, dtype=complex)
-            total_source_current = 0
-            source_currents = {}
-            # Initialize mutual currents dictionary for this frequency
+            total_source_current = 0j
             self.i_mutuals[freq] = {}
 
-            # Iterate over the sources and add the source values to the current vector
-            for source_name, source in self.network.sources.items():
-                # Check if the source has a path to the fault
-                branches_in_paths = paths_from_sources.get(source_name)
-                if branches_in_paths:
-                    bus_idx = self.bus_indices[source.bus]
-                    scaling = fault.scalings.get(freq, 1)
-                    current = source.values.get(freq, 0)
-                    if current:
-                        current_complex = scaling * complex(current.real, current.imag)
-                        total_source_current += current_complex
-                        # Store the source current for mutual coupling calculations
-                        source_currents[source_name] = current_complex
-                        # Source injection into their buses
-                        i_vector[bus_idx] += current_complex
-                else:
-                    # Source does not have a path to the fault
-                    continue  # Do not include this source
+            # Source injections at the source buses; combined fault current at the fault bus
+            for source_name in sources_with_path:
+                source = self.network.sources[source_name]
+                bus_idx = self.bus_indices[source.bus]
+                scaling = fault.scalings.get(freq, 1)
+                current = source.values.get(freq)
+                if current is None:
+                    continue
+                current_complex = scaling * complex(current.real, current.imag)
+                total_source_current += current_complex
+                i_vector[bus_idx] += current_complex
 
-            # Inject the fault current into the fault bus
             i_vector[fault_bus_idx] -= total_source_current
             self.total_source_currents[freq] = total_source_current
 
-            # Include mutual currents
-            self._add_mutual_currents(
-                i_vector, freq, source_currents, paths_from_sources
-            )
+            # Phase currents per branch at this frequency
+            phase_currents = self._compute_phase_currents(freq, sources_with_path)
+            self.phase_currents[freq] = phase_currents
+
+            # Mutual Norton injections on top
+            self._add_mutual_currents(i_vector, freq, phase_currents)
 
             self.i_vectors[freq] = i_vector
             self.u_vectors[freq] = u_vector
@@ -232,8 +219,9 @@ class ElectricalNetwork:
         """
         Construct the current vectors for each frequency without mutual currents.
 
-        This method builds current vectors excluding the effects of mutual currents between
-        branches and sources, allowing for separate analysis.
+        This method builds current vectors excluding the inductive coupling between
+        phase and shield conductors. It is used for the reference solution from which
+        the reduction factor is computed.
         """
         frequencies = self.network.frequencies
         active_fault = self.network.active_fault
@@ -244,132 +232,292 @@ class ElectricalNetwork:
         fault = self.network.faults[active_fault]
         fault_bus_idx = self.bus_indices[fault.bus]
 
-        # Paths from sources to fault
-        paths_from_sources = self._get_paths_from_sources_to_fault()
+        sources_with_path = self._sources_with_path_to_active_fault()
 
         self.i_vectors_no_mutual = {}
 
         for freq in frequencies:
             i_vector = np.zeros(self.num_buses, dtype=complex)
-            total_source_current = 0
-            source_currents = {}
+            total_source_current = 0j
 
-            # Iterate over the sources and add the source values to the current vector
-            for source_name, source in self.network.sources.items():
-                # Check if the source has a path to the fault
-                branches_in_paths = paths_from_sources.get(source_name)
-                if branches_in_paths:
-                    bus_idx = self.bus_indices[source.bus]
-                    scaling = fault.scalings.get(freq, 1)
-                    current = source.values.get(freq, 0)
-                    if current:
-                        current_complex = scaling * complex(current.real, current.imag)
-                        total_source_current += current_complex
-                        # Store the source current for mutual coupling calculations
-                        source_currents[source_name] = current_complex
-                        # Source injection into their buses
-                        i_vector[bus_idx] += current_complex
-                else:
-                    # Source does not have a path to the fault
-                    continue  # Do not include this source
+            for source_name in sources_with_path:
+                source = self.network.sources[source_name]
+                bus_idx = self.bus_indices[source.bus]
+                scaling = fault.scalings.get(freq, 1)
+                current = source.values.get(freq)
+                if current is None:
+                    continue
+                current_complex = scaling * complex(current.real, current.imag)
+                total_source_current += current_complex
+                i_vector[bus_idx] += current_complex
 
-            # Inject the fault current into the fault bus
             i_vector[fault_bus_idx] -= total_source_current
-
-            # Do NOT include mutual currents
-            # i_vector remains unchanged
 
             self.i_vectors_no_mutual[freq] = i_vector
 
-    def _get_paths_from_sources_to_fault(self):
+    def _sources_with_path_to_active_fault(self):
         """
-        Retrieve all paths from sources to the active fault.
+        Return the list of source names that have at least one path to the active fault.
 
-        Identifies and maps each source to the set of branches involved in its paths to the fault.
+        Paths are taken from ``self.network.paths`` which must have been populated
+        before the electrical network is solved (typically via ``network.define_paths()``).
 
         Returns:
-            Dict[str, set]: A dictionary mapping source names to sets of branch names in their paths.
+            List[str]: Source names that contribute to the active fault.
         """
-        paths_from_sources = {}
         fault_name = self.network.active_fault
-        fault = self.network.faults[fault_name]
-        fault_bus = fault.bus
+        sources = set()
+        for path in self.network.paths.values():
+            if path.fault == fault_name and path.source in self.network.sources:
+                sources.add(path.source)
+        # Preserve insertion order of self.network.sources for determinism
+        return [s for s in self.network.sources.keys() if s in sources]
 
-        for source_name, source in self.network.sources.items():
-
-            # Key: source_name, Value: set of branch names in paths
-            paths = []
-            for path in self.network.paths.values():
-                if path.source == source_name and path.fault == fault_name:
-                    paths.append(path)
-            branches_in_paths = set()
-            for path in paths:
-                for branch in path.segments:
-                    branches_in_paths.add(branch.name)
-
-            paths_from_sources[source_name] = branches_in_paths
-
-        return paths_from_sources
-
-    def _add_mutual_currents(self, i_vector, freq, source_currents, paths_from_sources):
+    def _compute_phase_currents(
+        self, freq: float, sources_with_path
+    ) -> Dict[str, complex]:
         """
-        Add mutual currents to the current vector for each branch in paths from sources.
+        Compute the signed phase current per branch at a given frequency.
 
-        Calculates and injects mutual currents based on source currents and branch impedances.
+        In the path-based mode (``auto_phase_currents=False``) the contributions are
+        accumulated from each source's paths to the active fault. Direction comes from
+        the actual path traversal (from-bus vs to-bus ordering) and the magnitude is
+        scaled by ``Branch.parallel_coefficient``. A branch that lies on any path
+        receives exactly one contribution per source (not one per path) to match the
+        semantics of the legacy implementation that used a set of path branches.
+
+        In the automatic mode (``auto_phase_currents=True``) a reduced phase-only
+        network is solved per source using the branch self-impedance as the phase
+        impedance proxy and the fault bus as the reference node. The resulting branch
+        current is used directly and ``parallel_coefficient`` is ignored.
 
         Args:
-            i_vector (np.ndarray): The current vector to update.
-            freq (float): The frequency at which to calculate mutual currents.
-            source_currents (Dict[str, complex]): A dictionary mapping source names to their currents.
-            paths_from_sources (Dict[str, set]): A dictionary mapping source names to sets of branch names in their paths.
+            freq (float): The frequency at which to compute the phase currents.
+            sources_with_path (Iterable[str]): Names of sources that have a path to the
+                active fault.
+
+        Returns:
+            Dict[str, complex]: Mapping from branch name to signed phase current
+            (positive when the current flows from ``from_bus`` to ``to_bus``).
+        """
+        if self.auto_phase_currents:
+            return self._compute_phase_currents_auto(freq, sources_with_path)
+        return self._compute_phase_currents_from_paths(freq, sources_with_path)
+
+    def _compute_phase_currents_from_paths(
+        self, freq: float, sources_with_path
+    ) -> Dict[str, complex]:
+        """
+        Variant A: derive branch phase currents by traversing each source-to-fault path.
+
+        For each source, all branches that appear on any of its paths to the active
+        fault receive a single contribution ``sign * parallel_coefficient * I_source``
+        where ``sign`` is +1 when the phase current direction coincides with the
+        branch's from->to orientation and -1 otherwise.
+
+        Args:
+            freq (float): Frequency to evaluate scalings and source values at.
+            sources_with_path (Iterable[str]): Sources that contribute at this fault.
+
+        Returns:
+            Dict[str, complex]: Signed phase current per branch.
+
+        Raises:
+            RuntimeError: If a path segment does not connect to the expected bus,
+            indicating that the stored path is inconsistent with the branches.
+        """
+        fault_name = self.network.active_fault
+        fault = self.network.faults[fault_name]
+        phase_currents: Dict[str, complex] = {
+            name: 0.0 + 0.0j for name in self.network.branches
+        }
+
+        for source_name in sources_with_path:
+            source = self.network.sources[source_name]
+            i_src = source.values.get(freq)
+            if i_src is None:
+                continue
+            scaling = fault.scalings.get(freq, 1)
+            i_src_complex = scaling * complex(i_src.real, i_src.imag)
+
+            # Collect per-source branch directions. The first path in which a branch
+            # appears determines its direction; any subsequent appearances are
+            # ignored to avoid double-counting across parallel paths.
+            branch_signs: Dict[str, int] = {}
+            for path in self.network.paths.values():
+                if path.source != source_name or path.fault != fault_name:
+                    continue
+                current_bus = source.bus
+                for branch in path.segments:
+                    if branch.from_bus == current_bus:
+                        sign = +1
+                        next_bus = branch.to_bus
+                    elif branch.to_bus == current_bus:
+                        sign = -1
+                        next_bus = branch.from_bus
+                    else:
+                        raise RuntimeError(
+                            f"Path '{path.name}' segment '{branch.name}' does not "
+                            f"connect to bus '{current_bus}'"
+                        )
+                    if branch.name not in branch_signs:
+                        branch_signs[branch.name] = sign
+                    current_bus = next_bus
+
+            for branch_name, sign in branch_signs.items():
+                branch = self.network.branches[branch_name]
+                coeff = branch.parallel_coefficient
+                if coeff is None:
+                    coeff = 1.0
+                phase_currents[branch_name] += sign * coeff * i_src_complex
+
+        return phase_currents
+
+    def _compute_phase_currents_auto(
+        self, freq: float, sources_with_path
+    ) -> Dict[str, complex]:
+        """
+        Variant B: solve a reduced phase-only network to split source currents over parallel paths.
+
+        The phase-side admittance of each branch is approximated by ``1 / Z_self`` when
+        a grounding conductor is present and by ``1 / length`` otherwise (purely
+        resistive proxy). The fault bus is taken as the reference (``u_fault = 0``) and
+        each source injects ``scaling * source.values[freq]`` at its bus. Branch phase
+        currents are then ``(u_from - u_to) * y_phase`` per branch. Contributions from
+        all sources are superposed.
+
+        This mode ignores ``Branch.parallel_coefficient`` because the split is derived
+        from the topology. It is also the natural integration point for an external
+        phase-current provider (e.g. pandapower's single-phase short-circuit) — such a
+        provider would bypass the solve and write directly into the returned dict.
+
+        Args:
+            freq (float): Frequency at which to solve.
+            sources_with_path (Iterable[str]): Sources contributing to the active fault.
+
+        Returns:
+            Dict[str, complex]: Signed phase current per branch.
+        """
+        fault_name = self.network.active_fault
+        fault = self.network.faults[fault_name]
+        fault_bus_idx = self.bus_indices[fault.bus]
+        n = self.num_buses
+
+        phase_currents: Dict[str, complex] = {
+            name: 0.0 + 0.0j for name in self.network.branches
+        }
+
+        # Assemble phase admittance matrix (one entry per branch, regardless of
+        # grounding_conductor: the phase conductor exists in both cases).
+        Y_phase = np.zeros((n, n), dtype=complex)
+        branch_y_phase: Dict[str, complex] = {}
+        for branch in self.network.branches.values():
+            Z_self = branch.self_impedance.get(freq)
+            if branch.type.grounding_conductor and Z_self is not None:
+                Z_complex = complex(Z_self.real, Z_self.imag)
+                if Z_complex == 0:
+                    y = 0.0 + 0.0j
+                else:
+                    y = 1.0 / Z_complex
+            else:
+                length = branch.length if branch.length and branch.length > 0 else 1.0
+                y = complex(1.0 / length, 0.0)
+            branch_y_phase[branch.name] = y
+            fi = self.bus_indices[branch.from_bus]
+            ti = self.bus_indices[branch.to_bus]
+            Y_phase[fi, fi] += y
+            Y_phase[ti, ti] += y
+            Y_phase[fi, ti] -= y
+            Y_phase[ti, fi] -= y
+
+        # Reduce the system by pinning the fault bus to zero
+        keep = [i for i in range(n) if i != fault_bus_idx]
+        if not keep:
+            return phase_currents
+        Y_red = Y_phase[np.ix_(keep, keep)]
+
+        scaling = fault.scalings.get(freq, 1)
+
+        for source_name in sources_with_path:
+            source = self.network.sources[source_name]
+            src_idx = self.bus_indices.get(source.bus)
+            if src_idx is None or src_idx == fault_bus_idx:
+                continue
+            i_src = source.values.get(freq)
+            if i_src is None:
+                continue
+            I = scaling * complex(i_src.real, i_src.imag)
+
+            src_red_idx = keep.index(src_idx)
+            i_red = np.zeros(len(keep), dtype=complex)
+            i_red[src_red_idx] = I
+
+            try:
+                u_red = np.linalg.solve(Y_red, i_red)
+            except np.linalg.LinAlgError:
+                # Disconnected sub-network for this source; skip contribution
+                continue
+
+            u_full = np.zeros(n, dtype=complex)
+            for j, bus_idx in enumerate(keep):
+                u_full[bus_idx] = u_red[j]
+            # u_full[fault_bus_idx] = 0 by construction
+
+            for branch in self.network.branches.values():
+                y = branch_y_phase[branch.name]
+                fi = self.bus_indices[branch.from_bus]
+                ti = self.bus_indices[branch.to_bus]
+                i_branch = (u_full[fi] - u_full[ti]) * y
+                phase_currents[branch.name] += i_branch
+
+        return phase_currents
+
+    def _add_mutual_currents(self, i_vector, freq, phase_currents):
+        """
+        Inject mutual-coupling Norton equivalents into the current vector.
+
+        For each branch with a grounding conductor the phase current ``I_p`` through
+        the parallel phase conductor induces an EMF across the shield which, combined
+        with the shield self-impedance, is equivalent to a current source
+        ``i_mut = (Z_mutual / Z_self) * I_p`` flowing from ``from_bus`` to ``to_bus``.
+        In nodal form this appears as ``-i_mut`` at ``from_bus`` and ``+i_mut`` at
+        ``to_bus``. For the downstream ``compute_branch_currents`` we store the
+        *negated* value so that it combines with the legacy branch-current formula
+        ``current = (u_to - u_from) * Y_self + i_mutual_stored``.
+
+        Args:
+            i_vector (np.ndarray): Current vector to update in place.
+            freq (float): Frequency at which to evaluate the branch impedances.
+            phase_currents (Dict[str, complex]): Signed phase current per branch.
         """
         for branch in self.network.branches.values():
+            if not branch.type.grounding_conductor:
+                continue
+            Z_self = branch.self_impedance.get(freq)
+            Z_mutual = branch.mutual_impedance.get(freq)
+            if Z_self is None or Z_mutual is None:
+                continue
+            Z_self_c = complex(Z_self.real, Z_self.imag)
+            Z_mutual_c = complex(Z_mutual.real, Z_mutual.imag)
+            if Z_self_c == 0:
+                continue
+
+            i_phase = phase_currents.get(branch.name, 0.0 + 0.0j)
+            i_mut = i_phase * (Z_mutual_c / Z_self_c)
+
             from_idx = self.bus_indices[branch.from_bus]
             to_idx = self.bus_indices[branch.to_bus]
+            # Norton current flows from_bus -> to_bus (same direction as I_p)
+            i_vector[from_idx] -= i_mut
+            i_vector[to_idx] += i_mut
 
-            # Check if branch is in any path from sources to fault
-            for source_name, branches_in_paths in paths_from_sources.items():
-                if branch.name in branches_in_paths:
-                    source_bus_idx = self.bus_indices[
-                        self.network.sources[source_name].bus
-                    ]
-
-                    # Determine sign based on indices
-                    if source_bus_idx > min(from_idx, to_idx):
-                        sign = 1
-                    else:
-                        sign = -1
-                    # Get source current
-                    i_source = source_currents.get(source_name, 0)
-                    # Get branch impedances
-                    Z_self = branch.self_impedance.get(freq)
-                    Z_mutual = branch.mutual_impedance.get(freq)
-                    if Z_self and Z_mutual:
-                        Z_self_complex = complex(Z_self.real, Z_self.imag)
-                        Z_mutual_complex = complex(Z_mutual.real, Z_mutual.imag)
-                        # Use the parallel_coefficient
-                        coefficient = branch.parallel_coefficient
-                        # check if the branch can carry current
-                        if branch.type.grounding_conductor:
-                            # Calculate mutual current
-                            i_mut = (
-                                sign
-                                * coefficient
-                                * i_source
-                                * (Z_mutual_complex / Z_self_complex)
-                            )
-                        else:
-                            i_mut = 0
-                        # Update i_vector with sign convention
-                        i_vector[from_idx] += i_mut  # Negative at from_bus
-                        i_vector[to_idx] -= i_mut  # Positive at to_bus
-
-                        # Store the mutual current for this branch and frequency
-                        # Accumulate if multiple sources contribute to mutual current
-                        if branch.name in self.i_mutuals[freq]:
-                            self.i_mutuals[freq][branch.name] += i_mut
-                        else:
-                            self.i_mutuals[freq][branch.name] = i_mut
+            # Stored with flipped sign so that compute_branch_currents keeps using
+            # the formula current = (u_to - u_from) * Y_self + i_mutual_stored.
+            stored = -i_mut
+            if branch.name in self.i_mutuals[freq]:
+                self.i_mutuals[freq][branch.name] += stored
+            else:
+                self.i_mutuals[freq][branch.name] = stored
 
     def solve_network(self):
         """
@@ -405,14 +553,19 @@ class ElectricalNetwork:
                 voltage = self.u_vectors[freq][idx]
                 bus = self.network.buses.get(bus_name)
                 impedance = bus.impedance.get(freq)
-                try:
-                    Z_self_complex = complex(impedance.real, impedance.imag)
-                    current = voltage / Z_self_complex
-                except ZeroDivisionError:
+                if impedance is None:
                     current = 0
+                else:
+                    Z_self_complex = complex(impedance.real, impedance.imag)
+                    if Z_self_complex == 0:
+                        current = 0
+                    else:
+                        current = voltage / Z_self_complex
 
                 uepr_freq[freq] = ComplexNumber(real=voltage.real, imag=voltage.imag)
-                ia_freq[freq] = ComplexNumber(real=current.real, imag=current.imag)
+                ia_freq[freq] = ComplexNumber(
+                    real=complex(current).real, imag=complex(current).imag
+                )
 
             # Calculate RMS values
             rms_voltage = self._calculate_rms(uepr_freq)
@@ -456,20 +609,24 @@ class ElectricalNetwork:
                 from_voltage = self.u_vectors[freq][from_idx]
                 to_voltage = self.u_vectors[freq][to_idx]
                 impedance = branch.self_impedance.get(freq)
-                if impedance and branch.type.grounding_conductor:
+                if (
+                    impedance is not None
+                    and branch.type.grounding_conductor
+                    and complex(impedance.real, impedance.imag) != 0
+                ):
                     Z_self_complex = complex(impedance.real, impedance.imag)
                     Y_self_complex = 1 / Z_self_complex
                     delta_voltage = to_voltage - from_voltage
 
-                    # Retrieve mutual current for this branch and frequency
+                    # Stored mutual term already carries the sign to combine with
+                    # delta_voltage = u_to - u_from. See _add_mutual_currents.
                     i_mutual = self.i_mutuals.get(freq, {}).get(branch.name, 0)
 
-                    # Calculate branch current using the new equation
                     current = delta_voltage * Y_self_complex + i_mutual
 
                     i_s_freq[freq] = ComplexNumber(real=current.real, imag=current.imag)
                 else:
-                    i_s_freq[freq] = 0
+                    i_s_freq[freq] = ComplexNumber(real=0.0, imag=0.0)
 
             # Calculate RMS current
             rms_current = self._calculate_rms(i_s_freq)
@@ -501,9 +658,10 @@ class ElectricalNetwork:
         """
         rms_squared = 0.0
         for value in freq_values.values():
-            if value:
-                magnitude = abs(complex(value.real, value.imag))
-                rms_squared += magnitude**2
+            if value is None:
+                continue
+            magnitude = abs(complex(value.real, value.imag))
+            rms_squared += magnitude**2
         rms_value = (rms_squared) ** 0.5
         return rms_value
 

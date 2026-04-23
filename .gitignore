@@ -160,3 +160,24 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Claude Code / AI assistant context
+#  Project-local instructions and scratch space for AI assistants; should not
+#  be pushed to the public repository.
+CLAUDE.md
+.claude/
+
+# OS-level cruft
+.DS_Store
+Thumbs.db
+
+# Test and notebook artifacts
+#  SQLite databases and JSON dumps produced by running the tests or the
+#  example notebooks. They are regenerated on demand.
+tests/test_grounding.db
+notebooks/grounding.db
+notebooks/network.json
+*.db-journal
+
+# Third-party license report (generated on release)
+THIRD_PARTY_NOTICES.md

@@ -40,8 +40,8 @@ def compute_impedance(
         # Define all necessary symbols
         # Start with frequency 'f' and include all keys from params
         symbols = ["f"] + list(params.keys())
-        sympy_symbols = sp.symbols(' '.join(symbols))
-        
+        sympy_symbols = sp.symbols(" ".join(symbols))
+
         # Create a symbols dictionary for substitution if needed
         symbols_dict = {str(s): s for s in sympy_symbols}
         # Parse the formula string into a SymPy expression
@@ -52,11 +52,7 @@ def compute_impedance(
 
         # Compile the function with parameters using lambdify
         # Use 'numpy' modules to ensure compatibility with numpy arrays
-        compiled_func = sp.lambdify(
-            sympy_symbols,
-            expr,
-            modules=["numpy"]
-        )
+        compiled_func = sp.lambdify(sympy_symbols, expr, modules=["numpy"])
 
         # Create a list where each element is (f_i, param1, param2, ...)
         impedance_dict = {}
@@ -68,15 +64,21 @@ def compute_impedance(
                 # Check if the impedance is a number (constant) or an array
                 if np.isscalar(impedance):
                     # If impedance is scalar, assign the constant value
-                    complex_impedance = ComplexNumber(real=impedance.real, imag=impedance.imag)
+                    complex_impedance = ComplexNumber(
+                        real=impedance.real, imag=impedance.imag
+                    )
                 else:
                     # If impedance is array-like, handle accordingly
-                    complex_impedance = ComplexNumber(real=impedance.real, imag=impedance.imag)
+                    complex_impedance = ComplexNumber(
+                        real=impedance.real, imag=impedance.imag
+                    )
 
                 impedance_dict[freq] = complex_impedance
 
             except Exception as e:
-                raise ValueError(f"Error computing impedance at frequency {freq} Hz: {e}")
+                raise ValueError(
+                    f"Error computing impedance at frequency {freq} Hz: {e}"
+                )
 
         return impedance_dict
 
