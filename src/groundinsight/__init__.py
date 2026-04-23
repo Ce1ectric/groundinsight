@@ -57,7 +57,7 @@ __all__ = [
 ]
 
 # Version
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 # These will be initialized by start_dbsession()
 engine = None
