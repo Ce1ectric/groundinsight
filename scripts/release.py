@@ -2,15 +2,17 @@
 
 This script bumps the project version in every location where it is
 recorded (``pyproject.toml``, ``src/groundinsight/__init__.py`` and
-``CITATION.cff``), creates a conventional-commit release commit, tags
-the commit as ``vX.Y.Z`` and pushes both the branch and the tag. The
-PyPI publishing itself is handled by the GitHub Actions workflow which
-triggers on the ``v*`` tag via OIDC Trusted Publishing.
+``CITATION.cff``), rolls the ``[Unreleased]`` section of ``CHANGELOG.md``
+into a new dated version section, creates a conventional-commit release
+commit, tags it as ``vX.Y.Z`` and pushes both the branch and the tag.
+The PyPI publishing itself is handled by the GitHub Actions workflow
+which triggers on the ``v*`` tag via OIDC Trusted Publishing.
 
 Usage
 -----
 Invoke via the Poetry script entry point::
 
+    poetry run release            # defaults to a patch bump
     poetry run release patch
     poetry run release minor
     poetry run release major
@@ -25,6 +27,13 @@ Options
 ``--allow-dirty``
     Allow uncommitted changes in the working tree. By default the script
     refuses to run if ``git status --porcelain`` reports any entries.
+``--allow-empty-changelog``
+    Proceed even if the ``[Unreleased]`` section of ``CHANGELOG.md`` is
+    empty. A housekeeping note will be inserted in the new version
+    section instead.
+``--date``
+    Override the release date written into ``CHANGELOG.md``. Defaults
+    to today in ISO-8601 form (``YYYY-MM-DD``).
 
 Notes
 -----
@@ -33,11 +42,18 @@ automatically derived from the location of ``pyproject.toml``. Semantic
 versioning is enforced: only ``MAJOR.MINOR.PATCH`` strings (with optional
 pre-release suffix) are accepted, and ``set`` refuses to move the version
 backwards.
+
+``CHANGELOG.md`` is optional — if it does not exist, the changelog step
+is skipped silently. If it exists, the script looks for a heading of the
+exact form ``## [Unreleased]`` and the next heading beginning with
+``## [`` to locate the section boundaries. Unrelated top-level headings
+such as ``## Roadmap`` are therefore safe to keep elsewhere in the file.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime as _datetime
 import logging
 import re
 import subprocess
@@ -54,6 +70,20 @@ logger = logging.getLogger("groundinsight.release")
 SEMVER_RE = re.compile(
     r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)"
     r"(?:-(?P<pre>[0-9A-Za-z.-]+))?$"
+)
+
+
+# Lower-cased strings that mark an '[Unreleased]' section as effectively
+# empty. The section is also considered empty if it only contains
+# whitespace or horizontal-rule separators after the '[Unreleased]' heading.
+_EMPTY_UNRELEASED_MARKERS: frozenset[str] = frozenset(
+    {
+        "",
+        "_no changes yet._",
+        "_nothing yet._",
+        "nothing yet.",
+        "nothing yet",
+    }
 )
 
 
@@ -273,6 +303,222 @@ def _write_new_version(location: VersionLocation, new_version: str) -> None:
     logger.info("updated %s -> %s", location.path.name, new_version)
 
 
+def _parse_iso_date(value: str) -> _datetime.date:
+    """Parse an ISO-8601 date string for the ``--date`` CLI option.
+
+    Parameters
+    ----------
+    value : str
+        Date in ``YYYY-MM-DD`` format.
+
+    Returns
+    -------
+    datetime.date
+        Parsed calendar date.
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        If ``value`` is not a valid ISO-8601 date.
+    """
+    try:
+        return _datetime.date.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"invalid ISO-8601 date {value!r}: {exc}"
+        ) from exc
+
+
+def _update_changelog(
+    root: Path,
+    new_version: str,
+    release_date: _datetime.date,
+    *,
+    allow_empty: bool,
+    dry_run: bool,
+) -> bool:
+    """Roll the ``[Unreleased]`` block into a new dated version section.
+
+    The function is idempotent relative to the structure of the file: it
+    finds the ``## [Unreleased]`` heading and the first subsequent
+    heading of the form ``## [...]`` (which scopes the match to version
+    sections and ignores unrelated top-level headings like
+    ``## Roadmap``), extracts the body in between, and rewrites the file
+    so that:
+
+    * a fresh empty ``## [Unreleased]`` stub remains at the top,
+    * a new ``## [vX.Y.Z] — YYYY-MM-DD`` section carries the old body,
+    * the ``[Unreleased]: .../compare/v<old>...HEAD`` link reference is
+      updated to point to ``v<new>``,
+    * a new ``[<new>]: .../releases/tag/v<new>`` link reference is
+      inserted directly below it.
+
+    Parameters
+    ----------
+    root : Path
+        Repository root (directory containing ``CHANGELOG.md``).
+    new_version : str
+        Version string to assign to the new section (without the leading
+        ``v`` prefix).
+    release_date : datetime.date
+        Calendar date to stamp on the new section.
+    allow_empty : bool
+        Proceed even if ``[Unreleased]`` is empty. When ``True``, a
+        housekeeping note is inserted into the new section.
+    dry_run : bool
+        When ``True``, the intended changes are logged but the file is
+        not modified.
+
+    Returns
+    -------
+    bool
+        ``True`` if ``CHANGELOG.md`` was found and processed (so the
+        caller should stage it); ``False`` if no ``CHANGELOG.md`` exists
+        and the step was skipped.
+
+    Raises
+    ------
+    RuntimeError
+        If ``CHANGELOG.md`` is present but has no ``[Unreleased]``
+        heading, or if no version heading follows the ``[Unreleased]``
+        section, or if the file has a broken structure.
+    ValueError
+        If the ``[Unreleased]`` section is empty and ``allow_empty`` is
+        ``False``.
+    """
+    path = root / "CHANGELOG.md"
+    if not path.is_file():
+        logger.info("no CHANGELOG.md found; skipping changelog update")
+        return False
+
+    text = path.read_text(encoding="utf-8")
+
+    # Find the '## [Unreleased]' heading line.
+    heading_re = re.compile(r"^## \[Unreleased\][^\n]*\n", re.MULTILINE)
+    heading_match = heading_re.search(text)
+    if heading_match is None:
+        raise RuntimeError(
+            "CHANGELOG.md: '## [Unreleased]' heading not found"
+        )
+
+    # The section extends from the end of the heading line up to (but not
+    # including) the next '## [' heading. Requiring the opening bracket
+    # scopes the match to version sections and avoids accidental matches
+    # on headings such as '## Roadmap'.
+    body_start = heading_match.end()
+    next_heading_re = re.compile(r"^## \[", re.MULTILINE)
+    next_match = next_heading_re.search(text, body_start)
+    if next_match is None:
+        raise RuntimeError(
+            "CHANGELOG.md: no version section follows '[Unreleased]'; "
+            "refusing to rewrite the file"
+        )
+    body_end = next_match.start()
+    raw_body = text[body_start:body_end]
+
+    # Trim a trailing horizontal-rule divider (``---``) which acts as a
+    # visual separator; a new one is emitted by the replacement.
+    body_without_divider = re.sub(
+        r"\n---[ \t]*\n\s*$", "\n", raw_body, flags=re.MULTILINE
+    )
+    stripped = body_without_divider.strip()
+    is_empty = stripped.lower() in _EMPTY_UNRELEASED_MARKERS
+
+    if is_empty and not allow_empty:
+        raise ValueError(
+            "CHANGELOG.md: the '[Unreleased]' section is empty. "
+            "Add release notes under '[Unreleased]' before cutting the "
+            "release, or pass '--allow-empty-changelog' to proceed "
+            "without notes."
+        )
+
+    if is_empty:
+        carried_body = "_Housekeeping release; no user-visible changes._\n"
+    else:
+        # Preserve verbatim body, trim surrounding whitespace, then
+        # normalise to exactly one trailing newline before the divider.
+        carried_body = stripped + "\n"
+
+    date_str = release_date.isoformat()
+    replacement = (
+        "## [Unreleased]\n"
+        "\n"
+        "_No changes yet._\n"
+        "\n"
+        "---\n"
+        "\n"
+        f"## [{new_version}] \u2014 {date_str}\n"
+        "\n"
+        f"{carried_body}"
+        "\n"
+        "---\n"
+        "\n"
+    )
+    updated = text[: heading_match.start()] + replacement + text[body_end:]
+
+    # Update the link references at the bottom. The '[Unreleased]' link
+    # has the form
+    #   [Unreleased]: https://.../compare/v<prev>...HEAD
+    # We rewrite it to target v<new> and insert a new
+    #   [<new>]: https://.../releases/tag/v<new>
+    # line directly below it.
+    link_re = re.compile(
+        r"^\[Unreleased\]:\s+"
+        r"(?P<base>https?://\S+/compare/)"
+        r"v(?P<prev>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)"
+        r"(?P<suffix>\.\.\.HEAD)\s*$",
+        re.MULTILINE,
+    )
+    link_match = link_re.search(updated)
+    if link_match is None:
+        logger.warning(
+            "CHANGELOG.md: '[Unreleased]' link reference not found; "
+            "version-compare links at the bottom of the file were not "
+            "touched — please update them by hand"
+        )
+    else:
+        base = link_match["base"]
+        tag_base = base.replace("/compare/", "/releases/tag/")
+        new_unreleased_line = (
+            f"[Unreleased]: {base}v{new_version}{link_match['suffix']}"
+        )
+        new_version_line = f"[{new_version}]: {tag_base}v{new_version}"
+        updated = link_re.sub(
+            f"{new_unreleased_line}\n{new_version_line}",
+            updated,
+            count=1,
+        )
+
+    if dry_run:
+        logger.info(
+            "[dry-run] would rewrite CHANGELOG.md: move '[Unreleased]' "
+            "to '[%s] \u2014 %s'",
+            new_version,
+            date_str,
+        )
+        if is_empty:
+            logger.info(
+                "[dry-run] '[Unreleased]' is empty; a housekeeping note "
+                "will be inserted in the new section"
+            )
+        else:
+            preview = [
+                line for line in carried_body.splitlines() if line.strip()
+            ][:6]
+            logger.info("[dry-run] new section preview:")
+            for line in preview:
+                logger.info("[dry-run]   %s", line)
+        return True
+
+    path.write_text(updated, encoding="utf-8")
+    logger.info(
+        "updated CHANGELOG.md: moved '[Unreleased]' to '[%s] \u2014 %s'",
+        new_version,
+        date_str,
+    )
+    return True
+
+
 def _run_git(args: list[str], *, dry_run: bool) -> None:
     """Run a git command, honouring ``dry_run``.
 
@@ -336,8 +582,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "kind",
+        nargs="?",
+        default="patch",
         choices=("major", "minor", "patch", "set"),
-        help="semver bump kind; 'set' requires an explicit VERSION argument",
+        help=(
+            "semver bump kind; defaults to 'patch' when omitted. "
+            "'set' requires an explicit VERSION argument"
+        ),
     )
     parser.add_argument(
         "version",
@@ -359,6 +610,21 @@ def _build_parser() -> argparse.ArgumentParser:
         "--allow-dirty",
         action="store_true",
         help="proceed even if the working tree has uncommitted changes",
+    )
+    parser.add_argument(
+        "--allow-empty-changelog",
+        action="store_true",
+        help=(
+            "proceed even if the '[Unreleased]' section of CHANGELOG.md "
+            "is empty; a housekeeping note will be inserted in its place"
+        ),
+    )
+    parser.add_argument(
+        "--date",
+        type=_parse_iso_date,
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="explicit release date for CHANGELOG.md (default: today)",
     )
     return parser
 
@@ -436,8 +702,28 @@ def main(argv: list[str] | None = None) -> int:
         else:
             _write_new_version(location, new_version)
 
+    # Roll the '[Unreleased]' block of CHANGELOG.md into a new dated
+    # version section. Failures raise and abort the release before any
+    # git operations are performed, leaving the working tree untouched
+    # except for the version-string files (which are still easy to
+    # revert with 'git checkout --').
+    release_date = args.date if args.date is not None else _datetime.date.today()
+    try:
+        changelog_updated = _update_changelog(
+            root,
+            new_version,
+            release_date,
+            allow_empty=args.allow_empty_changelog,
+            dry_run=args.dry_run,
+        )
+    except (RuntimeError, ValueError) as exc:
+        logger.error("%s", exc)
+        return 2
+
     # Stage, commit, tag, push.
     rel_paths = [str(loc.path.relative_to(root)) for loc in locations]
+    if changelog_updated:
+        rel_paths.append("CHANGELOG.md")
     _run_git(["add", *rel_paths], dry_run=args.dry_run)
     commit_message = f"chore(release): v{new_version}"
     _run_git(["commit", "-m", commit_message], dry_run=args.dry_run)

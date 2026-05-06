@@ -155,6 +155,52 @@ $$
 r = \left| 1 - \frac{Z_{\text{mutual}}}{Z_{\text{self}}} \right|.
 $$
 
+The same closed form applies to a fully symmetric ring with the fault
+diametrically opposite the source — the Norton injections in the two
+ring halves are then perfectly anti-parallel and superpose to the same
+expression as the single-line case.
+
+#### Frequency dependence of the reduction factor
+
+For a shielded cable the impedances split into a resistive and an
+inductive part,
+
+$$
+Z_{\text{self}}(f) = R + j\,\omega L,
+\qquad
+Z_{\text{mutual}}(f) = j\,\omega M,
+\qquad \omega = 2\pi f.
+$$
+
+With full coupling between the faulted phase and the grounding conductor
+(the geometric ideal $M = L$) the closed form simplifies to
+
+$$
+r(f) \;=\; \left| 1 - \frac{j\,\omega L}{R + j\,\omega L} \right|
+       \;=\; \frac{R}{\sqrt{R^{2} + (\omega L)^{2}}}.
+$$
+
+Two limits follow directly:
+
+- $f \to 0$: $\omega L \to 0$, so $Z_{\text{mutual}}/Z_{\text{self}} \to 0$
+  and $r \to 1$. At DC the shield carries no induced current, the entire
+  fault current flows through the local earth path and the reduction
+  factor equals 1.
+- $f \to \infty$: the imaginary parts dominate, so
+  $Z_{\text{mutual}}/Z_{\text{self}} \to M/L = 1$ and $r \to 0$. At high
+  frequency the shield short-circuits the inductive coupling, almost the
+  entire fault current returns metallically and the EPR collapses.
+
+In a real cable the resistive part is small compared with $\omega L$
+already at power frequency, which is why MV cables typically reach
+$r \approx 0.3 \ldots 0.4$ at 50 Hz and the reduction factor decays
+quickly above one or two hundred Hz. This convergence is exercised
+explicitly by
+`tests/test_topology_and_reduction.py::test_reduction_factor_sweep_*`,
+which sweeps a single MV cable section and a 20-bus symmetric ring
+from 50 Hz to 5 kHz and asserts both the closed form above and the
+monotonic decay towards zero.
+
 ### Grounding impedance
 
 The effective grounding impedance seen at the fault bus is

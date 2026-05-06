@@ -38,7 +38,9 @@ it for every harmonic of interest.
 
 - Bus, branch, source and fault objects modelled as Pydantic v2 classes.
 - Symbolic impedance formulas in `rho`, `f` and `l`, evaluated through
-  SymPy.
+  SymPy. Compiled callables are cached per `BusType` / `BranchType` and
+  evaluated vectorised over all frequencies, so building large networks
+  scales cheaply with the number of buses and branches.
 - Sparse LU solver per frequency (`scipy.sparse.linalg.splu`).
 - Mutual coupling between faulted phase and grounding conductor treated as
   Norton equivalents along the path from source to fault.
@@ -52,6 +54,10 @@ it for every harmonic of interest.
 - Polars DataFrames for result access (`net.res_buses(...)`,
   `net.res_branches(...)`, `net.res_all_impedances()`).
 - Matplotlib helpers for bar plots of EPR, branch currents and bus currents.
+- **Roadmap (0.4.0)**: import grids from `pandapower` and PowerFactory
+  (`.dgs` export and live Python API) so existing distribution-network
+  models can be reused as the topology source — see
+  [`CHANGELOG.md`](CHANGELOG.md) for the planned schema.
 
 ## Installation
 

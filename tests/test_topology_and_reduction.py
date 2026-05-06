@@ -67,6 +67,61 @@ def _ohl_branch_type():
     )
 
 
+def _ms_cable_branch_type_freq_dependent():
+    """MV cable with frequency-dependent reactance and constant L_self / M.
+
+    The 50-Hz reference values used by the rest of this module are
+    ``Z_self = 0.25 + j*0.6 ohm/km`` and ``Z_mutual = j*0.6 ohm/km``. Treating
+    the imaginary parts as ``omega * L`` and ``omega * M`` and solving at
+    ``f = 50 Hz`` gives the constant inductances of the cable shield::
+
+        omega_50 = 2 * pi * 50 = 100 * pi rad/s
+        L_self   = 0.6 / omega_50  ~ 1.910 mH / km
+        M        = 0.6 / omega_50  ~ 1.910 mH / km        (k = M / L = 1)
+
+    These values are representative for a 20 kV XLPE cable with a 25 mm^2
+    copper shield. The resistive part ``R = 0.25 ohm/km`` is kept identical to
+    the 50-Hz reference so that the new sweep agrees exactly with the existing
+    cable tests at 50 Hz.
+
+    Writing the formula as ``j * 0.6 * f / 50`` keeps the analytical 50-Hz
+    value explicit and avoids dragging ``pi`` through the SymPy formula
+    string -- ``omega * L = (2 * pi * f) * (0.6 / (2 * pi * 50)) = 0.6 * f / 50``.
+    """
+    return BranchType(
+        name="MSCableFreq",
+        description="MV cable, frequency-dependent (constant L, M)",
+        grounding_conductor=True,
+        self_impedance_formula="(0.25 + I * 0.6 * f / 50) * l",
+        mutual_impedance_formula="(0.0 + I * 0.6 * f / 50) * l",
+    )
+
+
+def _r_analytical_single_cable(f: float, R: float = 0.25, R_omegaL_50: float = 0.6) -> float:
+    """Closed-form reduction factor for a single MS-cable section.
+
+    With ``Z_self = R + j*omega*L`` and ``Z_mutual = j*omega*M`` and
+    ``L == M`` (full coupling), the reduction factor reduces to::
+
+        r(f) = |1 - Z_mutual/Z_self|
+             = |R / (R + j * omega * L)|
+             = R / sqrt(R**2 + (omega * L)**2)
+
+    With the ``f/50`` parameterisation used by
+    :func:`_ms_cable_branch_type_freq_dependent`, ``omega * L = 0.6 * f / 50``.
+
+    Args:
+        f: Frequency in Hz.
+        R: Real part of ``Z_self`` (ohm/km), default ``0.25``.
+        R_omegaL_50: ``omega * L`` at 50 Hz (ohm/km), default ``0.6``.
+
+    Returns:
+        The analytical reduction factor at frequency ``f``.
+    """
+    omega_L = R_omegaL_50 * f / 50.0
+    return R / math.sqrt(R**2 + omega_L**2)
+
+
 def _reduction_factor(net, fault_name, freq=50):
     """Extract the reduction factor for a given fault at a given frequency."""
     return net.results[fault_name].reduction_factor.value[freq]
@@ -322,3 +377,108 @@ def test_ring_variants_agree():
     r_a = _reduction_factor(net_a, "fault")
     r_b = _reduction_factor(net_b, "fault")
     assert r_a == pytest.approx(r_b, rel=1e-3)
+
+
+# ---------------------------------------------------------------------------
+# Frequency sweep: with constant L_self == M and a purely resistive bus
+# impedance, the reduction factor must converge towards 0 as f grows.
+#
+# The cable model is the frequency-dependent
+# :func:`_ms_cable_branch_type_freq_dependent`. For a single cable section
+# the closed form is
+#
+#     r(f) = R / sqrt(R**2 + (omega * L)**2)
+#
+# which is also the analytical reference for a fully symmetric ring with the
+# fault diametrically opposite to the source (Norton injections perfectly
+# anti-parallel along both halves).
+# ---------------------------------------------------------------------------
+
+
+_SWEEP_FREQS = [50, 100, 250, 500, 1000, 2500, 5000]
+
+
+def test_reduction_factor_sweep_single_cable_converges_to_zero():
+    """Single MS-cable section: r(f) follows the closed-form curve and
+    decays monotonically towards 0 as the frequency grows."""
+    net = gi.create_network(name="MSCableSweep", frequencies=_SWEEP_FREQS)
+    bus_type = _bus_type()
+    cable = _ms_cable_branch_type_freq_dependent()
+
+    gi.create_bus(name="bus1", type=bus_type, network=net)
+    gi.create_bus(name="bus2", type=bus_type, network=net)
+    gi.create_branch(
+        name="branch1", type=cable,
+        from_bus="bus1", to_bus="bus2", length=1.0, network=net,
+    )
+
+    values = {f: 100.0 for f in _SWEEP_FREQS}
+    scalings = {f: 1.0 for f in _SWEEP_FREQS}
+    gi.create_source(name="src", bus="bus1", values=values, network=net)
+    gi.create_fault(name="fault", bus="bus2", scalings=scalings, network=net)
+
+    gi.run_fault(net, fault_name="fault")
+
+    rf = net.results["fault"].reduction_factor.value
+    rs = [rf[float(f)] for f in _SWEEP_FREQS]
+
+    # 50 Hz reproduces the existing single-cable reference value (~0.385).
+    assert rs[0] == pytest.approx(R_REF, rel=1e-6)
+
+    # Monotonically decreasing across the entire sweep.
+    for prev, curr in zip(rs, rs[1:]):
+        assert curr < prev, f"r is not monotonically decreasing: {rs}"
+
+    # Each value matches the closed-form expression r = R / sqrt(R^2+(wL)^2).
+    for f, r in zip(_SWEEP_FREQS, rs):
+        assert r == pytest.approx(_r_analytical_single_cable(f), rel=1e-3)
+
+    # By 5 kHz the reduction factor is well below 5 % -- clear convergence
+    # towards 0.
+    assert rs[-1] < 0.05
+
+
+def test_reduction_factor_sweep_20_bus_ring_converges_to_zero():
+    """20-bus symmetric ring with the fault opposite the source: same
+    closed-form reduction factor as a single cable, hence the same
+    convergence towards 0 with rising frequency."""
+    n_buses = 20
+    fault_idx = n_buses // 2
+    net = gi.create_network(name="Ring20Sweep", frequencies=_SWEEP_FREQS)
+    bus_type = _bus_type()
+    cable = _ms_cable_branch_type_freq_dependent()
+
+    for i in range(n_buses):
+        gi.create_bus(name=f"bus{i:02d}", type=bus_type, network=net)
+    for i in range(n_buses):
+        nxt = (i + 1) % n_buses
+        gi.create_branch(
+            name=f"b{i:02d}_{nxt:02d}", type=cable,
+            from_bus=f"bus{i:02d}", to_bus=f"bus{nxt:02d}",
+            length=1.0, network=net,
+            parallel_coefficient=0.5,
+        )
+
+    values = {f: 100.0 for f in _SWEEP_FREQS}
+    scalings = {f: 1.0 for f in _SWEEP_FREQS}
+    gi.create_source(name="src", bus="bus00", values=values, network=net)
+    gi.create_fault(
+        name="fault", bus=f"bus{fault_idx:02d}",
+        scalings=scalings, network=net,
+    )
+
+    gi.run_fault(net, fault_name="fault", auto_parallel_coefficients=True)
+
+    rf = net.results["fault"].reduction_factor.value
+    rs = [rf[float(f)] for f in _SWEEP_FREQS]
+
+    # 50 Hz matches the analytical single-cable reference (the ring shares
+    # the same closed form thanks to the symmetric anti-parallel injections).
+    assert rs[0] == pytest.approx(R_REF, rel=1e-3)
+
+    # Monotonically decreasing across the entire sweep.
+    for prev, curr in zip(rs, rs[1:]):
+        assert curr < prev, f"r on ring is not monotonically decreasing: {rs}"
+
+    # Strict convergence towards 0 at high frequency.
+    assert rs[-1] < 0.05
