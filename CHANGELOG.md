@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.3.1] — 2026-05-06
+
 ### Changed
 
 - **Impedance evaluation is now cached and vectorised.**
@@ -172,7 +178,8 @@ form — superseded by 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.2.0
 [0.1.2]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.1.2
