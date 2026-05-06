@@ -636,6 +636,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Reduction factor">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#frequency-dependence-of-the-reduction-factor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Frequency dependence of the reduction factor
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -1215,6 +1232,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Reduction factor">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#frequency-dependence-of-the-reduction-factor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Frequency dependence of the reduction factor
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -1406,6 +1440,45 @@ collapses to the familiar analytical form</p>
 <div class="arithmatex">\[
 r = \left| 1 - \frac{Z_{\text{mutual}}}{Z_{\text{self}}} \right|.
 \]</div>
+<p>The same closed form applies to a fully symmetric ring with the fault
+diametrically opposite the source — the Norton injections in the two
+ring halves are then perfectly anti-parallel and superpose to the same
+expression as the single-line case.</p>
+<h4 id="frequency-dependence-of-the-reduction-factor">Frequency dependence of the reduction factor<a class="headerlink" href="#frequency-dependence-of-the-reduction-factor" title="Permanent link">&para;</a></h4>
+<p>For a shielded cable the impedances split into a resistive and an
+inductive part,</p>
+<div class="arithmatex">\[
+Z_{\text{self}}(f) = R + j\,\omega L,
+\qquad
+Z_{\text{mutual}}(f) = j\,\omega M,
+\qquad \omega = 2\pi f.
+\]</div>
+<p>With full coupling between the faulted phase and the grounding conductor
+(the geometric ideal <span class="arithmatex">\(M = L\)</span>) the closed form simplifies to</p>
+<div class="arithmatex">\[
+r(f) \;=\; \left| 1 - \frac{j\,\omega L}{R + j\,\omega L} \right|
+       \;=\; \frac{R}{\sqrt{R^{2} + (\omega L)^{2}}}.
+\]</div>
+<p>Two limits follow directly:</p>
+<ul>
+<li><span class="arithmatex">\(f \to 0\)</span>: <span class="arithmatex">\(\omega L \to 0\)</span>, so <span class="arithmatex">\(Z_{\text{mutual}}/Z_{\text{self}} \to 0\)</span>
+  and <span class="arithmatex">\(r \to 1\)</span>. At DC the shield carries no induced current, the entire
+  fault current flows through the local earth path and the reduction
+  factor equals 1.</li>
+<li><span class="arithmatex">\(f \to \infty\)</span>: the imaginary parts dominate, so
+  <span class="arithmatex">\(Z_{\text{mutual}}/Z_{\text{self}} \to M/L = 1\)</span> and <span class="arithmatex">\(r \to 0\)</span>. At high
+  frequency the shield short-circuits the inductive coupling, almost the
+  entire fault current returns metallically and the EPR collapses.</li>
+</ul>
+<p>In a real cable the resistive part is small compared with <span class="arithmatex">\(\omega L\)</span>
+already at power frequency, which is why MV cables typically reach
+<span class="arithmatex">\(r \approx 0.3 \ldots 0.4\)</span> at 50 Hz and the reduction factor decays
+quickly above one or two hundred Hz. This convergence is exercised
+explicitly by
+<code>tests/test_topology_and_reduction.py::test_reduction_factor_sweep_*</code>,
+which sweeps a single MV cable section and a 20-bus symmetric ring
+from 50 Hz to 5 kHz and asserts both the closed form above and the
+monotonic decay towards zero.</p>
 <h3 id="grounding-impedance">Grounding impedance<a class="headerlink" href="#grounding-impedance" title="Permanent link">&para;</a></h3>
 <p>The effective grounding impedance seen at the fault bus is</p>
 <div class="arithmatex">\[
