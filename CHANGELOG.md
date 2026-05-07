@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.3.2] — 2026-05-07
+
 ### Added
 
 - **`groundinsight.set_log_level(level)` helper** — convenience entry
@@ -214,7 +220,8 @@ form — superseded by 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.2.0
