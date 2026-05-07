@@ -1,6 +1,6 @@
 # Installation
 
-`groundinsight` requires **Python 3.12 or newer**. It is published on PyPI and
+`groundinsight` requires **Python 3.14 or newer**. It is published on PyPI and
 can be installed with any standard Python package manager.
 
 ## Install from PyPI

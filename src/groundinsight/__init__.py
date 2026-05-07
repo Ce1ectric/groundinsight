@@ -10,6 +10,9 @@ data to and from JSON files and integrates plotting functionalities for visualiz
 bus voltages and branch currents.
 """
 
+import logging
+from typing import Union
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 from .database.crud import (
@@ -54,10 +57,62 @@ __all__ = [
     "plot_bus_currents",
     "create_network_assistant",
     "create_paths",
+    "set_log_level",
 ]
 
 # Version
 __version__ = "0.3.1"
+
+# Library logging: attach a NullHandler so that importing groundinsight does
+# not produce any output by default. Applications and notebooks opt in to
+# log output either by configuring the standard ``logging`` module
+# themselves or by calling :func:`set_log_level`.
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
+
+
+def set_log_level(level: Union[int, str] = "INFO") -> logging.Logger:
+    """
+    Enable console logging for the ``groundinsight`` package.
+
+    Convenience helper for interactive use (notebooks, scripts). Attaches a
+    :class:`logging.StreamHandler` with a simple formatter to the
+    ``groundinsight`` package logger if none is attached yet, and sets the
+    requested level. Subsequent calls only adjust the level and do not add
+    additional handlers, so it is safe to call repeatedly.
+
+    Args:
+        level (Union[int, str], optional): Log level either as a numeric
+            constant (e.g. ``logging.INFO``) or as a string name
+            (``"DEBUG"``, ``"INFO"``, ``"WARNING"``, ``"ERROR"``,
+            ``"CRITICAL"``). Defaults to ``"INFO"``.
+
+    Returns:
+        logging.Logger: The configured ``groundinsight`` package logger,
+        for further adjustments by the caller if desired.
+
+    Examples:
+        >>> import groundinsight as gi
+        >>> gi.set_log_level("INFO")  # doctest: +ELLIPSIS
+        <Logger groundinsight (INFO)>
+    """
+    pkg_logger = logging.getLogger(__name__)
+    pkg_logger.setLevel(level)
+
+    has_stream = any(
+        isinstance(h, logging.StreamHandler)
+        and not isinstance(h, logging.NullHandler)
+        for h in pkg_logger.handlers
+    )
+    if not has_stream:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter("%(levelname)s [%(name)s] %(message)s")
+        )
+        pkg_logger.addHandler(handler)
+
+    return pkg_logger
+
 
 # These will be initialized by start_dbsession()
 engine = None
@@ -82,7 +137,7 @@ def start_dbsession(sqlite_path: str = "grounding.db"):
     global engine, SessionLocal, session
 
     if engine is not None:
-        print("Database session already started.")
+        logger.warning("Database session already started.")
         return
 
     # Create an engine
@@ -98,7 +153,7 @@ def start_dbsession(sqlite_path: str = "grounding.db"):
     from .models.database_models import Base
 
     Base.metadata.create_all(engine)
-    print(f"Database session started with '{sqlite_path}'.")
+    logger.info("Database session started with '%s'.", sqlite_path)
 
 
 def close_dbsession():
@@ -116,9 +171,9 @@ def close_dbsession():
         engine.dispose()
         engine = None
         SessionLocal = None
-        print("Database session closed.")
+        logger.info("Database session closed.")
     else:
-        print("No database session to close.")
+        logger.warning("No database session to close.")
 
 
 def save_bustype_to_db(bus_type: BusType, overwrite: bool = False):

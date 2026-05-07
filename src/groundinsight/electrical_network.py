@@ -37,6 +37,8 @@ Two strategies are available to determine the phase current I_p per branch:
    (e.g. pandapower single-phase short-circuit results).
 """
 
+import logging
+
 import numpy as np
 from typing import Dict, Optional
 from scipy.sparse import csc_matrix
@@ -54,6 +56,9 @@ from groundinsight.models.core_models import (
     ResultBranch,
     ResultReductionFactor,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class ElectricalNetwork:
@@ -542,7 +547,12 @@ class ElectricalNetwork:
                 u_vector = lu.solve(i_vector)
                 self.u_vectors[freq] = u_vector
             except np.linalg.LinAlgError as e:
-                print(f"Error solving network equations at frequency {freq}: {e}")
+                logger.error(
+                    "Error solving network equations at frequency %s: %s",
+                    freq,
+                    e,
+                    exc_info=True,
+                )
                 continue
 
         # Create ResultBus instances
@@ -705,8 +715,11 @@ class ElectricalNetwork:
                 self.u_vectors_no_mutual[freq] = u_vector
 
             except np.linalg.LinAlgError as e:
-                print(
-                    f"Error solving network equations at frequency {freq} without mutual currents: {e}"
+                logger.error(
+                    "Error solving network equations at frequency %s without mutual currents: %s",
+                    freq,
+                    e,
+                    exc_info=True,
                 )
                 continue
 

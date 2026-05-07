@@ -9,8 +9,13 @@ define paths, and run fault calculations. These operations utilize the core mode
 calculations and updates.
 """
 
+import logging
+
 from .models.core_models import Network, Bus, BusType, Branch, BranchType, Fault, Source
 from typing import Optional, List, Dict
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_network(name: str, frequencies: List, description: str = None) -> Network:
@@ -356,8 +361,10 @@ def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
         and more_than_one_path == True
         and parallel_coefficients_default == True
     ):
-        print(
-            "Warning: The parallel coefficients are set to 1 or None and there are parallel paths in the network. Consider setting the parallel coefficients to the correct value for the branches in the network or using the auto_parallel_coefficients flag within run_fault()."
+        logger.warning(
+            "The parallel coefficients are set to 1 or None and there are parallel paths in the network. "
+            "Consider setting the parallel coefficients to the correct value for the branches in the "
+            "network or using the auto_parallel_coefficients flag within run_fault()."
         )
 
 

@@ -156,3 +156,27 @@ gi.close_dbsession()
 That is the full workflow. The [Concepts](concepts.md) page explains the model
 behind the scenes; the [Examples](examples/index.md) section contains
 runnable notebooks covering more realistic network topologies.
+
+## 9. Logging and silencing output
+
+`groundinsight` is a quiet library by default: it attaches a
+`logging.NullHandler` to the package logger on import, so simply importing
+and using it produces no console output. Status messages, overwrite
+warnings and solver errors are all emitted through the standard
+[`logging`](https://docs.python.org/3/library/logging.html) module.
+
+To see the messages in a notebook or script, opt in with the convenience
+helper:
+
+```python
+import groundinsight as gi
+
+gi.set_log_level("INFO")  # or "WARNING", "ERROR", logging.DEBUG, ...
+```
+
+This attaches a single `StreamHandler` with a `LEVEL [logger] message`
+formatter to the `groundinsight` logger and is safe to call repeatedly
+(the handler is only added once). For full control, configure the
+standard `logging` module directly — for example, route the
+`groundinsight.electrical_network` logger to a file while keeping the
+rest at `WARNING`.
