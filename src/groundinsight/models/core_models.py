@@ -1,5 +1,7 @@
 # models/core_models.py
 
+import logging
+
 import numpy as np
 from pydantic import (
     BaseModel,
@@ -13,6 +15,9 @@ from sympy import lambdify, sympify, symbols
 from groundinsight.utils.validations import validate_impedance_formula_value
 from groundinsight.utils.impedance_calculator import compute_impedance
 import polars as pl
+
+
+logger = logging.getLogger(__name__)
 
 
 # data types
@@ -677,7 +682,10 @@ class Network(BaseModel):
         """
         if bus.name in self.buses:
             if overwrite:
-                print(f"Bus '{bus.name}' already exists in the network. Overwriting.")
+                logger.warning(
+                    "Bus '%s' already exists in the network. Overwriting.",
+                    bus.name,
+                )
             else:
                 raise ValueError(
                     f"Bus with name '{bus.name}' already exists in the network '{self.name}'. If you want to overwrite, set overwrite=True."
@@ -700,8 +708,9 @@ class Network(BaseModel):
         """
         if branch.name in self.branches:
             if overwrite:
-                print(
-                    f"Branch '{branch.name}' already exists in the network. Overwriting."
+                logger.warning(
+                    "Branch '%s' already exists in the network. Overwriting.",
+                    branch.name,
                 )
             else:
                 raise ValueError(
@@ -737,8 +746,9 @@ class Network(BaseModel):
 
         if fault.name in self.faults:
             if overwrite:
-                print(
-                    f"Fault '{fault.name}' already exists in the network. Overwriting."
+                logger.warning(
+                    "Fault '%s' already exists in the network. Overwriting.",
+                    fault.name,
                 )
             else:
                 raise ValueError(
@@ -763,8 +773,9 @@ class Network(BaseModel):
 
         if source.name in self.sources:
             if overwrite:
-                print(
-                    f"Source '{source.name}' already exists in the network. Overwriting."
+                logger.warning(
+                    "Source '%s' already exists in the network. Overwriting.",
+                    source.name,
                 )
             else:
                 raise ValueError(
@@ -918,7 +929,10 @@ class Network(BaseModel):
         data = []
         for fault_name, fault in self.faults.items():
             if fault_name not in self.results:
-                print(f"No results available for fault '{fault_name}'. Skipping.")
+                logger.warning(
+                    "No results available for fault '%s'. Skipping.",
+                    fault_name,
+                )
                 continue
             result = self.results[fault_name]
             fault_bus = fault.bus
@@ -926,13 +940,19 @@ class Network(BaseModel):
             # Grounding Impedance
             grounding_impedance = result.grounding_impedance
             if not grounding_impedance:
-                print(f"No grounding impedance results for fault '{fault_name}'.")
+                logger.warning(
+                    "No grounding impedance results for fault '%s'.",
+                    fault_name,
+                )
                 continue
 
             # Reduction Factor
             reduction_factor = result.reduction_factor
             if not reduction_factor:
-                print(f"No reduction factor results for fault '{fault_name}'.")
+                logger.warning(
+                    "No reduction factor results for fault '%s'.",
+                    fault_name,
+                )
                 continue
 
             for freq in self.frequencies:

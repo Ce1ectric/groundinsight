@@ -30,6 +30,48 @@ _No changes yet._
 
 ---
 
+## [0.3.2] — 2026-05-07
+
+### Added
+
+- **`groundinsight.set_log_level(level)` helper** — convenience entry
+  point for interactive use. Attaches a single `StreamHandler` with a
+  simple formatter to the package logger and sets the requested level.
+  Idempotent: repeated calls only adjust the level. Default behaviour of
+  the library is unchanged (a `NullHandler` is attached on import, no
+  output without explicit configuration).
+
+### Changed
+
+- **Minimum Python version raised to 3.14.** `pyproject.toml` now
+  declares `python = "^3.14"`; the CI matrix runs only against 3.14
+  and the docs / release workflows pin the same version. This aligns
+  the dissertation tool family (`groundinsight`, `groundmeas`,
+  `groundfield`) on a single supported interpreter. **Breaking** for
+  users still on 3.12 / 3.13 — pin to `groundinsight<0.3.2` if you
+  cannot upgrade your Python yet.
+- **User-facing messages migrated from `print()` to the standard
+  `logging` module.** Every call previously printing status, warnings or
+  solver errors in `__init__.py`, `network_operations.py`,
+  `electrical_network.py` and `models/core_models.py` now goes through
+  a per-module `logging.getLogger(__name__)`. Level mapping:
+  - `INFO` for status (database session started/closed).
+  - `WARNING` for recoverable issues that the user should notice
+    (already-started/no-session-to-close, overwriting an existing
+    `Bus`/`Branch`/`Fault`/`Source`, missing results when
+    aggregating, parallel-coefficient guidance in
+    `build_electrical_network`).
+  - `ERROR` (with `exc_info=True`) for `numpy.linalg.LinAlgError` raised
+    while solving the nodal equation per frequency.
+
+  Callers can silence everything by doing nothing (the default), enable
+  console output with `groundinsight.set_log_level("INFO")`, or wire the
+  package logger into their own `logging` configuration. Doctests
+  continue to use plain `print(...)` as before — they are not library
+  output.
+
+---
+
 ## [0.3.1] — 2026-05-06
 
 ### Changed
@@ -178,7 +220,8 @@ form — superseded by 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.2.0
@@ -312,12 +355,6 @@ distribution-network space.
 
 ### Medium term
 
-- **Logging migration**: the user-facing messages in
-  `network_operations.py` and `electrical_network.py` currently use
-  `print`. Moving to the standard `logging` module gives callers a
-  way to silence output and makes the library usable inside notebooks
-  without stdout noise. Becomes more pressing once parameter sweeps
-  run at AP 1 scale.
 - **`MeasurementScenario` abstraction** — model the earthing
   measurement (auxiliary electrode at distance `d`, measurement-loop
   source) as a first-class object instead of an ad-hoc `Fault`. Lets
