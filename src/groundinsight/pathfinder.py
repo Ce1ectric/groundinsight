@@ -46,19 +46,28 @@ class PathFinder:
         Build an adjacency list representation of the network graph.
 
         Each bus is mapped to a list of branches connected to it, facilitating efficient traversal.
+        Inactive buses (``Bus.active=False``) are excluded from the graph entirely.
+        Inactive branches (``Branch.active=False``) and branches that touch an inactive
+        bus on either end are also dropped, so DFS will never traverse them.
 
         Returns:
             Dict[str, List[Branch]]: An adjacency list where keys are bus names and values are lists of connected branches.
 
         """
-        graph = {bus_name: [] for bus_name in self.network.buses.keys()}
+        graph = {
+            bus_name: []
+            for bus_name, bus in self.network.buses.items()
+            if bus.active
+        }
 
         for branch in self.network.branches.values():
-            from_bus = branch.from_bus
-            to_bus = branch.to_bus
+            if not branch.active:
+                continue
+            if branch.from_bus not in graph or branch.to_bus not in graph:
+                continue
             # Assuming undirected graph, add branch to both from_bus and to_bus entries
-            graph[from_bus].append(branch)
-            graph[to_bus].append(branch)
+            graph[branch.from_bus].append(branch)
+            graph[branch.to_bus].append(branch)
         return graph
 
     def find_paths(self, source_bus_name: str, fault_bus_name: str) -> List[Path]:
@@ -78,6 +87,10 @@ class PathFinder:
         all_paths = []
         visited_buses = set()
         path = []
+
+        # Source or fault on an inactive (filtered) bus -> no path possible.
+        if source_bus_name not in self.graph or fault_bus_name not in self.graph:
+            return []
 
         self._dfs(source_bus_name, fault_bus_name, visited_buses, path, all_paths)
 

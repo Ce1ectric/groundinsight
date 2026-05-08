@@ -213,6 +213,10 @@ class Bus(BaseModel):
         type (BusType): The type of the bus.
         impedance (Dict[float, ComplexNumber]): A mapping of frequency to impedance values.
         specific_earth_resistance (float): The specific earth resistance associated with the bus.
+        active (bool): Whether the bus participates in the solve. Inactive buses are
+            removed from the admittance matrix; paths traversing them are dropped.
+            Defaults to True. Used by the outage / what-if machinery in
+            ``groundinsight.simulation.outage``.
     """
 
     name: str
@@ -220,6 +224,7 @@ class Bus(BaseModel):
     type: BusType
     impedance: Dict[float, ComplexNumber]
     specific_earth_resistance: float = 100.0
+    active: bool = True
 
     def calculate_impedance(self, frequencies: List[float]):
         """
@@ -302,6 +307,11 @@ class Branch(BaseModel):
         mutual_impedance (Dict[float, ComplexNumber]): Mutual-impedance values mapped by frequency.
         specific_earth_resistance (float): The specific earth resistance associated with the branch.
         parallel_coefficient (Optional[float]): The parallel coefficient between 0..1, if any.
+        active (bool): Whether the branch participates in the solve. An inactive branch
+            behaves like an open circuit: it contributes neither to the admittance matrix
+            nor to the mutual-coupling injection, paths traversing it are dropped, and
+            its branch current in the result is forced to zero. Defaults to True. Used
+            by the outage / what-if machinery in ``groundinsight.simulation.outage``.
     """
 
     name: str
@@ -314,6 +324,7 @@ class Branch(BaseModel):
     mutual_impedance: Dict[float, ComplexNumber]
     specific_earth_resistance: float = 100.0
     parallel_coefficient: Optional[float] = 1.0  # Default to 1
+    active: bool = True
 
     def calculate_impedance(self, frequencies: List[float]):
         """

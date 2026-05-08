@@ -109,6 +109,7 @@ class BusDB(Base):
     impedance = Column(
         JSON
     )  # Store impedance as JSON (frequency: {'real': x, 'imag': y})
+    active = Column(Boolean, nullable=False, default=True)
 
     type = relationship("BusTypeDB", backref="buses")
 
@@ -129,6 +130,7 @@ class BusDB(Base):
             type=self.type.to_pydantic(),
             impedance=impedance,
             specific_earth_resistance=self.specific_earth_resistance,
+            active=True if self.active is None else bool(self.active),
         )
 
     @classmethod
@@ -149,6 +151,7 @@ class BusDB(Base):
             type_name=bus.type.name,
             specific_earth_resistance=bus.specific_earth_resistance,
             impedance=impedance,
+            active=bus.active,
         )
 
 
@@ -207,6 +210,7 @@ class BranchDB(Base):
     mutual_impedance = Column(JSON)
     specific_earth_resistance = Column(Float, default=100.0)
     parallel_coefficient = Column(Float, nullable=True)
+    active = Column(Boolean, nullable=False, default=True)
 
     type = relationship("BranchTypeDB", backref="branches")
     from_bus = relationship("BusDB", foreign_keys=[from_bus_name])
@@ -243,6 +247,7 @@ class BranchDB(Base):
             mutual_impedance=mutual_impedance,
             specific_earth_resistance=self.specific_earth_resistance,
             parallel_coefficient=self.parallel_coefficient,
+            active=True if self.active is None else bool(self.active),
         )
 
     @classmethod
@@ -277,6 +282,7 @@ class BranchDB(Base):
             mutual_impedance=mutual_impedance,
             specific_earth_resistance=branch.specific_earth_resistance,
             parallel_coefficient=branch.parallel_coefficient,
+            active=branch.active,
         )
 
 

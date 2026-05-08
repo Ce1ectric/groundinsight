@@ -115,8 +115,13 @@ class ElectricalNetwork:
         Assign an index to each bus for matrix representation.
 
         Creates a mapping from bus names to their corresponding indices in the admittance matrix.
+        Inactive buses (``Bus.active=False``) are excluded; they are removed from the
+        nodal system entirely and any path traversing them is filtered out by the
+        pathfinder.
         """
-        bus_names = list(self.network.buses.keys())
+        bus_names = [
+            name for name, bus in self.network.buses.items() if bus.active
+        ]
         self.bus_indices = {bus_name: idx for idx, bus_name in enumerate(bus_names)}
         self.num_buses = len(bus_names)
 
@@ -133,8 +138,10 @@ class ElectricalNetwork:
         frequencies = self.network.frequencies
         for freq in frequencies:
             Y_matrix = np.zeros((self.num_buses, self.num_buses), dtype=complex)
-            # Bus grounding admittances on the diagonal
+            # Bus grounding admittances on the diagonal (active buses only)
             for bus_name, bus in self.network.buses.items():
+                if not bus.active:
+                    continue
                 idx = self.bus_indices[bus_name]
                 impedance = bus.impedance.get(freq)
                 if impedance is None:
@@ -144,9 +151,17 @@ class ElectricalNetwork:
                     continue
                 Y_matrix[idx, idx] += 1 / Z_complex
 
-            # Branch self-admittances
+            # Branch self-admittances (inactive branches behave like an open
+            # circuit: no contribution; inactive endpoints likewise drop the
+            # branch entirely).
             for branch in self.network.branches.values():
+                if not branch.active:
+                    continue
                 if not branch.type.grounding_conductor:
+                    continue
+                if branch.from_bus not in self.bus_indices:
+                    continue
+                if branch.to_bus not in self.bus_indices:
                     continue
                 impedance = branch.self_impedance.get(freq)
                 if impedance is None:
@@ -183,6 +198,10 @@ class ElectricalNetwork:
             raise ValueError("No active fault in the network")
 
         fault = self.network.faults[active_fault]
+        if fault.bus not in self.bus_indices:
+            raise ValueError(
+                f"Fault bus '{fault.bus}' is inactive or missing; cannot solve."
+            )
         fault_bus_idx = self.bus_indices[fault.bus]
 
         # Set of source names that actually have at least one path to the active
@@ -195,9 +214,14 @@ class ElectricalNetwork:
             total_source_current = 0j
             self.i_mutuals[freq] = {}
 
-            # Source injections at the source buses; combined fault current at the fault bus
+            # Source injections at the source buses; combined fault current at the fault bus.
+            # Sources whose bus is inactive are silently skipped here -- pathfinding
+            # has already excluded them via the active-only graph, so no path leads
+            # back to such a source either.
             for source_name in sources_with_path:
                 source = self.network.sources[source_name]
+                if source.bus not in self.bus_indices:
+                    continue
                 bus_idx = self.bus_indices[source.bus]
                 scaling = fault.scalings.get(freq, 1)
                 current = source.values.get(freq)
@@ -235,6 +259,10 @@ class ElectricalNetwork:
             raise ValueError("No active fault in the network")
 
         fault = self.network.faults[active_fault]
+        if fault.bus not in self.bus_indices:
+            raise ValueError(
+                f"Fault bus '{fault.bus}' is inactive or missing; cannot solve."
+            )
         fault_bus_idx = self.bus_indices[fault.bus]
 
         sources_with_path = self._sources_with_path_to_active_fault()
@@ -247,6 +275,8 @@ class ElectricalNetwork:
 
             for source_name in sources_with_path:
                 source = self.network.sources[source_name]
+                if source.bus not in self.bus_indices:
+                    continue
                 bus_idx = self.bus_indices[source.bus]
                 scaling = fault.scalings.get(freq, 1)
                 current = source.values.get(freq)
@@ -413,10 +443,18 @@ class ElectricalNetwork:
         }
 
         # Assemble phase admittance matrix (one entry per branch, regardless of
-        # grounding_conductor: the phase conductor exists in both cases).
+        # grounding_conductor: the phase conductor exists in both cases). Inactive
+        # branches and branches with at least one inactive endpoint are skipped --
+        # they cannot carry a phase current in the linearised model.
         Y_phase = np.zeros((n, n), dtype=complex)
         branch_y_phase: Dict[str, complex] = {}
         for branch in self.network.branches.values():
+            if not branch.active:
+                continue
+            if branch.from_bus not in self.bus_indices:
+                continue
+            if branch.to_bus not in self.bus_indices:
+                continue
             Z_self = branch.self_impedance.get(freq)
             if branch.type.grounding_conductor and Z_self is not None:
                 Z_complex = complex(Z_self.real, Z_self.imag)
@@ -469,6 +507,10 @@ class ElectricalNetwork:
             # u_full[fault_bus_idx] = 0 by construction
 
             for branch in self.network.branches.values():
+                if branch.name not in branch_y_phase:
+                    # Inactive branch or branch with inactive endpoint -- carries
+                    # no phase current and was excluded from Y_phase above.
+                    continue
                 y = branch_y_phase[branch.name]
                 fi = self.bus_indices[branch.from_bus]
                 ti = self.bus_indices[branch.to_bus]
@@ -496,7 +538,13 @@ class ElectricalNetwork:
             phase_currents (Dict[str, complex]): Signed phase current per branch.
         """
         for branch in self.network.branches.values():
+            if not branch.active:
+                continue
             if not branch.type.grounding_conductor:
+                continue
+            if branch.from_bus not in self.bus_indices:
+                continue
+            if branch.to_bus not in self.bus_indices:
                 continue
             Z_self = branch.self_impedance.get(freq)
             Z_mutual = branch.mutual_impedance.get(freq)
@@ -555,7 +603,9 @@ class ElectricalNetwork:
                 )
                 continue
 
-        # Create ResultBus instances
+        # Create ResultBus instances. Inactive buses are not in ``bus_indices``
+        # and therefore do not appear in the result -- they are physically
+        # disconnected from the nodal system.
         for bus_name, idx in self.bus_indices.items():
             uepr_freq = {}
             ia_freq = {}
@@ -612,9 +662,26 @@ class ElectricalNetwork:
         result = self.network.results[fault_name]
 
         for branch in self.network.branches.values():
+            i_s_freq = {}
+            # Inactive branches and branches with at least one inactive endpoint
+            # are open-circuited: their shield current is zero by construction.
+            is_open = (
+                not branch.active
+                or branch.from_bus not in self.bus_indices
+                or branch.to_bus not in self.bus_indices
+            )
+            if is_open:
+                for freq in self.network.frequencies:
+                    i_s_freq[freq] = ComplexNumber(real=0.0, imag=0.0)
+                rms_current = 0.0
+                result_branch = ResultBranch(
+                    name=branch.name, i_s=rms_current, i_s_freq=i_s_freq
+                )
+                result.branches.append(result_branch)
+                continue
+
             from_idx = self.bus_indices[branch.from_bus]
             to_idx = self.bus_indices[branch.to_bus]
-            i_s_freq = {}
             for freq in self.network.frequencies:
                 from_voltage = self.u_vectors[freq][from_idx]
                 to_voltage = self.u_vectors[freq][to_idx]
