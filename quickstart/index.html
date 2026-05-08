@@ -599,6 +599,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#9-logging-and-silencing-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Logging and silencing output
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1166,6 +1177,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#9-logging-and-silencing-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Logging and silencing output
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1309,6 +1331,24 @@ the reduction factor <span class="arithmatex">\(r\)</span> of every configured f
 <p>That is the full workflow. The <a href="../concepts/">Concepts</a> page explains the model
 behind the scenes; the <a href="../examples/">Examples</a> section contains
 runnable notebooks covering more realistic network topologies.</p>
+<h2 id="9-logging-and-silencing-output">9. Logging and silencing output<a class="headerlink" href="#9-logging-and-silencing-output" title="Permanent link">&para;</a></h2>
+<p><code>groundinsight</code> is a quiet library by default: it attaches a
+<code>logging.NullHandler</code> to the package logger on import, so simply importing
+and using it produces no console output. Status messages, overwrite
+warnings and solver errors are all emitted through the standard
+<a href="https://docs.python.org/3/library/logging.html"><code>logging</code></a> module.</p>
+<p>To see the messages in a notebook or script, opt in with the convenience
+helper:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">import</span> <span class="nn">groundinsight</span> <span class="k">as</span> <span class="nn">gi</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">gi</span><span class="o">.</span><span class="n">set_log_level</span><span class="p">(</span><span class="s2">&quot;INFO&quot;</span><span class="p">)</span>  <span class="c1"># or &quot;WARNING&quot;, &quot;ERROR&quot;, logging.DEBUG, ...</span>
+</code></pre></div>
+<p>This attaches a single <code>StreamHandler</code> with a <code>LEVEL [logger] message</code>
+formatter to the <code>groundinsight</code> logger and is safe to call repeatedly
+(the handler is only added once). For full control, configure the
+standard <code>logging</code> module directly — for example, route the
+<code>groundinsight.electrical_network</code> logger to a file while keeping the
+rest at <code>WARNING</code>.</p>
 
 
 
