@@ -166,6 +166,7 @@ cython_debug/
 #  be pushed to the public repository.
 CLAUDE.md
 .claude/
+graphify-out/
 
 # OS-level cruft
 .DS_Store
