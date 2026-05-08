@@ -26,7 +26,43 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Added
+
+- **`active` flag on `Bus` and `Branch`** — both Pydantic models now carry
+  a boolean `active` field (default `True`). An inactive `Bus` is removed
+  from the nodal system entirely; an inactive `Branch` behaves like an
+  open circuit (no contribution to the admittance matrix, no
+  Norton-equivalent injection from the mutual coupling, branch current in
+  the result is zero). The pathfinder skips inactive elements when
+  building the adjacency graph, so `define_paths` no longer enumerates
+  paths that cross them. Backwards compatible: existing JSON / SQLite
+  payloads load with `active=True` for every element.
+- **`groundinsight.simulation.outage`** — new sub-module for what-if
+  studies built on top of the new `active` flag. Exposes:
+  - `Outage` — Pydantic model describing a scenario (named, with
+    `disabled_buses` and `disabled_branches` lists).
+  - `outage_context(network, outage)` — context manager that flips the
+    listed elements to `active=False` for the duration of a `with` block
+    and restores them afterwards (including the previous path cache).
+  - `run_outage_study(network, fault=..., scenarios=[...])` — runs
+    `run_fault` for the base case (optional) and every scenario in one
+    call and returns an `OutageStudyResult` aggregating per-scenario
+    `res_buses` / `res_branches` DataFrames.
+  - `OutageStudyResult.compare_buses(...)` /
+    `compare_branches(...)` — long-format Polars DataFrames with absolute
+    and relative deltas against a reference scenario (default: the base
+    case). Same names are re-exported on the package: `gi.Outage`,
+    `gi.run_outage_study`, …
+
+### Changed
+
+- **`BusDB` / `BranchDB`** schema gains a `active BOOLEAN NOT NULL DEFAULT 1`
+  column to mirror the new Pydantic field. `from_pydantic` /
+  `to_pydantic` round-trip the value; existing SQLite databases that
+  predate this change still load (the column defaults to `True`).
+- **Pathfinder graph and solver assembly** filter inactive elements
+  (see *Added*). The behaviour is unchanged whenever every bus and
+  branch keeps the default `active=True`.
 
 ---
 

@@ -40,6 +40,12 @@ from .network_operations import (
     create_paths,
 )
 from .plotting import plot_bus_voltages, plot_branch_currents, plot_bus_currents
+from .simulation.outage import (
+    Outage,
+    OutageStudyResult,
+    outage_context,
+    run_outage_study,
+)
 
 
 __all__ = [
@@ -58,6 +64,10 @@ __all__ = [
     "create_network_assistant",
     "create_paths",
     "set_log_level",
+    "Outage",
+    "OutageStudyResult",
+    "outage_context",
+    "run_outage_study",
 ]
 
 # Version
