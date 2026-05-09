@@ -600,10 +600,43 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#9-logging-and-silencing-output" class="md-nav__link">
+  <a href="#9-optional-outage-what-if-studies" class="md-nav__link">
     <span class="md-ellipsis">
       
-        9. Logging and silencing output
+        9. Optional: outage / what-if studies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-optional-inverse-rho-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Optional: inverse rho analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-optional-import-from-pandapower" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Optional: import from pandapower
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12-logging-and-silencing-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Logging and silencing output
       
     </span>
   </a>
@@ -820,6 +853,12 @@
       
         
           
+        
+      
+        
+      
+        
+      
         
       
         
@@ -1056,6 +1095,90 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O — network importers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/outage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outage studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1178,10 +1301,43 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#9-logging-and-silencing-output" class="md-nav__link">
+  <a href="#9-optional-outage-what-if-studies" class="md-nav__link">
     <span class="md-ellipsis">
       
-        9. Logging and silencing output
+        9. Optional: outage / what-if studies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-optional-inverse-rho-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Optional: inverse rho analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-optional-import-from-pandapower" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Optional: import from pandapower
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12-logging-and-silencing-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Logging and silencing output
       
     </span>
   </a>
@@ -1331,7 +1487,73 @@ the reduction factor <span class="arithmatex">\(r\)</span> of every configured f
 <p>That is the full workflow. The <a href="../concepts/">Concepts</a> page explains the model
 behind the scenes; the <a href="../examples/">Examples</a> section contains
 runnable notebooks covering more realistic network topologies.</p>
-<h2 id="9-logging-and-silencing-output">9. Logging and silencing output<a class="headerlink" href="#9-logging-and-silencing-output" title="Permanent link">&para;</a></h2>
+<h2 id="9-optional-outage-what-if-studies">9. Optional: outage / what-if studies<a class="headerlink" href="#9-optional-outage-what-if-studies" title="Permanent link">&para;</a></h2>
+<p>Both <code>Bus</code> and <code>Branch</code> carry an <code>active</code> flag (default <code>True</code>) that
+toggles the element in the nodal solve. To evaluate one or more
+contingency scenarios in a single call, wrap them in <code>Outage</code>
+descriptors and pass them to <code>run_outage_study</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">scenario</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">Outage</span><span class="p">(</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;cable_1_oos&quot;</span><span class="p">,</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;MV cable_1 out of service&quot;</span><span class="p">,</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="n">disabled_buses</span><span class="o">=</span><span class="p">[],</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="n">disabled_branches</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;cable_1&quot;</span><span class="p">],</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="p">)</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="n">study</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">run_outage_study</span><span class="p">(</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>    <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">,</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>    <span class="n">fault</span><span class="o">=</span><span class="s2">&quot;fault_at_remote_bus&quot;</span><span class="p">,</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>    <span class="n">scenarios</span><span class="o">=</span><span class="p">[</span><span class="n">scenario</span><span class="p">],</span>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>    <span class="n">include_base_case</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="p">)</span>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a><span class="nb">print</span><span class="p">(</span><span class="n">study</span><span class="o">.</span><span class="n">compare_buses</span><span class="p">())</span>     <span class="c1"># EPR per bus, with delta vs. base</span>
+<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="nb">print</span><span class="p">(</span><span class="n">study</span><span class="o">.</span><span class="n">compare_branches</span><span class="p">())</span>  <span class="c1"># branch currents, with delta vs. base</span>
+</code></pre></div>
+<p>For a single ad-hoc modification, <code>gi.outage_context(net, scenario)</code>
+flips the elements for the duration of a <code>with</code> block and restores
+the previous state on exit. See the
+<a href="../api/outage/">outage-study reference</a> for the full API.</p>
+<h2 id="10-optional-inverse-rho-analysis">10. Optional: inverse rho analysis<a class="headerlink" href="#10-optional-inverse-rho-analysis" title="Permanent link">&para;</a></h2>
+<p>Given an EPR limit <span class="arithmatex">\(u_{\max}\)</span> at the fault bus, find the largest
+uniform scaling of <code>specific_earth_resistance</code> at selected buses
+that still satisfies it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">find_max_rho_scaling</span><span class="p">(</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">,</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">fault_name</span><span class="o">=</span><span class="s2">&quot;fault_at_remote_bus&quot;</span><span class="p">,</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="n">bus_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;bus_source&quot;</span><span class="p">,</span> <span class="s2">&quot;bus_fault&quot;</span><span class="p">],</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="n">u_max</span><span class="o">=</span><span class="mf">200.0</span><span class="p">,</span>            <span class="c1"># touch-voltage limit in volts (RMS)</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="n">c_bounds</span><span class="o">=</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">),</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>    <span class="n">tol_rel</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="p">)</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="c1"># result is a dict: {&quot;c_max&quot;: ..., &quot;u_epr_rms_at_c_max&quot;: ..., ...}</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;c_max = </span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;c_max&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, &quot;</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>      <span class="sa">f</span><span class="s2">&quot;EPR = </span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;u_epr_rms_at_c_max&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> V&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>The original <code>rho</code> values are restored automatically — see the
+<a href="../api/analysis/">analysis reference</a>.</p>
+<h2 id="11-optional-import-from-pandapower">11. Optional: import from pandapower<a class="headerlink" href="#11-optional-import-from-pandapower" title="Permanent link">&para;</a></h2>
+<p>If a distribution-network model already exists in pandapower, the
+topology can be reused directly:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">import</span> <span class="nn">pandapower.networks</span> <span class="k">as</span> <span class="nn">pn</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="n">defaults</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">ImportDefaults</span><span class="p">(</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="n">rho</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">,</span> <span class="mf">250.0</span><span class="p">],</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="n">default_bus_type</span><span class="o">=</span><span class="n">bus_type</span><span class="p">,</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>    <span class="n">default_branch_type</span><span class="o">=</span><span class="n">cable_type</span><span class="p">,</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="p">)</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="n">net_pp</span> <span class="o">=</span> <span class="n">pn</span><span class="o">.</span><span class="n">example_simple</span><span class="p">()</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="n">net_imported</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">from_pandapower</span><span class="p">(</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>    <span class="n">net_pp</span><span class="p">,</span> <span class="n">defaults</span><span class="o">=</span><span class="n">defaults</span><span class="p">,</span> <span class="n">voltage_level_kV</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="p">)</span>
+</code></pre></div>
+<p><code>gi.preview_pandapower_import(net_pp, voltage_level_kV=20.0)</code>
+returns a Polars DataFrame summarising kept and skipped elements
+with an explicit <code>reason</code> column. Install with
+<code>pip install 'groundinsight[pandapower]'</code>. See the
+<a href="../api/io/">I/O reference</a> for details.</p>
+<h2 id="12-logging-and-silencing-output">12. Logging and silencing output<a class="headerlink" href="#12-logging-and-silencing-output" title="Permanent link">&para;</a></h2>
 <p><code>groundinsight</code> is a quiet library by default: it attaches a
 <code>logging.NullHandler</code> to the package logger on import, so simply importing
 and using it produces no console output. Status messages, overwrite
@@ -1339,9 +1561,9 @@ warnings and solver errors are all emitted through the standard
 <a href="https://docs.python.org/3/library/logging.html"><code>logging</code></a> module.</p>
 <p>To see the messages in a notebook or script, opt in with the convenience
 helper:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">import</span> <span class="nn">groundinsight</span> <span class="k">as</span> <span class="nn">gi</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">gi</span><span class="o">.</span><span class="n">set_log_level</span><span class="p">(</span><span class="s2">&quot;INFO&quot;</span><span class="p">)</span>  <span class="c1"># or &quot;WARNING&quot;, &quot;ERROR&quot;, logging.DEBUG, ...</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">import</span> <span class="nn">groundinsight</span> <span class="k">as</span> <span class="nn">gi</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">gi</span><span class="o">.</span><span class="n">set_log_level</span><span class="p">(</span><span class="s2">&quot;INFO&quot;</span><span class="p">)</span>  <span class="c1"># or &quot;WARNING&quot;, &quot;ERROR&quot;, logging.DEBUG, ...</span>
 </code></pre></div>
 <p>This attaches a single <code>StreamHandler</code> with a <code>LEVEL [logger] message</code>
 formatter to the <code>groundinsight</code> logger and is safe to call repeatedly

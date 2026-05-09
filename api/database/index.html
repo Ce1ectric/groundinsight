@@ -16,6 +16,8 @@
         <link rel="prev" href="../plotting/">
       
       
+        <link rel="next" href="../io/">
+      
       
         
       
@@ -688,6 +690,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1176,6 +1184,90 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O — network importers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../outage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outage studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -2893,7 +2985,11 @@ and connected branches (segments).</p>
 
 
         <p>SourceDB Model.</p>
-<p>Represents a Source in the database, including its properties and associated bus.</p>
+<p>Represents a Source in the database. Both the legacy current-source mode
+and the Thevenin (voltage-source) mode are persisted in the same row.
+The <code>source_type</code> column selects which of <code>values</code> and the pair
+<code>(voltage, source_impedance)</code> carries the actual data; the other
+fields are stored as <code>NULL</code>.</p>
 
 
 

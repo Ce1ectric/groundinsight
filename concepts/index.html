@@ -672,6 +672,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#active-flag-and-outage-studies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Active flag and outage studies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inverse-rho-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inverse rho analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#summary-of-the-calculation-pipeline" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -865,6 +887,12 @@
       
         
           
+        
+      
+        
+      
+        
+      
         
       
         
@@ -1101,6 +1129,90 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O — network importers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/outage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outage studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1264,6 +1376,28 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#active-flag-and-outage-studies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Active flag and outage studies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inverse-rho-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inverse rho analysis
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1486,6 +1620,55 @@ Z_G(f) = \frac{u_{\text{EPR}}(f)}{r(f)\,I_{\text{fault}}(f)}.
 \]</div>
 <p>It is exposed per frequency and as RMS-scalar through
 <code>net.res_all_impedances()</code>.</p>
+<h2 id="active-flag-and-outage-studies">Active flag and outage studies<a class="headerlink" href="#active-flag-and-outage-studies" title="Permanent link">&para;</a></h2>
+<p>Both <code>Bus</code> and <code>Branch</code> carry a boolean <code>active</code> field (default
+<code>True</code>). The flag has a clean physical interpretation:</p>
+<ul>
+<li>An inactive <code>Bus</code> is <strong>removed from the nodal system</strong> entirely.
+  Its row and column drop from <span class="arithmatex">\(Y(f)\)</span> and the bus contributes
+  nothing to the right-hand-side vector <span class="arithmatex">\(\underline{i}(f)\)</span>.</li>
+<li>An inactive <code>Branch</code> behaves as an <strong>open circuit</strong>: no
+  contribution to the admittance matrix, no Norton-equivalent
+  injection from the mutual coupling, and a zero current in the
+  result.</li>
+</ul>
+<p><code>PathFinder</code> skips inactive elements when enumerating source-to-fault
+paths, so the per-path Norton bookkeeping stays consistent. The flag
+is round-tripped through SQLite and JSON; existing payloads load
+with <code>active=True</code> for every element, which keeps backwards
+compatibility intact.</p>
+<p>That makes maintenance scenarios, planned outages, broken shields
+and N-1 contingencies expressible without rebuilding the network.
+The <code>groundinsight.simulation.outage</code> sub-package wraps this into
+two convenience entry points:</p>
+<ul>
+<li><code>outage_context(network, outage)</code> — context manager that flips
+  the listed elements to <code>active=False</code> for the duration of a
+  <code>with</code> block and restores the previous state (including the
+  cached path list) afterwards.</li>
+<li><code>run_outage_study(network, fault, scenarios=[...])</code> — executes
+  the base case plus one fault calculation per <code>Outage</code> scenario
+  and returns an <code>OutageStudyResult</code> whose
+  <code>compare_buses(...)</code> / <code>compare_branches(...)</code> accessors yield
+  long-format Polars DataFrames with absolute and relative deltas
+  against a chosen reference scenario.</li>
+</ul>
+<h2 id="inverse-rho-analysis">Inverse rho analysis<a class="headerlink" href="#inverse-rho-analysis" title="Permanent link">&para;</a></h2>
+<p>The forward solve answers "given <span class="arithmatex">\(\rho_E\)</span>, what is the EPR?" The
+sister inverse question — <em>"how large can <span class="arithmatex">\(\rho_E\)</span> become before
+the EPR at the fault bus exceeds a touch-voltage limit
+<span class="arithmatex">\(u_{\max}\)</span>?"</em> — is answered by
+<code>groundinsight.analysis.find_max_rho_scaling</code>. It log-bisects a
+uniform scaling factor <span class="arithmatex">\(c\)</span> of <code>Bus.specific_earth_resistance</code> on a
+user-selected bus set, re-evaluates each <code>BusType.impedance_formula</code>
+through the existing SymPy machinery and triggers <code>run_fault</code> at
+every trial value. The output is the largest <span class="arithmatex">\(c\)</span> that still
+satisfies <span class="arithmatex">\(|U_\text{EPR}(f)|_{\text{RMS}} \le u_{\max}\)</span>, the EPR at
+that point, and the per-bus <span class="arithmatex">\(\rho_{\max} = c\,\rho_0\)</span>. The original
+<span class="arithmatex">\(\rho\)</span> values are restored via a <code>finally</code> block, so the network is
+unchanged after the call. A frequency-dependent variant
+(<code>find_max_rho_f_scaling</code>) extends the same idea to two-parameter
+rho-f curves.</p>
 <h2 id="summary-of-the-calculation-pipeline">Summary of the calculation pipeline<a class="headerlink" href="#summary-of-the-calculation-pipeline" title="Permanent link">&para;</a></h2>
 <p><code>run_fault(network, fault_name)</code> executes the following steps (see
 <code>network_operations.run_fault</code> and <code>ElectricalNetwork</code> for details):</p>
