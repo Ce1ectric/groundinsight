@@ -91,7 +91,7 @@ __all__ = [
 ]
 
 # Version
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 
 # Library logging: attach a NullHandler so that importing groundinsight does
 # not produce any output by default. Applications and notebooks opt in to
