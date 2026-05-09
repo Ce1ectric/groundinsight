@@ -113,3 +113,6 @@ nav:
       - Pathfinder: api/pathfinder.md
       - Plotting: api/plotting.md
       - Database: api/database.md
+      - "I/O — network importers": api/io.md
+      - Outage studies: api/outage.md
+      - Analysis: api/analysis.md

@@ -54,10 +54,20 @@ it for every harmonic of interest.
 - Polars DataFrames for result access (`net.res_buses(...)`,
   `net.res_branches(...)`, `net.res_all_impedances()`).
 - Matplotlib helpers for bar plots of EPR, branch currents and bus currents.
-- **Roadmap (0.4.0)**: import grids from `pandapower` and PowerFactory
-  (`.dgs` export and live Python API) so existing distribution-network
-  models can be reused as the topology source — see
-  [`CHANGELOG.md`](CHANGELOG.md) for the planned schema.
+- **`active` flag on `Bus` and `Branch`** for modelling out-of-service
+  equipment without rebuilding the network.
+- **Outage / what-if studies** (`gi.run_outage_study`, `gi.outage_context`,
+  `gi.Outage`) — evaluate contingency scenarios in a single call and get
+  long-format Polars DataFrames with absolute and relative deltas against
+  a reference scenario.
+- **Inverse rho analysis** (`gi.find_max_rho_scaling`,
+  `gi.find_max_rho_f_scaling`) — log-bisect the maximum admissible soil
+  resistivity (or rho-f curve) at a bus set given an EPR limit.
+- **External-network import** via `gi.from_pandapower` (and
+  `gi.preview_pandapower_import`) using a shared `ImportDefaults` schema.
+  Pandapower is an optional extra:
+  `pip install 'groundinsight[pandapower]'`. PowerFactory `.dgs` and the
+  live Python API are on the roadmap — see [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Installation
 
