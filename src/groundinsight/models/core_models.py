@@ -10,7 +10,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Literal
 from sympy import lambdify, sympify, symbols
 from groundinsight.utils.validations import validate_impedance_formula_value
 from groundinsight.utils.impedance_calculator import compute_impedance
@@ -443,22 +443,106 @@ class Fault(BaseModel):
 
 class Source(BaseModel):
     """
-    Represents a current source within the network.
+    Represents a current or Thevenin (voltage) source within the network.
+
+    For stationary grounding analyses the default is a current source with
+    a fixed injected current per frequency (``source_type="current"``).
+    This is equivalent to a Norton source with infinite parallel impedance
+    and matches the conventional planning practice of grounding engineering,
+    where the prospective fault current is treated as a constant input.
+
+    For transient simulations the source can alternatively be expressed as
+    a Thevenin equivalent (``source_type="voltage"``) with a frequency-
+    dependent EMF ``voltage`` and a finite ``source_impedance``. In that
+    case the grounding network sees the loop impedance ``Z_src + Z_loop``
+    and the effective fault current results from the solution rather than
+    being prescribed.
 
     Attributes:
         name (str): The name of the source.
         description (Optional[str]): A brief description of the source.
         bus (str): The name of the bus where the source is located.
-        values (Dict[float, ComplexNumber]): A mapping of frequency to current values.
+        source_type (Literal["current", "voltage"]): ``"current"`` (default)
+            for a classic current-source injection; ``"voltage"`` for a
+            Thevenin equivalent (EMF in series with ``source_impedance``).
+        values (Optional[Dict[float, ComplexNumber]]): Frequency-dependent
+            current injection. Required when ``source_type == "current"``
+            and must be ``None`` otherwise.
+        voltage (Optional[Dict[float, ComplexNumber]]): Frequency-dependent
+            Thevenin EMF. Required when ``source_type == "voltage"`` and
+            must be ``None`` otherwise.
+        source_impedance (Optional[Dict[float, ComplexNumber]]): Frequency-
+            dependent internal impedance of the Thevenin source. Required
+            when ``source_type == "voltage"`` and must be ``None``
+            otherwise. Must be non-zero at every frequency in order to be
+            invertible into a Norton equivalent.
     """
 
     name: str
     description: Optional[str] = None
     bus: str  # Location of the source
-    values: Dict[float, ComplexNumber]  # {frequency: current value}
+    source_type: Literal["current", "voltage"] = "current"
+    values: Optional[Dict[float, ComplexNumber]] = (
+        None  # {frequency: current value} (current source)
+    )
+    voltage: Optional[Dict[float, ComplexNumber]] = (
+        None  # {frequency: EMF value} (voltage source)
+    )
+    source_impedance: Optional[Dict[float, ComplexNumber]] = (
+        None  # {frequency: Z_src} (voltage source)
+    )
+
+    @model_validator(mode="after")
+    def _validate_source_mode(self):
+        """
+        Validate that the fields populated on the source match the declared
+        ``source_type``.
+
+        Returns:
+            Source: The validated source instance (self).
+
+        Raises:
+            ValueError: If required fields for the chosen mode are missing,
+                if fields belonging to the other mode are populated, if the
+                frequency keys of ``voltage`` and ``source_impedance``
+                disagree, or if any ``source_impedance`` entry is zero.
+        """
+        if self.source_type == "current":
+            if self.values is None:
+                raise ValueError(
+                    "Source.values must be provided when source_type='current'."
+                )
+            if self.voltage is not None or self.source_impedance is not None:
+                raise ValueError(
+                    "Source: 'voltage' and 'source_impedance' must not be set "
+                    "when source_type='current'."
+                )
+        else:  # source_type == "voltage"
+            if self.voltage is None or self.source_impedance is None:
+                raise ValueError(
+                    "Source.voltage and Source.source_impedance must both be "
+                    "provided when source_type='voltage'."
+                )
+            if self.values is not None:
+                raise ValueError(
+                    "Source.values must not be set when source_type='voltage'."
+                )
+            v_keys = set(self.voltage.keys())
+            z_keys = set(self.source_impedance.keys())
+            if v_keys != z_keys:
+                raise ValueError(
+                    "Source: 'voltage' and 'source_impedance' must share the "
+                    "same set of frequency keys."
+                )
+            for f, z in self.source_impedance.items():
+                if abs(complex(z.real, z.imag)) == 0:
+                    raise ValueError(
+                        f"Source.source_impedance at f={f} Hz must be non-zero."
+                    )
+        return self
 
     def __str__(self):
-        return f"Source(name={self.name}, bus={self.bus})"
+        return f"Source(name={self.name}, bus={self.bus}, type={self.source_type})"
 
 
 class ResultBus(BaseModel):

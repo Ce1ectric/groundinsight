@@ -266,6 +266,72 @@ def create_source(
     return source
 
 
+def create_voltage_source(
+    name: str,
+    bus: str,
+    voltage: Dict,
+    source_impedance: Dict,
+    description: str = None,
+    network: Optional[Network] = None,
+) -> Source:
+    """
+    Create a Thevenin (voltage) source and optionally add it to the network.
+
+    The Thevenin source models a frequency-dependent EMF ``voltage`` in series
+    with a finite ``source_impedance``. In contrast to :func:`create_source`,
+    which creates an ideal current source for stationary studies, this factory
+    is intended for transient analyses where the actual fault current is
+    determined by the loop impedance ``Z_src + Z_loop`` rather than being
+    prescribed.
+
+    Args:
+        name (str): The name of the source.
+        bus (str): The name of the bus where the source is located.
+        voltage (Dict[float, ComplexNumber]): Frequency-dependent EMF.
+        source_impedance (Dict[float, ComplexNumber]): Frequency-dependent
+            internal impedance. Must use the same frequency keys as
+            ``voltage`` and must be non-zero.
+        description (Optional[str], optional): A brief description of the
+            source. Defaults to None.
+        network (Optional[Network], optional): The network to which the
+            source should be added. Defaults to None.
+
+    Returns:
+        Source: A newly created Thevenin source instance with
+        ``source_type='voltage'``.
+
+    Raises:
+        ValueError: If the specified bus does not exist in the provided
+            network, or if the input dictionaries do not satisfy the
+            voltage-mode constraints.
+
+    Examples:
+        >>> import groundinsight as gi
+        >>> network = gi.create_network(name="TestNetwork", frequencies=[50])
+        >>> voltage = {50: 20000.0 + 0.0j}
+        >>> z_src = {50: 0.5 + 0.1j}
+        >>> source = gi.create_voltage_source(
+        ...     name="VSrc1", bus="Bus1", voltage=voltage,
+        ...     source_impedance=z_src, network=network,
+        ... )  # doctest: +SKIP
+    """
+    if network:
+        if bus not in network.buses:
+            raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
+
+    source = Source(
+        name=name,
+        description=description,
+        bus=bus,
+        source_type="voltage",
+        voltage=voltage,
+        source_impedance=source_impedance,
+    )
+    if network:
+        network.add_source(source)
+    return source
+
+
 def create_paths(network: Network):
     """
     Create all possible paths between sources and the active fault in the network.

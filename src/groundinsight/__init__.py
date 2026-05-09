@@ -34,6 +34,7 @@ from .network_operations import (
     create_branch,
     create_fault,
     create_source,
+    create_voltage_source,
     build_electrical_network,
     run_fault,
     create_network_assistant,
@@ -46,6 +47,17 @@ from .simulation.outage import (
     outage_context,
     run_outage_study,
 )
+from .io import (
+    ImportDefaults,
+    from_pandapower,
+    preview_pandapower_import,
+)
+from .analysis import (
+    find_max_rho_scaling,
+    find_max_rho_f_scaling,
+    evaluate_max_epr_under_k,
+    select_rho_f_from_catalog,
+)
 
 
 __all__ = [
@@ -56,6 +68,7 @@ __all__ = [
     "create_branch",
     "create_fault",
     "create_source",
+    "create_voltage_source",
     "build_electrical_network",
     "run_fault",
     "plot_bus_voltages",
@@ -68,6 +81,13 @@ __all__ = [
     "OutageStudyResult",
     "outage_context",
     "run_outage_study",
+    "ImportDefaults",
+    "from_pandapower",
+    "preview_pandapower_import",
+    "find_max_rho_scaling",
+    "find_max_rho_f_scaling",
+    "evaluate_max_epr_under_k",
+    "select_rho_f_from_catalog",
 ]
 
 # Version

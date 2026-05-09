@@ -157,7 +157,88 @@ That is the full workflow. The [Concepts](concepts.md) page explains the model
 behind the scenes; the [Examples](examples/index.md) section contains
 runnable notebooks covering more realistic network topologies.
 
-## 9. Logging and silencing output
+## 9. Optional: outage / what-if studies
+
+Both `Bus` and `Branch` carry an `active` flag (default `True`) that
+toggles the element in the nodal solve. To evaluate one or more
+contingency scenarios in a single call, wrap them in `Outage`
+descriptors and pass them to `run_outage_study`:
+
+```python
+scenario = gi.Outage(
+    name="cable_1_oos",
+    description="MV cable_1 out of service",
+    disabled_buses=[],
+    disabled_branches=["cable_1"],
+)
+
+study = gi.run_outage_study(
+    network=net,
+    fault="fault_at_remote_bus",
+    scenarios=[scenario],
+    include_base_case=True,
+)
+
+print(study.compare_buses())     # EPR per bus, with delta vs. base
+print(study.compare_branches())  # branch currents, with delta vs. base
+```
+
+For a single ad-hoc modification, `gi.outage_context(net, scenario)`
+flips the elements for the duration of a `with` block and restores
+the previous state on exit. See the
+[outage-study reference](api/outage.md) for the full API.
+
+## 10. Optional: inverse rho analysis
+
+Given an EPR limit $u_{\max}$ at the fault bus, find the largest
+uniform scaling of `specific_earth_resistance` at selected buses
+that still satisfies it:
+
+```python
+result = gi.find_max_rho_scaling(
+    network=net,
+    fault_name="fault_at_remote_bus",
+    bus_names=["bus_source", "bus_fault"],
+    u_max=200.0,            # touch-voltage limit in volts (RMS)
+    c_bounds=(0.1, 100.0),
+    tol_rel=1e-3,
+)
+# result is a dict: {"c_max": ..., "u_epr_rms_at_c_max": ..., ...}
+print(f"c_max = {result['c_max']:.3f}, "
+      f"EPR = {result['u_epr_rms_at_c_max']:.1f} V")
+```
+
+The original `rho` values are restored automatically — see the
+[analysis reference](api/analysis.md).
+
+## 11. Optional: import from pandapower
+
+If a distribution-network model already exists in pandapower, the
+topology can be reused directly:
+
+```python
+import pandapower.networks as pn
+
+defaults = gi.ImportDefaults(
+    rho=100.0,
+    frequencies=[50.0, 250.0],
+    default_bus_type=bus_type,
+    default_branch_type=cable_type,
+)
+
+net_pp = pn.example_simple()
+net_imported = gi.from_pandapower(
+    net_pp, defaults=defaults, voltage_level_kV=20.0,
+)
+```
+
+`gi.preview_pandapower_import(net_pp, voltage_level_kV=20.0)`
+returns a Polars DataFrame summarising kept and skipped elements
+with an explicit `reason` column. Install with
+`pip install 'groundinsight[pandapower]'`. See the
+[I/O reference](api/io.md) for details.
+
+## 12. Logging and silencing output
 
 `groundinsight` is a quiet library by default: it attaches a
 `logging.NullHandler` to the package logger on import, so simply importing

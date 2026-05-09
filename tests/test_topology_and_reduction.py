@@ -21,6 +21,7 @@ Analytical reference (see module docstring of ``electrical_network.py``):
     cables with PEN/shield.
 """
 
+import cmath
 import math
 import pytest
 
@@ -482,3 +483,183 @@ def test_reduction_factor_sweep_20_bus_ring_converges_to_zero():
 
     # Strict convergence towards 0 at high frequency.
     assert rs[-1] < 0.05
+
+
+# ---------------------------------------------------------------------------
+# Plausibility check: long homogeneous ring vs. asymptotic ladder formula.
+#
+# For a homogeneous ring (constant Z_l per branch, constant Z_q per bus) and
+# zero mutual coupling, the input impedance seen at the fault bus -- defined
+# as ``u_EPR / I_fault``, i.e. *without* dividing by the reduction factor
+# ``r`` -- is given asymptotically (N -> infinity) by
+#
+#     Z_par = Z_l/2 + sqrt(Z_l**2 / 4 + Z_l * Z_q)
+#     Z     = (Z_par / 2) || Z_q
+#
+# where ``Z_par`` is the input impedance of one half of the ring as seen
+# from the fault bus, viewed as a semi-infinite ladder with the longitudinal
+# step first, and the factor ``1/2`` accounts for the two halves of the
+# ring meeting at the fault bus. The fault-bus grounding ``Z_q`` is in
+# parallel with the combined ladder input.
+#
+# Adding a non-zero mutual impedance ``Z_m`` between the conductor and the
+# return path must strictly reduce ``|u_EPR / I_fault|`` (induced mutual
+# currents along the source-fault paths reduce the EPR). Note that the
+# ``grounding_impedance`` reported by :func:`run_fault` is
+# ``u_EPR / (r * I_fault)`` and is therefore invariant under ``Z_m`` for
+# this fully symmetric configuration, so the check has to use the raw
+# ``u_EPR / I_fault`` value.
+# ---------------------------------------------------------------------------
+
+
+def _build_homogeneous_ring(name, n, z_l, z_q, z_m=complex(0.0, 0.0)):
+    """Build an N-bus homogeneous ring (source at ``b0``, fault at ``b{n//2}``).
+
+    All branches share the same per-km self impedance ``z_l`` and per-km
+    mutual impedance ``z_m``, all buses share the same grounding impedance
+    ``z_q``. Branches have unit length and ``parallel_coefficient = 0.5``
+    so that the two halves of the ring carry the symmetric phase current.
+    """
+    bus_type = BusType(
+        name="HomBus",
+        description="Homogeneous bus grounding impedance",
+        system_type="Grounded",
+        voltage_level=20.0,
+        impedance_formula=f"({z_q.real} + I*{z_q.imag}) + 0*rho + 0*f",
+    )
+    branch_type = BranchType(
+        name="HomBranch",
+        description="Homogeneous branch with shield",
+        grounding_conductor=True,
+        self_impedance_formula=f"({z_l.real} + I*{z_l.imag})*l",
+        mutual_impedance_formula=f"({z_m.real} + I*{z_m.imag})*l",
+    )
+    net = gi.create_network(name=name, frequencies=[50])
+    for i in range(n):
+        gi.create_bus(name=f"b{i}", type=bus_type, network=net)
+    for i in range(n):
+        gi.create_branch(
+            name=f"br{i}",
+            type=branch_type,
+            from_bus=f"b{i}",
+            to_bus=f"b{(i + 1) % n}",
+            length=1.0,
+            network=net,
+            parallel_coefficient=0.5,
+        )
+    gi.create_source(name="src", bus="b0", values={50: 100.0}, network=net)
+    gi.create_fault(
+        name="fault", bus=f"b{n // 2}", scalings={50: 1.0}, network=net
+    )
+    return net
+
+
+def _ladder_input_impedance(z_l: complex, z_q: complex) -> complex:
+    """Closed-form ring input impedance for a homogeneous ladder.
+
+    ``Z_par = Z_l/2 + sqrt(Z_l**2/4 + Z_l * Z_q)`` is the semi-infinite
+    half-ring input impedance (longitudinal step first); ``Z = (Z_par/2)
+    || Z_q`` puts the two halves and the fault-bus grounding in parallel.
+    """
+    z_par = z_l / 2 + cmath.sqrt(z_l ** 2 / 4 + z_l * z_q)
+    half = z_par / 2
+    return half * z_q / (half + z_q)
+
+
+def _raw_input_impedance_magnitude(net, fault_name="fault", freq=50.0):
+    """Return ``|u_EPR / I_fault|`` at the fault bus.
+
+    This is the raw input impedance seen at the fault location, *without*
+    the ``1/r`` scaling that :attr:`Result.grounding_impedance` applies. It
+    is the quantity for which the closed-form ladder formula above holds
+    and which decreases strictly when mutual coupling is switched on.
+    """
+    fault = net.faults[fault_name]
+    bus_result = next(
+        b for b in net.results[fault_name].buses if b.name == fault.bus
+    )
+    uepr = bus_result.uepr_freq[freq]
+    uepr_complex = complex(uepr.real, uepr.imag)
+    i_fault = sum(
+        complex(s.values[freq]) * complex(fault.scalings[freq])
+        for s in net.sources.values()
+    )
+    return abs(uepr_complex) / abs(i_fault)
+
+
+@pytest.mark.parametrize(
+    "z_l, z_q",
+    [
+        (complex(0.1, 0.0), complex(10.0, 0.0)),
+        (complex(0.1, 0.5), complex(10.0, 5.0)),
+        (complex(0.2, 0.6), complex(5.0, 2.0)),
+        (complex(1.0, 0.0), complex(1.0, 0.0)),
+    ],
+)
+def test_homogeneous_ring_matches_ladder_formula(z_l, z_q):
+    """Long homogeneous ring without mutual coupling: ``|u_EPR / I_fault|``
+    at the fault bus must match the closed-form ladder input impedance
+    ``|(Z_par/2) || Z_q|`` with ``Z_par = Z_l/2 + sqrt(Z_l**2/4 + Z_l*Z_q)``.
+
+    The ring has 200 buses (~100 sections per half ring), enough for the
+    ladder to converge to its asymptotic input impedance for the parameter
+    ranges chosen here.
+    """
+    net = _build_homogeneous_ring(
+        f"HomRing_{abs(z_l):.2f}_{abs(z_q):.2f}",
+        n=200,
+        z_l=z_l,
+        z_q=z_q,
+    )
+    gi.run_fault(net, fault_name="fault")
+
+    z_meas = _raw_input_impedance_magnitude(net)
+    z_theory = abs(_ladder_input_impedance(z_l, z_q))
+
+    rel_err = abs(z_meas - z_theory) / z_theory
+    assert rel_err < 1e-2, (
+        f"|u_EPR/I| = {z_meas} vs. theory = {z_theory} "
+        f"(rel.err = {rel_err:.2e})"
+    )
+
+
+def test_homogeneous_ring_mutual_coupling_strictly_reduces_z():
+    """In the homogeneous ring, switching on a non-zero mutual impedance
+    ``Z_m`` must strictly reduce ``|u_EPR / I_fault|`` at the fault bus.
+
+    The ``grounding_impedance`` reported in the result is invariant under
+    ``Z_m`` for this symmetric configuration (``r`` and ``u_EPR`` decrease
+    proportionally), so the check uses the raw ``u_EPR / I_fault``.
+    """
+    z_l = complex(0.1, 0.5)
+    z_q = complex(10.0, 5.0)
+
+    net_no_m = _build_homogeneous_ring(
+        "HomRingNoMutual", n=200, z_l=z_l, z_q=z_q,
+        z_m=complex(0.0, 0.0),
+    )
+    gi.run_fault(net_no_m, fault_name="fault")
+    z0 = _raw_input_impedance_magnitude(net_no_m)
+
+    # Without mutual coupling the closed-form ladder formula must hold.
+    z_theory = abs(_ladder_input_impedance(z_l, z_q))
+    assert z0 == pytest.approx(z_theory, rel=1e-2)
+
+    # Sweep increasing mutual coupling. Every step must strictly decrease
+    # |u_EPR / I_fault| compared to the previous step.
+    prev = z0
+    for z_m_imag in (0.05, 0.1, 0.2, 0.3, 0.4, 0.5):
+        net_m = _build_homogeneous_ring(
+            f"HomRingM{z_m_imag}", n=200, z_l=z_l, z_q=z_q,
+            z_m=complex(0.0, z_m_imag),
+        )
+        gi.run_fault(net_m, fault_name="fault")
+        z = _raw_input_impedance_magnitude(net_m)
+        assert z < prev, (
+            f"|u_EPR/I| did not decrease at Z_m=j{z_m_imag}: {z} >= {prev}"
+        )
+        prev = z
+
+    # The strongest mutual coupling must reduce |u_EPR / I_fault| well
+    # below half of the no-coupling value.
+    assert prev < 0.5 * z0

@@ -653,6 +653,95 @@ def test_source_initialization_invalid():
             values={50: 1.0+2.0j},
         )
 
+def test_source_default_is_current_type():
+    """A bare Source without ``source_type`` defaults to a current source."""
+    source = Source(name="src", bus="bus1", values={50: 100.0 + 0.0j})
+    assert source.source_type == "current"
+    assert source.voltage is None
+    assert source.source_impedance is None
+
+
+def test_source_voltage_type_initialization_valid():
+    """Thevenin (voltage) source: voltage and source_impedance must be set."""
+    source = Source(
+        name="VSrc",
+        bus="bus1",
+        source_type="voltage",
+        voltage={50: 20000.0 + 0.0j},
+        source_impedance={50: 0.5 + 0.1j},
+    )
+
+    assert source.source_type == "voltage"
+    assert source.values is None
+    assert source.voltage == {50: 20000.0 + 0.0j}
+    assert source.source_impedance == {50: 0.5 + 0.1j}
+
+
+def test_source_voltage_type_missing_fields_raises():
+    """A voltage source without voltage or source_impedance is rejected."""
+    with pytest.raises(ValueError):
+        Source(
+            name="VSrc",
+            bus="bus1",
+            source_type="voltage",
+            voltage={50: 20000.0 + 0.0j},
+        )
+
+    with pytest.raises(ValueError):
+        Source(
+            name="VSrc",
+            bus="bus1",
+            source_type="voltage",
+            source_impedance={50: 0.5 + 0.1j},
+        )
+
+
+def test_source_mixed_modes_rejected():
+    """Mixing voltage-mode fields with a current source (and vice versa) fails."""
+    with pytest.raises(ValueError):
+        Source(
+            name="VSrc",
+            bus="bus1",
+            source_type="current",
+            values={50: 100.0 + 0.0j},
+            voltage={50: 20000.0 + 0.0j},
+        )
+
+    with pytest.raises(ValueError):
+        Source(
+            name="VSrc",
+            bus="bus1",
+            source_type="voltage",
+            values={50: 100.0 + 0.0j},
+            voltage={50: 20000.0 + 0.0j},
+            source_impedance={50: 0.5 + 0.1j},
+        )
+
+
+def test_source_voltage_frequency_keys_must_match():
+    """voltage and source_impedance must use the same frequency keys."""
+    with pytest.raises(ValueError):
+        Source(
+            name="VSrc",
+            bus="bus1",
+            source_type="voltage",
+            voltage={50: 20000.0 + 0.0j},
+            source_impedance={60: 0.5 + 0.1j},
+        )
+
+
+def test_source_voltage_zero_source_impedance_rejected():
+    """A zero internal impedance has no Norton equivalent and is rejected."""
+    with pytest.raises(ValueError):
+        Source(
+            name="VSrc",
+            bus="bus1",
+            source_type="voltage",
+            voltage={50: 20000.0 + 0.0j},
+            source_impedance={50: 0.0 + 0.0j},
+        )
+
+
 def test_resultbus_initialization_valid():
     """
     name: str  # name of the bus

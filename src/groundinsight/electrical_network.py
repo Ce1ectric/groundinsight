@@ -134,8 +134,28 @@ class ElectricalNetwork:
         grounding conductor (``grounding_conductor=False``) contribute no admittance to Y
         because their shield path is absent; they only propagate the phase current for the
         mutual coupling term.
+
+        Thevenin sources (``source_type="voltage"``) contribute an additional
+        loop-closing admittance ``Y_src = 1/Z_src`` between the source bus and
+        the active fault bus. This represents the non-grounding part of the
+        fault loop (phase conductor, transformer, source-side ground return)
+        that is not modelled explicitly in the grounding network. Current-mode
+        sources contribute nothing to ``Y`` -- they appear only in the current
+        vector (Norton convention with infinite parallel impedance).
         """
         frequencies = self.network.frequencies
+        # Active fault bus index is needed for the Thevenin loop closure. If
+        # no fault is active yet (e.g. the network is being inspected before
+        # ``run_fault``) we silently skip the voltage-source contribution --
+        # ``_construct_vectors`` will reject the situation later with a
+        # clear error.
+        active_fault = self.network.active_fault
+        if active_fault is not None:
+            fault_bus = self.network.faults[active_fault].bus
+            fault_bus_idx = self.bus_indices.get(fault_bus)
+        else:
+            fault_bus_idx = None
+
         for freq in frequencies:
             Y_matrix = np.zeros((self.num_buses, self.num_buses), dtype=complex)
             # Bus grounding admittances on the diagonal (active buses only)
@@ -177,6 +197,28 @@ class ElectricalNetwork:
                 Y_matrix[from_idx, from_idx] += admittance
                 Y_matrix[to_idx, to_idx] += admittance
 
+            # Thevenin (voltage-source) loop closures between source bus and
+            # active fault bus. Skipped if there is no active fault yet, or if
+            # either endpoint is inactive.
+            if fault_bus_idx is not None:
+                for source in self.network.sources.values():
+                    if source.source_type != "voltage":
+                        continue
+                    src_idx = self.bus_indices.get(source.bus)
+                    if src_idx is None or src_idx == fault_bus_idx:
+                        continue
+                    Z_src = source.source_impedance.get(freq)
+                    if Z_src is None:
+                        continue
+                    Z_src_c = complex(Z_src.real, Z_src.imag)
+                    if Z_src_c == 0:
+                        continue
+                    Y_src = 1 / Z_src_c
+                    Y_matrix[src_idx, src_idx] += Y_src
+                    Y_matrix[fault_bus_idx, fault_bus_idx] += Y_src
+                    Y_matrix[src_idx, fault_bus_idx] -= Y_src
+                    Y_matrix[fault_bus_idx, src_idx] -= Y_src
+
             self.Y_matrices[freq] = Y_matrix
 
     def _construct_vectors(self):
@@ -217,19 +259,21 @@ class ElectricalNetwork:
             # Source injections at the source buses; combined fault current at the fault bus.
             # Sources whose bus is inactive are silently skipped here -- pathfinding
             # has already excluded them via the active-only graph, so no path leads
-            # back to such a source either.
+            # back to such a source either. The injection convention is the same
+            # for current and voltage sources: +I at source bus, -I at fault bus.
+            # For voltage sources I is the Norton-equivalent ``I_N = scaling*U/Z_src``;
+            # the corresponding ``Y_src`` loop closure has already been added to Y.
             for source_name in sources_with_path:
                 source = self.network.sources[source_name]
                 if source.bus not in self.bus_indices:
                     continue
                 bus_idx = self.bus_indices[source.bus]
                 scaling = fault.scalings.get(freq, 1)
-                current = source.values.get(freq)
-                if current is None:
+                injection = self._source_injection(source, freq, scaling)
+                if injection is None:
                     continue
-                current_complex = scaling * complex(current.real, current.imag)
-                total_source_current += current_complex
-                i_vector[bus_idx] += current_complex
+                total_source_current += injection
+                i_vector[bus_idx] += injection
 
             i_vector[fault_bus_idx] -= total_source_current
             self.total_source_currents[freq] = total_source_current
@@ -243,6 +287,46 @@ class ElectricalNetwork:
 
             self.i_vectors[freq] = i_vector
             self.u_vectors[freq] = u_vector
+
+    def _source_injection(
+        self, source: Source, freq: float, scaling: float
+    ) -> Optional[complex]:
+        """
+        Return the (Norton-equivalent) current injection of a source at a frequency.
+
+        For ``source_type="current"`` this is the legacy ``scaling * I_src``.
+        For ``source_type="voltage"`` it is the Norton equivalent
+        ``scaling * U_emf / Z_src`` -- the corresponding ``Y_src`` admittance is
+        contributed to the Y-matrix in :meth:`_construct_Y_matrices`. Together
+        the two model a Thevenin loop between the source bus and the fault bus.
+
+        Args:
+            source (Source): The source whose injection should be evaluated.
+            freq (float): Frequency in Hz at which to evaluate the injection.
+            scaling (float): ``Fault.scalings[freq]`` for the active fault.
+
+        Returns:
+            Optional[complex]: The complex injection, or ``None`` if the
+            source has no value at the requested frequency.
+        """
+        if source.source_type == "current":
+            current = source.values.get(freq) if source.values is not None else None
+            if current is None:
+                return None
+            return scaling * complex(current.real, current.imag)
+
+        # source_type == "voltage"
+        if source.voltage is None or source.source_impedance is None:
+            return None
+        u = source.voltage.get(freq)
+        z = source.source_impedance.get(freq)
+        if u is None or z is None:
+            return None
+        Z_src_c = complex(z.real, z.imag)
+        if Z_src_c == 0:
+            return None
+        u_eff = scaling * complex(u.real, u.imag)
+        return u_eff / Z_src_c
 
     def _construct_vectors_no_mutual(self):
         """
@@ -279,12 +363,11 @@ class ElectricalNetwork:
                     continue
                 bus_idx = self.bus_indices[source.bus]
                 scaling = fault.scalings.get(freq, 1)
-                current = source.values.get(freq)
-                if current is None:
+                injection = self._source_injection(source, freq, scaling)
+                if injection is None:
                     continue
-                current_complex = scaling * complex(current.real, current.imag)
-                total_source_current += current_complex
-                i_vector[bus_idx] += current_complex
+                total_source_current += injection
+                i_vector[bus_idx] += injection
 
             i_vector[fault_bus_idx] -= total_source_current
 
@@ -369,11 +452,10 @@ class ElectricalNetwork:
 
         for source_name in sources_with_path:
             source = self.network.sources[source_name]
-            i_src = source.values.get(freq)
-            if i_src is None:
-                continue
             scaling = fault.scalings.get(freq, 1)
-            i_src_complex = scaling * complex(i_src.real, i_src.imag)
+            i_src_complex = self._source_injection(source, freq, scaling)
+            if i_src_complex is None:
+                continue
 
             # Collect per-source branch directions. The first path in which a branch
             # appears determines its direction; any subsequent appearances are
@@ -486,10 +568,9 @@ class ElectricalNetwork:
             src_idx = self.bus_indices.get(source.bus)
             if src_idx is None or src_idx == fault_bus_idx:
                 continue
-            i_src = source.values.get(freq)
-            if i_src is None:
+            I = self._source_injection(source, freq, scaling)
+            if I is None:
                 continue
-            I = scaling * complex(i_src.real, i_src.imag)
 
             src_red_idx = keep.index(src_idx)
             i_red = np.zeros(len(keep), dtype=complex)
@@ -824,8 +905,18 @@ class ElectricalNetwork:
         """
         Compute the grounding impedance for the fault bus.
 
-        This method calculates the grounding impedance using the formula:
-            grounding_impedance = uepr / (reduction_factor * sum of all fault currents at the fault bus)
+        This method calculates the grounding impedance using the formula::
+
+            Z_G = u_EPR / (reduction_factor * I_fault)
+
+        where ``I_fault`` is the (signed) sum of source injections at the
+        active fault. For current-mode sources this is ``Σ scaling * I_src``
+        as before; for Thevenin (voltage-mode) sources it is the corresponding
+        Norton injection ``Σ scaling * U_emf / Z_src``. In Thevenin mode the
+        resulting ``Z_G`` is therefore the EPR per Norton ampere, which
+        depends on both the grounding network and ``Z_src``; it recovers the
+        classic grounding impedance in the limit ``Z_src -> ∞`` with
+        ``U_emf = I_src * Z_src`` held constant.
 
         The results are stored in the network's results object.
         """

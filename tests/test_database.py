@@ -169,4 +169,59 @@ def test_network_save_load():
     assert loaded_net.buses == net.buses
     assert loaded_net.branches == net.branches
     assert loaded_net.sources == net.sources
-    assert loaded_net.faults == net.faults 
+    assert loaded_net.faults == net.faults
+
+
+def test_voltage_source_db_roundtrip():
+    """Persist a network with a Thevenin source and reload it: source mode
+    and the voltage / source_impedance dicts must survive the roundtrip."""
+    bus_type = BusType(
+        name="BusTypeFormulaTest",
+        system_type="Grounded",
+        voltage_level=230.0,
+        impedance_formula="rho * 0 + 1 + I * f * 1/50",
+    )
+    branch_type = BranchType(
+        name="TestBranchType",
+        grounding_conductor=True,
+        self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
+        mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
+    )
+
+    net = gi.create_network(name="TestNetThevenin", frequencies=[50])
+    gi.create_bus(name="bus1", type=bus_type, network=net)
+    gi.create_bus(name="bus2", type=bus_type, network=net)
+    gi.create_branch(
+        name="branch1",
+        type=branch_type,
+        from_bus="bus1",
+        to_bus="bus2",
+        length=1,
+        network=net,
+    )
+    gi.create_voltage_source(
+        name="vsrc",
+        bus="bus1",
+        voltage={50: 1000.0 + 0.0j},
+        source_impedance={50: 0.5 + 0.1j},
+        network=net,
+    )
+    gi.create_fault(name="fault1", bus="bus2", scalings={50: 1.0}, network=net)
+    gi.create_paths(network=net)
+
+    # Make sure the session is up. The previous tests may have closed it.
+    try:
+        gi.start_dbsession("tests/test_grounding.db")
+    except Exception:
+        pass
+
+    gi.save_network_to_db(network=net, overwrite=True)
+    loaded = gi.load_network_from_db("TestNetThevenin")
+
+    src_loaded = loaded.sources["vsrc"]
+    assert src_loaded.source_type == "voltage"
+    assert src_loaded.values is None
+    assert src_loaded.voltage is not None
+    assert src_loaded.source_impedance is not None
+    assert abs(complex(src_loaded.voltage[50].real, src_loaded.voltage[50].imag) - (1000.0 + 0.0j)) < 1e-9
+    assert abs(complex(src_loaded.source_impedance[50].real, src_loaded.source_impedance[50].imag) - (0.5 + 0.1j)) < 1e-9

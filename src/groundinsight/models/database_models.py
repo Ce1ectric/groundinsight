@@ -332,7 +332,11 @@ class SourceDB(Base):
     """
     SourceDB Model.
 
-    Represents a Source in the database, including its properties and associated bus.
+    Represents a Source in the database. Both the legacy current-source mode
+    and the Thevenin (voltage-source) mode are persisted in the same row.
+    The ``source_type`` column selects which of ``values`` and the pair
+    ``(voltage, source_impedance)`` carries the actual data; the other
+    fields are stored as ``NULL``.
     """
 
     __tablename__ = "sources"
@@ -340,40 +344,68 @@ class SourceDB(Base):
     name = Column(String, primary_key=True)
     description = Column(Text, nullable=True)
     bus_name = Column(String, ForeignKey("buses.name"))
-    values = Column(JSON, nullable=False)
+    source_type = Column(String, nullable=False, default="current")
+    # Current-source mode: frequency -> {real, imag}
+    values = Column(JSON, nullable=True)
+    # Voltage-source (Thevenin) mode: frequency -> {real, imag}
+    voltage = Column(JSON, nullable=True)
+    source_impedance = Column(JSON, nullable=True)
 
     bus = relationship("BusDB", backref="sources")
 
+    @staticmethod
+    def _freq_dict_to_pydantic(stored):
+        """Convert a JSON-serialised ``{str(freq): {real, imag}}`` mapping
+        back into ``Dict[float, ComplexNumber]``. Returns ``None`` if the
+        stored value is missing."""
+        if stored is None:
+            return None
+        result = {}
+        for freq, value in stored.items():
+            if isinstance(value, dict):
+                cn = ComplexNumber(**value)
+            else:
+                cn = ComplexNumber(real=value, imag=0.0)
+            result[float(freq)] = cn
+        return result
+
+    @staticmethod
+    def _freq_dict_to_json(values):
+        """Convert ``Dict[float, ComplexNumber]`` (or scalars) into a JSON-
+        serialisable mapping with string keys, or ``None`` if the input is
+        ``None``."""
+        if values is None:
+            return None
+        out = {}
+        for freq, val in values.items():
+            if isinstance(val, ComplexNumber):
+                out[str(freq)] = {"real": val.real, "imag": val.imag}
+            else:
+                out[str(freq)] = val  # Assume float or int
+        return out
+
     def to_pydantic(self):
-        # Convert values JSON to Dict[float, ComplexNumber]
-        values = {
-            float(freq): (
-                ComplexNumber(**value)
-                if isinstance(value, dict)
-                else ComplexNumber(real=value, imag=0.0)
-            )
-            for freq, value in self.values.items()
-        }
+        source_type = self.source_type or "current"
         return Source(
             name=self.name,
             description=self.description,
             bus=self.bus_name,
-            values=values,
+            source_type=source_type,
+            values=self._freq_dict_to_pydantic(self.values),
+            voltage=self._freq_dict_to_pydantic(self.voltage),
+            source_impedance=self._freq_dict_to_pydantic(self.source_impedance),
         )
 
     @classmethod
     def from_pydantic(cls, source: Source):
-        values = {}
-        for freq, val in source.values.items():
-            if isinstance(val, ComplexNumber):
-                values[str(freq)] = {"real": val.real, "imag": val.imag}
-            else:
-                values[str(freq)] = val  # Assume float or int
         return cls(
             name=source.name,
             description=source.description,
             bus_name=source.bus,
-            values=values,
+            source_type=source.source_type,
+            values=cls._freq_dict_to_json(source.values),
+            voltage=cls._freq_dict_to_json(source.voltage),
+            source_impedance=cls._freq_dict_to_json(source.source_impedance),
         )
 
 

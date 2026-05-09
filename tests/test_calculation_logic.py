@@ -117,5 +117,136 @@ def test_reduction_factor_for_bus7_fault7():
     res_bus7_fault7 = res_impedances_df.filter((pl.col("fault_name") == "fault7") & (pl.col("fault_bus") == "bus7"))
 
     # Assert that the reduction factor is equal to 1 for the frequency of 50 Hz
-    assert res_bus7_fault7.filter(pl.col("frequency_Hz") == 50)["reduction_factor"][0] > 0.99 
+    assert res_bus7_fault7.filter(pl.col("frequency_Hz") == 50)["reduction_factor"][0] > 0.99
     assert res_bus7_fault7.filter(pl.col("frequency_Hz") == 50)["reduction_factor"][0] < 1.01
+
+
+# ---------------------------------------------------------------------------
+# Thevenin (voltage-source) regression tests
+# ---------------------------------------------------------------------------
+
+
+def _build_simple_two_bus_network(name: str):
+    """Helper: build a deterministic 2-bus network used by the Thevenin tests.
+
+    Real-valued bus and branch impedances keep the analytic comparison
+    simple. Returns the populated, path-defined network.
+    """
+    bus_type = BusType(
+        name="BT_const",
+        description="Constant 10 ohm bus impedance",
+        system_type="Substation",
+        voltage_level=20.0,
+        impedance_formula="rho * 0 + 10 + I * f * 0",
+    )
+    branch_type = BranchType(
+        name="BR_const",
+        description="Constant 1 ohm self / 0.2 ohm mutual per length",
+        grounding_conductor=True,
+        self_impedance_formula="(rho * 0 + 1.0 + I * f * 0) * l",
+        mutual_impedance_formula="(rho * 0 + 0.2 + I * f * 0) * l",
+    )
+    net = gi.create_network(name=name, frequencies=[50])
+    gi.create_bus(name="bus1", type=bus_type, network=net, specific_earth_resistance=100.0)
+    gi.create_bus(name="bus2", type=bus_type, network=net, specific_earth_resistance=100.0)
+    gi.create_branch(
+        name="branch1",
+        type=branch_type,
+        from_bus="bus1",
+        to_bus="bus2",
+        length=1.0,
+        network=net,
+    )
+    gi.create_fault(
+        name="fault1",
+        bus="bus2",
+        scalings={50: 1.0},
+        network=net,
+    )
+    return net
+
+
+def test_voltage_source_reproduces_current_source_in_high_zsrc_limit():
+    """A Thevenin source with very large Z_src and U = I_src * Z_src must
+    reproduce the current-source EPR to within numerical tolerance."""
+    # Reference: current source delivering 100 A
+    net_i = _build_simple_two_bus_network("net_current")
+    gi.create_source(name="src", bus="bus1", values={50: 100.0 + 0.0j}, network=net_i)
+    net_i.define_paths()
+    gi.run_fault(net_i, fault_name="fault1")
+    epr_i_bus1 = next(
+        b.uepr for b in net_i.results["fault1"].buses if b.name == "bus1"
+    )
+    epr_i_bus2 = next(
+        b.uepr for b in net_i.results["fault1"].buses if b.name == "bus2"
+    )
+
+    # Equivalent Thevenin source: Z_src very large, U = 100 * Z_src so that
+    # I_N = U/Z_src = 100 A regardless of loading.
+    Z_src = 1e9 + 0.0j
+    U_eff = 100.0 * Z_src
+    net_v = _build_simple_two_bus_network("net_voltage")
+    gi.create_voltage_source(
+        name="src",
+        bus="bus1",
+        voltage={50: U_eff},
+        source_impedance={50: Z_src},
+        network=net_v,
+    )
+    net_v.define_paths()
+    gi.run_fault(net_v, fault_name="fault1")
+    epr_v_bus1 = next(
+        b.uepr for b in net_v.results["fault1"].buses if b.name == "bus1"
+    )
+    epr_v_bus2 = next(
+        b.uepr for b in net_v.results["fault1"].buses if b.name == "bus2"
+    )
+
+    assert abs(epr_v_bus1 - epr_i_bus1) / max(abs(epr_i_bus1), 1.0) < 1e-6
+    assert abs(epr_v_bus2 - epr_i_bus2) / max(abs(epr_i_bus2), 1.0) < 1e-6
+
+
+def test_voltage_source_finite_zsrc_reduces_effective_fault_current():
+    """With a finite source impedance the actual loop current must be smaller
+    than the Norton open-circuit current ``U/Z_src``."""
+    # Norton-equivalent of a 100 A source would be U/Z_src = 100 with
+    # Z_src = 5 ohm => U = 500 V. The loop is closed via Z_src in parallel
+    # with the (much larger) earth path through the grounding network, so
+    # the actual current through Z_src is smaller than 100 A.
+    net = _build_simple_two_bus_network("net_finite_zsrc")
+    Z_src = 5.0 + 0.0j
+    U_emf = 500.0 + 0.0j
+    gi.create_voltage_source(
+        name="src",
+        bus="bus1",
+        voltage={50: U_emf},
+        source_impedance={50: Z_src},
+        network=net,
+    )
+    net.define_paths()
+    gi.run_fault(net, fault_name="fault1")
+
+    en = net.electrical_network
+    src_idx = en.bus_indices["bus1"]
+    fault_idx = en.bus_indices["bus2"]
+    v_src = en.u_vectors[50][src_idx]
+    v_fault = en.u_vectors[50][fault_idx]
+    I_loop = (U_emf - (v_src - v_fault)) / Z_src
+
+    # Effective fault loop current must be strictly smaller in magnitude
+    # than the open-circuit Norton current.
+    I_norton = U_emf / Z_src
+    assert abs(I_loop) < abs(I_norton)
+    # And strictly positive: the source still drives a fault current.
+    assert abs(I_loop) > 0.0
+
+
+def test_default_source_type_is_current():
+    """A source created via :func:`create_source` must keep the legacy
+    current-source semantics."""
+    net = _build_simple_two_bus_network("net_default")
+    src = gi.create_source(name="src", bus="bus1", values={50: 100.0 + 0.0j}, network=net)
+    assert src.source_type == "current"
+    assert src.values is not None
+    assert src.voltage is None
+    assert src.source_impedance is None

@@ -212,6 +212,59 @@ $$
 It is exposed per frequency and as RMS-scalar through
 `net.res_all_impedances()`.
 
+## Active flag and outage studies
+
+Both `Bus` and `Branch` carry a boolean `active` field (default
+`True`). The flag has a clean physical interpretation:
+
+- An inactive `Bus` is **removed from the nodal system** entirely.
+  Its row and column drop from $Y(f)$ and the bus contributes
+  nothing to the right-hand-side vector $\underline{i}(f)$.
+- An inactive `Branch` behaves as an **open circuit**: no
+  contribution to the admittance matrix, no Norton-equivalent
+  injection from the mutual coupling, and a zero current in the
+  result.
+
+`PathFinder` skips inactive elements when enumerating source-to-fault
+paths, so the per-path Norton bookkeeping stays consistent. The flag
+is round-tripped through SQLite and JSON; existing payloads load
+with `active=True` for every element, which keeps backwards
+compatibility intact.
+
+That makes maintenance scenarios, planned outages, broken shields
+and N-1 contingencies expressible without rebuilding the network.
+The `groundinsight.simulation.outage` sub-package wraps this into
+two convenience entry points:
+
+- `outage_context(network, outage)` — context manager that flips
+  the listed elements to `active=False` for the duration of a
+  `with` block and restores the previous state (including the
+  cached path list) afterwards.
+- `run_outage_study(network, fault, scenarios=[...])` — executes
+  the base case plus one fault calculation per `Outage` scenario
+  and returns an `OutageStudyResult` whose
+  `compare_buses(...)` / `compare_branches(...)` accessors yield
+  long-format Polars DataFrames with absolute and relative deltas
+  against a chosen reference scenario.
+
+## Inverse rho analysis
+
+The forward solve answers "given $\rho_E$, what is the EPR?" The
+sister inverse question — *"how large can $\rho_E$ become before
+the EPR at the fault bus exceeds a touch-voltage limit
+$u_{\max}$?"* — is answered by
+`groundinsight.analysis.find_max_rho_scaling`. It log-bisects a
+uniform scaling factor $c$ of `Bus.specific_earth_resistance` on a
+user-selected bus set, re-evaluates each `BusType.impedance_formula`
+through the existing SymPy machinery and triggers `run_fault` at
+every trial value. The output is the largest $c$ that still
+satisfies $|U_\text{EPR}(f)|_{\text{RMS}} \le u_{\max}$, the EPR at
+that point, and the per-bus $\rho_{\max} = c\,\rho_0$. The original
+$\rho$ values are restored via a `finally` block, so the network is
+unchanged after the call. A frequency-dependent variant
+(`find_max_rho_f_scaling`) extends the same idea to two-parameter
+rho-f curves.
+
 ## Summary of the calculation pipeline
 
 `run_fault(network, fault_name)` executes the following steps (see

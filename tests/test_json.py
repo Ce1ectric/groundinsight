@@ -68,3 +68,52 @@ def test_save_network_successful(tmp_path):
     assert net.faults == net2.faults
     assert net.paths == net2.paths
     assert net.results == net2.results
+
+
+def test_voltage_source_json_roundtrip(tmp_path):
+    """A network with a Thevenin source must survive a JSON roundtrip
+    without losing source mode or impedance values."""
+    net = gi.create_network(name="ThevNet", frequencies=[50])
+    bus_type = gi.BusType(
+        name="BusTypeFormulaTest",
+        system_type="Grounded",
+        voltage_level=230,
+        impedance_formula="rho * 0 + 1 + I * f * 1/50",
+    )
+    branch_type = gi.BranchType(
+        name="TestBranchType",
+        grounding_conductor=True,
+        self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
+        mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l",
+    )
+
+    gi.create_bus(name="bus1", type=bus_type, network=net)
+    gi.create_bus(name="bus2", type=bus_type, network=net)
+    gi.create_branch(
+        name="branch1",
+        type=branch_type,
+        from_bus="bus1",
+        to_bus="bus2",
+        length=1,
+        network=net,
+    )
+    gi.create_voltage_source(
+        name="vsrc",
+        bus="bus1",
+        voltage={50: 1000.0 + 0.0j},
+        source_impedance={50: 0.5 + 0.1j},
+        network=net,
+    )
+    gi.create_fault(name="fault1", bus="bus2", scalings={50: 1.0}, network=net)
+    gi.create_paths(network=net)
+
+    json_file = tmp_path / "thevenin_network.json"
+    gi.save_network_to_json(network=net, path=str(json_file))
+    loaded = gi.load_network_from_json(path=str(json_file))
+
+    assert loaded.sources == net.sources
+    src = loaded.sources["vsrc"]
+    assert src.source_type == "voltage"
+    assert src.values is None
+    assert src.voltage is not None
+    assert src.source_impedance is not None
