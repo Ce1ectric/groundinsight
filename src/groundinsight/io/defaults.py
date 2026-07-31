@@ -25,38 +25,43 @@ class ImportDefaults(BaseModel):
     """
     Per-import defaults shared by every external-network importer.
 
-    Attributes:
-        rho (float): Specific earth resistance applied to every imported
-            ``Bus`` and ``Branch`` (Ohm * m). Source tools do not encode
-            soil parameters, so a single project-wide value is taken
-            from the user.
-        frequencies (List[float]): Frequencies at which impedance values
-            are evaluated. Becomes ``Network.frequencies``; bus and
-            branch impedance dicts are sized accordingly.
-        default_bus_type (BusType): Default ``BusType`` assigned to every
-            imported bus on the selected voltage level.
-        default_branch_type (BranchType): Default ``BranchType`` assigned
-            to every imported line / cable on the selected voltage level.
+    Attributes
+    ----------
+    rho : float
+        Specific earth resistance applied to every imported :class:`Bus`
+        and :class:`Branch` (Ohm * m). Source tools do not encode soil
+        parameters, so a single project-wide value is taken from the user.
+    frequencies : list of float
+        Frequencies at which impedance values are evaluated. Becomes
+        ``Network.frequencies``; bus and branch impedance dicts are sized
+        accordingly.
+    default_bus_type : BusType
+        Default :class:`BusType` assigned to every imported bus on the
+        selected voltage level.
+    default_branch_type : BranchType
+        Default :class:`BranchType` assigned to every imported line /
+        cable on the selected voltage level.
 
-    Examples:
-        >>> from groundinsight.models.core_models import BusType, BranchType
-        >>> from groundinsight.io import ImportDefaults
-        >>> defaults = ImportDefaults(
-        ...     rho=100.0,
-        ...     frequencies=[50.0],
-        ...     default_bus_type=BusType(
-        ...         name="ImportedBus",
-        ...         system_type="Grounded",
-        ...         voltage_level=20.0,
-        ...         impedance_formula="rho * 0 + 1.0 + I * f * 0",
-        ...     ),
-        ...     default_branch_type=BranchType(
-        ...         name="ImportedCable",
-        ...         grounding_conductor=True,
-        ...         self_impedance_formula="(0.25 + I * 0.6) * l",
-        ...         mutual_impedance_formula="(0.0 + I * 0.6) * l",
-        ...     ),
-        ... )
+    Examples
+    --------
+    >>> from groundinsight.models.core_models import BusType, BranchType
+    >>> from groundinsight.io import ImportDefaults
+    >>> defaults = ImportDefaults(
+    ...     rho=100.0,
+    ...     frequencies=[50.0],
+    ...     default_bus_type=BusType(
+    ...         name="ImportedBus",
+    ...         system_type="Grounded",
+    ...         voltage_level=20.0,
+    ...         impedance_formula="rho * 0 + 1.0 + I * f * 0",
+    ...     ),
+    ...     default_branch_type=BranchType(
+    ...         name="ImportedCable",
+    ...         grounding_conductor=True,
+    ...         self_impedance_formula="(0.25 + I * 0.6) * l",
+    ...         mutual_impedance_formula="(0.0 + I * 0.6) * l",
+    ...     ),
+    ... )
     """
 
     rho: float

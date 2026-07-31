@@ -36,38 +36,37 @@ it for every harmonic of interest.
 
 ## Features
 
-- Bus, branch, source and fault objects modelled as Pydantic v2 classes.
-- Symbolic impedance formulas in `rho`, `f` and `l`, evaluated through
-  SymPy. Compiled callables are cached per `BusType` / `BranchType` and
-  evaluated vectorised over all frequencies, so building large networks
-  scales cheaply with the number of buses and branches.
-- Sparse LU solver per frequency (`scipy.sparse.linalg.splu`).
-- Mutual coupling between faulted phase and grounding conductor treated as
-  Norton equivalents along the path from source to fault.
-- Reduction factor computed from the ratio of EPR with and without mutual
-  coupling at the fault bus.
-- Support for **ring and mesh** grounding topologies with multiple parallel
-  paths; the optional `auto_parallel_coefficients=True` flag on
-  `run_fault` derives the per-path current share from a reduced phase-only
-  solve.
-- SQLite persistence and JSON export/import of networks and type libraries.
-- Polars DataFrames for result access (`net.res_buses(...)`,
-  `net.res_branches(...)`, `net.res_all_impedances()`).
-- Matplotlib helpers for bar plots of EPR, branch currents and bus currents.
-- **`active` flag on `Bus` and `Branch`** for modelling out-of-service
-  equipment without rebuilding the network.
-- **Outage / what-if studies** (`gi.run_outage_study`, `gi.outage_context`,
-  `gi.Outage`) — evaluate contingency scenarios in a single call and get
-  long-format Polars DataFrames with absolute and relative deltas against
-  a reference scenario.
-- **Inverse rho analysis** (`gi.find_max_rho_scaling`,
-  `gi.find_max_rho_f_scaling`) — log-bisect the maximum admissible soil
-  resistivity (or rho-f curve) at a bus set given an EPR limit.
-- **External-network import** via `gi.from_pandapower` (and
-  `gi.preview_pandapower_import`) using a shared `ImportDefaults` schema.
-  Pandapower is an optional extra:
-  `pip install 'groundinsight[pandapower]'`. PowerFactory `.dgs` and the
-  live Python API are on the roadmap — see [`CHANGELOG.md`](CHANGELOG.md).
+- Pydantic v2 model layer (`Bus`, `Branch`, `Source`, `Fault`) with
+  symbolic impedance formulas in `rho`, `f` and `l` evaluated through
+  SymPy and cached per `BusType` / `BranchType`.
+- Sparse LU solve per frequency (`scipy.sparse.linalg.splu`); mutual
+  coupling injected as Norton equivalents along the source-to-fault
+  path.
+- Ring and mesh topologies with optional automatic per-path current
+  sharing (`auto_parallel_coefficients=True` on `run_fault`).
+- Outage / what-if studies via `Bus.active` / `Branch.active`,
+  `gi.outage_context` and `gi.run_outage_study`.
+- Inverse rho analysis (`gi.find_max_rho_scaling`,
+  `gi.find_max_rho_f_scaling`) — bisect the maximum soil resistivity
+  at a bus set against an EPR limit.
+- Time-domain transient simulation via `gi.TransientStudy`, FFT or
+  state-space ODE; the state-space path uses the lumped RLC fields
+  on `BusType` and `BranchType`.
+- External-network import from pandapower (`gi.from_pandapower`,
+  optional extra `pip install 'groundinsight[pandapower]'`), including
+  solved short-circuit cases (`gi.read_shortcircuit_results`,
+  `gi.apply_shortcircuit_characteristics`) as IEC 60909 quantities.
+- Conductor thermal-limit check (`gi.check_conductor_limits`): IEC 60909
+  `I_th` against the IEC 60949 adiabatic limit `k·S/√t_k`, per grounding
+  branch. The linear AC-RMS currents are superposed by the solve and the
+  non-linear peak/thermal factors applied to that aggregate.
+- SQLite persistence, JSON export/import and Polars DataFrames for
+  result access; Matplotlib helpers for bar and time-series plots.
+- Quiet by default; opt-in console logging via
+  `gi.set_log_level("INFO")`.
+
+See the [documentation](https://ce1ectric.github.io/groundinsight/)
+for the full list and the API reference.
 
 ## Installation
 
@@ -102,58 +101,41 @@ import groundinsight as gi
 net = gi.create_network(name="QuickstartNet", frequencies=[50, 250, 350])
 
 bus_type = gi.BusType(
-    name="SubstationBus",
-    description="Lumped substation grounding grid",
-    system_type="Substation",
-    voltage_level=20,
+    name="SubstationBus", system_type="Substation", voltage_level=20,
     impedance_formula="rho * 0.01 + j * f * 1/50 * 0.1",
 )
-
 cable_type = gi.BranchType(
-    name="MSCable",
-    description="20 kV single-core cable with shield",
-    grounding_conductor=True,
+    name="MSCable", grounding_conductor=True,
     self_impedance_formula="(0.25 + j * f * 0.012) * l",
     mutual_impedance_formula="(0.0  + j * f * 0.012) * l",
 )
 
-gi.create_bus(name="bus_source", type=bus_type, network=net, specific_earth_resistance=100.0)
-gi.create_bus(name="bus_fault",  type=bus_type, network=net, specific_earth_resistance=100.0)
-
+gi.create_bus(name="bus_source", type=bus_type, network=net)
+gi.create_bus(name="bus_fault",  type=bus_type, network=net)
 gi.create_branch(
     name="cable_1", type=cable_type,
     from_bus="bus_source", to_bus="bus_fault",
-    length=5.0, specific_earth_resistance=100.0, network=net,
+    length=5.0, network=net,
 )
-
 gi.create_source(
     name="infeed", bus="bus_source",
     values={50: 1000.0, 250: 200.0, 350: 100.0}, network=net,
 )
 gi.create_fault(
     name="fault1", bus="bus_fault",
-    description="single-phase-to-ground fault",
     scalings={50: 1.0}, network=net,
 )
 
 gi.run_fault(network=net, fault_name="fault1")
-
 print(net.res_all_impedances())
 ```
 
-For a ring/meshed network, enable the automatic parallel-path distribution:
-
-```python
-gi.run_fault(
-    network=net,
-    fault_name="fault1",
-    auto_parallel_coefficients=True,
-)
-```
-
-More worked examples — including the CIRED reference and a low-voltage
-network — are available as notebooks in the
-[documentation](https://ce1ectric.github.io/groundinsight/examples/).
+For the full walkthrough — including ring topologies with
+`auto_parallel_coefficients=True`, outage / what-if studies,
+transient simulations and the pandapower importer — see the
+[Quickstart](https://ce1ectric.github.io/groundinsight/quickstart/)
+and the [example notebooks](https://ce1ectric.github.io/groundinsight/examples/)
+in the documentation.
 
 ## Model overview
 

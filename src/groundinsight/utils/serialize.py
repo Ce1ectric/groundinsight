@@ -9,14 +9,18 @@ def serialize_impedance(impedance_dict):
     into a dictionary where frequencies are strings and impedance values are dictionaries
     containing 'real' and 'imag' components.
 
-    Args:
-        impedance_dict (Dict[float, ComplexNumber]): A dictionary mapping each frequency to its
-                                                     corresponding `ComplexNumber` impedance.
+    Parameters
+    ----------
+    impedance_dict : Dict[float, ComplexNumber]
+        A dictionary mapping each frequency to its
+        corresponding `ComplexNumber` impedance.
 
-    Returns:
-        Dict[str, Dict[str, float]]: A JSON-compatible dictionary where each key is a frequency
-                                     represented as a string, and each value is a dictionary
-                                     with 'real' and 'imag' keys corresponding to the impedance components.
+    Returns
+    -------
+    Dict[str, Dict[str, float]]
+        A JSON-compatible dictionary where each key is a frequency
+        represented as a string, and each value is a dictionary
+        with 'real' and 'imag' keys corresponding to the impedance components.
     """
     return {
         str(freq): {"real": imp.real, "imag": imp.imag}
@@ -32,17 +36,23 @@ def deserialize_impedance(impedance_json):
     dictionaries containing 'real' and 'imag' components into a dictionary mapping frequencies
     as floats to `ComplexNumber` instances.
 
-    Args:
-        impedance_json (Dict[str, Dict[str, float]]): A JSON-compatible dictionary where each key is
-                                                      a frequency represented as a string, and each value
-                                                      is a dictionary with 'real' and 'imag' keys.
+    Parameters
+    ----------
+    impedance_json : Dict[str, Dict[str, float]]
+        A JSON-compatible dictionary where each key is
+        a frequency represented as a string, and each value
+        is a dictionary with 'real' and 'imag' keys.
 
-    Returns:
-        Dict[float, ComplexNumber]: A dictionary mapping each frequency to its corresponding
-                                    `ComplexNumber` impedance.
+    Returns
+    -------
+    Dict[float, ComplexNumber]
+        A dictionary mapping each frequency to its corresponding
+        `ComplexNumber` impedance.
 
-    Raises:
-        ValueError: If the input JSON does not conform to the expected format.
+    Raises
+    ------
+    ValueError
+        If the input JSON does not conform to the expected format.
     """
     try:
         return {

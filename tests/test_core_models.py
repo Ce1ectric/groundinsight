@@ -258,6 +258,154 @@ def test_branchtype_initialization_invalid():
             mutual_impedance_formula="1+2",
         )
 
+
+# ---------------------------------------------------------------------------
+# Phase 2: lumped RLC parameters on BusType / BranchType
+# ---------------------------------------------------------------------------
+
+
+def test_bustype_optional_rlc_formulas_default_none():
+    """A BusType without RLC fields must still be valid; new fields default
+    to None so existing code keeps working."""
+    bt = BusType(
+        name="legacy",
+        system_type="Substation",
+        voltage_level=20.0,
+        impedance_formula="rho * 0 + 5",
+    )
+    assert bt.R_formula is None
+    assert bt.L_formula is None
+    assert bt.C_formula is None
+
+
+def test_bustype_with_rlc_formulas():
+    """RLC formulas pass the same SymPy validation as impedance formulas."""
+    bt = BusType(
+        name="rlc",
+        system_type="Substation",
+        voltage_level=20.0,
+        impedance_formula="rho * 0 + 5",
+        R_formula="rho * 0 + 5",
+        L_formula="rho * 0 + 1e-6",
+        C_formula="rho * 0 + 1e-9",
+    )
+    assert bt.R_formula == "rho * 0 + 5"
+    assert bt.L_formula == "rho * 0 + 1e-6"
+    assert bt.C_formula == "rho * 0 + 1e-9"
+
+
+def test_bustype_invalid_rlc_formula_rejected():
+    """Syntactically invalid RLC formulas are rejected at construction."""
+    with pytest.raises(ValueError):
+        BusType(
+            name="bad",
+            system_type="Substation",
+            voltage_level=20.0,
+            impedance_formula="rho * 0 + 5",
+            R_formula="1+2+",
+        )
+
+
+def test_bus_calculates_rlc_when_formulas_present():
+    """Bus.calculate_impedance fills R/L/C dicts when formulas exist."""
+    bt = BusType(
+        name="rlc",
+        system_type="Substation",
+        voltage_level=20.0,
+        impedance_formula="rho * 0 + 5",
+        R_formula="rho * 0 + 5",
+        L_formula="rho * 0 + 1e-6",
+        C_formula="rho * 0 + 1e-9",
+    )
+    bus = Bus(name="b1", type=bt, impedance={}, specific_earth_resistance=100.0)
+    bus.calculate_impedance([50.0, 1000.0])
+    assert bus.R == {50.0: 5.0, 1000.0: 5.0}
+    assert bus.L == {50.0: 1e-6, 1000.0: 1e-6}
+    assert bus.C == {50.0: 1e-9, 1000.0: 1e-9}
+
+
+def test_bus_rlc_remains_none_without_formulas():
+    """Without formulas the RLC dicts stay at their None defaults."""
+    bt = BusType(
+        name="no_rlc",
+        system_type="Substation",
+        voltage_level=20.0,
+        impedance_formula="rho * 0 + 5",
+    )
+    bus = Bus(name="b1", type=bt, impedance={}, specific_earth_resistance=100.0)
+    bus.calculate_impedance([50.0])
+    assert bus.R is None and bus.L is None and bus.C is None
+
+
+def test_bus_rlc_complex_formula_raises():
+    """A formula that evaluates to a complex number is rejected at evaluation
+    time with a clear message; the validator only catches syntax errors."""
+    bt = BusType(
+        name="cplx",
+        system_type="Substation",
+        voltage_level=20.0,
+        impedance_formula="rho * 0 + 5",
+        R_formula="1 + 2*j",  # syntactically valid, semantically wrong
+    )
+    bus = Bus(name="b1", type=bt, impedance={}, specific_earth_resistance=100.0)
+    with pytest.raises(ValueError, match="non-real"):
+        bus.calculate_impedance([50.0])
+
+
+def test_branchtype_with_rlc_formulas():
+    """All five branch RLCM formulas are accepted and validated."""
+    bt = BranchType(
+        name="rlc_br",
+        grounding_conductor=True,
+        self_impedance_formula="(rho * 0 + 1) * l",
+        mutual_impedance_formula="(rho * 0 + 0.2) * l",
+        R_self_formula="(rho * 0 + 1) * l",
+        L_self_formula="(rho * 0 + 1e-6) * l",
+        C_self_formula="(rho * 0 + 1e-9) * l",
+        R_mutual_formula="(rho * 0 + 0.05) * l",
+        M_mutual_formula="(rho * 0 + 0.5e-6) * l",
+    )
+    assert bt.R_self_formula is not None
+    assert bt.M_mutual_formula is not None
+
+
+def test_branch_calculates_rlc_when_formulas_present():
+    """Branch.calculate_impedance fills the RLCM dicts when formulas exist."""
+    bus_type = BusType(
+        name="bt",
+        system_type="Substation",
+        voltage_level=20.0,
+        impedance_formula="rho * 0 + 5",
+    )
+    br_type = BranchType(
+        name="rlc_br",
+        grounding_conductor=True,
+        self_impedance_formula="(rho * 0 + 1) * l",
+        mutual_impedance_formula="(rho * 0 + 0.2) * l",
+        R_self_formula="(rho * 0 + 1) * l",
+        L_self_formula="(rho * 0 + 1e-6) * l",
+        C_self_formula="(rho * 0 + 1e-9) * l",
+        R_mutual_formula="(rho * 0 + 0.05) * l",
+        M_mutual_formula="(rho * 0 + 0.5e-6) * l",
+    )
+    branch = Branch(
+        name="br1",
+        type=br_type,
+        length=10.0,
+        from_bus="b1",
+        to_bus="b2",
+        self_impedance={},
+        mutual_impedance={},
+        specific_earth_resistance=100.0,
+    )
+    branch.calculate_impedance([50.0])
+    assert branch.R_self[50.0] == pytest.approx(10.0)
+    assert branch.L_self[50.0] == pytest.approx(1e-5)
+    assert branch.C_self[50.0] == pytest.approx(1e-8)
+    assert branch.R_mutual[50.0] == pytest.approx(0.5)
+    assert branch.M_mutual[50.0] == pytest.approx(5e-6)
+
+
 def test_bus_initialization_valid():
     """
     Test creating a Bus object with valid data.

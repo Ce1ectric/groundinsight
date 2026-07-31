@@ -59,6 +59,28 @@ Install a specific group with:
 poetry install --with docs,dev
 ```
 
+## Optional extras
+
+In addition to the development groups above, runtime-optional features
+are exposed as PyPI extras. They keep the core install lean and let the
+user opt into the heavier dependencies on demand:
+
+| Extra        | Purpose                                            | Pulls in       |
+|--------------|----------------------------------------------------|----------------|
+| pandapower   | `gi.from_pandapower` / `gi.preview_pandapower_import` to import existing distribution-network models | `pandapower` |
+
+Install with pip:
+
+```bash
+pip install 'groundinsight[pandapower]'
+```
+
+or with Poetry:
+
+```bash
+poetry install --extras pandapower
+```
+
 ## Verify the installation
 
 Open a Python shell and import the package:

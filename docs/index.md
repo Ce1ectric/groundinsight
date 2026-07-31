@@ -44,6 +44,38 @@ diagonal, branch self-admittances off-diagonal), $\underline{u}$ is the EPR
 vector and $\underline{i}$ combines injected source currents and the Norton
 equivalents of the mutual coupling between phase and shield conductors.
 
+## Minimal example
+
+```python
+import groundinsight as gi
+
+net = gi.create_network(name="Demo", frequencies=[50])
+
+bus_type = gi.BusType(
+    name="SubstationBus", system_type="Substation", voltage_level=20,
+    impedance_formula="rho * 0.01 + j * f * 1/50 * 0.1",
+)
+cable_type = gi.BranchType(
+    name="MSCable", grounding_conductor=True,
+    self_impedance_formula="(0.25 + j * f * 0.012) * l",
+    mutual_impedance_formula="(0.0  + j * f * 0.012) * l",
+)
+
+gi.create_bus(name="src", type=bus_type, network=net)
+gi.create_bus(name="flt", type=bus_type, network=net)
+gi.create_branch(
+    name="c1", type=cable_type,
+    from_bus="src", to_bus="flt", length=5.0, network=net,
+)
+gi.create_source(name="infeed", bus="src", values={50: 1000.0}, network=net)
+gi.create_fault(name="f1", bus="flt", scalings={50: 1.0}, network=net)
+
+gi.run_fault(network=net, fault_name="f1")
+print(net.res_all_impedances())
+```
+
+See the [Quickstart](quickstart.md) for the full walkthrough.
+
 ## Feature overview
 
 - Bus, branch, source and fault objects modelled as Pydantic v2 classes
@@ -55,14 +87,28 @@ equivalents of the mutual coupling between phase and shield conductors.
   coupling at the fault bus
 - SQLite persistence and JSON export/import of networks and type libraries
 - Polars DataFrames for result access; Matplotlib helpers for bar plots
+- **Time-domain transient simulation** (FFT and modified-nodal-analysis
+  state-space solvers) on top of the same Pydantic network, see
+  [Transient simulation](transient.md)
+- Import of external distribution networks from pandapower — the topology
+  via `from_pandapower`, and a solved short-circuit case as IEC 60909
+  quantities via `read_shortcircuit_results` /
+  `apply_shortcircuit_characteristics`, see [I/O](api/io.md)
+- **Conductor thermal-limit check** (`check_conductor_limits`): the
+  IEC 60909 thermally equivalent current $I_{th}$ against the IEC 60949
+  adiabatic limit $k\,S/\sqrt{t_k}$, per grounding branch, see
+  [Analysis](api/analysis.md)
 
 ## Where to go next
 
 - [Installation](installation.md) — how to get `groundinsight` onto your system.
 - [Quickstart](quickstart.md) — end-to-end walkthrough of a minimal network.
 - [Concepts](concepts.md) — the physical and numerical model behind the code.
-- [Examples](examples/index.md) — notebooks covering the simple case, a CIRED
-  reference and a low-voltage network.
+- [Transient simulation](transient.md) — FFT and state-space solver paths for
+  time-domain studies on top of the stationary network.
+- [Examples](examples/index.md) — notebooks covering the minimal case,
+  stationary and transient MV ring studies, a pandapower import and a
+  fault sweep across an MV cable line.
 - [API reference](api/index.md) — function-by-function documentation.
 
 ## Citation

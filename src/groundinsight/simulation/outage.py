@@ -50,6 +50,18 @@ from groundinsight.models.core_models import Network
 logger = logging.getLogger(__name__)
 
 
+# Per-network nesting stack for :func:`outage_context`. Keyed by
+# ``id(network)``; each value is a list of per-level baselines pushed by
+# nested ``with`` blocks. Each per-level baseline is a
+# ``{"buses": {name: original_active}, "branches": {name: original_active}}``
+# mapping captured *immediately before* the level flips its targets, so
+# the level's exit can revert exactly its own changes (and nothing the
+# inner level did to untouched-by-this-level elements). The stack
+# bookkeeping lives at module scope rather than on the
+# :class:`Network` instance so the public Pydantic surface stays clean.
+_OUTAGE_BASELINE_STACK: Dict[int, List[Dict[str, Dict[str, bool]]]] = {}
+
+
 class Outage(BaseModel):
     """
     Definition of a single what-if scenario.
@@ -59,11 +71,16 @@ class Outage(BaseModel):
     elements that exist in the network when the scenario is applied;
     unknown names raise ``ValueError`` at apply time.
 
-    Attributes:
-        name (str): Unique label used in result keys and DataFrame columns.
-        disabled_buses (List[str]): Names of buses to deactivate.
-        disabled_branches (List[str]): Names of branches to deactivate.
-        description (Optional[str]): Free-form description for documentation.
+    Attributes
+    ----------
+    name : str
+        Unique label used in result keys and DataFrame columns.
+    disabled_buses : list of str
+        Names of buses to deactivate.
+    disabled_branches : list of str
+        Names of branches to deactivate.
+    description : str, optional
+        Free-form description for documentation.
     """
 
     name: str
@@ -84,16 +101,23 @@ class OutageStudyResult(BaseModel):
     Result of an outage study.
 
     Holds bus and branch result DataFrames per scenario (and for the base
-    case, if it was included). The ``compare_*`` methods produce long-format
-    Polars DataFrames suitable for plotting or further aggregation.
+    case, if it was included). The ``compare_*`` methods produce
+    long-format Polars DataFrames suitable for plotting or further
+    aggregation.
 
-    Attributes:
-        fault (str): Name of the fault that was solved.
-        base_label (str): Label of the base scenario (typically ``"base"``).
-        scenarios (List[Outage]): The scenarios in the order they were run.
-        bus_results (Dict[str, pl.DataFrame]): ``label -> res_buses(fault)``
-            for the base case (if present) and every scenario.
-        branch_results (Dict[str, pl.DataFrame]): Same for branch results.
+    Attributes
+    ----------
+    fault : str
+        Name of the fault that was solved.
+    base_label : str
+        Label of the base scenario (typically ``"base"``).
+    scenarios : list of Outage
+        The scenarios in the order they were run.
+    bus_results : dict of str to polars.DataFrame
+        ``label -> res_buses(fault)`` for the base case (if present) and
+        every scenario.
+    branch_results : dict of str to polars.DataFrame
+        Same as ``bus_results`` but for branch results.
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -111,8 +135,10 @@ class OutageStudyResult(BaseModel):
         The base label is included first (if present), followed by the user
         scenarios in the order they were submitted to ``run_outage_study``.
 
-        Returns:
-            List[str]: Scenario labels.
+        Returns
+        -------
+        list of str
+            Scenario labels.
         """
         order = []
         if self.base_label in self.bus_results:
@@ -135,22 +161,29 @@ class OutageStudyResult(BaseModel):
         row per scenario per metric, plus the ``delta_vs_<against>`` and
         ``delta_pct_vs_<against>`` columns relative to the reference scenario.
 
-        Args:
-            against (Optional[str]): Reference scenario label. Defaults to
-                ``base_label`` if it exists in the result, otherwise to the
-                first available label.
-            columns (Sequence[str]): Bus result metrics to compare. Defaults
-                to ``("EPR_V",)``. Must be column names of the per-scenario
-                ``res_buses`` DataFrame (e.g. ``"EPR_V"``, ``"I_bus_A"``).
+        Parameters
+        ----------
+        against : str, optional
+            Reference scenario label. Defaults to ``base_label`` if it
+            exists in the result, otherwise to the first available label.
+        columns : sequence of str, optional
+            Bus result metrics to compare. Defaults to ``("EPR_V",)``.
+            Must be column names of the per-scenario ``res_buses``
+            DataFrame (e.g. ``"EPR_V"``, ``"I_bus_A"``).
 
-        Returns:
-            pl.DataFrame: Long-format frame with columns
-            ``["bus_name", "frequency_Hz", "scenario", "metric", "value",
-              "delta_vs_<ref>", "delta_pct_vs_<ref>"]``.
+        Returns
+        -------
+        polars.DataFrame
+            Long-format frame with columns ``["bus_name", "frequency_Hz",
+            "scenario", "metric", "value", "delta_vs_<ref>",
+            "delta_pct_vs_<ref>"]``. ``delta_pct_vs_<ref>`` is ``null``
+            wherever the reference value is 0 -- see :meth:`_compare`.
 
-        Raises:
-            ValueError: If ``against`` is not present in the stored results
-                or if a requested column is missing from a scenario frame.
+        Raises
+        ------
+        ValueError
+            If ``against`` is not present in the stored results or if a
+            requested column is missing from a scenario frame.
         """
         return self._compare(
             tables=self.bus_results,
@@ -171,17 +204,26 @@ class OutageStudyResult(BaseModel):
         Same shape as :meth:`compare_buses` but keyed by
         ``(branch_name, frequency_Hz)``.
 
-        Args:
-            against (Optional[str]): Reference scenario label.
-            columns (Sequence[str]): Branch result metrics to compare.
-                Defaults to ``("I_branch_A",)``.
+        Parameters
+        ----------
+        against : str, optional
+            Reference scenario label.
+        columns : sequence of str, optional
+            Branch result metrics to compare. Defaults to
+            ``("I_branch_A",)``.
 
-        Returns:
-            pl.DataFrame: Long-format comparison frame.
+        Returns
+        -------
+        polars.DataFrame
+            Long-format comparison frame. ``delta_pct_vs_<ref>`` is
+            ``null`` wherever the reference value is 0 -- see
+            :meth:`_compare`.
 
-        Raises:
-            ValueError: If ``against`` is not present in the stored results
-                or if a requested column is missing from a scenario frame.
+        Raises
+        ------
+        ValueError
+            If ``against`` is not present in the stored results or if a
+            requested column is missing from a scenario frame.
         """
         return self._compare(
             tables=self.branch_results,
@@ -225,6 +267,13 @@ class OutageStudyResult(BaseModel):
         relative deltas are computed for every other scenario. ``frequency_Hz``
         is cast to ``Utf8`` so that the ``"RMS"`` row mixes cleanly with the
         per-frequency floats.
+
+        A zero reference value yields ``null`` in the relative column, not
+        ``inf`` or ``NaN``. Zero baselines are ordinary in a grounding
+        study -- an islanded station, a frequency the fault does not
+        excite -- and "x % of nothing" is undefined, not infinite. The
+        absolute ``delta_vs_<ref>`` column still carries the full
+        information for those rows.
         """
         ref_label = self._resolve_reference(tables, against)
         if not metrics:
@@ -261,13 +310,22 @@ class OutageStudyResult(BaseModel):
             .select([id_col_a, id_col_b, "metric", pl.col("value").alias("_ref_value")])
         )
         merged = long_df.join(ref_df, on=[id_col_a, id_col_b, "metric"], how="left")
+        delta = pl.col("value") - pl.col("_ref_value")
+        # The relative column is only defined where the baseline is non-zero.
+        # Dividing anyway produced +/-inf for "0 V in the reference, non-zero
+        # in the scenario" -- the single most interesting row of an outage
+        # study -- and NaN for "0 V in both", the most boring one. Both then
+        # poisoned every mean()/max() over the column and sorted to the top of
+        # any "largest relative change" ranking. ``null`` is the honest
+        # marker: Polars aggregations skip it and it plots as a gap.
+        relative = (
+            pl.when(pl.col("_ref_value") == 0.0)
+            .then(pl.lit(None, dtype=pl.Float64))
+            .otherwise(delta / pl.col("_ref_value") * 100.0)
+        )
         merged = merged.with_columns(
-            (pl.col("value") - pl.col("_ref_value")).alias(f"delta_vs_{ref_label}"),
-            (
-                (pl.col("value") - pl.col("_ref_value"))
-                / pl.col("_ref_value")
-                * 100.0
-            ).alias(f"delta_pct_vs_{ref_label}"),
+            delta.alias(f"delta_vs_{ref_label}"),
+            relative.alias(f"delta_pct_vs_{ref_label}"),
         ).drop("_ref_value")
         return merged
 
@@ -283,27 +341,54 @@ def outage_context(network: Network, outage: Outage) -> Iterator[Network]:
     """
     Apply an :class:`Outage` to ``network`` for the duration of a ``with`` block.
 
-    On entry, the ``active`` flag of the listed buses and branches is set to
-    ``False``. On exit, the original ``active`` values are restored even if
-    the body raises. Path information is invalidated on entry and on exit
-    because both the outage and its rollback can change topology.
+    On entry, the ``active`` flag of the listed buses and branches is set
+    to ``False``. On exit, the original ``active`` values are restored
+    even if the body raises. Path information is invalidated on entry and
+    on exit because both the outage and its rollback can change topology.
 
-    Args:
-        network (Network): The network to mutate in place.
-        outage (Outage): Scenario describing what to deactivate.
+    Parameters
+    ----------
+    network : Network
+        The network to mutate in place.
+    outage : Outage
+        Scenario describing what to deactivate.
 
-    Yields:
-        Network: The same ``network`` instance, mutated for the scenario.
+    Yields
+    ------
+    Network
+        The same ``network`` instance, mutated for the scenario.
 
-    Raises:
-        ValueError: If a name in ``disabled_buses`` or ``disabled_branches``
-            is not part of the network.
+    Raises
+    ------
+    ValueError
+        If a name in ``disabled_buses`` or ``disabled_branches`` is not
+        part of the network.
 
-    Examples:
-        >>> with outage_context(net, Outage(name="b12", disabled_branches=["B12"])):
-        ...     gi.run_fault(net, "F1")
-        ...     df = net.res_buses()
+    Notes
+    -----
+    - The module-level pathfinder cache (see
+      :mod:`groundinsight.pathfinder`) is cleared **on exit** as well
+      as on entry. Without the exit-side eviction, a multi-scenario
+      outage sweep was accumulating one cache entry per scenario
+      indefinitely; together with the new LRU cap the cache footprint
+      now matches the user-visible state of ``network``.
+    - The function is now **nestable**. Nested ``with`` blocks store
+      the *outer-block-baseline* on a per-(bus, branch) basis using
+      ``setdefault`` so the inner block does not capture the
+      already-modified outer state as its own baseline. On
+      outer-block exit the originally-captured baseline is restored,
+      so changes made by the inner block to buses/branches that are
+      not part of the outer outage are correctly preserved through
+      the unwind.
+
+    Examples
+    --------
+    >>> with outage_context(net, Outage(name="b12", disabled_branches=["B12"])):  # doctest: +SKIP
+    ...     gi.run_fault(net, "F1")
+    ...     df = net.res_buses(fault="F1")
     """
+    from groundinsight.pathfinder import clear_pathfinder_cache  # local import
+
     unknown_buses = [b for b in outage.disabled_buses if b not in network.buses]
     if unknown_buses:
         raise ValueError(
@@ -317,12 +402,36 @@ def outage_context(network: Network, outage: Outage) -> Iterator[Network]:
             f"Outage '{outage.name}' references unknown branches: {unknown_branches}"
         )
 
-    saved_buses = {
-        name: network.buses[name].active for name in outage.disabled_buses
+    # Nestable baseline tracking. Each ``outage_context`` level pushes a
+    # per-level baseline onto the module-level
+    # ``_OUTAGE_BASELINE_STACK`` (keyed by ``id(network)``) that records
+    # the ``active`` flag for every bus / branch *this level* touches
+    # *immediately before* it flips them. On exit, only that level's
+    # changes are reverted; nothing the inner block has done to
+    # untouched-by-this-level elements is overwritten. This makes
+    # ``with outage_context(net, A): with outage_context(net, B): ...``
+    # behave like a stack so nested contexts compose cleanly.
+    # ``id(network)`` rather than a Pydantic ``PrivateAttr`` keeps the
+    # bookkeeping out of the public ``Network`` surface.
+    net_key = id(network)
+    stack = _OUTAGE_BASELINE_STACK.setdefault(net_key, [])
+
+    # Snapshot the pre-flip state for *this* level. We snapshot *before*
+    # mutating so an outer level that has already flipped a flag to
+    # ``False`` does not see the inner level "restore" it to ``False``
+    # on exit (correct behaviour: inner level only restores what it
+    # itself changed at the moment it changed it).
+    level_baseline = {
+        "buses": {
+            name: network.buses[name].active for name in outage.disabled_buses
+        },
+        "branches": {
+            name: network.branches[name].active
+            for name in outage.disabled_branches
+        },
     }
-    saved_branches = {
-        name: network.branches[name].active for name in outage.disabled_branches
-    }
+    stack.append(level_baseline)
+
     saved_paths = dict(network.paths)
 
     try:
@@ -330,15 +439,26 @@ def outage_context(network: Network, outage: Outage) -> Iterator[Network]:
             network.buses[name].active = False
         for name in outage.disabled_branches:
             network.branches[name].active = False
-        # The pre-existing path cache is no longer valid for the new topology.
+        # The pre-existing path cache is no longer valid for the new
+        # topology — drop both ``network.paths`` and the module-level
+        # pathfinder cache for this network so the inner solve rebuilds
+        # both. Atomic rebind keeps any external snapshot intact.
         network.paths = {}
+        clear_pathfinder_cache(network)
         yield network
     finally:
-        for name, value in saved_buses.items():
+        # Restore only what *this* level touched.
+        for name, value in level_baseline["buses"].items():
             network.buses[name].active = value
-        for name, value in saved_branches.items():
+        for name, value in level_baseline["branches"].items():
             network.branches[name].active = value
+        stack.pop()
+        if not stack:
+            _OUTAGE_BASELINE_STACK.pop(net_key, None)
         network.paths = saved_paths
+        # Drop the cache entries this context built up so the resident
+        # footprint matches the externally-visible state of ``network``.
+        clear_pathfinder_cache(network)
 
 
 def run_outage_study(
@@ -354,44 +474,56 @@ def run_outage_study(
     """
     Solve ``fault`` for the base case (optional) and a list of outage scenarios.
 
-    Each scenario is applied via :func:`outage_context`, then ``run_fault`` is
-    called. Bus and branch result DataFrames are pulled out of the network
-    and stored under the scenario label so that the network's own
+    Each scenario is applied via :func:`outage_context`, then ``run_fault``
+    is called. Bus and branch result DataFrames are pulled out of the
+    network and stored under the scenario label so that the network's own
     ``results`` dict is left in a single, reproducible state at the end of
     the study (the last scenario's solution).
 
-    Args:
-        network (Network): The network to study. Must contain ``fault``.
-        fault (str): Name of the fault to solve in every scenario.
-        scenarios (List[Outage]): Scenarios to run, in order.
-        include_base (bool): If ``True`` (default) the base case (no
-            outages) is solved first and stored under ``base_label``.
-        base_label (str): Label used to identify the base case in the
-            stored DataFrames. Defaults to ``"base"``.
-        auto_parallel_coefficients (bool): Forwarded to ``run_fault``.
-        redefine_paths (bool): If ``True`` (default), the pre-existing path
-            cache on ``network`` is dropped at the start of the study so
-            that path definitions match the current topology. Each scenario
-            then triggers its own path definition through ``run_fault``.
+    Parameters
+    ----------
+    network : Network
+        The network to study. Must contain ``fault``.
+    fault : str
+        Name of the fault to solve in every scenario.
+    scenarios : list of Outage
+        Scenarios to run, in order.
+    include_base : bool, optional
+        If ``True`` (default) the base case (no outages) is solved first
+        and stored under ``base_label``.
+    base_label : str, optional
+        Label used to identify the base case in the stored DataFrames.
+        Defaults to ``"base"``.
+    auto_parallel_coefficients : bool, optional
+        Forwarded to :func:`run_fault`. Defaults to ``False``.
+    redefine_paths : bool, optional
+        If ``True`` (default), the pre-existing path cache on ``network``
+        is dropped at the start of the study so that path definitions
+        match the current topology. Each scenario then triggers its own
+        path definition through :func:`run_fault`.
 
-    Returns:
-        OutageStudyResult: Aggregated result with comparison helpers.
+    Returns
+    -------
+    OutageStudyResult
+        Aggregated result with comparison helpers.
 
-    Raises:
-        ValueError: If ``fault`` is not part of the network or if a scenario
-            label collides with ``base_label``.
+    Raises
+    ------
+    ValueError
+        If ``fault`` is not part of the network or if a scenario label
+        collides with ``base_label``.
 
-    Examples:
-        >>> study = run_outage_study(
-        ...     net,
-        ...     fault="F1",
-        ...     scenarios=[
-        ...         Outage(name="b12_open", disabled_branches=["B12"]),
-        ...         Outage(name="bus5_isolated", disabled_buses=["bus5"]),
-        ...     ],
-        ... )
-        >>> study.compare_buses()         # doctest: +SKIP
-        >>> study.compare_branches()      # doctest: +SKIP
+    Examples
+    --------
+    >>> study = run_outage_study(  # doctest: +SKIP
+    ...     net, fault="F1",
+    ...     scenarios=[
+    ...         Outage(name="b12_open", disabled_branches=["B12"]),
+    ...         Outage(name="bus5_isolated", disabled_buses=["bus5"]),
+    ...     ],
+    ... )
+    >>> study.compare_buses()       # doctest: +SKIP
+    >>> study.compare_branches()    # doctest: +SKIP
     """
     if fault not in network.faults:
         raise ValueError(f"Fault '{fault}' is not part of network '{network.name}'.")

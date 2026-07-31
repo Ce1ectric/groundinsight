@@ -29,8 +29,12 @@ def test_network_assistant_creation():
         mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l"
     )
 
+    # 10 buses -> 9 branches -> 9 lengths. This call used to pass ``[1]*10``
+    # while asserting ``len(net.branches) == 9``: the surplus entry was dropped
+    # silently. All kept entries are 1, so the network built here is
+    # bit-for-bit the one the assertions below were always checking.
     net = gi.create_network_assistant(name="MyTestNetwork", frequencies=[50], number_buses=10,
-                                      bus_type=bus_type, branch_type=branch_type, branch_length=[1]*10, specific_earth_resistance=100)
+                                      bus_type=bus_type, branch_type=branch_type, branch_length=[1]*9, specific_earth_resistance=100)
 
     assert net.name == "MyTestNetwork"
     assert net.frequencies == [50]

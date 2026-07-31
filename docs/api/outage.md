@@ -54,12 +54,42 @@ study = gi.run_outage_study(
     network=net,
     fault="fault1",
     scenarios=[scenario_cable_out, scenario_bus_islanded],
-    include_base_case=True,
+    include_base=True,
 )
 
 # Per-scenario result DataFrames
 print(study.compare_buses())     # EPR per bus, with delta vs. base
 print(study.compare_branches())  # branch currents, with delta vs. base
+```
+
+## Reading the two delta columns
+
+Each comparison carries an absolute `delta_vs_<ref>` and a relative
+`delta_pct_vs_<ref>`. The relative one is **`null` wherever the
+reference value is zero**, and that is the ordinary case rather than
+an exotic one:
+
+| situation | reference | scenario | `delta_vs_base` | `delta_pct_vs_base` |
+| --- | --- | --- | --- | --- |
+| a frequency the fault does not excite | 0 V | 0 V | 0 V | `null` |
+| a station islanded in the reference scenario | 0 V | 57.9 V | 57.9 V | `null` |
+| ordinary change | 800 V | 720 V | −80 V | −10 % |
+
+"Ten per cent of nothing" has no answer, so none is reported. A
+zero baseline arises from a `scalings={250.0: 0.0}` fault, from
+comparing `against=` a scenario that islands the bus in question,
+and from any element that carries no current in the reference —
+none of which is an error.
+
+The absolute column keeps the full information in all three rows,
+so it is the one to rank by when a zero baseline is possible. And
+because the marker is `null` and not `NaN`, Polars aggregations
+skip it:
+
+```python
+tbl = study.compare_buses()
+tbl["delta_pct_vs_base"].mean()   # finite; the null rows are skipped
+tbl.filter(pl.col("delta_pct_vs_base").is_null())   # the zero-baseline rows
 ```
 
 Use `outage_context(network, outage)` directly when a single one-off
