@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.5.0] — 2026-07-31
+
 > This release makes direct current a real operating point, adds transient
 > simulation with two independent solver paths, and adds the
 > equipment-integrity side of a grounding study — thermal limits for the
@@ -705,7 +711,8 @@ form — superseded by 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.4.0
 [0.3.2]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.1
