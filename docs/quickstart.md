@@ -103,6 +103,11 @@ gi.create_paths(network=net)
 gi.run_fault(network=net, fault_name="fault_at_remote_bus")
 ```
 
+Both steps require the network to have at least one source **and** at least one
+fault; without either there is nothing to enumerate, and the calculation would
+otherwise run to completion and report 0 V everywhere. You get a `ValueError`
+naming the missing side instead.
+
 ## 6. Inspect the results
 
 The results are attached to the `Network` object and exposed as Polars
@@ -136,6 +141,27 @@ gi.plot_bus_voltages(result=result, title="EPR — RMS values")
 gi.plot_branch_currents(result=result, title="Branch currents — RMS values")
 gi.plot_bus_currents(result=result, title="Bus currents — RMS values")
 ```
+
+Passing `frequencies=` selects single frequencies from the result. Only
+frequencies the network was actually computed for can be plotted — asking for
+`250.0` on a 50 Hz result raises a `KeyError` rather than drawing a bar of
+height zero, which would read as "no earth potential rise at 250 Hz".
+
+The helpers return the figure and leave it open, which is what you want in a
+notebook. Inside a loop, pass `close=True` so the figures do not accumulate —
+the returned figure is still complete and `savefig` still works. Pass `ax=` to
+draw into an axis you created yourself; that is how two scenarios end up side
+by side in one figure:
+
+```python
+import matplotlib.pyplot as plt
+
+fig, axes = plt.subplots(1, 2, figsize=(16, 5), sharey=True)
+gi.plot_bus_voltages(result=base,   ax=axes[0], title="base case")
+gi.plot_bus_voltages(result=outage, ax=axes[1], title="cable out")
+```
+
+See [Figure ownership](api/plotting.md#figure-ownership) for the details.
 
 ## 8. Save and load
 
@@ -176,7 +202,7 @@ study = gi.run_outage_study(
     network=net,
     fault="fault_at_remote_bus",
     scenarios=[scenario],
-    include_base_case=True,
+    include_base=True,
 )
 
 print(study.compare_buses())     # EPR per bus, with delta vs. base
@@ -203,13 +229,25 @@ result = gi.find_max_rho_scaling(
     c_bounds=(0.1, 100.0),
     tol_rel=1e-3,
 )
-# result is a dict: {"c_max": ..., "u_epr_rms_at_c_max": ..., ...}
+# result is a dict: c_max, u_epr_rms_at_c_max, rho_max, iterations,
+# status, converged, c_bracket, bracket_rel_width.
+#
+# Check `converged` before using `c_max`: c_max is always a factor whose
+# EPR was measured and found admissible, but only a converged search has
+# also shown that nothing meaningfully larger is. A non-converged result
+# means either "the whole bracket was admissible — widen c_bounds" or
+# "the step cap was hit"; `status` says which.
+if not result["converged"]:
+    print(f"not a maximum: {result['status']}, "
+          f"bracket {result['c_bracket']}")
+
 print(f"c_max = {result['c_max']:.3f}, "
       f"EPR = {result['u_epr_rms_at_c_max']:.1f} V")
 ```
 
 The original `rho` values are restored automatically — see the
-[analysis reference](api/analysis.md).
+[analysis reference](api/analysis.md), which lists every `status`
+value and what it says about `c_max`.
 
 ## 11. Optional: import from pandapower
 
@@ -238,7 +276,35 @@ with an explicit `reason` column. Install with
 `pip install 'groundinsight[pandapower]'`. See the
 [I/O reference](api/io.md) for details.
 
-## 12. Logging and silencing output
+## 12. Optional: transient simulation
+
+A `TransientStudy` produces time-domain EPR and shield-current
+trajectories for a user-defined source waveform. The FFT solver
+re-uses the existing `impedance_formula` of every `BusType` and
+`BranchType`; the state-space solver consumes the lumped RLC
+fields instead.
+
+```python
+study = gi.TransientStudy(network=net, fault_name="fault_at_remote_bus")
+study.set_source_waveform(
+    "substation_infeed",
+    gi.waveforms.sinusoidal_with_dc_offset(
+        amplitude=1e3, frequency_hz=50.0,
+        t_on=0.02, t_off=0.12,
+        dc_amplitude=500.0, dc_decay_tau=0.05,
+    ),
+)
+study.set_observation(buses=["bus_fault"], branches=["cable_1"])
+result = study.solve(t_end=0.2, dt=1e-4, solver="fft")
+
+gi.plot_epr_transient(result=result)
+gi.plot_branch_current_transient(result=result)
+```
+
+See the [transient-simulations reference](api/transient.md) for the
+full API and the differences between the FFT and state-space solvers.
+
+## 13. Logging and silencing output
 
 `groundinsight` is a quiet library by default: it attaches a
 `logging.NullHandler` to the package logger on import, so simply importing

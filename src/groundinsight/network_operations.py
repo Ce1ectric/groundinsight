@@ -22,22 +22,31 @@ def create_network(name: str, frequencies: List, description: str = None) -> Net
     """
     Create a new network with the given name and description.
 
-    Initializes a `Network` instance with the specified name, frequencies, and an optional description.
+    Initialises a :class:`Network` instance with the specified name,
+    frequency list and an optional description.
 
-    Args:
-        name (str): The name of the network.
-        frequencies (List[float]): A list of frequencies (in Hz) to be used in network calculations.
-        description (Optional[str], optional): A brief description of the network. Defaults to None.
+    Parameters
+    ----------
+    name : str
+        The name of the network.
+    frequencies : list of float
+        Frequencies (in Hz) at which network calculations are performed.
+    description : str, optional
+        A brief description of the network. Defaults to ``None``.
 
-    Returns:
-        Network: A newly created `Network` instance.
+    Returns
+    -------
+    Network
+        A newly created :class:`Network` instance.
 
-    Examples:
-        >>> from groundinsight.models.core_models import BusType, BranchType
-        >>> import groundinsight as gi
-        >>> bus_type = BusType(name="StandardBus", description="A standard bus type", system_type="Grounded", voltage_level=110.0, impedance_formula="1 + j * f / 50")
-        >>> branch_type = BranchType(name="StandardBranch", description="A standard branch type", grounding_conductor=True, self_impedance_formula="(1 + j * f / 50)*l", mutual_impedance_formula="(0.5 + j * f / 100)*l")
-        >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> network = gi.create_network(
+    ...     name="TestNetwork",
+    ...     frequencies=[50, 60],
+    ...     description="A test electrical network",
+    ... )
     """
     return Network(name=name, description=description, frequencies=frequencies)
 
@@ -50,33 +59,50 @@ def create_bus(
     network: Optional[Network] = None,
 ) -> Bus:
     """
-    Create a new Bus instance and optionally add it to the network.
+    Create a new :class:`Bus` instance and optionally add it to a network.
 
-    This function initializes a `Bus` with the provided parameters. If a `Network` instance is
-    provided, the bus is added to the network, triggering impedance calculations.
+    If a :class:`Network` instance is provided, the bus is added to the
+    network, which also triggers the impedance calculation against the
+    network's frequency list.
 
-    Args:
-        name (str): The name of the bus.
-        type (BusType): The type of the bus.
-        specific_earth_resistance (Optional[float], optional): The specific earth resistance for the bus.
-                                                              Defaults to 100.0.
-        description (Optional[str], optional): A brief description of the bus. Defaults to None.
-        network (Optional[Network], optional): The network to which the bus should be added. Defaults to None.
+    Parameters
+    ----------
+    name : str
+        The name of the bus.
+    type : BusType
+        The type of the bus.
+    specific_earth_resistance : float, optional
+        The specific earth resistance for the bus (Ohm * m). Defaults to
+        ``100``.
+    description : str, optional
+        A brief description of the bus. Defaults to ``None``.
+    network : Network, optional
+        The network to which the bus should be added. Defaults to ``None``.
 
-    Returns:
-        Bus: A newly created `Bus` instance.
+    Returns
+    -------
+    Bus
+        A newly created :class:`Bus` instance.
 
-    Raises:
-        ValueError: If the bus cannot be added to the provided network.
+    Raises
+    ------
+    ValueError
+        If the bus cannot be added to the provided network.
 
-    Examples:
-        >>> from groundinsight.models.core_models import BusType
-        >>> import groundinsight as gi
-        >>> bus_type = BusType(name="StandardBus", description="A standard bus type", system_type="Grounded", voltage_level=110, impedance_formula="1 + j * f / 50")
-        >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
-        >>> bus = gi.create_bus(name="Bus1", type=bus_type, specific_earth_resistance=100.0, network=network)
-        >>> print(bus.name)
-        Bus1
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> bus_type = gi.BusType(
+    ...     name="StandardBus", system_type="Grounded", voltage_level=110,
+    ...     impedance_formula="1 + j * f / 50",
+    ... )
+    >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60])
+    >>> bus = gi.create_bus(
+    ...     name="Bus1", type=bus_type,
+    ...     specific_earth_resistance=100.0, network=network,
+    ... )
+    >>> bus.name
+    'Bus1'
     """
     bus = Bus(
         name=name,
@@ -103,40 +129,61 @@ def create_branch(
     parallel_coefficient: Optional[float] = 1.0,
 ) -> Branch:
     """
-    Create a new Branch instance and optionally add it to the network.
+    Create a new :class:`Branch` instance and optionally add it to a network.
 
-    Initializes a `Branch` with the provided parameters. If a `Network` instance is provided,
-    the branch is added to the network, triggering impedance calculations.
+    If a :class:`Network` instance is provided, the branch is added to the
+    network, which also triggers the self- and mutual-impedance
+    calculations against the network's frequency list.
 
-    Args:
-        name (str): The name of the branch.
-        type (BranchType): The type of the branch.
-        from_bus (str): The name of the originating bus.
-        to_bus (str): The name of the terminating bus.
-        length (float): The length of the branch.
-        specific_earth_resistance (Optional[float], optional): The specific earth resistance for the branch.
-                                                              Defaults to 100.0.
-        description (Optional[str], optional): A brief description of the branch. Defaults to None.
-        network (Optional[Network], optional): The network to which the branch should be added. Defaults to None.
-        parallel_coefficient (Optional[float], optional): The parallel coefficient for the branch.
-                                                          Defaults to None.
+    Parameters
+    ----------
+    name : str
+        The name of the branch.
+    type : BranchType
+        The type of the branch.
+    from_bus : str
+        The name of the originating bus.
+    to_bus : str
+        The name of the terminating bus.
+    length : float
+        The length of the branch (km).
+    specific_earth_resistance : float, optional
+        The specific earth resistance for the branch (Ohm * m). Defaults
+        to ``100``.
+    description : str, optional
+        A brief description of the branch. Defaults to ``None``.
+    network : Network, optional
+        The network to which the branch should be added. Defaults to
+        ``None``.
+    parallel_coefficient : float, optional
+        Per-branch share of the source-to-fault phase current; used by
+        the path-based mutual-coupling injection. Defaults to ``1.0``.
 
-    Returns:
-        Branch: A newly created `Branch` instance.
+    Returns
+    -------
+    Branch
+        A newly created :class:`Branch` instance.
 
-    Raises:
-        ValueError: If the specified `from_bus` or `to_bus` does not exist in the provided network.
+    Raises
+    ------
+    ValueError
+        If the specified ``from_bus`` or ``to_bus`` does not exist in the
+        provided network.
 
-    Examples:
-        >>> from groundinsight.models.core_models import BranchType
-        >>> import groundinsight as gi
-        >>> branch_type = BranchType(name="StandardBranch", description="A standard branch type", grounding_conductor=True, self_impedance_formula="(1 + j * f / 50)*l", mutual_impedance_formula="(0.5 + j * f / 100)*l")
-        >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
-        >>> bus1 = gi.create_bus(name="Bus1", type=bus_type, specific_earth_resistance=100.0, network=network)
-        >>> bus2 = gi.create_bus(name="Bus2", type=bus_type, specific_earth_resistance=100.0, network=network)
-        >>> branch = gi.create_branch(name="Branch1", type=branch_type, from_bus="Bus1", to_bus="Bus2", length=1.0, network=network)
-        >>> print(branch.name)
-        Branch1
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> branch_type = gi.BranchType(
+    ...     name="StandardBranch", grounding_conductor=True,
+    ...     self_impedance_formula="(1 + j * f / 50)*l",
+    ...     mutual_impedance_formula="(0.5 + j * f / 100)*l",
+    ... )
+    >>> branch = gi.create_branch(
+    ...     name="Branch1", type=branch_type,
+    ...     from_bus="Bus1", to_bus="Bus2", length=1.0,
+    ... )
+    >>> branch.name
+    'Branch1'
     """
     # Validate buses if network is provided
     if network:
@@ -174,43 +221,77 @@ def create_fault(
     active: bool = False,
     description: str = None,
     network: Optional[Network] = None,
+    t_k_s: Optional[float] = None,
+    n_factor: float = 1.0,
 ) -> Fault:
     """
-    Create a new Fault instance and optionally add it to the network.
+    Create a new :class:`Fault` instance and optionally add it to a network.
 
-    Initializes a `Fault` with the provided parameters. If a `Network` instance is provided,
-    the fault is added to the network. If the fault is marked as active, it becomes the
-    currently active fault in the network.
+    If a :class:`Network` instance is provided, the fault is added to the
+    network. If ``active=True``, the fault becomes the currently active
+    fault in the network.
 
-    Args:
-        name (str): The name of the fault.
-        bus (str): The name of the bus where the fault occurs.
-        scalings (Dict[float, float]): Scaling factors for sources at different frequencies.
-        active (bool, optional): Whether to activate the fault immediately upon creation.
-                                  Defaults to False.
-        description (Optional[str], optional): A brief description of the fault. Defaults to None.
-        network (Optional[Network], optional): The network to which the fault should be added. Defaults to None.
+    Parameters
+    ----------
+    name : str
+        The name of the fault.
+    bus : str
+        The name of the bus where the fault occurs.
+    scalings : dict of float to float
+        Scaling factors applied to the source currents at each frequency.
+    active : bool, optional
+        Whether to activate the fault immediately upon creation. Defaults
+        to ``False``.
+    description : str, optional
+        A brief description of the fault. Defaults to ``None``.
+    network : Network, optional
+        The network to which the fault should be added. Defaults to
+        ``None``.
+    t_k_s : float, optional
+        IEC 60909-0 short-circuit duration ``T_k`` in seconds. When set,
+        :func:`groundinsight.check_conductor_limits` can derive the
+        thermal rating without an explicit ``t_k`` argument.
+    n_factor : float, default 1.0
+        IEC 60909-0 AC heat factor ``n``. Keep the default ``1.0`` for
+        far-from-generator faults, which is the normal case in grounding
+        studies.
 
-    Returns:
-        Fault: A newly created `Fault` instance.
+    Returns
+    -------
+    Fault
+        A newly created :class:`Fault` instance.
 
-    Raises:
-        ValueError: If the specified bus does not exist in the provided network.
+    Raises
+    ------
+    ValueError
+        If the specified bus does not exist in the provided network, if
+        ``t_k_s`` is not a positive duration, or if ``n_factor`` lies
+        outside ``(0, 1]``.
 
-    Examples:
-        >>> import groundinsight as gi
-        >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
-        >>> fault_scalings = {50: 1.0, 60: 0.8}
-        >>> fault = gi.create_fault(name="Fault1", bus="Bus1", scalings=fault_scalings, active=True, network=network)
-        >>> print(fault.name)
-        Fault1
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60])
+    >>> fault = gi.create_fault(
+    ...     name="Fault1", bus="Bus1",
+    ...     scalings={50: 1.0, 60: 0.8},
+    ...     active=True, network=network,
+    ... )
+    >>> fault.name
+    'Fault1'
     """
     if network:
         if bus not in network.buses:
             raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
 
     fault = Fault(
-        name=name, description=description, bus=bus, scalings=scalings, active=False
+        name=name,
+        description=description,
+        bus=bus,
+        scalings=scalings,
+        active=False,
+        t_k_s=t_k_s,
+        n_factor=n_factor,
     )
 
     if network:
@@ -222,45 +303,121 @@ def create_fault(
     return fault
 
 
+def set_active_fault(
+    network: Network, fault_name: str, keep_results: bool = False
+) -> None:
+    """Activate ``fault_name`` on ``network`` and deactivate the others.
+
+    Thin wrapper around :meth:`Network.set_active_fault` so the
+    ``keep_results=`` keyword is reachable from the public top-level
+    API surface (``gi.set_active_fault(net, "F1", keep_results=True)``)
+    rather than only via the bound method on the :class:`Network`
+    instance.
+
+    Parameters
+    ----------
+    network : Network
+        The network to operate on.
+    fault_name : str
+        The name of the fault to activate.
+    keep_results : bool, default ``False``
+        Forwarded to :meth:`Network.set_active_fault`. If ``True``,
+        any previously cached :class:`Result` for ``fault_name`` is
+        preserved so a notebook can re-plot the existing solve
+        without recomputing it.
+
+    Raises
+    ------
+    ValueError
+        If the specified fault does not exist in ``network``.
+
+    Notes
+    -----
+    Exposes the ``keep_results`` keyword at the top-level API surface
+    where it would otherwise only be reachable as a bound method.
+
+    Examples
+    --------
+    >>> import groundinsight as gi  # doctest: +SKIP
+    >>> gi.set_active_fault(net, "F1", keep_results=True)  # doctest: +SKIP
+    """
+    network.set_active_fault(fault_name, keep_results=keep_results)
+
+
 def create_source(
     name: str,
     bus: str,
     values: Dict,
     description: str = None,
     network: Optional[Network] = None,
+    i_k_a: Optional[float] = None,
+    r_to_x: Optional[float] = None,
+    kappa: Optional[float] = None,
 ) -> Source:
     """
-    Create a new Source instance and optionally add it to the network.
+    Create a new current :class:`Source` and optionally add it to a network.
 
-    Initializes a `Source` with the provided parameters. If a `Network` instance is provided,
-    the source is added to the network.
+    Parameters
+    ----------
+    name : str
+        The name of the source.
+    bus : str
+        The name of the bus where the source is located.
+    values : dict of float to ComplexNumber or complex or float
+        Frequency-resolved injected current. Real numbers are auto-promoted
+        to :class:`ComplexNumber`.
+    description : str, optional
+        A brief description of the source. Defaults to ``None``.
+    network : Network, optional
+        The network to which the source should be added. Defaults to
+        ``None``.
+    i_k_a : float, optional
+        Initial symmetrical short-circuit current ``I_k''`` in amperes
+        contributed by this source. Metadata for the IEC 60909
+        characteristics; the solve keeps using ``values``.
+    r_to_x : float, optional
+        ``R/X`` ratio of the short-circuit loop, used to derive ``kappa``
+        when the latter is not given.
+    kappa : float, optional
+        IEC 60909-0 peak factor. Takes precedence over ``r_to_x``.
 
-    Args:
-        name (str): The name of the source.
-        bus (str): The name of the bus where the source is located.
-        values (Dict[float, ComplexNumber]): A dictionary mapping frequencies to current values.
-        description (Optional[str], optional): A brief description of the source. Defaults to None.
-        network (Optional[Network], optional): The network to which the source should be added. Defaults to None.
+    Returns
+    -------
+    Source
+        A newly created :class:`Source` instance with
+        ``source_type='current'``.
 
-    Returns:
-        Source: A newly created `Source` instance.
+    Raises
+    ------
+    ValueError
+        If the specified bus does not exist in the provided network, or if
+        any of the IEC 60909 quantities is outside its physical range.
 
-    Raises:
-        ValueError: If the specified bus does not exist in the provided network.
-
-    Examples:
-        >>> import groundinsight as gi
-        >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
-        >>> source_values = {50: ComplexNumber(real=10, imag=5), 60: ComplexNumber(real=15, imag=7)}
-        >>> source = gi.create_source(name="Source1", bus="Bus1", values=source_values, network=network)
-        >>> print(source.name)
-        Source1
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60])
+    >>> source = gi.create_source(
+    ...     name="Source1", bus="Bus1",
+    ...     values={50: 10 + 5j, 60: 15 + 7j},
+    ...     network=network,
+    ... )
+    >>> source.name
+    'Source1'
     """
     if network:
         if bus not in network.buses:
             raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
 
-    source = Source(name=name, description=description, bus=bus, values=values)
+    source = Source(
+        name=name,
+        description=description,
+        bus=bus,
+        values=values,
+        i_k_a=i_k_a,
+        r_to_x=r_to_x,
+        kappa=kappa,
+    )
     if network:
         network.add_source(source)
     return source
@@ -275,45 +432,55 @@ def create_voltage_source(
     network: Optional[Network] = None,
 ) -> Source:
     """
-    Create a Thevenin (voltage) source and optionally add it to the network.
+    Create a Thevenin (voltage) source and optionally add it to a network.
 
-    The Thevenin source models a frequency-dependent EMF ``voltage`` in series
-    with a finite ``source_impedance``. In contrast to :func:`create_source`,
-    which creates an ideal current source for stationary studies, this factory
-    is intended for transient analyses where the actual fault current is
-    determined by the loop impedance ``Z_src + Z_loop`` rather than being
-    prescribed.
+    The Thevenin source models a frequency-dependent EMF ``voltage`` in
+    series with a finite ``source_impedance``. In contrast to
+    :func:`create_source`, which creates an ideal current source for
+    stationary studies, this factory is intended for transient analyses
+    where the fault current is determined by the loop impedance
+    ``Z_src + Z_loop`` rather than being prescribed.
 
-    Args:
-        name (str): The name of the source.
-        bus (str): The name of the bus where the source is located.
-        voltage (Dict[float, ComplexNumber]): Frequency-dependent EMF.
-        source_impedance (Dict[float, ComplexNumber]): Frequency-dependent
-            internal impedance. Must use the same frequency keys as
-            ``voltage`` and must be non-zero.
-        description (Optional[str], optional): A brief description of the
-            source. Defaults to None.
-        network (Optional[Network], optional): The network to which the
-            source should be added. Defaults to None.
+    Parameters
+    ----------
+    name : str
+        The name of the source.
+    bus : str
+        The name of the bus where the source is located.
+    voltage : dict of float to ComplexNumber or complex
+        Frequency-dependent EMF.
+    source_impedance : dict of float to ComplexNumber or complex
+        Frequency-dependent internal impedance. Must use the same
+        frequency keys as ``voltage`` and must be non-zero.
+    description : str, optional
+        A brief description of the source. Defaults to ``None``.
+    network : Network, optional
+        The network to which the source should be added. Defaults to
+        ``None``.
 
-    Returns:
-        Source: A newly created Thevenin source instance with
+    Returns
+    -------
+    Source
+        A newly created Thevenin source instance with
         ``source_type='voltage'``.
 
-    Raises:
-        ValueError: If the specified bus does not exist in the provided
-            network, or if the input dictionaries do not satisfy the
-            voltage-mode constraints.
+    Raises
+    ------
+    ValueError
+        If the specified bus does not exist in the provided network, or
+        if the input dictionaries do not satisfy the voltage-mode
+        constraints.
 
-    Examples:
-        >>> import groundinsight as gi
-        >>> network = gi.create_network(name="TestNetwork", frequencies=[50])
-        >>> voltage = {50: 20000.0 + 0.0j}
-        >>> z_src = {50: 0.5 + 0.1j}
-        >>> source = gi.create_voltage_source(
-        ...     name="VSrc1", bus="Bus1", voltage=voltage,
-        ...     source_impedance=z_src, network=network,
-        ... )  # doctest: +SKIP
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> network = gi.create_network(name="TestNetwork", frequencies=[50])
+    >>> source = gi.create_voltage_source(
+    ...     name="VSrc1", bus="Bus1",
+    ...     voltage={50: 20000.0 + 0.0j},
+    ...     source_impedance={50: 0.5 + 0.1j},
+    ...     network=network,
+    ... )  # doctest: +SKIP
     """
     if network:
         if bus not in network.buses:
@@ -334,53 +501,88 @@ def create_voltage_source(
 
 def create_paths(network: Network):
     """
-    Create all possible paths between sources and the active fault in the network.
+    Create all paths between the sources and the faults of the network.
 
-    Identifies and maps each source to the set of branches involved in its paths to the fault.
-    The identified paths are added to the network's paths collection.
+    Identifies and maps each source to the ordered branch list of every
+    simple path to each fault. The identified paths are added to the
+    network's ``paths`` collection.
 
-    Args:
-        network (Network): The network instance for which paths are to be defined.
+    Parameters
+    ----------
+    network : Network
+        The network instance for which paths are to be defined.
 
-    Raises:
-        ValueError: If there are no sources or faults defined in the network.
+    Raises
+    ------
+    ValueError
+        If the network defines no sources or no faults. Path enumeration
+        runs over ``sources x faults``, so an empty side yields no paths
+        at all; every downstream step then succeeds on an unexcited
+        system and reports 0 V at every bus. That is a plausible-looking
+        result, not an error message, so it is rejected here instead.
 
-    Examples:
-        >>> import groundinsight as gi
-        >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
-        >>> gi.create_bus(name="Bus1", type=bus_type, specific_earth_resistance=100.0, network=network)
-        >>> gi.create_bus(name="Bus2", type=bus_type, specific_earth_resistance=100.0, network=network)
-        >>> gi.create_branch(name="Branch1", type=branch_type, from_bus="Bus1", to_bus="Bus2", length=1.0, network=network)
-        >>> gi.create_fault(name="Fault1", bus="Bus2", scalings={50:1.0, 60:0.8}, active=True, network=network)
-        >>> gi.create_paths(network=network)
+    Notes
+    -----
+    The check is on *all* faults, not on ``active_fault``:
+    :meth:`~groundinsight.models.core_models.Network.define_paths`
+    enumerates every ``(source, fault)`` pair, and ``run_fault`` sets the
+    active fault before it calls this function.
+
+    Finding no path between an existing source and an existing fault is a
+    different matter and stays permitted -- that is exactly what an
+    outage scenario which islands the fault bus produces, and the
+    all-zero result is then the correct answer.
+
+    Examples
+    --------
+    >>> import groundinsight as gi  # doctest: +SKIP
+    >>> gi.create_paths(network=network)  # doctest: +SKIP
     """
+    if not network.sources:
+        raise ValueError(
+            f"Network '{network.name}' defines no sources, so no source-to-fault "
+            "path exists and the calculation would return 0 V at every bus. "
+            "Add a source with gi.create_source(...) or gi.create_voltage_source(...)."
+        )
+    if not network.faults:
+        raise ValueError(
+            f"Network '{network.name}' defines no faults, so no source-to-fault "
+            "path exists and the calculation would return 0 V at every bus. "
+            "Add a fault with gi.create_fault(...)."
+        )
     network.define_paths()
 
 
 def build_electrical_network(network: Network, auto_phase_currents: bool = False):
     """
-    Build the electrical network from the physical network and attach it to the Network object.
+    Build the electrical network and attach it to the :class:`Network` object.
 
-    Initializes an `ElectricalNetwork` instance based on the physical network's configuration and
-    assigns it to the `electrical_network` attribute of the provided `Network` instance.
+    Initialises an :class:`ElectricalNetwork` helper based on the physical
+    network's configuration and assigns it to the
+    ``electrical_network`` attribute of the provided :class:`Network`
+    instance. This step is invoked automatically by :func:`run_fault`.
 
-    Args:
-        network (Network): The network instance for which the electrical network is to be built.
-        auto_phase_currents (bool, optional): If True, the phase current through each branch
-            is determined by solving a reduced phase-only network (topology-based split over
-            parallel paths). If False, the phase current is derived from the enumerated
-            source-to-fault paths using each branch's ``parallel_coefficient``. Defaults to False.
+    Parameters
+    ----------
+    network : Network
+        The network instance for which the electrical network is to be
+        built.
+    auto_phase_currents : bool, optional
+        If ``True``, the phase current through each branch is determined
+        by solving a reduced phase-only network (topology-based split
+        over parallel paths). If ``False``, the phase current is derived
+        from the enumerated source-to-fault paths using each branch's
+        ``parallel_coefficient``. Defaults to ``False``.
 
-    Raises:
-        ImportError: If the `ElectricalNetwork` class cannot be imported.
-        Exception: If there is an error during the construction of the electrical network.
+    Raises
+    ------
+    ImportError
+        If the :class:`ElectricalNetwork` class cannot be imported.
 
-    Examples:
-        >>> import groundinsight as gi
-        >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
-        >>> gi.build_electrical_network(network)
-        >>> print(network.electrical_network)
-        ElectricalNetwork: TestNetwork
+    Examples
+    --------
+    >>> import groundinsight as gi  # doctest: +SKIP
+    >>> gi.build_electrical_network(network)  # doctest: +SKIP
     """
     from groundinsight.electrical_network import ElectricalNetwork
 
@@ -394,15 +596,21 @@ def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
     Create a warning message if the parallel coefficients are set to 1 and there are more than
     1 path from sources to the fault.
 
-    Args:
-        network (Network): The network instance for which the warning is to be raised.
-        parallel_coefficients (bool): Whether to use parallel coefficients of the branches in
-                                      the calculations.
+    Parameters
+    ----------
+    network : Network
+        The network instance for which the warning is to be raised.
+    parallel_coefficients : bool
+        Whether to use parallel coefficients of the branches in
+        the calculations.
 
-    Raises:
-        Warning: If the parallel coefficients are not set to 1.
+    Raises
+    ------
+    Warning
+        If the parallel coefficients are not set to 1.
 
-    Examples:
+    Examples
+    --------
         >>> import groundinsight as gi
         >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
         >>> _warning_parallel_coeffcient(network=network, parallel_coefficients=False)
@@ -438,40 +646,50 @@ def run_fault(
     network: Network, fault_name: str, auto_parallel_coefficients: bool = False
 ):
     """
-    Execute fault calculations, including solving the network and computing branch currents.
+    Execute the fault calculation pipeline for a single fault.
 
-    This function sets the specified fault as active, builds the electrical network, solves the network equations,
-    computes branch currents, reduction factors, and grounding impedance. The results are stored within the
-    network's results object.
+    Sets the named fault as the active fault, builds the electrical
+    network, solves the per-frequency nodal system, computes branch
+    currents, reduction factors and grounding impedance. The results are
+    stored on ``network.results[fault_name]``.
 
-    Args:
-        network (Network): The network instance on which the fault calculations are to be performed.
-        fault_name (str): The name of the fault to activate and run calculations for.
-        auto_parallel_coefficients (bool, optional): If True, the phase current through each
-            branch is computed automatically from a reduced phase-only network solve (topology-
-            based split over parallel paths). When set, each branch's ``parallel_coefficient``
-            is ignored and the split is derived from the network topology. Defaults to False.
+    Parameters
+    ----------
+    network : Network
+        The network instance on which the fault calculations are to be
+        performed.
+    fault_name : str
+        The name of the fault to activate and run calculations for.
+    auto_parallel_coefficients : bool, optional
+        If ``True``, the phase current through each branch is computed
+        automatically from a reduced phase-only network solve
+        (topology-based split over parallel paths). When set, each
+        branch's ``parallel_coefficient`` is ignored and the split is
+        derived from the network topology. Defaults to ``False``.
 
-    Raises:
-        ValueError: If the specified fault does not exist in the network.
-        RuntimeError: If there is an error during network calculations.
+    Raises
+    ------
+    ValueError
+        If the specified fault does not exist in the network.
+    RuntimeError
+        If there is an error during the network calculations.
 
-    Examples:
-        >>> import groundinsight as gi
-        >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
-        >>> gi.create_bus(name="Bus1", type=bus_type, specific_earth_resistance=100.0, network=network)
-        >>> gi.create_bus(name="Bus2", type=bus_type, specific_earth_resistance=100.0, network=network)
-        >>> gi.create_branch(name="Branch1", type=branch_type, from_bus="Bus1", to_bus="Bus2", length=1.0, network=network)
-        >>> fault_scalings = {50: 1.0, 60: 0.8}
-        >>> gi.create_fault(name="Fault1", bus="Bus2", scalings=fault_scalings, active=True, network=network)
-        >>> gi.run_fault(network, fault_name="Fault1")
+    Examples
+    --------
+    >>> import groundinsight as gi  # doctest: +SKIP
+    >>> gi.run_fault(network, fault_name="Fault1")  # doctest: +SKIP
     """
 
     # Set the active fault
     network.set_active_fault(fault_name)
 
-    # Check if there are paths in the network if not run create_path
-    if network.paths == {}:
+    # (Re)build paths when they are missing or the active topology changed
+    # since they were last built (e.g. a manual Bus.active / Branch.active
+    # flip or an in-place rewiring). Without this check run_fault would
+    # silently reuse stale paths while the Y-matrix is rebuilt from the
+    # current active flags, yielding a wrong EPR.
+    if network._needs_path_rebuild():
+        network.invalidate_paths()
         create_paths(network)
 
     # Create a Warning if there are more than one path and the parallel coefficients are default or 1
@@ -511,39 +729,87 @@ def create_network_assistant(
     description: str = None,
 ) -> Network:
     """
-    Create a new network with a uniform bus and branch type with a given number of buses.
+    Create a linear network with a uniform bus and branch type.
 
-    This function initializes a `Network` instance and populates it with a specified number of buses
-    and branches. Each bus is connected sequentially to form a linear network. Impedance calculations
-    are triggered upon adding buses and branches to the network.
+    Initialises a :class:`Network` instance and populates it with
+    ``number_buses`` buses and ``number_buses - 1`` branches connected
+    sequentially to form a line topology. Impedance calculations are
+    triggered upon adding buses and branches to the network.
 
-    Args:
-        name (str): The name of the network.
-        frequencies (List[float]): A list of frequencies (in Hz) to be used in network calculations.
-        number_buses (int): The total number of buses to create in the network.
-        bus_type (BusType): The type to assign to each bus.
-        branch_type (BranchType): The type to assign to each branch.
-        branch_length (List[float]): A list of lengths for each branch connecting the buses.
-                                     The list should have `number_buses - 1` elements.
-        specific_earth_resistance (float): The specific earth resistance for all buses and branches.
-        description (Optional[str], optional): A brief description of the network. Defaults to None.
+    Parameters
+    ----------
+    name : str
+        The name of the network.
+    frequencies : list of float
+        Frequencies (in Hz) at which network calculations are performed.
+    number_buses : int
+        The total number of buses to create.
+    bus_type : BusType
+        The type to assign to each bus.
+    branch_type : BranchType
+        The type to assign to each branch.
+    branch_length : list of float
+        Lengths of each branch connecting the buses. Must have
+        ``number_buses - 1`` elements.
+    specific_earth_resistance : float
+        The specific earth resistance for all buses and branches
+        (Ohm * m).
+    description : str, optional
+        A brief description of the network. Defaults to ``None``.
 
-    Returns:
-        Network: A fully initialized `Network` instance with the specified configuration.
+    Returns
+    -------
+    Network
+        A fully initialised :class:`Network` instance with the specified
+        configuration.
 
-    Raises:
-        ValueError: If the length of `branch_length` does not match `number_buses - 1`.
+    Raises
+    ------
+    ValueError
+        If ``number_buses`` is not an integer ``>= 1``, or if the length
+        of ``branch_length`` does not match ``number_buses - 1``.
 
-    Examples:
-        >>> from groundinsight.models.core_models import BusType, BranchType
-        >>> import groundinsight as gi
-        >>> bus_type = BusType(name="StandardBus", description="A standard bus type", system_type="Grounded", voltage_level=230.0, impedance_formula="1 + j * f / 50")
-        >>> branch_type = BranchType(name="StandardBranch", description="A standard branch type", grounding_conductor=True, self_impedance_formula="(1 + j * f / 50)*l", mutual_impedance_formula="(0.5 + j * f / 100)*l")
-        >>> branch_lengths = [1.0 for _ in range(29)]
-        >>> network = gi.create_network_assistant(name="Network2", frequencies=[50, 250], number_buses=30, bus_type=bus_type, branch_type=branch_type, branch_length=branch_lengths, specific_earth_resistance=100.0, description="A large test network")
-        >>> print(network.name)
-        Network2
+    Notes
+    -----
+    A line of ``n`` buses has ``n - 1`` branches, so ``branch_length``
+    has one entry *fewer* than ``number_buses``. Passing ``n`` lengths --
+    ``[1.0] * 30`` for ``number_buses=30``, read as "a 30 km line" -- used
+    to be accepted silently: the surplus entry was dropped and the
+    returned network was one span shorter than the one asked for, with no
+    warning anywhere. Too few entries raised a bare ``IndexError`` from
+    inside the loop.
+
+    Examples
+    --------
+    >>> import groundinsight as gi  # doctest: +SKIP
+    >>> network = gi.create_network_assistant(  # doctest: +SKIP
+    ...     name="Linear30", frequencies=[50, 250], number_buses=30,
+    ...     bus_type=bus_type, branch_type=branch_type,
+    ...     branch_length=[1.0] * 29, specific_earth_resistance=100.0,
+    ... )
     """
+    if isinstance(number_buses, bool) or not isinstance(number_buses, int):
+        raise ValueError(
+            f"number_buses must be an int >= 1, got "
+            f"{number_buses!r} ({type(number_buses).__name__})."
+        )
+    if number_buses < 1:
+        raise ValueError(f"number_buses must be >= 1, got {number_buses}.")
+
+    try:
+        n_lengths = len(branch_length)
+    except TypeError:
+        raise ValueError(
+            f"branch_length must be a sequence of {number_buses - 1} lengths "
+            f"(one per branch), got {branch_length!r} "
+            f"({type(branch_length).__name__})."
+        ) from None
+    if n_lengths != number_buses - 1:
+        raise ValueError(
+            f"branch_length has {n_lengths} entries but a line of "
+            f"{number_buses} buses has {number_buses - 1} branches. "
+            "A line of n buses needs n-1 lengths."
+        )
 
     net = create_network(name, frequencies, description)
 

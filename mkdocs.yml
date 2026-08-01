@@ -73,7 +73,12 @@ plugins:
         python:
           paths: [src]
           options:
-            docstring_style: google
+            # Pass-6 / Pass-7 audit fix: the public-API docstrings
+            # were migrated to numpy-style on 2026-05-14 but the
+            # mkdocstrings parser stayed on Google, so Parameters /
+            # Returns sections rendered as plain text and the
+            # per-field type annotations dropped silently.
+            docstring_style: numpy
             show_source: true
             show_signature_annotations: true
             separate_signature: true
@@ -87,7 +92,9 @@ plugins:
 
 extra_javascript:
   - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  # polyfill.io was removed in 2026-05 (domain was sold and later served
+  # malicious JavaScript). MathJax 3 does not require a polyfill for
+  # modern browsers; see groundmeas/mkdocs.yml for the same change.
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 extra:
@@ -100,11 +107,29 @@ nav:
   - Installation: installation.md
   - Quickstart: quickstart.md
   - Concepts: concepts.md
+  - Transient simulation: transient.md
+  - Audit log: audit-log.md
   - Examples:
       - Overview: examples/index.md
-      - Simple example: examples/simple.ipynb
-      - CIRED case: examples/cired.ipynb
-      - Low-voltage network: examples/low_voltage.ipynb
+      - Minimal example: examples/minimal.ipynb
+      - MV ring (stationary): examples/mv_ring.ipynb
+      - MV ring (transient): examples/mv_ring_transient.ipynb
+      - Pandapower import: examples/pandapower_import.ipynb
+      - Fault sweep: examples/fault_sweep.ipynb
+  # The ``notebooks/`` directory at the project root is *not* part of the
+  # published site. It was listed here as a "Research notebooks" section
+  # until 2026-07-19, but mkdocs only collects files below ``docs_dir``,
+  # so every ``../notebooks/*.ipynb`` entry was reported as
+  #   "A reference to '...' is included in the 'nav' configuration,
+  #    which is not found in the documentation files"
+  # and silently dropped -- the section never appeared on the site. The
+  # cause is the path, not a missing file: placing a real notebook at the
+  # exact nav path reproduces the same warning. Since ``mkdocs gh-deploy``
+  # runs without ``--strict``, the build stayed green while the section
+  # vanished. ``/notebooks`` is also gitignored, so the files would not
+  # reach a CI checkout in the first place. Curated notebooks belong in
+  # ``docs/examples/`` (see the Examples section above); the research
+  # notebooks stay a local working artefact.
   - API reference:
       - Overview: api/index.md
       - Network operations: api/network_operations.md
@@ -116,3 +141,4 @@ nav:
       - "I/O — network importers": api/io.md
       - Outage studies: api/outage.md
       - Analysis: api/analysis.md
+      - Transient simulations: api/transient.md

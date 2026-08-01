@@ -225,3 +225,69 @@ def test_voltage_source_db_roundtrip():
     assert src_loaded.source_impedance is not None
     assert abs(complex(src_loaded.voltage[50].real, src_loaded.voltage[50].imag) - (1000.0 + 0.0j)) < 1e-9
     assert abs(complex(src_loaded.source_impedance[50].real, src_loaded.source_impedance[50].imag) - (0.5 + 0.1j)) < 1e-9
+
+
+def test_rlc_parameters_db_roundtrip():
+    """Persist a network whose BusType / BranchType carry RLC formulas and
+    reload it: formulas, evaluated R/L/C dicts and the mutual M_mutual dict
+    must survive the roundtrip."""
+    bus_type = BusType(
+        name="BusTypeRLC",
+        system_type="Substation",
+        voltage_level=20.0,
+        impedance_formula="rho * 0 + 5",
+        R_formula="rho * 0 + 5",
+        L_formula="rho * 0 + 1e-6",
+        C_formula="rho * 0 + 1e-9",
+    )
+    branch_type = BranchType(
+        name="BranchTypeRLC",
+        grounding_conductor=True,
+        self_impedance_formula="(rho * 0 + 1.0) * l",
+        mutual_impedance_formula="(rho * 0 + 0.2) * l",
+        R_self_formula="(rho * 0 + 1.0) * l",
+        L_self_formula="(rho * 0 + 1e-6) * l",
+        C_self_formula="(rho * 0 + 1e-9) * l",
+        R_mutual_formula="(rho * 0 + 0.05) * l",
+        M_mutual_formula="(rho * 0 + 0.5e-6) * l",
+    )
+
+    net = gi.create_network(name="TestNetRLC", frequencies=[50])
+    gi.create_bus(name="bus1", type=bus_type, network=net)
+    gi.create_bus(name="bus2", type=bus_type, network=net)
+    gi.create_branch(
+        name="branch1",
+        type=branch_type,
+        from_bus="bus1",
+        to_bus="bus2",
+        length=1.0,
+        network=net,
+    )
+    gi.create_source(name="src", bus="bus1", values={50: 100.0 + 0.0j}, network=net)
+    gi.create_fault(name="fault1", bus="bus2", scalings={50: 1.0}, network=net)
+    gi.create_paths(network=net)
+
+    try:
+        gi.start_dbsession("tests/test_grounding.db")
+    except Exception:
+        pass
+    gi.save_network_to_db(network=net, overwrite=True)
+    loaded = gi.load_network_from_db("TestNetRLC")
+
+    bt_loaded = loaded.buses["bus1"].type
+    assert bt_loaded.R_formula == "rho * 0 + 5"
+    assert bt_loaded.L_formula == "rho * 0 + 1e-6"
+    assert bt_loaded.C_formula == "rho * 0 + 1e-9"
+
+    bus_loaded = loaded.buses["bus1"]
+    assert bus_loaded.R == {50.0: 5.0}
+    assert bus_loaded.L == {50.0: 1e-6}
+    assert bus_loaded.C == {50.0: 1e-9}
+
+    brt_loaded = loaded.branches["branch1"].type
+    assert brt_loaded.R_self_formula is not None
+    assert brt_loaded.M_mutual_formula is not None
+
+    branch_loaded = loaded.branches["branch1"]
+    assert branch_loaded.R_self == {50.0: 1.0}
+    assert branch_loaded.M_mutual == {50.0: 0.5e-6}

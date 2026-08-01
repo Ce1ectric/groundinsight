@@ -256,6 +256,17 @@ def test_parallel_coefficient_warning_is_logged(caplog):
 
 
 def test_db_session_already_started_emits_warning(tmp_path, caplog):
+    """
+    Calling :func:`start_dbsession` twice with the **same** path is a
+    no-op apart from a warning record (the 0.5 audit-pass-4 contract:
+    silent re-use for identical paths, hard error for divergent ones).
+    """
+    # Defensive: another test in the suite may have left a session
+    # behind. The audit-pass-4 contract makes the cross-test contamination
+    # explicit by raising RuntimeError otherwise, so close pre-emptively.
+    if gi.engine is not None:
+        gi.close_dbsession()
+
     db_path = tmp_path / "log_test.db"
     gi.start_dbsession(str(db_path))
 
@@ -266,7 +277,11 @@ def test_db_session_already_started_emits_warning(tmp_path, caplog):
         matching = [
             r
             for r in caplog.records
-            if r.levelno == logging.WARNING and "already started" in r.getMessage()
+            if r.levelno == logging.WARNING
+            and (
+                "already started" in r.getMessage()
+                or "re-using existing engine" in r.getMessage()
+            )
         ]
         assert matching, "Expected a WARNING about the already-started session."
     finally:

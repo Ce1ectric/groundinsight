@@ -11,8 +11,7 @@ authors:
   - family-names: Ehlert
     given-names: Christian
     email: christian.ehlert@mailbox.org
-    affiliation: Avacon Netz GmbH
-version: "0.4.0"
+version: "0.5.0"
 license: MIT
 repository-code: "https://github.com/Ce1ectric/groundinsight"
 url: "https://ce1ectric.github.io/groundinsight/"

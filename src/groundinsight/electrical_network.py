@@ -40,7 +40,7 @@ Two strategies are available to determine the phase current I_p per branch:
 import logging
 
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import splu
 from groundinsight.models.core_models import (
@@ -56,9 +56,86 @@ from groundinsight.models.core_models import (
     ResultBranch,
     ResultReductionFactor,
 )
+from groundinsight.utils.impedance_calculator import (
+    check_passive_impedance,
+    dc_substitute_impedance,
+    is_short_circuit,
+)
 
 
 logger = logging.getLogger(__name__)
+
+
+def _shortlist(names, limit: int = 5) -> str:
+    """Render a list of names for an error message without flooding it.
+
+    A 400-bus network with a systematic modelling error would otherwise put
+    400 names into a single exception string, which hides the sentence that
+    explains the problem. The count is always reported, so nothing is lost
+    silently.
+
+    Parameters
+    ----------
+    names : list of str
+        Names to render, in the order they were collected.
+    limit : int
+        Maximum number of names to spell out. Defaults to 5.
+
+    Returns
+    -------
+    str
+        Comma-separated names, truncated with a total count if needed.
+    """
+    names = list(names)
+    if len(names) <= limit:
+        return ", ".join(names)
+    shown = ", ".join(names[:limit])
+    return f"{shown}, ... ({len(names)} in total)"
+
+
+def _is_open_circuit(Z_complex: complex) -> bool:
+    """Return ``True`` if an impedance means *no connection at all*.
+
+    An infinite impedance is the documented open-end sentinel (formula
+    ``"nan"``) -- a tower without an earth electrode, an overhead line without
+    an earth wire. It is the only value that means "not connected".
+
+    The reciprocal has to be short-circuited rather than computed, because
+    IEEE 754 complex division does not give the mathematical answer for an
+    infinite operand: ``1/complex(inf, inf)`` is ``nan+nan*j``, not ``0``.
+    Letting that through puts NaN on the diagonal of ``Y`` and destroys the
+    factorisation of the *whole* network -- so a single un-earthed tower,
+    modelled exactly as documented, would fail the entire calculation with a
+    "no path to reference earth" message even when every other bus is
+    properly earthed.
+
+    ``Z == 0`` is deliberately *not* treated as open any more. Up to v0.4.0 it
+    was, which made a perfect earth electrode indistinguishable from a missing
+    one: sweeping a grounding impedance towards zero converges to EPR = 0, but
+    the value *at* zero returned the no-electrode EPR. Above 0 Hz zero is now
+    rejected where it is computed
+    (:func:`utils.impedance_calculator.check_passive_impedance`) and again in
+    :meth:`ElectricalNetwork._validate_passive_impedances` for values that
+    never passed through a formula. At 0 Hz it is legitimate -- an inductance
+    is a short circuit at DC -- and
+    :meth:`ElectricalNetwork._dc_substitute_at` replaces it with a small finite
+    value before the matrix is assembled.
+
+    ``NaN`` is deliberately *not* treated as open either. A NaN impedance is a
+    failed computation, and it must stay visible so that
+    :meth:`ElectricalNetwork._assert_finite_system` can report it.
+
+    Parameters
+    ----------
+    Z_complex : complex
+        The impedance to classify.
+
+    Returns
+    -------
+    bool
+        ``True`` for infinite impedances, ``False`` otherwise.
+    """
+    return bool(np.isinf(Z_complex.real) or np.isinf(Z_complex.imag))
 
 
 class ElectricalNetwork:
@@ -76,13 +153,16 @@ class ElectricalNetwork:
 
         Sets up necessary data structures and initializes the network calculations.
 
-        Args:
-            network (Network): The Network instance containing buses, branches, sources, and faults.
-            auto_phase_currents (bool, optional): If True the phase current through each
-                branch is computed by solving a reduced phase-only network (Variant B).
-                If False (default) the phase current is derived from the enumerated
-                source-to-fault paths using each branch's ``parallel_coefficient``
-                (Variant A). Defaults to False.
+        Parameters
+        ----------
+        network : Network
+            The Network instance containing buses, branches, sources, and faults.
+        auto_phase_currents : bool, optional
+            If True the phase current through each
+            branch is computed by solving a reduced phase-only network (Variant B).
+            If False (default) the phase current is derived from the enumerated
+            source-to-fault paths using each branch's ``parallel_coefficient``
+            (Variant A). Defaults to False.
         """
         self.network = network
         self.auto_phase_currents = auto_phase_currents
@@ -95,7 +175,20 @@ class ElectricalNetwork:
         self.results: Result = Result()  # Stores the calculation results
         self.i_mutuals = {}  # Store mutual currents per frequency per branch
         self.total_source_currents = {}  # Store total source currents per frequency
+        # Source-only nodal injection per frequency, i.e. the ``i`` vector *before*
+        # the mutual Norton equivalents are added on top. This is the current that
+        # physically enters the grounding system through a lumped connection at the
+        # bus -- the earthing conductor (EN 50522 "Erdungsleiter") -- as opposed to
+        # ``ResultBus.ia``, which is the share dissipated into the soil through the
+        # earth electrode ("Erder"). The mutual terms are a distributed modelling
+        # artefact of the line/shield coupling and are deliberately excluded here:
+        # no lumped conductor carries them into the node.
+        self.source_injections = {}
         self.phase_currents = {}  # Signed phase current per branch per frequency
+        # Substitute impedance per frequency for elements that are a short
+        # circuit there. Only 0 Hz can have an entry, and only when the network
+        # actually contains such an element. See _dc_substitute_at.
+        self._dc_substitutes: Dict[float, float] = {}
 
         self._initialize()
 
@@ -125,6 +218,193 @@ class ElectricalNetwork:
         self.bus_indices = {bus_name: idx for idx, bus_name in enumerate(bus_names)}
         self.num_buses = len(bus_names)
 
+    def _relevant(self, z_dict):
+        """Restrict an impedance dictionary to the frequencies actually solved.
+
+        A stored impedance dictionary may carry frequencies the network is not
+        being solved at -- a leftover from an earlier frequency list, or an
+        entry a user added by hand. Those values never reach a division, so
+        they must not make the network unusable.
+
+        Parameters
+        ----------
+        z_dict : dict or None
+            Mapping of frequency to :class:`ComplexNumber`.
+
+        Returns
+        -------
+        dict
+            The subset of ``z_dict`` whose keys are in ``network.frequencies``.
+        """
+        if not z_dict:
+            return {}
+        return {
+            freq: z_dict[freq]
+            for freq in self.network.frequencies
+            if freq in z_dict
+        }
+
+    def _validate_passive_impedances(self):
+        """Reject stored impedances that cannot become an admittance.
+
+        :meth:`Bus.calculate_impedance` and
+        :meth:`Branch._calculate_self_impedance` already apply this rule when
+        they evaluate a formula, but impedances are *not* recomputed at solve
+        time. A value assigned directly to ``bus.impedance[freq]``, or restored
+        from a database or a JSON file written by an older version, therefore
+        reaches the solver untouched. This is the pass that catches those.
+
+        Only the impedances that are actually inverted are checked: active
+        buses, the self impedance of active grounding-conductor branches
+        between two active buses, and the source impedance of voltage sources.
+        Mutual impedances are never inverted and are deliberately left alone --
+        zero mutual coupling is the normal case.
+
+        Raises
+        ------
+        ValueError
+            If any checked impedance is zero, too small to invert in double
+            precision, or has a negative real part. The message names the
+            element and every offending frequency.
+        """
+        for bus_name, bus in self.network.buses.items():
+            if not bus.active:
+                continue
+            check_passive_impedance(
+                self._relevant(bus.impedance),
+                element=f"bus '{bus_name}' (grounding impedance)",
+                formula_str=bus.type.impedance_formula,
+            )
+
+        for branch in self.network.branches.values():
+            if not branch.active:
+                continue
+            if not branch.type.grounding_conductor:
+                continue
+            if branch.from_bus not in self.bus_indices:
+                continue
+            if branch.to_bus not in self.bus_indices:
+                continue
+            check_passive_impedance(
+                self._relevant(branch.self_impedance),
+                element=f"branch '{branch.name}' (self impedance)",
+                formula_str=branch.type.self_impedance_formula,
+            )
+
+        for source in self.network.sources.values():
+            if source.source_type != "voltage":
+                continue
+            if source.bus not in self.bus_indices:
+                continue
+            check_passive_impedance(
+                self._relevant(source.source_impedance),
+                element=f"source '{source.name}' (source impedance)",
+            )
+
+    def _dc_substitute_at(self, freq: float) -> Optional[float]:
+        """Size the stand-in for elements that are a short circuit at 0 Hz.
+
+        Only 0 Hz can need one: every other frequency has already been rejected
+        by :meth:`_validate_passive_impedances`. At 0 Hz a purely inductive
+        element legitimately has zero impedance -- an ideal short -- which the
+        nodal formulation cannot invert. This pass finds those elements, and
+        collects the magnitudes of the impedances that *are* usable so
+        :func:`~groundinsight.utils.impedance_calculator.dc_substitute_impedance`
+        can scale the substitute to the network.
+
+        The scan covers exactly the impedances that are inverted in
+        :meth:`_construct_Y_matrices`: active buses, the self impedance of
+        active grounding-conductor branches between two active buses, and the
+        impedance of voltage sources. Mutual impedances are never inverted.
+
+        Parameters
+        ----------
+        freq : float
+            The frequency being assembled, in Hz.
+
+        Returns
+        -------
+        float or None
+            The substitute impedance in Ohm, or ``None`` when ``freq`` is not
+            0 Hz or no element is shorted -- in which case nothing changes.
+        """
+        if freq != 0.0:
+            return None
+
+        shorted: List[str] = []
+        magnitudes: List[float] = []
+
+        def classify(impedance, label: str) -> None:
+            if impedance is None:
+                return
+            value = complex(impedance.real, impedance.imag)
+            if is_short_circuit(value):
+                shorted.append(label)
+            else:
+                magnitudes.append(abs(value))
+
+        for bus_name, bus in self.network.buses.items():
+            if not bus.active:
+                continue
+            classify(bus.impedance.get(freq), f"bus '{bus_name}'")
+
+        for branch in self.network.branches.values():
+            if not branch.active:
+                continue
+            if not branch.type.grounding_conductor:
+                continue
+            if branch.from_bus not in self.bus_indices:
+                continue
+            if branch.to_bus not in self.bus_indices:
+                continue
+            classify(
+                branch.self_impedance.get(freq), f"branch '{branch.name}'"
+            )
+
+        for source in self.network.sources.values():
+            if source.source_type != "voltage":
+                continue
+            if source.bus not in self.bus_indices:
+                continue
+            classify(
+                source.source_impedance.get(freq), f"source '{source.name}'"
+            )
+
+        if not shorted:
+            return None
+        return dc_substitute_impedance(
+            magnitudes, shorted, context="steady-state solve"
+        )
+
+    def _resolved_impedance(self, impedance, freq: float) -> Optional[complex]:
+        """Complex value of a stored impedance, with a 0 Hz short substituted.
+
+        Every place that inverts an impedance has to see the *same* value,
+        otherwise the admittance matrix and the currents derived from it would
+        describe two different networks. This is that single place. Away from
+        0 Hz, and for every value that is not a short circuit, it is a plain
+        conversion to :class:`complex`.
+
+        Parameters
+        ----------
+        impedance : ComplexNumber or None
+            The stored value, or ``None`` when the frequency is absent.
+        freq : float
+            The frequency the value belongs to, in Hz.
+
+        Returns
+        -------
+        complex or None
+            The value to invert, or ``None`` if ``impedance`` was ``None``.
+        """
+        if impedance is None:
+            return None
+        value = complex(impedance.real, impedance.imag)
+        substitute = self._dc_substitutes.get(freq)
+        if substitute is not None and is_short_circuit(value):
+            return complex(substitute, 0.0)
+        return value
+
     def _construct_Y_matrices(self):
         """
         Construct the admittance matrices Y for each frequency in the network.
@@ -143,6 +423,8 @@ class ElectricalNetwork:
         sources contribute nothing to ``Y`` -- they appear only in the current
         vector (Norton convention with infinite parallel impedance).
         """
+        self._validate_passive_impedances()
+
         frequencies = self.network.frequencies
         # Active fault bus index is needed for the Thevenin loop closure. If
         # no fault is active yet (e.g. the network is being inspected before
@@ -156,6 +438,14 @@ class ElectricalNetwork:
         else:
             fault_bus_idx = None
 
+        # At 0 Hz a short circuit is physics rather than a mistake, so the
+        # elements that have one get a small finite stand-in instead of being
+        # dropped. Every frequency is asked, and only 0 Hz can answer.
+        for freq in frequencies:
+            substitute = self._dc_substitute_at(freq)
+            if substitute is not None:
+                self._dc_substitutes[freq] = substitute
+
         for freq in frequencies:
             Y_matrix = np.zeros((self.num_buses, self.num_buses), dtype=complex)
             # Bus grounding admittances on the diagonal (active buses only)
@@ -163,11 +453,12 @@ class ElectricalNetwork:
                 if not bus.active:
                     continue
                 idx = self.bus_indices[bus_name]
-                impedance = bus.impedance.get(freq)
-                if impedance is None:
+                Z_complex = self._resolved_impedance(
+                    bus.impedance.get(freq), freq
+                )
+                if Z_complex is None:
                     continue
-                Z_complex = complex(impedance.real, impedance.imag)
-                if Z_complex == 0:
+                if _is_open_circuit(Z_complex):
                     continue
                 Y_matrix[idx, idx] += 1 / Z_complex
 
@@ -183,11 +474,12 @@ class ElectricalNetwork:
                     continue
                 if branch.to_bus not in self.bus_indices:
                     continue
-                impedance = branch.self_impedance.get(freq)
-                if impedance is None:
+                Z_complex = self._resolved_impedance(
+                    branch.self_impedance.get(freq), freq
+                )
+                if Z_complex is None:
                     continue
-                Z_complex = complex(impedance.real, impedance.imag)
-                if Z_complex == 0:
+                if _is_open_circuit(Z_complex):
                     continue
                 admittance = 1 / Z_complex
                 from_idx = self.bus_indices[branch.from_bus]
@@ -207,11 +499,12 @@ class ElectricalNetwork:
                     src_idx = self.bus_indices.get(source.bus)
                     if src_idx is None or src_idx == fault_bus_idx:
                         continue
-                    Z_src = source.source_impedance.get(freq)
-                    if Z_src is None:
+                    Z_src_c = self._resolved_impedance(
+                        source.source_impedance.get(freq), freq
+                    )
+                    if Z_src_c is None:
                         continue
-                    Z_src_c = complex(Z_src.real, Z_src.imag)
-                    if Z_src_c == 0:
+                    if _is_open_circuit(Z_src_c):
                         continue
                     Y_src = 1 / Z_src_c
                     Y_matrix[src_idx, src_idx] += Y_src
@@ -230,8 +523,10 @@ class ElectricalNetwork:
         is computed (see :meth:`_compute_phase_currents`) and the Norton-equivalent
         mutual currents are added on top.
 
-        Raises:
-            ValueError: If no active fault is set on the network.
+        Raises
+        ------
+        ValueError
+            If no active fault is set on the network.
         """
         frequencies = self.network.frequencies
         active_fault = self.network.active_fault
@@ -278,6 +573,13 @@ class ElectricalNetwork:
             i_vector[fault_bus_idx] -= total_source_current
             self.total_source_currents[freq] = total_source_current
 
+            # Snapshot of the source-only injection, taken *before*
+            # ``_add_mutual_currents`` mutates ``i_vector`` in place. This is the
+            # current a lumped earthing conductor carries into (source buses) or
+            # out of (fault bus) the grounding system; see the attribute comment
+            # in ``__init__`` for why the mutual terms must not be included.
+            self.source_injections[freq] = i_vector.copy()
+
             # Phase currents per branch at this frequency
             phase_currents = self._compute_phase_currents(freq, sources_with_path)
             self.phase_currents[freq] = phase_currents
@@ -300,14 +602,20 @@ class ElectricalNetwork:
         contributed to the Y-matrix in :meth:`_construct_Y_matrices`. Together
         the two model a Thevenin loop between the source bus and the fault bus.
 
-        Args:
-            source (Source): The source whose injection should be evaluated.
-            freq (float): Frequency in Hz at which to evaluate the injection.
-            scaling (float): ``Fault.scalings[freq]`` for the active fault.
+        Parameters
+        ----------
+        source : Source
+            The source whose injection should be evaluated.
+        freq : float
+            Frequency in Hz at which to evaluate the injection.
+        scaling : float
+            ``Fault.scalings[freq]`` for the active fault.
 
-        Returns:
-            Optional[complex]: The complex injection, or ``None`` if the
-            source has no value at the requested frequency.
+        Returns
+        -------
+        Optional[complex]
+            The complex injection, or ``None`` if the
+        source has no value at the requested frequency.
         """
         if source.source_type == "current":
             current = source.values.get(freq) if source.values is not None else None
@@ -319,11 +627,12 @@ class ElectricalNetwork:
         if source.voltage is None or source.source_impedance is None:
             return None
         u = source.voltage.get(freq)
-        z = source.source_impedance.get(freq)
-        if u is None or z is None:
+        Z_src_c = self._resolved_impedance(
+            source.source_impedance.get(freq), freq
+        )
+        if u is None or Z_src_c is None:
             return None
-        Z_src_c = complex(z.real, z.imag)
-        if Z_src_c == 0:
+        if _is_open_circuit(Z_src_c):
             return None
         u_eff = scaling * complex(u.real, u.imag)
         return u_eff / Z_src_c
@@ -380,8 +689,10 @@ class ElectricalNetwork:
         Paths are taken from ``self.network.paths`` which must have been populated
         before the electrical network is solved (typically via ``network.define_paths()``).
 
-        Returns:
-            List[str]: Source names that contribute to the active fault.
+        Returns
+        -------
+        List[str]
+            Source names that contribute to the active fault.
         """
         fault_name = self.network.active_fault
         sources = set()
@@ -409,14 +720,19 @@ class ElectricalNetwork:
         impedance proxy and the fault bus as the reference node. The resulting branch
         current is used directly and ``parallel_coefficient`` is ignored.
 
-        Args:
-            freq (float): The frequency at which to compute the phase currents.
-            sources_with_path (Iterable[str]): Names of sources that have a path to the
-                active fault.
+        Parameters
+        ----------
+        freq : float
+            The frequency at which to compute the phase currents.
+        sources_with_path : Iterable[str]
+            Names of sources that have a path to the
+            active fault.
 
-        Returns:
-            Dict[str, complex]: Mapping from branch name to signed phase current
-            (positive when the current flows from ``from_bus`` to ``to_bus``).
+        Returns
+        -------
+        Dict[str, complex]
+            Mapping from branch name to signed phase current
+        (positive when the current flows from ``from_bus`` to ``to_bus``).
         """
         if self.auto_phase_currents:
             return self._compute_phase_currents_auto(freq, sources_with_path)
@@ -433,16 +749,23 @@ class ElectricalNetwork:
         where ``sign`` is +1 when the phase current direction coincides with the
         branch's from->to orientation and -1 otherwise.
 
-        Args:
-            freq (float): Frequency to evaluate scalings and source values at.
-            sources_with_path (Iterable[str]): Sources that contribute at this fault.
+        Parameters
+        ----------
+        freq : float
+            Frequency to evaluate scalings and source values at.
+        sources_with_path : Iterable[str]
+            Sources that contribute at this fault.
 
-        Returns:
-            Dict[str, complex]: Signed phase current per branch.
+        Returns
+        -------
+        Dict[str, complex]
+            Signed phase current per branch.
 
-        Raises:
-            RuntimeError: If a path segment does not connect to the expected bus,
-            indicating that the stored path is inconsistent with the branches.
+        Raises
+        ------
+        RuntimeError
+            If a path segment does not connect to the expected bus,
+        indicating that the stored path is inconsistent with the branches.
         """
         fault_name = self.network.active_fault
         fault = self.network.faults[fault_name]
@@ -508,12 +831,17 @@ class ElectricalNetwork:
         phase-current provider (e.g. pandapower's single-phase short-circuit) — such a
         provider would bypass the solve and write directly into the returned dict.
 
-        Args:
-            freq (float): Frequency at which to solve.
-            sources_with_path (Iterable[str]): Sources contributing to the active fault.
+        Parameters
+        ----------
+        freq : float
+            Frequency at which to solve.
+        sources_with_path : Iterable[str]
+            Sources contributing to the active fault.
 
-        Returns:
-            Dict[str, complex]: Signed phase current per branch.
+        Returns
+        -------
+        Dict[str, complex]
+            Signed phase current per branch.
         """
         fault_name = self.network.active_fault
         fault = self.network.faults[fault_name]
@@ -537,10 +865,11 @@ class ElectricalNetwork:
                 continue
             if branch.to_bus not in self.bus_indices:
                 continue
-            Z_self = branch.self_impedance.get(freq)
-            if branch.type.grounding_conductor and Z_self is not None:
-                Z_complex = complex(Z_self.real, Z_self.imag)
-                if Z_complex == 0:
+            Z_complex = self._resolved_impedance(
+                branch.self_impedance.get(freq), freq
+            )
+            if branch.type.grounding_conductor and Z_complex is not None:
+                if _is_open_circuit(Z_complex):
                     y = 0.0 + 0.0j
                 else:
                     y = 1.0 / Z_complex
@@ -613,10 +942,14 @@ class ElectricalNetwork:
         *negated* value so that it combines with the legacy branch-current formula
         ``current = (u_to - u_from) * Y_self + i_mutual_stored``.
 
-        Args:
-            i_vector (np.ndarray): Current vector to update in place.
-            freq (float): Frequency at which to evaluate the branch impedances.
-            phase_currents (Dict[str, complex]): Signed phase current per branch.
+        Parameters
+        ----------
+        i_vector : np.ndarray
+            Current vector to update in place.
+        freq : float
+            Frequency at which to evaluate the branch impedances.
+        phase_currents : Dict[str, complex]
+            Signed phase current per branch.
         """
         for branch in self.network.branches.values():
             if not branch.active:
@@ -627,13 +960,14 @@ class ElectricalNetwork:
                 continue
             if branch.to_bus not in self.bus_indices:
                 continue
-            Z_self = branch.self_impedance.get(freq)
+            Z_self_c = self._resolved_impedance(
+                branch.self_impedance.get(freq), freq
+            )
             Z_mutual = branch.mutual_impedance.get(freq)
-            if Z_self is None or Z_mutual is None:
+            if Z_self_c is None or Z_mutual is None:
                 continue
-            Z_self_c = complex(Z_self.real, Z_self.imag)
             Z_mutual_c = complex(Z_mutual.real, Z_mutual.imag)
-            if Z_self_c == 0:
+            if _is_open_circuit(Z_self_c):
                 continue
 
             i_phase = phase_currents.get(branch.name, 0.0 + 0.0j)
@@ -653,6 +987,209 @@ class ElectricalNetwork:
             else:
                 self.i_mutuals[freq][branch.name] = stored
 
+    def _assert_finite_system(self, freq, Y_matrix, i_vector):
+        """Reject a nodal system that contains NaN, naming the source.
+
+        ``NaN`` in ``Y`` or ``i`` makes the LU factorisation fail or return
+        garbage, and scipy's report for that is "singular matrix". That message
+        describes a *topology* problem -- a network with no path to reference
+        earth -- so an engineer reading it goes looking for a missing earth
+        connection. The actual cause is arithmetic: an impedance formula that
+        produced NaN, or a NaN written directly into ``bus.impedance`` /
+        ``branch.self_impedance``. Say so, and say where.
+
+        ``inf`` is deliberately not checked: it is the documented open-end
+        sentinel and contributes ``1/inf == 0`` to the matrix, which is exactly
+        right.
+
+        Parameters
+        ----------
+        freq : float
+            Frequency (Hz) of the system being checked, used in the message.
+        Y_matrix : numpy.ndarray
+            The nodal admittance matrix at ``freq``.
+        i_vector : numpy.ndarray
+            The injection vector at ``freq``.
+
+        Raises
+        ------
+        ValueError
+            If ``Y_matrix`` or ``i_vector`` contains NaN.
+        """
+        if not (np.isnan(Y_matrix).any() or np.isnan(i_vector).any()):
+            return
+
+        index_to_bus = {idx: name for name, idx in self.bus_indices.items()}
+
+        culprit_buses = []
+        for bus_name, bus in self.network.buses.items():
+            if not bus.active or bus_name not in self.bus_indices:
+                continue
+            imp = bus.impedance.get(freq)
+            if imp is not None and (np.isnan(imp.real) or np.isnan(imp.imag)):
+                culprit_buses.append(bus_name)
+
+        culprit_branches = []
+        for branch in self.network.branches.values():
+            if not branch.active:
+                continue
+            for label, store in (
+                ("self", branch.self_impedance),
+                ("mutual", branch.mutual_impedance),
+            ):
+                imp = store.get(freq) if store else None
+                if imp is not None and (np.isnan(imp.real) or np.isnan(imp.imag)):
+                    culprit_branches.append(f"{branch.name} ({label})")
+
+        affected_rows = sorted(
+            {int(row) for row in np.argwhere(np.isnan(Y_matrix))[:, 0]}
+            | {int(row) for row in np.argwhere(np.isnan(i_vector)).ravel()}
+        )
+        affected_names = [
+            index_to_bus.get(row, f"index {row}") for row in affected_rows
+        ]
+
+        parts = [
+            f"NaN in the nodal system at f={freq} Hz -- the network cannot be "
+            f"solved. This is a computation error, not a topology error: NaN "
+            f"would surface from the LU factorisation as a misleading "
+            f"'singular matrix'."
+        ]
+        if culprit_buses:
+            parts.append(
+                "Buses with a NaN grounding impedance: "
+                + _shortlist(culprit_buses)
+                + "."
+            )
+        if culprit_branches:
+            parts.append(
+                "Branches with a NaN impedance: " + _shortlist(culprit_branches) + "."
+            )
+        if not culprit_buses and not culprit_branches:
+            parts.append(
+                "No single bus or branch impedance is NaN, so the NaN entered "
+                "through an injected current or a mutual coupling term. "
+                "Affected matrix rows: " + _shortlist(affected_names) + "."
+            )
+        parts.append(
+            "Check the impedance formula of the affected type(s) for a "
+            "division by zero or a domain error (e.g. log(0) at f=0 Hz)."
+        )
+        raise ValueError(" ".join(parts))
+
+    def _classify_bus_grounding(self, freq):
+        """Sort the active buses by what their grounding impedance actually is.
+
+        The four non-referencing outcomes are physically distinct and each has
+        its own remedy, so they are kept apart instead of being collapsed into
+        one "no path to reference earth".
+
+        Parameters
+        ----------
+        freq : float
+            Frequency (Hz) at which to read ``bus.impedance``.
+
+        Returns
+        -------
+        dict
+            Keys ``referenced`` (finite, non-zero -- these are the only buses
+            that tie the network to earth), ``zero`` (``Z == 0``, only
+            reachable by assigning to ``bus.impedance`` after the network was
+            built, since :meth:`_validate_passive_impedances` rejects it
+            otherwise), ``infinite`` (open end), ``nan`` (failed computation)
+            and ``missing`` (no entry stored for this frequency); each maps to
+            a list of bus names.
+        """
+        grouped = {
+            "referenced": [],
+            "zero": [],
+            "infinite": [],
+            "nan": [],
+            "missing": [],
+        }
+        for bus_name, bus in self.network.buses.items():
+            if not bus.active or bus_name not in self.bus_indices:
+                continue
+            imp = bus.impedance.get(freq)
+            if imp is None:
+                grouped["missing"].append(bus_name)
+                continue
+            zc = complex(imp.real, imp.imag)
+            if np.isnan(zc.real) or np.isnan(zc.imag):
+                grouped["nan"].append(bus_name)
+            elif zc == 0:
+                grouped["zero"].append(bus_name)
+            elif not np.isfinite(zc):
+                grouped["infinite"].append(bus_name)
+            else:
+                grouped["referenced"].append(bus_name)
+        return grouped
+
+    def _no_ground_reference_message(self, freq, grouped):
+        """Build the diagnosis for a network with no path to reference earth.
+
+        The word "Singular" is kept at the front because that is what the
+        solver would have said, and because callers (and tests) match on it.
+        Everything after it names which buses were looked at and why each one
+        failed to provide a reference -- a bus written ``Z = 0`` needs a
+        different fix from a bus left at the open-end sentinel.
+
+        Parameters
+        ----------
+        freq : float
+            Frequency (Hz) of the singular system.
+        grouped : dict
+            Output of :meth:`_classify_bus_grounding`.
+
+        Returns
+        -------
+        str
+            The full message for the :class:`ValueError`.
+        """
+        parts = [
+            f"Singular admittance matrix at f={freq} Hz: no active bus is "
+            f"referenced to earth, so the network has no path to reference "
+            f"earth and its potential is undefined."
+        ]
+        if grouped["zero"]:
+            parts.append(
+                "Buses with Z = 0: "
+                + _shortlist(grouped["zero"])
+                + ". A zero grounding impedance is rejected when the network is "
+                "built, so these values were assigned after construction and "
+                "never reached the admittance matrix -- the diagonal still "
+                "holds whatever was there before. Use a small finite value "
+                "(e.g. 1e-6) for a near-ideal earth electrode and rebuild the "
+                "network."
+            )
+        if grouped["infinite"]:
+            parts.append(
+                "Buses with an infinite Z (open-end sentinel, formula 'nan'): "
+                + _shortlist(grouped["infinite"])
+                + "."
+            )
+        if grouped["nan"]:
+            parts.append(
+                "Buses with a NaN Z (failed formula evaluation): "
+                + _shortlist(grouped["nan"])
+                + "."
+            )
+        if grouped["missing"]:
+            parts.append(
+                f"Buses with no impedance stored at {freq} Hz: "
+                + _shortlist(grouped["missing"])
+                + "."
+            )
+        if not any(
+            grouped[key] for key in ("zero", "infinite", "nan", "missing")
+        ):
+            parts.append("No active bus is present in the nodal system at all.")
+        parts.append(
+            "Give at least one bus a finite, non-zero grounding impedance and "
+            "make sure the fault bus is galvanically connected to it."
+        )
+        return " ".join(parts)
+
     def solve_network(self):
         """
         Solve the network equations Y * u = i for each frequency.
@@ -660,6 +1197,25 @@ class ElectricalNetwork:
         This method computes the bus voltages by solving the admittance matrix equations for each frequency.
         The results are stored in the network's results object.
         It uses the csc_matrix and splu functions from scipy, assuming the Y-Matrix is a sparse matrix.
+
+        .. warning::
+
+            This **replaces** ``network.results[fault]`` with a fresh
+            :class:`Result` that carries bus rows only. The branch rows are
+            filled in by :meth:`compute_branch_currents`, which must be
+            called afterwards -- :func:`groundinsight.run_fault` does exactly
+            that. Calling ``solve_network`` on its own, e.g. on a hand-built
+            :class:`ElectricalNetwork` used to inspect ``Y``, ``i`` or ``u``,
+            therefore discards the branch results of a previous ``run_fault``.
+            Clearing them is deliberate -- stale branch currents next to fresh
+            bus voltages would be silently inconsistent -- and the thermal
+            checks raise on the resulting gap rather than reporting an
+            incomplete result as free of violations.
+
+            To inspect the nodal system without touching the stored results,
+            build the :class:`ElectricalNetwork` (its constructor has no side
+            effects on ``network.results``) and read ``u`` back from
+            ``network.results[fault].buses`` instead of re-solving.
         """
         fault_name = self.network.active_fault
         if fault_name is None:
@@ -668,21 +1224,42 @@ class ElectricalNetwork:
         result = Result(buses=[], branches=[], fault=fault_name)
         for freq in self.network.frequencies:
             Y_matrix = self.Y_matrices[freq]
-            Y_matrix_sparse = csc_matrix(Y_matrix)
-            lu = splu(Y_matrix_sparse)
             i_vector = self.i_vectors[freq]
+            singular_msg = (
+                f"Singular admittance matrix at f={freq} Hz: the network has no "
+                "path to reference earth. Ensure at least one bus has a finite "
+                "grounding impedance and that the fault bus is connected to it."
+            )
+            # A NaN anywhere in the nodal system poisons the factorisation, and
+            # scipy reports that as a singular matrix -- which reads like a
+            # topology error and sends the engineer looking for a missing
+            # earth connection that is not missing. Catch it first and name
+            # what is actually NaN.
+            self._assert_finite_system(freq, Y_matrix, i_vector)
+
+            # Exact, solver-independent floating-network guard. If no active bus
+            # is referenced to earth at this frequency (every grounding impedance
+            # is zero, infinite or missing) the admittance matrix is singular.
+            # scipy's sparse ``splu`` handles a singular Y inconsistently across
+            # versions -- it may raise ``RuntimeError``, return a non-finite
+            # solution, or return an arbitrary finite one (a floating network has
+            # no unique EPR) -- so the common floating case is caught structurally
+            # here, before the solve, with no numerical tolerance.
+            grouped = self._classify_bus_grounding(freq)
+            if not grouped["referenced"]:
+                raise ValueError(self._no_ground_reference_message(freq, grouped))
             try:
-                # Solve for u_vector
+                # Backstops for any remaining singular case (e.g. a disconnected
+                # ungrounded island): scipy may raise, or return a non-finite
+                # solution.
+                Y_matrix_sparse = csc_matrix(Y_matrix)
+                lu = splu(Y_matrix_sparse)
                 u_vector = lu.solve(i_vector)
-                self.u_vectors[freq] = u_vector
-            except np.linalg.LinAlgError as e:
-                logger.error(
-                    "Error solving network equations at frequency %s: %s",
-                    freq,
-                    e,
-                    exc_info=True,
-                )
-                continue
+            except (np.linalg.LinAlgError, RuntimeError) as e:
+                raise ValueError(f"{singular_msg} Original solver error: {e}") from e
+            if not np.all(np.isfinite(u_vector)):
+                raise ValueError(singular_msg)
+            self.u_vectors[freq] = u_vector
 
         # Create ResultBus instances. Inactive buses are not in ``bus_indices``
         # and therefore do not appear in the result -- they are physically
@@ -690,15 +1267,20 @@ class ElectricalNetwork:
         for bus_name, idx in self.bus_indices.items():
             uepr_freq = {}
             ia_freq = {}
+            i_inj_freq = {}
             for freq in self.network.frequencies:
                 voltage = self.u_vectors[freq][idx]
                 bus = self.network.buses.get(bus_name)
-                impedance = bus.impedance.get(freq)
-                if impedance is None:
+                Z_self_complex = self._resolved_impedance(
+                    bus.impedance.get(freq), freq
+                )
+                if Z_self_complex is None:
                     current = 0
                 else:
-                    Z_self_complex = complex(impedance.real, impedance.imag)
-                    if Z_self_complex == 0:
+                    if _is_open_circuit(Z_self_complex):
+                        # Open end (Z = inf): no electrode, so no current leaves
+                        # into the soil here. Computing the quotient would give
+                        # NaN and store it in the I_a column.
                         current = 0
                     else:
                         current = voltage / Z_self_complex
@@ -707,17 +1289,27 @@ class ElectricalNetwork:
                 ia_freq[freq] = ComplexNumber(
                     real=complex(current).real, imag=complex(current).imag
                 )
+                # Source-only injection at this bus (0 at every bus that is
+                # neither a source bus nor the fault bus).
+                inj_vector = self.source_injections.get(freq)
+                injection = 0j if inj_vector is None else complex(inj_vector[idx])
+                i_inj_freq[freq] = ComplexNumber(
+                    real=injection.real, imag=injection.imag
+                )
 
             # Calculate RMS values
             rms_voltage = self._calculate_rms(uepr_freq)
             rms_current = self._calculate_rms(ia_freq)
+            rms_injection = self._calculate_rms(i_inj_freq)
 
             result_bus = ResultBus(
                 name=bus_name,
                 uepr=rms_voltage,
                 ia=rms_current,
+                i_inj=rms_injection,
                 uepr_freq=uepr_freq,
                 ia_freq=ia_freq,
+                i_inj_freq=i_inj_freq,
             )
             result.buses.append(result_bus)
 
@@ -766,13 +1358,14 @@ class ElectricalNetwork:
             for freq in self.network.frequencies:
                 from_voltage = self.u_vectors[freq][from_idx]
                 to_voltage = self.u_vectors[freq][to_idx]
-                impedance = branch.self_impedance.get(freq)
+                Z_self_complex = self._resolved_impedance(
+                    branch.self_impedance.get(freq), freq
+                )
                 if (
-                    impedance is not None
+                    Z_self_complex is not None
                     and branch.type.grounding_conductor
-                    and complex(impedance.real, impedance.imag) != 0
+                    and not _is_open_circuit(Z_self_complex)
                 ):
-                    Z_self_complex = complex(impedance.real, impedance.imag)
                     Y_self_complex = 1 / Z_self_complex
                     delta_voltage = to_voltage - from_voltage
 
@@ -807,12 +1400,16 @@ class ElectricalNetwork:
         This method computes the root mean square (RMS) of the magnitudes of complex numbers
         across all specified frequencies.
 
-        Args:
-            freq_values (Dict[float, Optional[ComplexNumber]]): A dictionary mapping frequencies
-                                                               to their corresponding ComplexNumber values.
+        Parameters
+        ----------
+        freq_values : Dict[float, Optional[ComplexNumber]]
+            A dictionary mapping frequencies
+            to their corresponding ComplexNumber values.
 
-        Returns:
-            float: The calculated RMS value.
+        Returns
+        -------
+        float
+            The calculated RMS value.
         """
         rms_squared = 0.0
         for value in freq_values.values():

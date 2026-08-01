@@ -30,6 +30,346 @@ _No changes yet._
 
 ---
 
+## [0.5.0] — 2026-07-31
+
+> This release makes direct current a real operating point, adds transient
+> simulation with two independent solver paths, and adds the
+> equipment-integrity side of a grounding study — thermal limits for the
+> conductor between two buses and for the two grounding elements at a bus —
+> next to the potential rise that was there before. It also carries fourteen
+> audit passes worth of correctness work. The full measurement protocol for
+> every finding (reproduction, negative control, and mutation testing where
+> the change touched drawing or matrix-assembly code) is kept out of these
+> notes and lives in [`docs/audit-log.md`](docs/audit-log.md).
+>
+> **Breaking changes are marked in _Changed_.** Databases written by an
+> earlier release are converted automatically — see _Added_.
+
+### Added
+
+- **`f = 0 Hz` is a frequency, not a special case.** A study at zero
+  frequency used to raise, and the documented workaround was to enter
+  `f = 0.1 Hz` instead. Both solvers now evaluate the DC bin, and the three
+  singularities a formula string can hit there are told apart rather than
+  lumped together: Carson's removable `0·∞` resolves to its limit, the
+  capacitive `1/(jωC)` stays an infinite open circuit, and a genuine failure
+  (`√ρ` with negative `ρ`, a `NaN`) still raises. An impedance that becomes a
+  true short circuit at DC is replaced by a substitute impedance sized from
+  the network's own smallest impedance (`√eps · |Z|min`) and reported through
+  the new `gi.DCLimitWarning`; `docs/concepts.md` explains when to merge the
+  two buses instead. New public helpers `is_short_circuit(z)` and
+  `dc_substitute_impedance(...)` in
+  `groundinsight.utils.impedance_calculator`. What the old workaround cost,
+  measured: for the common `(0.25 + j*0.6)*l` spelling it reported
+  **718.54 V instead of 456.62 V** and `Z_G = 2.87 Ω` instead of `1.82 Ω`,
+  and the error did not shrink with the frequency.
+- **Transient simulation** — the new `groundinsight.simulation.transient`
+  sub-module, with two solver paths behind one contract:
+  `gi.TransientStudy(network, fault_name)` plus `set_source_waveform`,
+  `set_observation(buses=, branches=)` and `solve(t_end, dt, solver=)`,
+  returning `gi.ResultTransient` (`time_s`, `epr_t`, `i_branch_t`,
+  `source_t`, `to_polars()`). Switching solver paths is a one-line change.
+  - `solver="fft"` — frequency-domain superposition of a user waveform.
+  - `solver="state_space"` — modified nodal analysis assembled as
+    `dx/dt = A·x + B·u` and integrated with `scipy.signal.lsim`. Resolves
+    the true ring-down that the FFT path cannot, and supports bus
+    capacitance, automatic pi-section lumping of branch shunt capacitance,
+    voltage sources (Norton reduction for a resistive loop, an explicit
+    inductor state for `L_src > 0`) and Carson-style mutual coupling.
+- **Lumped RLC parameterisation** — optional `R_formula`, `L_formula`,
+  `C_formula` on `BusType` and `R_self_formula`, `L_self_formula`,
+  `C_self_formula`, `R_mutual_formula`, `M_mutual_formula` on `BranchType`,
+  evaluated into real `Dict[float, float]` fields on `Bus` and `Branch` by
+  the new `compute_real_value` helper. All default to `None`, so the
+  frequency-domain path and existing networks are unaffected; the
+  duplication against `impedance_formula` is intentional so the stationary
+  and transient parameterisations can be maintained independently.
+- **`gi.waveforms`** — `step`, `sinusoidal_with_dc_offset` and
+  `damped_oscillation` factory functions returning vectorised time-domain
+  callables, plus the plotting helpers `gi.plot_epr_transient` and
+  `gi.plot_branch_current_transient`.
+- **Thermal limit check for conductors (roadmap F1).**
+  `gi.check_conductor_limits(network, fault, t_k, *, kappa=/r_to_x=, n=, f=)`
+  compares every grounding branch's thermally equivalent short-time current
+  against its adiabatic limit and returns a long-format Polars frame.
+  `I_th = I_rms·√(m + n)` (IEC 60909-0) is applied to the *superposed* AC RMS
+  shield current — linear superposition first, the non-linear factor on the
+  aggregate — against `I_adm = k·S/√t_k` (IEC 60949). `BranchType` gains
+  `conductor_material`, `cross_section_mm2`, `theta_initial_C` and
+  `theta_final_C`; new helpers `gi.iec60949_k`, `gi.iec60909_m`,
+  `gi.kappa_from_r_to_x` and the catalog `gi.IEC60949_MATERIALS`, verified
+  against the published `k` tables (Cu/XLPE 143, Cu/PVC 115, Al/XLPE 94).
+- **Thermal limit check for nodes (roadmap F4).** EN 50522 and IEC 61936-1
+  size the **earthing conductor** and the **earth electrode** for different
+  currents, and the solver did not expose the first of them at all — in the
+  verification network the two differ by a factor of 41.
+  `gi.check_node_limits(...)` assesses both per bus and reports every bus,
+  leaving `within_limit = None` where the `BusType` declares nothing.
+  `ResultBus.i_inj` / `i_inj_freq` report the source-only nodal injection —
+  the current a lumped earthing conductor carries into the system — which is
+  *not* `ResultBus.ia = u_EPR / Z_B`, the share dissipated into the soil
+  through the electrode. `BusType` gains five fields per element
+  (`material`, `cross_section_mm2`, `theta_initial_C`, `theta_final_C`,
+  `current_split`). `current_split ∈ (0, 1]` is a declared factor, not a
+  derived one: the split depends on geometry the nodal model does not carry.
+  `gi.final_temperature(material, covering)` and `gi.FINAL_TEMPERATURES`
+  name their source per entry and raise rather than return a
+  plausible-looking number for an entry they cannot cite.
+- **IEC 60909 short-circuit characteristics from a solved pandapower case
+  (roadmap F2/F3).** `gi.read_shortcircuit_results(net_pp, ...)` reads a
+  `calc_sc` result as 60909 quantities in amperes,
+  `gi.apply_shortcircuit_characteristics(...)` writes them onto the model
+  and returns an audit frame including the previous values, and
+  `gi.resolve_fault_sc_characteristics(...)` reduces several infeeds to one
+  effective `kappa` (current-weighted by default, reproducing the sum of the
+  individual peaks to 1.6e-16; `aggregation="max"` for the conservative
+  variant). `Source` gains `i_k_a`, `r_to_x`, `kappa`, `Fault` gains
+  `t_k_s`, `n_factor` — metadata that never enters the linear solve. Two
+  deliberate deviations from pandapower, both pinned by tests: `ip_ka` and
+  `ith_ka` are derived here because pandapower returns `NaN` for the `1ph`
+  case that matters for grounding, and `I_th` is always recomputed because
+  pandapower sets `m = 0` for `kappa > 1.99` where the analytic limit is
+  `m = 2`, which under-estimates the thermal stress. The `R/X` driving
+  `kappa` is that of the earth-fault loop `2·Z1 + Z0`, not `R1/X1`.
+- **Databases written by an older release are converted, not rejected.**
+  `gi.migrate_database(path)` converts a file written by the name-keyed
+  schema to the current one and `gi.needs_migration(path)` classifies a file
+  without touching it; `gi.start_dbsession()` migrates automatically
+  (`migrate=False` restores the previous behaviour, which now raises a
+  `RuntimeError` naming the tool and your file). The original is copied to
+  `<path>.bak` first and an existing backup is never overwritten; the
+  conversion is written to a temporary sibling and moved in with
+  `os.replace`, so an interruption leaves either the old file or the new one.
+  Every converted network is loaded back *before* the swap, because a
+  structurally valid file is not necessarily a usable one.
+  `gi.MigrationReport` names what could not be recovered — shared elements,
+  paths whose segment order does not form a connected chain, orphans,
+  dangling memberships, defaulted cells — instead of quietly guessing, and a
+  missing `length` or `scalings` aborts the migration rather than being
+  invented.
+- **The plotting helpers accept `ax=` and `close=`.** `ax=` draws into an
+  axis you already have, which is what makes a base case and an outage case
+  comparable in one figure; `close=True` unregisters the figure the call
+  created, so a parameter sweep no longer accumulates figures until
+  matplotlib warns at twenty. Both are keyword-only and appended behind a
+  `*`, so the historical positional signature is unaffected.
+
+### Changed
+
+- **Breaking: the SQLite schema keys elements per network.** Buses,
+  branches, faults, sources and paths carry the composite primary key
+  `(network_name, name)`; the five `network_*` association tables are gone,
+  the relationships are ordinary one-to-many, and `path_segments` was
+  promoted to a mapped `PathSegmentDB` keyed
+  `(network_name, path_name, position)`. Two networks in one file that both
+  contained a bus called `"A"` previously shared a single row, so saving the
+  second silently overwrote the first one's impedance. Element order now
+  survives the round-trip — before, the load order was whatever SQLite
+  returned, which reordered the Y-matrix assembly and changed the LU
+  factorisation in the last bits; a save/load/re-solve is now bit-identical.
+- **Breaking: a zero, a sub-invertible or a negative-real-part impedance
+  raises `ValueError`.** `Z = 0` was assembled as an *open circuit* — the
+  exact opposite of the ideal earth it is written to mean — and an impedance
+  too small to invert put `inf` on the diagonal and `NaN` in the result. The
+  rule covers bus grounding impedances, branch self impedances where
+  `grounding_conductor=True`, and `Source.source_impedance`, and it runs
+  again immediately before the matrix is assembled. Deliberately out of
+  scope: mutual impedances (`Z_mutual = 0` is the ordinary way to say "no
+  coupling"), non-grounding branches, inactive elements, frequencies outside
+  `network.frequencies`, and `inf`, which remains the documented open-end
+  sentinel. Replace a deliberate `0.0` with a small finite value — `1e-6 Ω`
+  is seven digits of the ideal limit in a 1 Ω network and, unlike `0.0`,
+  actually behaves like one.
+- **Breaking: `create_paths` — and therefore `run_fault` — rejects a network
+  with no sources or no faults**, which previously produced a complete,
+  structurally valid all-zero result. The check is on the *collections being
+  empty*, never on the resulting path count: an outage scenario that islands
+  the fault bus still runs and still legitimately returns all zeros.
+- **Breaking: `create_network_assistant` validates `number_buses` and
+  `branch_length`.** A line of `n` buses has `n − 1` branches; passing `n`
+  lengths silently dropped the last one and passing too few raised a bare
+  `IndexError`. A scalar `branch_length=1.0` now gets a message instead of
+  `TypeError: 'float' object is not subscriptable`.
+- **Breaking: `max_iter` must be an `int >= 1`** in `find_max_rho_scaling`
+  and `find_max_rho_f_scaling`. `max_iter=60.0` was never harmless — the
+  loop condition rounds up, so `2.7` meant three steps, and a cap that does
+  not mean what it says is worse than no cap.
+- **Breaking: the plotting helpers reject two argument combinations and an
+  unusable `figsize`.** `ax=` with `figsize=` and `ax=` with `close=True`
+  both raise `ValueError`, because the figure belongs to the caller in that
+  case. A `figsize` that cannot be used raises instead of being swapped for
+  the default: matplotlib accepts `figsize=(0, 0)` at creation and only
+  fails when the figure is drawn, which pointed the traceback at `savefig`
+  rather than at the call responsible.
+- **Final temperatures now have two regimes with one source each.** The
+  catalogue previously mixed the National Grid Earthing Technical
+  Specification and IEC 60364-5-54 in one table. Uninsulated conductors
+  follow **EN 50522 Table 2** — 300 °C for bare copper, aluminium, steel and
+  galvanised steel, 150 °C for tinned copper, whose tin coating melts at
+  231.9 °C. Insulated conductors are capped by their insulation, not by the
+  metal: **IEC 60364-5-54 Table 54.2** gives 160 °C for PVC and 250 °C for
+  XLPE and EPR, for every conductor material, because the insulation fails
+  first. `IEC60949_MATERIALS["Steel"]["theta_final_default_C"]` is lowered
+  from 400 °C to 300 °C: `θ_f` enters the IEC 60949 material constant `k`
+  under a logarithm, so the old default produced a larger `k` and permitted
+  *more* current — the unsafe direction for a limit check. Pass
+  `theta_final_C=400.0` explicitly to reproduce earlier studies. `"PE"` is
+  deliberately not tabulated and raises, as do physically impossible
+  pairings such as `("Al", "tinned")`.
+- **A finite reactance at 0 Hz falls back to the real part, with a warning.**
+  `(0.25 + j·0.6)·l` reports 0.6 Ω of reactance at *every* frequency, and at
+  DC that is a statement about nothing — a reactance either vanishes or is
+  infinite. The warning quotes the length-invariant X/R ratio rather than the
+  two values, so Python's default filter collapses a hundred-branch network
+  into one line, and it names the remedy: write the reactance as
+  `j*2*pi*f*L` and it vanishes at DC by itself. The fallback is off for
+  R/L/C parameters, which are real at every frequency by contract.
+  Correspondingly, `Z = 0` and a non-invertible `|Z|` are accepted at 0 Hz
+  and rejected above it — an inductance really is a short circuit at DC and
+  really is not one at 50 Hz — while a **negative real part stays rejected at
+  every frequency**, because a passive element is passive at DC too.
+- **`find_max_rho_scaling` and `find_max_rho_f_scaling` return four new
+  keys.** `status` is one of `"converged"`,
+  `"bracket_within_tol_on_entry"`, `"bracket_fully_admissible"` or
+  `"max_iter_reached"`, `converged` is `True` for the first two, `c_bracket`
+  is the interval that provably contains the threshold, and
+  `bracket_rel_width` is its relative width. For a fully admissible bracket
+  the interval is `(c_hi, inf)`, which makes "widen `c_bounds`"
+  machine-readable. Every previous key keeps its name and meaning, so code
+  reading `c_max` still works — it now has a way to find out whether that
+  number is a maximum.
+- **An unsolvable nodal system is diagnosed instead of being reported as a
+  singular matrix.** A `NaN` in `Y` or in the injection vector is now a
+  computation error naming the buses and branches whose stored impedance is
+  `NaN`, with self and mutual told apart, rather than reaching SciPy and
+  coming back as "singular matrix" — which sends the engineer looking for a
+  topology error. "No path to reference earth" lists which buses were
+  examined and why each failed, grouped into `Z = 0`, infinite, `NaN` and no
+  value stored at that frequency, truncated after five names with the total
+  reported. The word `Singular` is kept at the front for callers matching on
+  it.
+
+### Fixed
+
+- **Security: an impedance or RLC formula string was an arbitrary-code
+  execution vector**, and `mkdocs.yml` loaded `polyfill.io`, a domain that
+  had changed hands and was serving malicious redirects. Both closed.
+- **Formula evaluation.** A formula that merely *contained* the letters
+  `nan` (`nan_factor`, `tanh`) became an open circuit. A parameter whose name
+  collides with one of SymPy's ~680 exported names was shadowed, and
+  `params={"I": ...}` was silently overwritten with the imaginary unit. Every
+  formula whose argument goes negative — the common `√(1 − x)` fit outside
+  its range — collapsed to `NaN`, which was then passed on as if it were a
+  number, into `ComplexNumber`, into `Y`, and out the far side as a result.
+  `compute_real_value(..., name=...)` now actually reaches the caller, so two
+  `BranchType` fields sharing an expression no longer produce two
+  byte-identical messages.
+- **Paths and topology.** The path set went stale after a fault or a source
+  was added following the first `run_fault`: the new element was never given
+  paths, which made `find_max_rho_scaling` over-estimate the admissible soil
+  resistivity. `run_fault` now rebuilds when the active topology changed, and
+  `Network.invalidate_paths()` is an atomic rebind scoped to the calling
+  network rather than a clear of the global cache. Two topology fingerprints
+  collapsed parallel branches into one key, so two structurally different
+  networks hashed alike. `Network.define_paths` no longer shadows
+  `(source, fault)` pairs that share a source.
+- **Transient solvers.** With `network.paths` empty or stale the state-space
+  path dropped the entire Carson coupling silently, and a branch shared by
+  two parallel paths of one source received the coupling twice. Branch
+  currents from the state-space solver were inverted relative to
+  `compute_branch_currents` and the FFT solver; both now follow
+  `i_branch = (v_to − v_from) · Y_self`, so the two traces sit on top of each
+  other for the forced response. The source waveform is treated as the
+  literal injection instead of being rescaled.
+- **Persistence.** `save_network` committed its delete-then-insert in two
+  steps, so an interruption could leave a half-written network on disk, and
+  it wrote raw type rows instead of merging them. `Network.results`,
+  `Fault.active` and open-end `inf` values now survive the JSON and SQLite
+  round-trips. Inconsistent path segments are rejected before anything is
+  written.
+- **pandapower import.** `calc_sc`'s `tk_s=1.0` signature default was read
+  as the protection's actual clearing time. Three `pl.DataFrame(...)` sites
+  relied on polars inferring a schema from the first row. A missing line
+  length was silently replaced by 1.0 km — a fabricated length changes the
+  earth potential rise with nothing in the output to show it was invented —
+  and zero or negative lengths are now rejected. Duplicate line names no
+  longer abort the import.
+- **Results that looked like answers.** A frequency that was never computed
+  was plotted as a bar of height zero, indistinguishable from a computed
+  zero. The relative delta of an outage study divided by the reference value
+  without guarding a zero reference. `check_conductor_limits` and
+  `check_node_limits` reported "no violations" on a result that was only
+  half built, and an element carrying just one half of its thermal data was
+  skipped without a word. `str()` on `ResultReductionFactor` and
+  `ResultGroundingImpedance` raised `AttributeError`. An unresolvable bus or
+  branch type surfaced as an `AttributeError` from deep inside the solver,
+  and two documented `ValueError`s were never raised at all.
+- **The inverse-`ρ` searches.** `iterations == 0` meant three different
+  things; exhausting `max_iter` was silent; `tol_rel` and `max_iter` were
+  unvalidated; a `NaN` EPR limit passed the positivity guard because
+  `nan <= 0` is `False`; and `c_bounds=(1e-3, inf)` passed the ordering
+  check. The shared checks and the report builder now live in
+  `analysis/_bisection.py` so the two searches cannot drift apart. The
+  routines also restore network state instead of leaving the scaling they
+  last tried in place.
+- **A single un-earthed tower no longer fails the whole network**, and a
+  genuinely singular or floating network raises a clear `ValueError` naming
+  the cause instead of surfacing as a SciPy factorisation error.
+- **Session and cache handling.** `_set_session` is the single source of
+  truth for the module globals; `start_dbsession` is hardened against a
+  second call and `close_dbsession` tears down all three globals;
+  `set_log_level` is handler-idempotent across repeated calls; the
+  pathfinder caches are bounded LRUs that no longer key on `id(network)`;
+  `outage_context` clears them and is re-entrant. `Network.frequencies` is
+  validated at construction and warns on a non-monotonic order.
+  `gi.set_active_fault(network, fault_name, keep_results=False)` is
+  available at the top level, and `__all__` lists every public helper.
+
+### Docs
+
+- `docs/concepts.md` gains **"Direct current (`f = 0`)"** — the three
+  singularities and how they are told apart, the reactance fallback and how
+  to write a formula that does not need it, what the short-circuit
+  substitution costs and when to merge two buses instead — and **"Which
+  values a formula may produce"** under *Impedance formulas*.
+- `docs/transient.md` documents the state-space solver, the DC bin, the
+  Carson-mutual substitution and the waveform contract.
+- New API pages for the transient sub-module and the analysis helpers;
+  `docs/api/analysis.md` carries the documented discrepancy between the
+  `IEC60949_MATERIALS["Steel"]` default and EN 50522 Table 2.
+- The dead **"Research notebooks"** nav section was removed from
+  `mkdocs.yml`. mkdocs only collects files below `docs_dir`, so every
+  `../notebooks/*.ipynb` entry was reported as unresolvable and silently
+  dropped — the section never appeared on the site, and the build stayed
+  green because `mkdocs gh-deploy` runs without `--strict`. Curated
+  notebooks live in `docs/examples/`.
+- `mkdocs.yml` uses `docstring_style: numpy`, matching the docstrings the
+  project actually writes.
+
+### Internal
+
+- The audit narrative moved out of this file into
+  [`docs/audit-log.md`](docs/audit-log.md): fourteen passes, each finding
+  with its reproduction, its negative control, and — where the change
+  touched drawing or matrix-assembly code — a mutation-testing result. The
+  open findings not yet scheduled are in the same document; the roadmap is
+  at the end of this file.
+- **The thermal assessment is opt-in and provably so.** A grounding study is
+  useful long before anybody has decided on a cross-section, so an element
+  with no thermal data is reported with its current columns filled and
+  `within_limit = None` rather than being dropped or defaulted. The
+  *excitation* is not optional: once a check is requested, `t_k` and the
+  peak factor must be resolvable, and a half-declared element is a warning
+  rather than a silent skip.
+- The release tooling's own preconditions are now tested rather than
+  assumed. `pyproject.toml`, `src/groundinsight/__init__.py` and
+  `CITATION.cff` are checked against each other by
+  `test_version_matches_pyproject` and `test_version_matches_citation_cff`,
+  which read the expectation from the project metadata instead of pinning a
+  literal that `scripts/release.py` rewrites on every release commit.
+
+---
+
 ## [0.4.0] — 2026-05-09
 
 ### Added
@@ -371,7 +711,8 @@ form — superseded by 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.4.0
 [0.3.2]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.1
@@ -460,6 +801,9 @@ distribution-network space.
   conductors. Length is taken from `line.length_km`; transformer
   branches default to a configurable star-point impedance formula.
   Round-trip example notebook under `notebooks/import_pandapower.ipynb`.
+  *Shipped — `gi.from_pandapower`, `gi.ImportDefaults`,
+  `gi.preview_pandapower_import`. The PowerFactory paths below are
+  still open.*
 - **PowerFactory importer** — new module
   `src/groundinsight/io/powerfactory_import.py` with two ingestion
   paths:
@@ -484,6 +828,7 @@ distribution-network space.
   DataFrame summarising which buses and branches will be created and
   which elements were skipped (with reason), so users can validate
   the mapping before committing to a full network build.
+  *Shipped as `gi.preview_pandapower_import`.*
 
 ### Near term — other
 
@@ -540,6 +885,8 @@ distribution-network space.
   user-supplied fault-current time function. Needs design work on how
   to spec the input and what assumptions (linearity, bandwidth) to
   guard.
+  *Shipped — `gi.TransientStudy` with `solver="fft"` for exactly this,
+  and `solver="state_space"` beyond it.*
 - **Typed impedance DSL** — replace SymPy formula strings with a
   small typed expression tree so units and argument domains can be
   checked at construction time. Would also let the docs site render a
@@ -550,6 +897,107 @@ distribution-network space.
   identification package or in `groundmeas` itself; the hook on the
   `groundinsight` side is the `ImpedanceTable` interface listed under
   the `groundfield` bridge.
+
+### From the audit passes (2026-05 – 2026-07)
+
+Open items raised by the audit passes, de-duplicated across passes.
+Items the passes proposed and that have since shipped are not repeated
+here — they are in `[Unreleased]` or in an earlier version section. The
+verbatim per-pass roadmap blocks are preserved in
+`docs/audit-log.md`, Part 4.
+
+**Safety assessment — the missing half of a grounding study.** 0.5.0 added
+the equipment-integrity side (thermal limits for conductors and nodes);
+person safety is still unassessed.
+
+- `Network.res_touch_voltages()` and `ResultTouchVoltage`, then a thin
+  `assess_touch_voltage(t_clearing_ms, standard="EN50522"|"IEEE80")`
+  returning the admissible limit and a pass/fail flag per bus. Initial
+  implementation from a simple analytical surface-potential model in
+  layered earth; higher-fidelity surface potentials come from
+  `groundfield` through `ImpedanceTable`. This is the single most useful
+  safety-engineering deliverable on top of the present steady-state
+  solver.
+- **Mechanical (electrodynamic) limits** — `F ∝ i_p²` between parallel
+  conductors, the deliberate second step after the thermal check.
+  Needs conductor geometry (spacing, support distance), which the nodal
+  model does not carry today.
+
+**Modelling.**
+
+- **PEN-conductor-aware `BranchType`** — `BranchType` distinguishes only
+  `grounding_conductor: bool`. In a TN-Ortsnetz the PEN sits in parallel
+  with the cable shield and the soil; modelling it explicitly
+  (`pen_impedance_formula`) gives a cleaner reduction-factor split for
+  low-voltage networks. Directly relevant to AP 1 of the dissertation.
+- **`Network.frequencies` as a `tuple[float, ...]`** — a tuple plus the
+  existing validator makes the network hashable, which is what the
+  pathfinder cache key wants; it currently keys on a network fingerprint
+  because `List[float]` is unhashable.
+- **`gi.PathfinderConfig(cache_scope="per_network"|"global"|"none")`** —
+  make the cache-scope decision explicit rather than a property of the
+  module-level dictionaries.
+
+**Convenience factories** — each of these removes notebook boilerplate
+that the example notebooks currently carry by hand.
+
+- **`Source.from_waveform(waveform, frequencies)`** — do the FFT once for
+  a Thevenin source instead of forcing the user to assemble a
+  per-frequency `voltage` dict.
+- **`gi.waveforms.from_array(t_samples, values)`** — wrap a measured
+  fault-current trace (e.g. from a digital fault recorder) into the
+  `Callable[[np.ndarray], np.ndarray]` contract via `np.interp`.
+- **`gi.TransientStudy.from_steady_state(network, fault_name)`** —
+  pre-populate a transient study from the most recent `run_fault` result
+  on the same network, copying fault scalings and the observation set.
+- **`gi.from_pandapower_multi_voltage(net, defaults_map)`** — take a
+  `Dict[float, ImportDefaults]` and produce one `Network` per voltage
+  level (or one combined network once transformer branches land). Closes
+  the gap to the AP 1 case studies that span 110 / 20 / 0.4 kV.
+
+**Diagnostics.**
+
+- **`Network.verify_steady_state_match(transient_result)`** — promote the
+  manual cross-check in `test_state_space_matches_fft_on_lti_network` to a
+  public diagnostic, so a user can validate a new transient setup against
+  the per-frequency phasor solve.
+- **`gi.diagnose(network)`** — one-call health check: stale
+  `network.paths`, duplicate frequencies, missing impedance formulas,
+  untyped branches, the inverse-`ρ` bus mismatch. Useful before each
+  `run_fault` in a long notebook.
+
+**Performance.**
+
+- **Parallel per-frequency solve** — a `ThreadPoolExecutor` over the
+  frequency loop in `solve_network`. SciPy's `splu` releases the GIL, so a
+  near-linear speed-up is realistic for a harmonic study over 10–30
+  frequencies. Low effort, high payoff. (Also listed under *Medium term*.)
+
+**Cross-repo toolchain** (`groundfield` field solver, `groundinsight`
+reduced network, `groundmeas` measurement store).
+
+- **ADR for the `show_versions` return shape** — `gi.show_versions()`
+  shipped in 0.5.0, but the key set must be pinned across
+  `gf.show_versions()` and the planned `gm-cli doctor` before the other
+  two implement it, so one dashboard or CI pipeline can consume all
+  three. Tie to `ADR-0013` in `groundfield`.
+- **`gi.cross_repo` namespace and `docs/cross-repo.md`** — one page
+  naming the three packages and their data-flow contracts (`ρ(f)` fit
+  handoff, `multilayer_soil_model` bridge, planned
+  `Measurement → ImpedanceTable` exporter), which currently live in three
+  separate `CLAUDE.md` files. Blocked on `ADR-0013`.
+- **`gi.audit_apply(report_path)`** — read a Markdown audit report and
+  insert its bullets into the matching section of `[Unreleased]`.
+  Seventeen passes of hand-merging is the argument for it; the
+  `docs/audit-log.md` split in 0.5.0 is the argument against, since the
+  destination is no longer a single file.
+- **`gi.docs.assert_api_pages_exist`** — walk `__all__` and assert every
+  public symbol has at least one mkdocstrings `:::` directive under
+  `docs/api/`. Companion to the `mkdocs build --strict` check.
+- **`gi.connectors.dashboard_state`** — a serialisable state object so a
+  future dashboard can resume a notebook session.
+- **`docs/api/database.md` sub-section for `gi.show_versions()`** — the
+  helper is in `__all__` but has no rendered docs page entry.
 
 ### Explicit non-goals
 

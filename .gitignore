@@ -140,6 +140,12 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# jupyter notebooks
+/notebooks
+
+# powerfactory examples 
+/powerfactory_data
+
 # mypy
 .mypy_cache/
 .dmypy.json

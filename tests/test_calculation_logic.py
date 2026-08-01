@@ -39,8 +39,13 @@ def test_reduction_factor_for_bus7_fault7():
         mutual_impedance_formula="NaN"
     )
 
+    # 30 buses -> 29 branches -> 29 lengths (0.1 ... 2.9 km). The call used to
+    # pass ``range(30)``; the 30th entry (3.0 km) was silently dropped, so the
+    # reference values asserted further down were always computed from the
+    # 0.1 ... 2.9 line. Trimming the list to 29 entries keeps that network
+    # unchanged and only removes the entry that never had any effect.
     net2 = gi.create_network_assistant(name="Network2", frequencies=[50,250], number_buses=30, bus_type=bus_type, branch_type=branch_type,
-                                    branch_length=[(x+1)/10 for x in range(30)], specific_earth_resistance=100)
+                                    branch_length=[(x+1)/10 for x in range(29)], specific_earth_resistance=100)
 
 
     """

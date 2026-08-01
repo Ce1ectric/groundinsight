@@ -20,10 +20,18 @@ from .outage import (
     outage_context,
     run_outage_study,
 )
+from .transient import (
+    ResultTransient,
+    TransientStudy,
+)
+from . import waveforms
 
 __all__ = [
     "Outage",
     "OutageStudyResult",
     "outage_context",
     "run_outage_study",
+    "ResultTransient",
+    "TransientStudy",
+    "waveforms",
 ]
