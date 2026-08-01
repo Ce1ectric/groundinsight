@@ -1,0 +1,2186 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Simulation of grounding systems in electrical power grids.">
+      
+      
+      
+        <link rel="canonical" href="https://ce1ectric.github.io/groundinsight/transient/">
+      
+      
+        <link rel="prev" href="../concepts/">
+      
+      
+        <link rel="next" href="../audit-log/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Transient simulation - groundinsight</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#transient-simulation" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="groundinsight" class="md-header__button md-logo" aria-label="groundinsight" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            groundinsight
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Transient simulation
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Ce1ectric/groundinsight" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundinsight
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../quickstart/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Quickstart
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../concepts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Concepts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Transient simulation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../audit-log/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Audit log
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../examples/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../api/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  API reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="groundinsight" class="md-nav__button md-logo" aria-label="groundinsight" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    groundinsight
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Ce1ectric/groundinsight" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundinsight
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulation
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem-statement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem statement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fft-solver" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FFT solver
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="FFT solver">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#derivation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Derivation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#implementation-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation notes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#state-space-solver" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State-space solver
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="State-space solver">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#modified-nodal-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modified nodal analysis
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state-vector-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State-vector layout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#algebraic-constraint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Algebraic constraint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state-space-form" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State-space form
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#voltage-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Voltage sources
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mutual-coupling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mutual coupling
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pi-section-lumping-of-branch-shunt-capacitance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pi-section lumping of branch shunt capacitance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#time-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Time integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limitations_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-choose-which-solver" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to choose which solver
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-the-state-space-integration-is-fast" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why the state-space integration is fast
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../audit-log/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../examples/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/minimal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    — API smoke test
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/mv_ring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    20 kV MV ring — stationary fault analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/mv_ring_transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    20 kV MV ring — transient analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/pandapower_import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    — pandapower import walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/fault_sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault sweep — grounding impedance &amp; reduction factor per bus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../api/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/network_operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/core_models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/electrical_network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Electrical network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/pathfinder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pathfinder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/plotting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plotting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O — network importers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/outage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outage studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem-statement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem statement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fft-solver" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FFT solver
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="FFT solver">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#derivation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Derivation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#implementation-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation notes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#state-space-solver" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State-space solver
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="State-space solver">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#modified-nodal-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modified nodal analysis
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state-vector-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State-vector layout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#algebraic-constraint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Algebraic constraint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state-space-form" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State-space form
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#voltage-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Voltage sources
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mutual-coupling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mutual coupling
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pi-section-lumping-of-branch-shunt-capacitance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pi-section lumping of branch shunt capacitance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#time-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Time integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limitations_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-choose-which-solver" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to choose which solver
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-the-state-space-integration-is-fast" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why the state-space integration is fast
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="transient-simulation">Transient simulation<a class="headerlink" href="#transient-simulation" title="Permanent link">&para;</a></h1>
+<p>The stationary solver described in <a href="../concepts/">Concepts</a> operates in the
+phasor domain: one linear system per frequency, RMS / per-frequency
+post-processing. Many fault studies in low- and medium-voltage grounding
+analysis need a <em>time-domain</em> answer instead — for example to look at the
+fault-on / fault-off transient, the asymmetric peak with a decaying DC
+component, the L/C ringing on a switching edge, or the post-clearing
+ring-down of a grounding network with non-zero capacitive coupling.</p>
+<p><code>groundinsight</code> ships two solvers for this. They share the user-facing
+contract — define waveforms per source, declare observation points, get
+back a <code>ResultTransient</code> with time series — but they take fundamentally
+different mathematical paths. This page derives both, lists the
+assumptions each one makes, and explains where one is the right choice
+over the other.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">study</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">TransientStudy</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="n">fault_name</span><span class="o">=</span><span class="s2">&quot;F1&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">study</span><span class="o">.</span><span class="n">set_source_waveform</span><span class="p">(</span><span class="s2">&quot;src&quot;</span><span class="p">,</span> <span class="n">waveforms</span><span class="o">.</span><span class="n">sinusoidal_with_dc_offset</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">study</span><span class="o">.</span><span class="n">set_observation</span><span class="p">(</span><span class="n">buses</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;b10&quot;</span><span class="p">],</span> <span class="n">branches</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;L_09_10&quot;</span><span class="p">])</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">result_fft</span> <span class="o">=</span> <span class="n">study</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">t_end</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="s2">&quot;fft&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">result_ss</span>  <span class="o">=</span> <span class="n">study</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">t_end</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">5e-5</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="s2">&quot;state_space&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="problem-statement">Problem statement<a class="headerlink" href="#problem-statement" title="Permanent link">&para;</a></h2>
+<p>For a linear, time-invariant grounding network with a single excitation
+<span class="arithmatex">\(u(t)\)</span> at one source and a fixed topology between the observation start
+<span class="arithmatex">\(t = 0\)</span> and the end <span class="arithmatex">\(t_{\text{end}}\)</span>, the response at any observation
+point is the convolution</p>
+<div class="arithmatex">\[
+y(t) \;=\; \int_{0}^{t} h(t - \tau)\, u(\tau)\, \mathrm{d}\tau
+\]</div>
+<p>where <span class="arithmatex">\(h(t)\)</span> is the impulse response from the source's input port to the
+observation point. The two solvers are two ways of evaluating this
+convolution numerically; both, when applied to the same physical model
+with the same input and zero initial conditions, return the same
+<span class="arithmatex">\(y(t)\)</span> to numerical precision.</p>
+<h2 id="fft-solver">FFT solver<a class="headerlink" href="#fft-solver" title="Permanent link">&para;</a></h2>
+<h3 id="derivation">Derivation<a class="headerlink" href="#derivation" title="Permanent link">&para;</a></h3>
+<p>For an LTI system, multiplication in the frequency domain replaces
+convolution in the time domain:</p>
+<div class="arithmatex">\[
+Y(f) \;=\; H(f)\, U(f).
+\]</div>
+<p>In <code>groundinsight</code> the transfer function <span class="arithmatex">\(H(f)\)</span> is <em>not</em> stored as an
+analytic expression; instead it is evaluated implicitly per frequency by
+re-using the existing nodal solver. Pick a regular time grid</p>
+<div class="arithmatex">\[
+t_k \;=\; k\,\Delta t,\quad k = 0,\dots,N-1,
+\]</div>
+<p>with <span class="arithmatex">\(N\)</span> even. The discrete real-valued FFT of the source samples is</p>
+<div class="arithmatex">\[
+U_m \;=\; \sum_{k=0}^{N-1} u(t_k)\,e^{-2\pi\mathrm{i}\, km / N},
+\qquad m = 0,\dots,\tfrac{N}{2},
+\]</div>
+<p>evaluated on the frequency grid <span class="arithmatex">\(f_m = m / (N\,\Delta t)\)</span> (the real-FFT
+frequencies). The Nyquist limit is <span class="arithmatex">\(f_{\max} = 1 / (2\,\Delta t)\)</span>.</p>
+<p>For each <span class="arithmatex">\(f_m\)</span> the solver builds the per-frequency admittance matrix
+<span class="arithmatex">\(Y(f_m)\)</span> from the network's <code>BusType.impedance_formula</code> and
+<code>BranchType.self_impedance_formula</code> (exactly the same matrices the
+stationary <code>run_fault</code> builds at <span class="arithmatex">\(f = 50\,\mathrm{Hz}\)</span>), then solves</p>
+<div class="arithmatex">\[
+Y(f_m)\,\underline{v}(f_m) \;=\; \underline{i}(f_m)
+\]</div>
+<p>with the right-hand side derived from the source spectrum:
+<span class="arithmatex">\(\underline{i}(f_m)\)</span> has <span class="arithmatex">\(+U_m\)</span> at the source bus and <span class="arithmatex">\(-U_m\)</span> at the
+fault bus (current-source convention; see notes below for voltage
+sources). For each observation bus <span class="arithmatex">\(b\)</span> the resulting spectrum
+<span class="arithmatex">\(\underline{v}_b(f_m)\)</span> is transformed back into the time domain via the
+inverse real FFT:</p>
+<div class="arithmatex">\[
+y_b(t_k) \;=\; \frac{1}{N}\sum_{m=0}^{N/2} \underline{v}_b(f_m)\,
+              e^{+2\pi\mathrm{i}\,km / N}\,(\text{conjugate-symmetric reconstruction}).
+\]</div>
+<p>Branch currents are computed analogously: each branch's frequency-domain
+current is <span class="arithmatex">\((\underline{v}_{\text{to}} - \underline{v}_{\text{from}})/Z_{\text{self}}\)</span>,
+inverse-FFTed sample-by-sample.</p>
+<h3 id="implementation-notes">Implementation notes<a class="headerlink" href="#implementation-notes" title="Permanent link">&para;</a></h3>
+<p><em>Compile cache.</em> The compiled SymPy callables for every type's impedance
+formula are cached, so even at <span class="arithmatex">\(\sim 2000\)</span> FFT bins each unique formula
+is parsed exactly once.</p>
+<p><em>Mutual coupling.</em> The FFT solver uses the existing
+<code>_compute_phase_currents_from_paths</code> machinery to inject Norton-equivalent
+mutual currents per branch in the same way the stationary solver does.</p>
+<p><em>DC bin.</em> The lowest FFT bin sits at <span class="arithmatex">\(f_0 = 0\)</span>, so <strong>every</strong> transient run
+evaluates every impedance formula at zero frequency — there is no such thing
+as a transient study that avoids DC. Three cases have to be told apart there,
+and all of them arrive as <code>NaN</code> or <code>inf</code> in floating point: a removable
+singularity such as Carson's earth-return term (limit 0, so the conductor
+tends to its DC resistance), a true pole such as a series capacitance
+(infinite, i.e. the open circuit it should be) and a genuine formula error
+(raises). A purely inductive element is an exact <em>short circuit</em> at DC; since
+zero has no reciprocal, that one bin uses a small finite stand-in and warns
+with a <code>DCLimitWarning</code>. Up to v0.4.0 such an element was dropped from the
+matrix instead, i.e. a short circuit was modelled as a disconnection — see
+<a href="../concepts/#direct-current-f-0">Direct current (<code>f = 0</code>)</a> in the concepts
+chapter for the measured error and for when to merge the two buses instead.
+If <span class="arithmatex">\(Y(f_0)\)</span> is still singular after all this (a genuinely floating
+sub-network) the bin is set to zero, which is equivalent to a DC-removed
+reconstruction.</p>
+<h3 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>LTI and fixed topology.</strong> The FFT solver assumes the network is the
+  same at every <span class="arithmatex">\(f_m\)</span> that the FFT visits. Topology changes
+  mid-simulation (e.g. a breaker that opens half-way through the
+  trace) are not modelled.</li>
+<li><strong>Wraparound.</strong> The DFT is implicitly periodic. If the network's
+  impulse response has not decayed by <span class="arithmatex">\(t_{\text{end}}\)</span>, the tail
+  wraps around and corrupts the start of the next "period", which is
+  what the user sees as the simulation start. Choose
+  <span class="arithmatex">\(t_{\text{end}} \gg \tau_{\text{slowest}}\)</span> in practice.</li>
+<li><strong>Aliasing.</strong> Source-waveform content above the Nyquist
+  <span class="arithmatex">\(1 / (2\,\Delta t)\)</span> is folded back into the resolved band. Sharp
+  switching edges have nominally infinite bandwidth; the FFT result
+  shows Gibbs-style ringing on the rising/falling edges.</li>
+<li><strong>Voltage sources.</strong> Voltage-mode sources are rejected by the FFT
+  solver at <code>solve()</code> time with a clear pointer to the state-space
+  alternative. The reason: a voltage source's loop current depends on
+  the network state, which means <span class="arithmatex">\(\underline{i}(f_m)\)</span> is no longer a
+  pure function of the source spectrum.</li>
+</ul>
+<h2 id="state-space-solver">State-space solver<a class="headerlink" href="#state-space-solver" title="Permanent link">&para;</a></h2>
+<h3 id="modified-nodal-analysis">Modified nodal analysis<a class="headerlink" href="#modified-nodal-analysis" title="Permanent link">&para;</a></h3>
+<p>The state-space path builds an explicit ODE system from the lumped RLC
+formulas on <code>BusType</code> and <code>BranchType</code>. Each active bus contributes up
+to three parallel paths to remote earth:</p>
+<ul>
+<li>a resistive shunt with conductance <span class="arithmatex">\(G_k = 1 / R_k\)</span> (mandatory),</li>
+<li>an inductive shunt <span class="arithmatex">\(L_k\)</span> (optional, contributes one state),</li>
+<li>a capacitive shunt <span class="arithmatex">\(C_k\)</span> (optional, contributes one state).</li>
+</ul>
+<p>Each grounding branch with <span class="arithmatex">\(L_{\text{self}} &gt; 0\)</span> contributes one inductor
+state <span class="arithmatex">\(i_{\text{br}}\)</span> with the convention that <span class="arithmatex">\(i_{\text{br}} &gt; 0\)</span> when
+current flows from the <em>to</em> bus to the <em>from</em> bus internally — matching
+the project-wide branch-current convention <code>i_branch = (v_to - v_from)
+* Y_self</code>.</p>
+<h3 id="state-vector-layout">State-vector layout<a class="headerlink" href="#state-vector-layout" title="Permanent link">&para;</a></h3>
+<p>The full state vector <span class="arithmatex">\(\underline{x} = [\underline{x}_L;\,\underline{v}_C]\)</span> stacks</p>
+<div class="arithmatex">\[
+\underline{x}_L \;=\;
+\begin{bmatrix}
+\text{bus inductor currents } i_{L,k} \\[2pt]
+\text{branch inductor currents } i_{\text{br},j} \\[2pt]
+\text{voltage-source loop currents } i_{\text{loop},s}
+\end{bmatrix},
+\qquad
+\underline{v}_C \;=\;
+\begin{bmatrix} v_C \text{ at every capacitive bus} \end{bmatrix}.
+\]</div>
+<h3 id="algebraic-constraint">Algebraic constraint<a class="headerlink" href="#algebraic-constraint" title="Permanent link">&para;</a></h3>
+<p>Bus voltages without a capacitive shunt are determined algebraically by
+KCL. Collect the bus voltages into a single vector <span class="arithmatex">\(\underline{v}\)</span> and
+partition it into <span class="arithmatex">\(\underline{v}_R\)</span> (non-capacitive buses) and
+<span class="arithmatex">\(\underline{v}_C\)</span> (capacitive buses, which are also state variables).
+Then the nodal equation reads</p>
+<div class="arithmatex">\[
+G_a\,\underline{v} + B_L\,\underline{x}_L \;=\; \underline{u}_{\text{kcl}},
+\]</div>
+<p>where <span class="arithmatex">\(G_a\)</span> is the conductance matrix from all resistive elements (bus
+shunts, resistive branches, and Norton-equivalent admittances of any
+voltage sources with purely resistive <span class="arithmatex">\(Z_{\text{src}}\)</span>), <span class="arithmatex">\(B_L\)</span> maps
+inductor currents to KCL contributions, and <span class="arithmatex">\(\underline{u}_{\text{kcl}}\)</span>
+collects the source injections. Partitioned by capacitive vs.
+non-capacitive buses,</p>
+<div class="arithmatex">\[
+\begin{bmatrix} G_{RR} &amp; G_{RC} \\ G_{CR} &amp; G_{CC} \end{bmatrix}
+\begin{bmatrix} \underline{v}_R \\ \underline{v}_C \end{bmatrix}
++
+\begin{bmatrix} B_{L,R} \\ B_{L,C} \end{bmatrix}
+\underline{x}_L
+\;=\;
+\begin{bmatrix} \underline{u}_R \\ \underline{u}_C \end{bmatrix}.
+\]</div>
+<p>The non-capacitive sub-system is purely algebraic and is solved for
+<span class="arithmatex">\(\underline{v}_R\)</span> once, in closed form:</p>
+<div class="arithmatex">\[
+\underline{v}_R \;=\; G_{RR}^{-1}\!\left(
+\underline{u}_R - G_{RC}\,\underline{v}_C - B_{L,R}\,\underline{x}_L
+\right).
+\]</div>
+<p>Substituting back into the capacitive KCL gives an ODE for
+<span class="arithmatex">\(\underline{v}_C\)</span>, and substituting the same expression into the
+voltage-driven inductor equations gives an ODE for <span class="arithmatex">\(\underline{x}_L\)</span>.</p>
+<h3 id="state-space-form">State-space form<a class="headerlink" href="#state-space-form" title="Permanent link">&para;</a></h3>
+<p>Let <span class="arithmatex">\(M\)</span> be the matrix that maps bus voltages to inductor-current
+derivatives (<span class="arithmatex">\(M\)</span> has <span class="arithmatex">\(1/L\)</span> entries that pick out the relevant bus
+voltages per inductor) and <span class="arithmatex">\(N\)</span> be the diagonal of <span class="arithmatex">\(-R/L\)</span> entries that
+captures any series resistance in inductive branches. Define the helper
+products</p>
+<div class="arithmatex">\[
+\tilde{M} \;=\; M_R\,G_{RR}^{-1},
+\qquad
+\tilde{G} \;=\; G_{CR}\,G_{RR}^{-1}.
+\]</div>
+<p>The full state derivative reads</p>
+<div class="arithmatex">\[
+\dot{\underline{x}} =
+\underbrace{\begin{bmatrix}
+N - \tilde{M}\,B_{L,R} &amp; M_C - \tilde{M}\,G_{RC} \\
+C^{-1}(\tilde{G}\,B_{L,R} - B_{L,C}) &amp; C^{-1}(\tilde{G}\,G_{RC} - G_{CC})
+\end{bmatrix}}_{A}
+\underline{x}
++
+\underbrace{\begin{bmatrix}
+\tilde{M}\,B_{\text{kcl},R} + B_{\text{emf}} \\
+C^{-1}(B_{\text{kcl},C} - \tilde{G}\,B_{\text{kcl},R})
+\end{bmatrix}}_{B}
+\underline{u},
+\]</div>
+<p>where <span class="arithmatex">\(C^{-1}\)</span> is the diagonal <span class="arithmatex">\(\mathrm{diag}(1/C_k)\)</span> over the
+capacitive buses, <span class="arithmatex">\(B_{\text{kcl}}\)</span> encodes how source waveforms map onto
+KCL injections, and <span class="arithmatex">\(B_{\text{emf}}\)</span> encodes the EMF input of any
+voltage source (see below). Output bus voltages and branch currents are
+recovered with a separate <span class="arithmatex">\(C\,\underline{x} + D\,\underline{u}\)</span> pair
+that simply re-applies the algebraic substitution of <span class="arithmatex">\(\underline{v}_R\)</span>.</p>
+<h3 id="voltage-sources">Voltage sources<a class="headerlink" href="#voltage-sources" title="Permanent link">&para;</a></h3>
+<p>A Thevenin source between source bus <span class="arithmatex">\(a\)</span> and active fault bus <span class="arithmatex">\(b\)</span> with
+EMF <span class="arithmatex">\(u(t)\)</span> and internal impedance <span class="arithmatex">\(Z_{\text{src}}(f_{\text{eval}})\)</span> is
+decomposed at the network's lowest frequency into</p>
+<div class="arithmatex">\[
+R_{\text{src}} \;=\; \mathrm{Re}\,Z_{\text{src}},
+\qquad
+L_{\text{src}} \;=\; \mathrm{Im}\,Z_{\text{src}}\,/\,(2\pi f_{\text{eval}}).
+\]</div>
+<p>Two cases:</p>
+<ol>
+<li><strong><span class="arithmatex">\(L_{\text{src}} = 0\)</span></strong> — the source reduces to its Norton
+   equivalent: a current <span class="arithmatex">\(u(t)/R_{\text{src}}\)</span> injected at <span class="arithmatex">\(a\)</span> and
+   <span class="arithmatex">\(-u(t)/R_{\text{src}}\)</span> at <span class="arithmatex">\(b\)</span>, plus a loop conductance <span class="arithmatex">\(1/R_{\text{src}}\)</span>
+   added between <span class="arithmatex">\(a\)</span> and <span class="arithmatex">\(b\)</span> in <span class="arithmatex">\(G_a\)</span>. The state vector grows by
+   nothing; only <span class="arithmatex">\(B_{\text{kcl}}\)</span> and <span class="arithmatex">\(G_a\)</span> are augmented.</li>
+<li><strong><span class="arithmatex">\(L_{\text{src}} &gt; 0\)</span></strong> — a synthetic loop branch with series
+   <span class="arithmatex">\(R_{\text{src}}\)</span> and <span class="arithmatex">\(L_{\text{src}}\)</span> is added between <span class="arithmatex">\(a\)</span> and <span class="arithmatex">\(b\)</span>
+   exactly like a regular grounding branch with an inductor state. The
+   EMF enters the loop's KVL via <span class="arithmatex">\(B_{\text{emf}}\)</span>, contributing
+   <span class="arithmatex">\(1/L_{\text{src}}\)</span> at the source's input column. The user sees the
+   loop dynamics — including the L/R rise time of the fault current —
+   without doing any Norton math by hand.</li>
+</ol>
+<h3 id="mutual-coupling">Mutual coupling<a class="headerlink" href="#mutual-coupling" title="Permanent link">&para;</a></h3>
+<p>When <code>R_mutual_formula</code> and <code>M_mutual_formula</code> are populated on the
+branch type, the shield's KVL gains two additional terms:</p>
+<div class="arithmatex">\[
+v_{\text{to}} - v_{\text{from}} \;=\;
+R_{\text{self}}\,i_s + L_{\text{self}}\,\dot{i}_s
+\;+\; R_{\text{mut}}\,I_p + M\,\dot{I}_p,
+\]</div>
+<p>with <span class="arithmatex">\(I_p\)</span> the phase current on the source-to-fault path traversing
+this branch. The <span class="arithmatex">\(\dot{I}_p\)</span> term is awkward because <span class="arithmatex">\(I_p\)</span> is a function
+of the source waveform, not a state — we would have to numerically
+differentiate the input. The state-space solver avoids this with the
+substitution</p>
+<div class="arithmatex">\[
+z \;=\; i_s + \frac{M}{L_{\text{self}}}\,I_p,
+\]</div>
+<p>after which</p>
+<div class="arithmatex">\[
+\dot{z} \;=\; \frac{v_{\text{to}} - v_{\text{from}}}{L_{\text{self}}}
+- \frac{R_{\text{self}}}{L_{\text{self}}}\,z
++ \underbrace{\frac{R_{\text{self}}\,M - R_{\text{mut}}\,L_{\text{self}}}{L_{\text{self}}^2}}_{K_{\text{mut}}}
+\,I_p,
+\]</div>
+<p>a clean ODE in <span class="arithmatex">\(z\)</span> with <span class="arithmatex">\(I_p\)</span> entering as a regular linear input. The
+phase factor <span class="arithmatex">\(I_p / I_{\text{src}}\)</span> per branch is derived from the
+network's path topology — same algorithm as the FFT solver's mutual
+Norton injection. The actually observed shield current is recovered at
+output time via <span class="arithmatex">\(i_s = z - (M/L_{\text{self}})\,I_p\)</span>.</p>
+<p>The mutual coupling for state-space sources is currently restricted to
+current sources; voltage sources are skipped with a one-time warning
+because their loop current is itself a state and feeding it into the
+mutual feedforward needs an additional substitution layer.</p>
+<h3 id="pi-section-lumping-of-branch-shunt-capacitance">Pi-section lumping of branch shunt capacitance<a class="headerlink" href="#pi-section-lumping-of-branch-shunt-capacitance" title="Permanent link">&para;</a></h3>
+<p>Each grounding branch with a defined <code>C_self_formula</code> is treated as a
+pi-section: <span class="arithmatex">\(C_{\text{self}}/2\)</span> is added to each endpoint bus's
+effective capacitance. Buses with non-zero effective <span class="arithmatex">\(C\)</span> become
+capacitive states (see <a href="#algebraic-constraint">Algebraic constraint</a>);
+for branches without <code>L_self</code> the lumping still happens but only
+modifies the bus's algebraic capacitance term. The rule is purely
+additive: a substation with its own grounding capacitance plus two
+adjacent cables sees</p>
+<div class="arithmatex">\[
+C_{\text{eff},k} \;=\; C_{\text{bus},k} + \tfrac{1}{2}\sum_{j \in \mathcal{E}(k)} C_{\text{self},j}.
+\]</div>
+<p>For a uniform ring topology this simplifies to
+<span class="arithmatex">\(C_{\text{eff}} = C_{\text{branch}}\)</span> at every bus.</p>
+<h3 id="time-integration">Time integration<a class="headerlink" href="#time-integration" title="Permanent link">&para;</a></h3>
+<p><code>scipy.signal.lsim</code> is used for the actual ODE integration. For an LTI
+system on a regular time grid it discretises the state-space form via
+the matrix exponential</p>
+<div class="arithmatex">\[
+\Phi \;=\; \exp(A\,\Delta t),
+\qquad
+\Gamma \;=\; \int_0^{\Delta t} \exp\!\bigl(A(\Delta t - \tau)\bigr)\,B\,\mathrm{d}\tau,
+\]</div>
+<p>and steps through the discrete-time system</p>
+<div class="arithmatex">\[
+\underline{x}_{k+1} \;=\; \Phi\,\underline{x}_k + \Gamma\,\underline{u}_k
+\]</div>
+<p>with first-order hold on the input. Both <span class="arithmatex">\(\Phi\)</span> and <span class="arithmatex">\(\Gamma\)</span> are
+computed <em>once</em> (per integration step size <span class="arithmatex">\(\Delta t\)</span>); each subsequent
+sample is just a matrix-vector product. There is no Runge-Kutta
+function evaluation, no adaptive step control, no event detection — for
+the LTI case this is a strict win over a generic ODE solver.</p>
+<h3 id="limitations_1">Limitations<a class="headerlink" href="#limitations_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>LTI.</strong> The current implementation cannot handle nonlinear elements
+  (saturable inductors, surge arresters, arc models). Adding a
+  nonlinear path requires switching to <code>scipy.integrate.solve_ivp</code> with
+  an implicit method.</li>
+<li><strong>Fixed topology.</strong> Switching events are modelled via the source
+  waveform window (<code>t_on</code>, <code>t_off</code> of the waveform factories), not via
+  topology changes mid-integration. A real breaker that opens at a
+  zero crossing, or an arc that re-strikes, would need event detection
+  and state continuation between segments.</li>
+<li><strong>Voltage-source mutual coupling.</strong> Mutual coupling is evaluated only
+  for current sources. The phase current of a voltage source is itself
+  a state and is not yet woven into the mutual feedforward.</li>
+</ul>
+<h2 id="when-to-choose-which-solver">When to choose which solver<a class="headerlink" href="#when-to-choose-which-solver" title="Permanent link">&para;</a></h2>
+<p>The two solvers, applied to the <em>same</em> physical network with the <em>same</em>
+input and zero initial conditions, return the same time series to
+within numerical precision. The relevant differences are practical, not
+mathematical:</p>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>FFT</th>
+<th>State-space</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Source types</td>
+<td>current only</td>
+<td>current + voltage (Thevenin)</td>
+</tr>
+<tr>
+<td>Mutual coupling</td>
+<td>current sources only</td>
+<td>current sources only</td>
+</tr>
+<tr>
+<td>Bus capacitance</td>
+<td>via <code>impedance_formula</code></td>
+<td>via <code>C_formula</code> and pi-lumping</td>
+</tr>
+<tr>
+<td>Topology change mid-sim</td>
+<td>not supported</td>
+<td>not supported (yet)</td>
+</tr>
+<tr>
+<td>Initial conditions</td>
+<td>always zero</td>
+<td>always zero (extension point)</td>
+</tr>
+<tr>
+<td>Speed (LTI)</td>
+<td>very fast for short traces</td>
+<td>very fast via matrix exponential</td>
+</tr>
+<tr>
+<td>Speed (long traces)</td>
+<td>grows with sample count</td>
+<td>grows linearly per sample, <span class="arithmatex">\(\Phi\)</span> reused</td>
+</tr>
+<tr>
+<td>Future nonlinear elements</td>
+<td>impossible</td>
+<td>natural via <code>solve_ivp</code></td>
+</tr>
+</tbody>
+</table>
+<p>Use the FFT solver when:</p>
+<ul>
+<li>the network is strictly LTI with a fixed topology,</li>
+<li>the source is a current source (any waveform, including a switched
+  sinusoid with DC offset),</li>
+<li>you want a fast cross-check against the stationary solver — both use
+  the same per-frequency admittance matrices.</li>
+</ul>
+<p>Use the state-space solver when:</p>
+<ul>
+<li>the source is a Thevenin voltage source and you want to see the
+  loop dynamics including <span class="arithmatex">\(L_{\text{src}}\)</span>,</li>
+<li>you need to look at clean post-clearing ring-down behaviour
+  (FFT can have wraparound artifacts in this region if <span class="arithmatex">\(t_{\text{end}}\)</span>
+  is short),</li>
+<li>you plan to extend the model with nonlinear elements, custom event
+  handling, or non-zero initial conditions in a future iteration.</li>
+</ul>
+<h2 id="why-the-state-space-integration-is-fast">Why the state-space integration is fast<a class="headerlink" href="#why-the-state-space-integration-is-fast" title="Permanent link">&para;</a></h2>
+<p>A common surprise from users with a Matlab/Simulink background is that
+the state-space solver runs at roughly the same speed as the FFT
+solver, even for a 20-bus ring with mutual coupling and pi-lumped
+capacitances. Several factors combine:</p>
+<ol>
+<li><strong>Closed-form LTI integration.</strong> <code>lsim</code> discretises the LTI system
+   once per <span class="arithmatex">\(\Delta t\)</span> via the matrix exponential. The inner loop is
+   a pair of matrix-vector products, not the 4–7 function evaluations
+   of a Runge-Kutta step plus adaptive step control.</li>
+<li><strong>One-shot algebraic elimination.</strong> The Schur complement that
+   eliminates <span class="arithmatex">\(\underline{v}_R\)</span> runs once at matrix-build time. A
+   generic DAE solver iterates the algebraic sub-system at every
+   integration step.</li>
+<li><strong>Small dense matrices on BLAS/LAPACK.</strong> A 20-bus ring with mutual
+   coupling has on the order of 50 states; the resulting <span class="arithmatex">\(50 \times 50\)</span>
+   matrices fit in CPU cache and run at SIMD-vectorised speed. Block
+   diagram engines that route signals between hundreds of separate
+   blocks pay overhead for every connection.</li>
+<li><strong>Pure linear network.</strong> No nonlinear element forces a Newton
+   iteration per step; no event detection forces step refinement.</li>
+</ol>
+<p>The combination is essentially a hand-tuned LTI integrator without any
+of the bells and whistles a general-purpose simulation engine has to
+provide. As soon as nonlinear elements, real switching events, or
+adaptive step control are needed the speed advantage closes — at that
+point the path forward is <code>scipy.integrate.solve_ivp</code> with an implicit
+method, which is an extension point of the current implementation.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024&ndash;2026 Christian Ehlert
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Ce1ectric/groundinsight" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "content.code.annotate", "toc.follow", "search.highlight", "search.share"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

@@ -16,7 +16,7 @@
         <link rel="prev" href="../quickstart/">
       
       
-        <link rel="next" href="../examples/">
+        <link rel="next" href="../transient/">
       
       
         
@@ -307,6 +307,44 @@
   
   
   
+    <li class="md-tabs__item">
+      <a href="../transient/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Transient simulation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../audit-log/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Audit log
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
     
     
       <li class="md-tabs__item">
@@ -569,6 +607,95 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Impedance formulas">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#which-values-a-formula-may-produce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which values a formula may produce
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#direct-current-f-0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Direct current (f = 0)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Direct current (f = 0)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#three-singularities-told-apart-numerically" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Three singularities, told apart numerically
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-finite-reactance-has-no-reading-at-dc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A finite reactance has no reading at DC
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#an-ideal-bond-is-a-short-circuit-and-a-short-circuit-has-no-admittance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An ideal bond is a short circuit, and a short circuit has no admittance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#every-transient-study-contains-dc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Every transient study contains DC
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-a-source-and-a-fault-need-at-dc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a source and a fault need at DC
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -694,6 +821,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#transient-simulations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transient simulations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#worked-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Worked example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#summary-of-the-calculation-pipeline" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -718,11 +867,69 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../audit-log/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
     
     
       
         
           
+        
+      
+        
+      
         
       
         
@@ -744,7 +951,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -766,14 +973,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -792,14 +999,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../examples/simple/" class="md-nav__link">
+      <a href="../examples/minimal/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Simple example
+    — API smoke test
   
 
     
@@ -820,14 +1027,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../examples/cired/" class="md-nav__link">
+      <a href="../examples/mv_ring/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    CIRED case
+    20 kV MV ring — stationary fault analysis
   
 
     
@@ -848,14 +1055,70 @@
   
   
     <li class="md-nav__item">
-      <a href="../examples/low_voltage/" class="md-nav__link">
+      <a href="../examples/mv_ring_transient/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Generate Formulas for Grounding Elements
+    20 kV MV ring — transient analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/pandapower_import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    — pandapower import walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/fault_sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault sweep — grounding impedance &amp; reduction factor per bus
   
 
     
@@ -907,6 +1170,8 @@
       
         
       
+        
+      
     
     
     
@@ -920,7 +1185,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -942,14 +1207,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1213,6 +1478,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1276,6 +1569,95 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Impedance formulas">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#which-values-a-formula-may-produce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which values a formula may produce
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#direct-current-f-0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Direct current (f = 0)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Direct current (f = 0)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#three-singularities-told-apart-numerically" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Three singularities, told apart numerically
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-finite-reactance-has-no-reading-at-dc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A finite reactance has no reading at DC
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#an-ideal-bond-is-a-short-circuit-and-a-short-circuit-has-no-admittance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An ideal bond is a short circuit, and a short circuit has no admittance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#every-transient-study-contains-dc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Every transient study contains DC
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-a-source-and-a-fault-need-at-dc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a source and a fault need at DC
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1402,6 +1784,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#transient-simulations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transient simulations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#worked-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Worked example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#summary-of-the-calculation-pipeline" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1503,6 +1907,222 @@ for every network frequency.</p>
 by SymPy is admissible. The literal string <code>"nan"</code> maps to an effectively
 infinite impedance and can be used to model open ends (broken shields,
 isolators etc.).</p>
+<h3 id="which-values-a-formula-may-produce">Which values a formula may produce<a class="headerlink" href="#which-values-a-formula-may-produce" title="Permanent link">&para;</a></h3>
+<p>Every impedance that ends up on the diagonal of <span class="arithmatex">\(Y(f)\)</span> is inverted, so not
+every number a formula can produce is a physically meaningful model. Three
+results are rejected with a <code>ValueError</code> that names the element, the
+frequency and the formula:</p>
+<table>
+<thead>
+<tr>
+<th>Result</th>
+<th>Why it is rejected</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="arithmatex">\(\underline{Z} = 0\)</span> exactly</td>
+<td>An element with no impedance has no admittance either. It drops out of the nodal system entirely and therefore reports the <em>opposite</em> of the ideal-earth limit: full earth potential rise and no current into the soil, indistinguishable from a bus with no electrode at all.</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(0 &lt; \lvert\underline{Z}\rvert \lesssim 5.6\cdot10^{-309}\ \Omega\)</span></td>
+<td>Too small to invert in double precision. <span class="arithmatex">\(1/\underline{Z}\)</span> overflows, reaches the admittance matrix as infinity, and the bus current comes back as <code>NaN</code>.</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(\operatorname{Re}(\underline{Z}) &lt; 0\)</span></td>
+<td>An earth electrode, an earthing conductor and a cable screen are passive; a negative resistance generates energy. It also pushes <span class="arithmatex">\(Y(f)\)</span> towards singularity, where the earth potential rise grows without bound while every intermediate number still looks plausible.</td>
+</tr>
+</tbody>
+</table>
+<p>A <strong>near-ideal earth</strong> is modelled with a small finite value, not with zero.
+The solution converges smoothly as <span class="arithmatex">\(\underline{Z}\to 0\)</span>, with a relative error
+of the order of the ratio between that value and the other impedances in the
+network: in a network whose impedances are of the order of <span class="arithmatex">\(1\ \Omega\)</span>,
+<span class="arithmatex">\(10^{-6}\ \Omega\)</span> reproduces the ideal-earth limit to about seven digits, and
+every further decade buys another digit.</p>
+<p>A <strong>negative real part</strong> is almost always a fitted formula evaluated outside
+the range it was fitted on. <code>0.05*rho - 2</code>, a plausible fit for a rod
+electrode, is negative below <span class="arithmatex">\(\rho_E = 40\ \Omega\,\text{m}\)</span> — wet clay, not
+an exotic soil. Check a new formula at the lowest <span class="arithmatex">\(\rho_E\)</span>, the lowest
+frequency and the shortest length that occur in the model.</p>
+<p>The rule applies exactly where an impedance is inverted, and nowhere else:</p>
+<ul>
+<li><strong>Bus grounding impedances</strong> and the <strong>self impedances of branches with
+  <code>grounding_conductor=True</code></strong> are checked; the self impedance of a branch
+  with <code>grounding_conductor=False</code> is never inverted and is not checked.</li>
+<li><strong>Mutual impedances</strong> are not checked. <code>Z_mutual = 0</code> is the normal way to
+  express "no coupling" and stays legal.</li>
+<li><strong>Source impedances</strong> of voltage sources are checked. (A zero source
+  impedance was already rejected when the source was constructed; a negative
+  one was not.)</li>
+<li><strong>Inactive</strong> buses and branches, and frequencies outside
+  <code>network.frequencies</code>, are not checked — they never reach the matrix.</li>
+<li>Infinity stays legal everywhere: it is the documented open-end sentinel,
+  and <span class="arithmatex">\(1/\infty = 0\)</span> is the right answer. <code>NaN</code> is reported by its own
+  handler.</li>
+</ul>
+<p>The check runs both where the impedance is computed (<code>calculate_impedance</code>)
+and again immediately before the matrix is assembled, because impedances are
+<em>not</em> recomputed at solve time — a value written directly into
+<code>bus.impedance[f]</code>, or restored from JSON or from the database, would
+otherwise reach the solver unexamined.</p>
+<p>In a <strong>transient simulation</strong> the same rule is applied to every bin of the
+FFT frequency grid, the 0 Hz bin included. At 0 Hz the first two rows of the
+table are inverted: a purely reactive impedance such as <code>j*2*pi*f*L</code> really is
+a short circuit at DC, so there the value is accepted and replaced by a small
+finite stand-in instead of being rejected — see
+<a href="#direct-current-f-0">Direct current (<code>f = 0</code>)</a> below. The negative real part
+stays rejected at 0 Hz as well; a passive element is passive at DC too.</p>
+<h2 id="direct-current-f-0">Direct current (<code>f = 0</code>)<a class="headerlink" href="#direct-current-f-0" title="Permanent link">&para;</a></h2>
+<p><code>f = 0</code> is an ordinary entry in <code>Network.frequencies</code> and in <code>Fault.scalings</code>,
+and a direct-current study needs nothing beyond it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">net</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">create_network</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;dc_return&quot;</span><span class="p">,</span> <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">0.0</span><span class="p">])</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># ... buses and branches ...</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_source</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;electrode&quot;</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="p">{</span><span class="mf">0.0</span><span class="p">:</span> <span class="mf">1000.0</span><span class="p">},</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_fault</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;F&quot;</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="s2">&quot;C&quot;</span><span class="p">,</span> <span class="n">scalings</span><span class="o">=</span><span class="p">{</span><span class="mf">0.0</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">},</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">gi</span><span class="o">.</span><span class="n">run_fault</span><span class="p">(</span><span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">,</span> <span class="n">fault_name</span><span class="o">=</span><span class="s2">&quot;F&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>DC needs a section of its own not because the solver is special there but
+because it is <em>not</em>. <span class="arithmatex">\(Y(f)\,\underline{u}(f) = \underline{i}(f)\)</span> has no
+frequency dependence of its own — <span class="arithmatex">\(f\)</span> enters only through the impedances — so
+a DC solve is an ordinary solve and it is exact. What has to be handled at
+zero frequency is the other half: what an impedance <em>formula</em> means there, and
+what happens when the number it produces has no reciprocal.</p>
+<div class="admonition note">
+<p class="admonition-title">Why <code>f = 0</code> and not <code>f = 0.1 Hz</code></p>
+<p>Entering a small frequency instead of zero was the established workaround,
+and for a conductor whose reactance is written as <code>j*2*pi*f*L</code> it was
+accurate: on the reference chain of <code>notebooks/24_dc_studies.ipynb</code> (two
+10 km spans of 0.25 Ω/km earthing conductor, 1 kA injected at one end and
+the fault at the other) 0.1 Hz gives
+<span class="arithmatex">\(456.621004575\ \text{V}\)</span> and 0 Hz gives <span class="arithmatex">\(456.621004566\ \text{V}\)</span> —
+eleven digits. It was needed only because <code>f = 0</code> used to raise.</p>
+<p>For the far more common spelling <code>(0.25 + j*0.6)*l</code> the workaround is
+wrong, and not marginally: 0.1 Hz keeps the <span class="arithmatex">\(6\ \Omega\)</span> of reactance that
+does not exist at DC and reports <strong>718.54 V instead of 456.62 V</strong>, with
+<span class="arithmatex">\(Z_G = 2.87\ \Omega\)</span> instead of <span class="arithmatex">\(1.82\ \Omega\)</span> — 57 % high. The reactance
+is constant, so making the frequency smaller does not make the error
+smaller.</p>
+</div>
+<h3 id="three-singularities-told-apart-numerically">Three singularities, told apart numerically<a class="headerlink" href="#three-singularities-told-apart-numerically" title="Permanent link">&para;</a></h3>
+<p>At <span class="arithmatex">\(f = 0\)</span> three quite different things can happen to a formula string, and in
+floating point all three arrive as <code>NaN</code> or <code>inf</code>:</p>
+<table>
+<thead>
+<tr>
+<th>At <code>f = 0</code> the formula …</th>
+<th>Example</th>
+<th>What <code>groundinsight</code> does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>has a <strong>removable singularity</strong> — <span class="arithmatex">\(0\cdot\infty\)</span> with a finite limit</td>
+<td>Carson's earth-return term <span class="arithmatex">\(\omega\ln\!\big(658\sqrt{\rho/f}\,/\,\text{GMR}\big)\)</span>, whose limit is 0 because <span class="arithmatex">\(\omega\)</span> vanishes linearly while the logarithm diverges logarithmically</td>
+<td>evaluates the limit and returns it, so the conductor tends to its DC resistance</td>
+</tr>
+<tr>
+<td>has a <strong>true pole</strong></td>
+<td>a series capacitance, <span class="arithmatex">\(1/(j\omega C)\to\infty\)</span></td>
+<td>returns infinity, which the solver already reads as an open circuit — the correct physics</td>
+</tr>
+<tr>
+<td><strong>genuinely fails</strong></td>
+<td>a <code>NaN</code> parameter, <span class="arithmatex">\(\sqrt{\rho}\)</span> with <span class="arithmatex">\(\rho&lt;0\)</span>, <span class="arithmatex">\(0/0\)</span></td>
+<td>raises <code>ValueError</code> naming the formula, the frequency and the parameters, exactly as at any other frequency</td>
+</tr>
+</tbody>
+</table>
+<p>The limit is determined by approaching zero on the decade sequence
+<code>1e-6, 1e-7, 1e-8 Hz</code> and comparing two consecutive <em>absolute</em> differences.
+Measured on the reference cases: an inductance gives <span class="arithmatex">\(d_1 = 1.41\cdot10^{-8}\)</span>,
+<span class="arithmatex">\(d_2 = 1.41\cdot10^{-9}\)</span> — shrinking, hence convergent — against
+<span class="arithmatex">\(d_1 = 1.43\cdot10^{12}\)</span>, <span class="arithmatex">\(d_2 = 1.43\cdot10^{13}\)</span> for a capacitance, growing,
+hence a pole. The criterion is deliberately absolute: a relative one cannot
+classify a formula whose limit is zero, because there the relative change per
+decade stays at 90 % forever. The tie-break is biased towards <em>convergent</em>,
+because mistaking a pole for a limit yields a very large finite impedance that
+behaves almost like the open circuit it should have been, whereas the opposite
+mistake would silently disconnect a real earthing conductor.</p>
+<h3 id="a-finite-reactance-has-no-reading-at-dc">A finite reactance has no reading at DC<a class="headerlink" href="#a-finite-reactance-has-no-reading-at-dc" title="Permanent link">&para;</a></h3>
+<p><code>(0.25 + j*0.6)*l</code> reports the same reactance at every frequency, zero
+included — and at DC a reactance can only vanish (<span class="arithmatex">\(j\omega L \to 0\)</span>) or be
+infinite (<span class="arithmatex">\(1/(j\omega C)\to\infty\)</span>). A finite non-zero one is a statement about
+nothing. The 0 Hz bin therefore takes the real part, drops the reactance and
+emits a <code>DCLimitWarning</code> that quotes <span class="arithmatex">\(X/R\)</span> and the remedy; all other
+frequencies are untouched. Write the reactance as <code>j*2*pi*f*L</code> and nothing is
+dropped and nothing warns. The warning quotes the <em>ratio</em> rather than the two
+values because the ratio is length-invariant and therefore identical for every
+branch sharing a <code>BranchType</code> — which lets Python's default warning filter
+collapse a hundred-branch network into a single line.</p>
+<p>The fallback applies to impedance formulas only. The <code>R_formula</code>, <code>L_formula</code>
+and <code>C_formula</code> fields consumed by the state-space transient solver are real at
+every frequency by contract, so a complex value there is reported as an error
+rather than repaired.</p>
+<h3 id="an-ideal-bond-is-a-short-circuit-and-a-short-circuit-has-no-admittance">An ideal bond is a short circuit, and a short circuit has no admittance<a class="headerlink" href="#an-ideal-bond-is-a-short-circuit-and-a-short-circuit-has-no-admittance" title="Permanent link">&para;</a></h3>
+<p>A purely inductive element — a short bonding conductor modelled as
+<code>j*2*pi*f*L*l</code>, with no resistance — is an <em>exact</em> zero at DC. That is correct
+physics, and it is also a number the nodal formulation cannot invert. Up to
+v0.4.0 both solvers responded by dropping such an element, i.e. by modelling a
+short circuit as a disconnection. On the reference chain
+(<span class="arithmatex">\(Z_A = 0.8\ \Omega\)</span>, <span class="arithmatex">\(Z_B = 12\ \Omega\)</span>, <span class="arithmatex">\(Z_C = 3.5\ \Omega\)</span>, bond A–B purely
+inductive, <span class="arithmatex">\(R_{BC} = 0.35\ \Omega\)</span>, 1 kA at A, fault at C) the correct answer is
+<span class="arithmatex">\(u_A = u_B = 57.07\ \text{V}\)</span>, <span class="arithmatex">\(u_C = -266.30\ \text{V}\)</span>; what came back was
+<span class="arithmatex">\(800.00\)</span>, <span class="arithmatex">\(-2649.84\)</span> and <span class="arithmatex">\(-2727.13\ \text{V}\)</span> — wrong by factors of 14.0, 46.4
+and 10.2, with the sign of bus B reversed, because bus A had been cut off from
+the network and reported its own electrode instead of the parallel combination.</p>
+<p>Such an element is now given a finite stand-in <strong>at the 0 Hz bin only</strong>:</p>
+<div class="arithmatex">\[
+Z_{\text{sub}} = \sqrt{\varepsilon_{\text{mach}}}\; Z_{\min}
+              = 1.4901\cdot10^{-8}\; Z_{\min},
+\]</div>
+<p>where <span class="arithmatex">\(Z_{\min}\)</span> is the smallest finite non-zero impedance magnitude the
+network carries at that frequency. Tying the stand-in to <span class="arithmatex">\(Z_{\min}\)</span> was chosen
+by measurement against analytically node-merged reference networks; it costs a
+relative error of about <span class="arithmatex">\(10^{-5}\)</span> in the worst case observed, <span class="arithmatex">\(1.6\cdot10^{-9}\)</span>
+on the chain above, and <span class="arithmatex">\(8.3\cdot10^{-8}\)</span> at the DC bin of the corresponding
+transient run — better than modelling the bond as an explicit <span class="arithmatex">\(10^{-8}\ \Omega\)</span>
+resistance. Every use is announced by a <code>DCLimitWarning</code> naming the elements,
+the substitute and the reference it was scaled to.</p>
+<p><strong>When to merge two buses instead.</strong> The exact model of an ideal bond is one
+node, not two, and the stand-in is an approximation of that merge. Prefer the
+merge — one bus whose impedance is the parallel combination of the two
+electrodes — whenever the <em>difference</em> in earth potential rise across the bond
+is part of the result you report (across an ideal bond it is zero, and whatever
+the stand-in produces there is numerical residue), or when the bonded buses
+carry impedances many orders of magnitude away from <span class="arithmatex">\(Z_{\min}\)</span>. For the usual
+question — the earth potential rise of the bonded group and the current leaving
+it — the substitution is accurate to the digits above and needs no change to
+the model. Giving the bond a small but honest resistance works equally well and
+removes the warning.</p>
+<h3 id="every-transient-study-contains-dc">Every transient study contains DC<a class="headerlink" href="#every-transient-study-contains-dc" title="Permanent link">&para;</a></h3>
+<p>An <code>rfft</code> frequency grid always contains a 0 Hz bin, so <em>every</em> transient run
+evaluates every formula at zero frequency, whether or not the study is about
+DC. There was never a <code>f = 0.1 Hz</code> workaround available on that path, which is
+why a Carson-type conductor could not be used in a transient study at all and
+why a purely inductive bond was silently opened in every one. Both are fixed on
+the same code path as the stationary case; the state-space solver works from
+the lumped R/L/C fields and never inverts an impedance, so it has no DC
+inversion problem and serves as the independent cross-check.</p>
+<h3 id="what-a-source-and-a-fault-need-at-dc">What a source and a fault need at DC<a class="headerlink" href="#what-a-source-and-a-fault-need-at-dc" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Current source.</strong> <code>values</code> needs a <code>0.0</code> key: <code>values={0.0: 1000.0}</code>. Give
+  it a real number — at zero frequency the imaginary part is not a phase shift.</li>
+<li><strong>Voltage source.</strong> <code>voltage</code> and <code>source_impedance</code> both need a <code>0.0</code> entry,
+  and the source impedance must have a real part: the Thevenin loop is closed
+  by inverting it, and a purely inductive internal impedance would be zero at
+  DC. A zero <code>source_impedance</code> is rejected when the source is constructed.</li>
+<li><strong>Fault.</strong> <code>scalings</code> needs a <code>0.0</code> key; a fault that does not scale 0 Hz
+  contributes nothing at DC.</li>
+<li><strong>IEC 60909 characteristics.</strong> <code>i_k_a</code>, <code>r_to_x</code> and <code>kappa</code> describe the
+  DC offset and thermal equivalent of an <em>alternating</em> short-circuit current.
+  They do not enter the solve (see <a href="#objects">Objects</a>) and have no meaning in
+  a pure DC study; leave them unset there.</li>
+<li><strong>Mixed studies.</strong> <code>frequencies=[0.0, 50.0]</code> is legal and the two are
+  independent: the DC handling is confined to the 0 Hz bin, and a study
+  carrying both returns the same 50 Hz answer, bit for bit, as one carrying
+  50 Hz alone.</li>
+</ul>
 <h2 id="nodal-admittance-formulation">Nodal-admittance formulation<a class="headerlink" href="#nodal-admittance-formulation" title="Permanent link">&para;</a></h2>
 <p>All computations take place per frequency <span class="arithmatex">\(f\)</span> in the phasor domain.
 <code>groundinsight</code> assembles an admittance matrix <span class="arithmatex">\(Y(f)\)</span> of size <span class="arithmatex">\(N\times N\)</span>
@@ -1543,6 +2163,14 @@ paths. By default every path carries the full source current. The optional
 individual parallel legs; if you set <code>auto_parallel_coefficients=True</code> on
 <code>run_fault</code>, <code>groundinsight</code> solves a reduced phase-only network first and
 uses its current distribution as the per-path scaling.</p>
+<p>Two different situations both end in "no paths", and <code>groundinsight</code> treats
+them differently on purpose. <strong>No sources or no faults at all</strong> is rejected:
+the enumeration runs over <code>sources × faults</code>, so an empty side means nothing
+was ever asked, and the all-zero result that follows is an artefact of an
+incomplete model rather than a statement about the system. <strong>No path between
+an existing source and an existing fault</strong> is accepted: that is the signature
+of an islanded fault bus — the normal outcome of an outage scenario — and 0 V
+is then the physically correct answer.</p>
 <h2 id="derived-quantities">Derived quantities<a class="headerlink" href="#derived-quantities" title="Permanent link">&para;</a></h2>
 <p>Once <span class="arithmatex">\(\underline{u}(f)\)</span> is known for every frequency, three result families
 are computed:</p>
@@ -1662,13 +2290,75 @@ the EPR at the fault bus exceeds a touch-voltage limit
 uniform scaling factor <span class="arithmatex">\(c\)</span> of <code>Bus.specific_earth_resistance</code> on a
 user-selected bus set, re-evaluates each <code>BusType.impedance_formula</code>
 through the existing SymPy machinery and triggers <code>run_fault</code> at
-every trial value. The output is the largest <span class="arithmatex">\(c\)</span> that still
-satisfies <span class="arithmatex">\(|U_\text{EPR}(f)|_{\text{RMS}} \le u_{\max}\)</span>, the EPR at
-that point, and the per-bus <span class="arithmatex">\(\rho_{\max} = c\,\rho_0\)</span>. The original
-<span class="arithmatex">\(\rho\)</span> values are restored via a <code>finally</code> block, so the network is
-unchanged after the call. A frequency-dependent variant
-(<code>find_max_rho_f_scaling</code>) extends the same idea to two-parameter
-rho-f curves.</p>
+every trial value. The output is the largest <em>verified admissible</em>
+<span class="arithmatex">\(c\)</span> — a factor for which <span class="arithmatex">\(|U_\text{EPR}(f)|_{\text{RMS}} \le u_{\max}\)</span>
+was actually measured — together with the EPR at that point and the
+per-bus <span class="arithmatex">\(\rho_{\max} = c\,\rho_0\)</span>. The original <span class="arithmatex">\(\rho\)</span> values are
+restored via a <code>finally</code> block, so the network is unchanged after the
+call. A frequency-dependent variant (<code>find_max_rho_f_scaling</code>)
+extends the same idea to two-parameter rho-f curves.</p>
+<p>"Verified admissible" and "maximal" are not the same claim, and the
+result distinguishes them. A bisection can also end because the
+entire bracket was admissible (the true maximum lies above
+<code>c_bounds[1]</code> and was never determined) or because the iteration cap
+was reached before the bracket closed. In both cases the returned
+<span class="arithmatex">\(c\)</span> is still a factor that satisfies the limit — it is simply not the
+largest one. The <code>status</code> and <code>converged</code> keys carry that
+distinction, and <code>c_bracket</code> gives the interval that provably
+contains the true threshold; an infinite upper bound is the
+machine-readable form of "widen <code>c_bounds</code>". Only a converged result
+is a maximum in the sense the question asks for.</p>
+<h2 id="transient-simulations">Transient simulations<a class="headerlink" href="#transient-simulations" title="Permanent link">&para;</a></h2>
+<p>The phasor-domain pipeline above answers the <em>stationary</em> question.
+For non-sinusoidal fault currents (fault inception, DC offset
+asymmetry, clearing, switching transients) the
+<code>groundinsight.simulation.transient</code> sub-module adds a time-domain
+layer on top of the same network model. Two solver paths are
+available: an FFT-based path that re-uses the existing
+<code>impedance_formula</code> of <code>BusType</code> and <code>BranchType</code> per FFT bin, and a
+state-space ODE path that consumes the lumped RLC fields
+(<code>R_formula</code>, <code>L_formula</code>, <code>C_formula</code>, <code>R_self_formula</code>,
+<code>L_self_formula</code>, <code>C_self_formula</code>, <code>R_mutual_formula</code>,
+<code>M_mutual_formula</code>) and integrates with <code>scipy.signal.lsim</code>. Source
+waveforms come from the <code>groundinsight.simulation.waveforms</code>
+library (<code>step</code>, <code>sinusoidal_with_dc_offset</code>,
+<code>damped_oscillation</code>) or from any user-supplied vectorised callable
+<code>f(t) -&gt; values</code>. See the
+<a href="../api/transient/">transient-simulations reference</a> for the full API.</p>
+<h2 id="worked-example">Worked example<a class="headerlink" href="#worked-example" title="Permanent link">&para;</a></h2>
+<p>The full physical model behind the equations above maps onto the
+Python API in a single block:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span> <span class="nn">groundinsight</span> <span class="k">as</span> <span class="nn">gi</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">net</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">create_network</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;demo&quot;</span><span class="p">,</span> <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">,</span> <span class="mf">250.0</span><span class="p">])</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">bus_type</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">BusType</span><span class="p">(</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;SubstationBus&quot;</span><span class="p">,</span> <span class="n">system_type</span><span class="o">=</span><span class="s2">&quot;Substation&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="n">voltage_level</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="n">impedance_formula</span><span class="o">=</span><span class="s2">&quot;rho * 0.01 + j * f * 1/50 * 0.1&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="p">)</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">cable_type</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">BranchType</span><span class="p">(</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;MSCable&quot;</span><span class="p">,</span> <span class="n">grounding_conductor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">self_impedance_formula</span><span class="o">=</span><span class="s2">&quot;(0.25 + j * f * 0.012) * l&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="n">mutual_impedance_formula</span><span class="o">=</span><span class="s2">&quot;(0.0  + j * f * 0.012) * l&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="p">)</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_bus</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;b0&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">bus_type</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_bus</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;b1&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">bus_type</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_branch</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;ln&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">cable_type</span><span class="p">,</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>                 <span class="n">from_bus</span><span class="o">=</span><span class="s2">&quot;b0&quot;</span><span class="p">,</span> <span class="n">to_bus</span><span class="o">=</span><span class="s2">&quot;b1&quot;</span><span class="p">,</span> <span class="n">length</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_source</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;src&quot;</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="s2">&quot;b0&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>                 <span class="n">values</span><span class="o">=</span><span class="p">{</span><span class="mf">50.0</span><span class="p">:</span> <span class="mf">1000.0</span><span class="p">,</span> <span class="mf">250.0</span><span class="p">:</span> <span class="mf">200.0</span><span class="p">},</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_fault</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;F1&quot;</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="s2">&quot;b1&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>                <span class="n">scalings</span><span class="o">=</span><span class="p">{</span><span class="mf">50.0</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">250.0</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">},</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="n">gi</span><span class="o">.</span><span class="n">run_fault</span><span class="p">(</span><span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">,</span> <span class="n">fault_name</span><span class="o">=</span><span class="s2">&quot;F1&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="nb">print</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">res_all_impedances</span><span class="p">())</span>   <span class="c1"># Z_G and r per frequency</span>
+</code></pre></div>
+<p>The <code>Network</code> API hides every step listed in the next section behind
+<code>run_fault</code>; the results are exposed as Polars DataFrames via
+<code>net.res_buses(fault="F1")</code>, <code>net.res_branches(fault="F1")</code> and
+<code>net.res_all_impedances()</code>.</p>
 <h2 id="summary-of-the-calculation-pipeline">Summary of the calculation pipeline<a class="headerlink" href="#summary-of-the-calculation-pipeline" title="Permanent link">&para;</a></h2>
 <p><code>run_fault(network, fault_name)</code> executes the following steps (see
 <code>network_operations.run_fault</code> and <code>ElectricalNetwork</code> for details):</p>
@@ -1770,8 +2460,6 @@ re-solving after topology changes only requires a fresh <code>run_fault</code> c
       <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

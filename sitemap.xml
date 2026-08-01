@@ -2,74 +2,94 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/audit-log/</loc>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/concepts/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/installation/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/quickstart/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/transient/</loc>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/analysis/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/core_models/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/database/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/electrical_network/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/io/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/network_operations/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/outage/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/pathfinder/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/plotting/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/api/transient/</loc>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/examples/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
-         <loc>https://ce1ectric.github.io/groundinsight/examples/cired/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <loc>https://ce1ectric.github.io/groundinsight/examples/fault_sweep/</loc>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
-         <loc>https://ce1ectric.github.io/groundinsight/examples/low_voltage/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <loc>https://ce1ectric.github.io/groundinsight/examples/minimal/</loc>
+         <lastmod>2026-08-01</lastmod>
     </url>
     <url>
-         <loc>https://ce1ectric.github.io/groundinsight/examples/simple/</loc>
-         <lastmod>2026-05-09</lastmod>
+         <loc>https://ce1ectric.github.io/groundinsight/examples/mv_ring/</loc>
+         <lastmod>2026-08-01</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/examples/mv_ring_transient/</loc>
+         <lastmod>2026-08-01</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/examples/pandapower_import/</loc>
+         <lastmod>2026-08-01</lastmod>
     </url>
 </urlset>
