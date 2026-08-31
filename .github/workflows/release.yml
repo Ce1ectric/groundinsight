@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - "v*"
+  # Manual re-run for a tag that already exists. Use this when a publish
+  # failed for a reason unrelated to the build (a missed environment
+  # approval, a PyPI outage) so the tag does not have to be moved.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish (e.g. v0.5.0)"
+        required: true
+        type: string
 
 jobs:
   build:
@@ -11,10 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - name: Set up Python 3.14
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.14"
 
@@ -24,11 +35,50 @@ jobs:
           virtualenvs-create: true
           virtualenvs-in-project: true
 
+      # scripts/release.py keeps three files in sync. A tag that points at a
+      # commit where they disagree would publish a wrongly numbered artifact,
+      # so check all three rather than pyproject alone.
+      - name: Verify tag matches every version source
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+          import sys
+
+          tag = os.environ["RELEASE_TAG"]
+          expected = tag[1:] if tag.startswith("v") else tag
+
+          sources = {
+              "pyproject.toml": r'^version\s*=\s*"([^"]+)"',
+              "src/groundinsight/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
+              "CITATION.cff": r'^version:\s*"?([^"\s]+)"?',
+          }
+
+          problems = []
+          for path, pattern in sources.items():
+              text = pathlib.Path(path).read_text(encoding="utf-8")
+              match = re.search(pattern, text, re.MULTILINE)
+              if match is None:
+                  problems.append(f"{path}: no version declaration found")
+              elif match.group(1) != expected:
+                  problems.append(f"{path}: declares {match.group(1)}")
+
+          if problems:
+              for problem in problems:
+                  print(f"::error::tag {tag} expects {expected} — {problem}")
+              sys.exit(1)
+
+          print(f"tag {tag} matches all version sources ({expected})")
+          PY
+
       - name: Build distributions
         run: poetry build
 
       - name: Upload distributions
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -44,13 +94,17 @@ jobs:
       id-token: write
     steps:
       - name: Download distributions
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist
 
       - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # The workflow can be re-run for an existing tag, so a partially
+          # completed upload must not turn the retry into a hard failure.
+          skip-existing: true
 
   github-release:
     name: Create GitHub Release
@@ -60,19 +114,20 @@ jobs:
       contents: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.tag || github.ref_name }}
           fetch-depth: 0
 
       - name: Download distributions
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*
           generate_release_notes: true
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
