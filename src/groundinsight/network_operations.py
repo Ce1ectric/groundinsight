@@ -569,10 +569,11 @@ def build_electrical_network(network: Network, auto_phase_currents: bool = False
         built.
     auto_phase_currents : bool, optional
         If ``True``, the phase current through each branch is determined
-        by solving a reduced phase-only network (topology-based split
-        over parallel paths). If ``False``, the phase current is derived
-        from the enumerated source-to-fault paths using each branch's
-        ``parallel_coefficient``. Defaults to ``False``.
+        by solving a reduced phase-conductor network (topology-based
+        split over parallel paths). If ``False``, the phase current is
+        derived from the enumerated source-to-fault paths using each
+        branch's ``parallel_coefficient``. Defaults to ``False`` here;
+        :func:`run_fault` passes ``True`` unless asked otherwise.
 
     Raises
     ------
@@ -591,23 +592,69 @@ def build_electrical_network(network: Network, auto_phase_currents: bool = False
     )
 
 
+def _resolve_phase_current_mode(
+    phase_current_mode: str, auto_parallel_coefficients: Optional[bool]
+) -> bool:
+    """
+    Translate the mode arguments of :func:`run_fault` into one boolean.
+
+    The deprecated ``auto_parallel_coefficients`` wins when it was passed
+    explicitly, so existing call sites keep their exact behaviour even though
+    the default of ``phase_current_mode`` is ``"auto"``.
+
+    Parameters
+    ----------
+    phase_current_mode : str
+        Either ``"auto"`` or ``"paths"``.
+    auto_parallel_coefficients : bool or None
+        Deprecated alias; ``None`` means it was not passed.
+
+    Returns
+    -------
+    bool
+        The value for ``ElectricalNetwork.auto_phase_currents``.
+
+    Raises
+    ------
+    ValueError
+        If ``phase_current_mode`` is neither ``"auto"`` nor ``"paths"``.
+    """
+    if phase_current_mode not in ("auto", "paths"):
+        raise ValueError(
+            f"phase_current_mode must be 'auto' or 'paths', got "
+            f"{phase_current_mode!r}. 'auto' solves the phase-conductor network "
+            f"and is the only mode that handles rings and meshes; 'paths' is the "
+            f"pre-0.6 behaviour driven by Branch.parallel_coefficient."
+        )
+    if auto_parallel_coefficients is not None:
+        logger.warning(
+            "run_fault(auto_parallel_coefficients=%s) is deprecated; pass "
+            "phase_current_mode=%r instead. The old argument still wins when "
+            "given, so this call is unaffected.",
+            auto_parallel_coefficients,
+            "auto" if auto_parallel_coefficients else "paths",
+        )
+        return bool(auto_parallel_coefficients)
+    return phase_current_mode == "auto"
+
+
 def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
     """
-    Create a warning message if the parallel coefficients are set to 1 and there are more than
-    1 path from sources to the fault.
+    Warn when the legacy path-based mode meets a network with parallel routes.
+
+    The check is scoped to the **active fault** and to a **single source**: only
+    when one source reaches the active fault over two or more paths does the
+    path-based scheme multiply the source current instead of splitting it. The
+    earlier version counted paths across all faults, which raised a false alarm
+    on a strictly radial network that merely carried two fault definitions.
 
     Parameters
     ----------
     network : Network
         The network instance for which the warning is to be raised.
     parallel_coefficients : bool
-        Whether to use parallel coefficients of the branches in
-        the calculations.
-
-    Raises
-    ------
-    Warning
-        If the parallel coefficients are not set to 1.
+        ``True`` when the automatic phase-network solve is active, in which case
+        nothing is warned about.
 
     Examples
     --------
@@ -615,35 +662,49 @@ def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
         >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60], description="A test electrical network")
         >>> _warning_parallel_coeffcient(network=network, parallel_coefficients=False)
     """
-    more_than_one_path = False
-    # Check if there are more than 1 path in the network
-    if len(network.paths) > 1:
-        more_than_one_path = True
+    if parallel_coefficients:
+        return
 
-    parallel_coefficients_default = False
-    # Check if all of the parallel coefficients within the paths are set to 1 or None
+    active_fault = network.active_fault
+    paths_per_source: Dict[str, int] = {}
     for path in network.paths.values():
-        for branch in path.segments:
-            if (
-                branch.parallel_coefficient is None
-                or branch.parallel_coefficient == 1.0
-            ):
-                parallel_coefficients_default = True
+        if active_fault is not None and path.fault != active_fault:
+            continue
+        paths_per_source[path.source] = paths_per_source.get(path.source, 0) + 1
 
-    if (
-        parallel_coefficients == False
-        and more_than_one_path == True
-        and parallel_coefficients_default == True
-    ):
-        logger.warning(
-            "The parallel coefficients are set to 1 or None and there are parallel paths in the network. "
-            "Consider setting the parallel coefficients to the correct value for the branches in the "
-            "network or using the auto_parallel_coefficients flag within run_fault()."
-        )
+    parallel_sources = [s for s, count in paths_per_source.items() if count > 1]
+    if not parallel_sources:
+        return
+
+    # Only complain when the coefficients are still at their default, because a
+    # user who set them deliberately has already made the call.
+    default_coefficients = any(
+        branch.parallel_coefficient is None or branch.parallel_coefficient == 1.0
+        for path in network.paths.values()
+        if active_fault is None or path.fault == active_fault
+        for branch in path.segments
+    )
+    if not default_coefficients:
+        return
+
+    logger.warning(
+        "Source(s) %s reach fault '%s' over more than one path while "
+        "parallel_coefficient is still 1.0 or None. In phase_current_mode="
+        "'paths' every one of those paths carries the FULL source current, so "
+        "the current is multiplied instead of split -- a symmetric ring "
+        "collapses to EPR = 0, r = 0 and Z_G = None. Use the default "
+        "phase_current_mode='auto', or set parallel_coefficient per branch.",
+        ", ".join(f"'{s}'" for s in sorted(parallel_sources)),
+        active_fault,
+    )
 
 
 def run_fault(
-    network: Network, fault_name: str, auto_parallel_coefficients: bool = False
+    network: Network,
+    fault_name: str,
+    auto_parallel_coefficients: Optional[bool] = None,
+    *,
+    phase_current_mode: str = "auto",
 ):
     """
     Execute the fault calculation pipeline for a single fault.
@@ -661,16 +722,32 @@ def run_fault(
     fault_name : str
         The name of the fault to activate and run calculations for.
     auto_parallel_coefficients : bool, optional
-        If ``True``, the phase current through each branch is computed
-        automatically from a reduced phase-only network solve
-        (topology-based split over parallel paths). When set, each
-        branch's ``parallel_coefficient`` is ignored and the split is
-        derived from the network topology. Defaults to ``False``.
+        Deprecated alias for ``phase_current_mode``. ``True`` maps to
+        ``"auto"``, ``False`` to ``"paths"``. When given it wins over
+        ``phase_current_mode`` so existing call sites keep their exact
+        behaviour. Defaults to ``None`` (not given).
+    phase_current_mode : {"auto", "paths"}, optional
+        How the phase current per branch is determined.
+
+        ``"auto"`` (default) solves a reduced phase-conductor network per
+        source with the fault bus as reference and reads the branch
+        currents off that solution. This is the only mode that splits the
+        source current correctly over rings, meshes and parallel
+        branches, and it ignores ``Branch.parallel_coefficient``.
+
+        ``"paths"`` is the pre-0.6 behaviour: every branch on any
+        enumerated source-to-fault path receives the *full* source
+        current scaled by its ``parallel_coefficient``. In a meshed
+        network that multiplies the current instead of splitting it --
+        with the default coefficient of 1.0 a symmetric ring collapses to
+        ``EPR = 0``. Kept for reproducing older studies and for networks
+        where the split is known from measurement and set by hand.
 
     Raises
     ------
     ValueError
-        If the specified fault does not exist in the network.
+        If the specified fault does not exist in the network, or if
+        ``phase_current_mode`` is not one of the two accepted values.
     RuntimeError
         If there is an error during the network calculations.
 
@@ -679,6 +756,9 @@ def run_fault(
     >>> import groundinsight as gi  # doctest: +SKIP
     >>> gi.run_fault(network, fault_name="Fault1")  # doctest: +SKIP
     """
+    auto_phase_currents = _resolve_phase_current_mode(
+        phase_current_mode, auto_parallel_coefficients
+    )
 
     # Set the active fault
     network.set_active_fault(fault_name)
@@ -692,16 +772,15 @@ def run_fault(
         network.invalidate_paths()
         create_paths(network)
 
-    # Create a Warning if there are more than one path and the parallel coefficients are default or 1
-    if len(network.paths) > 1 and not auto_parallel_coefficients:
-        _warning_parallel_coeffcient(network, auto_parallel_coefficients)
+    # Warn only in the legacy mode, and only when the network around this fault
+    # actually has parallel routes -- see _warning_parallel_coeffcient.
+    if not auto_phase_currents:
+        _warning_parallel_coeffcient(network, auto_phase_currents)
 
-    # Build the electrical network from the physical network. The
-    # auto_parallel_coefficients flag is forwarded to the ElectricalNetwork as
-    # auto_phase_currents which switches the phase-current determination from
-    # the path-based scheme (parallel_coefficient per branch) to the automatic
-    # topology-based split.
-    build_electrical_network(network, auto_phase_currents=auto_parallel_coefficients)
+    # Build the electrical network from the physical network. auto_phase_currents
+    # switches the phase-current determination from the path-based scheme
+    # (parallel_coefficient per branch) to the phase-network solve.
+    build_electrical_network(network, auto_phase_currents=auto_phase_currents)
 
     # Solve the network
     network.electrical_network.solve_network()

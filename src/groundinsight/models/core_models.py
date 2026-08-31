@@ -517,6 +517,16 @@ class BranchType(BaseModel):
     The mandatory ``self_impedance_formula`` and
     ``mutual_impedance_formula`` drive the frequency-domain solver.
 
+    The optional ``phase_impedance_formula`` describes the *phase*
+    conductor -- the faulted conductor whose current induces the
+    longitudinal EMF on the shield -- and is what the automatic
+    phase-current distribution solves on. It is only needed when the
+    network contains rings, meshes or parallel branches, because only
+    then does the source current have more than one way to reach the
+    fault. Without it the distribution falls back to a documented proxy
+    and warns; see :meth:`~groundinsight.electrical_network.
+    ElectricalNetwork._compute_phase_currents_auto`.
+
     For transient simulations the type can additionally carry a lumped
     RLCM decomposition: ``R_self_formula``, ``L_self_formula``,
     ``C_self_formula`` (shunt-to-ground capacitance per branch, only
@@ -541,6 +551,11 @@ class BranchType(BaseModel):
         SymPy formula used to calculate self-impedance per branch.
     mutual_impedance_formula : str
         SymPy formula used to calculate mutual impedance.
+    phase_impedance_formula : str, optional
+        SymPy formula for the series impedance of the *phase* conductor
+        of this branch, in the same symbols ``f``, ``rho``, ``l`` as the
+        other formulas. Consumed only by the automatic phase-current
+        distribution; the admittance matrix never sees it.
     R_self_formula : str, optional
         Per-branch series resistance in Ohm. Used only by the transient
         solvers.
@@ -563,6 +578,7 @@ class BranchType(BaseModel):
     grounding_conductor: bool
     self_impedance_formula: str
     mutual_impedance_formula: str
+    phase_impedance_formula: Optional[str] = None
     R_self_formula: Optional[str] = None
     L_self_formula: Optional[str] = None
     C_self_formula: Optional[str] = None
@@ -579,6 +595,7 @@ class BranchType(BaseModel):
         return validate_impedance_formula_value(value)
 
     @field_validator(
+        "phase_impedance_formula",
         "R_self_formula",
         "L_self_formula",
         "C_self_formula",
@@ -652,6 +669,7 @@ class Branch(BaseModel):
     specific_earth_resistance: float = 100.0
     parallel_coefficient: Optional[float] = 1.0  # Default to 1
     active: bool = True
+    phase_impedance: Optional[Dict[float, ComplexNumber]] = None
     R_self: Optional[Dict[float, float]] = None
     L_self: Optional[Dict[float, float]] = None
     C_self: Optional[Dict[float, float]] = None
@@ -661,12 +679,13 @@ class Branch(BaseModel):
     def calculate_impedance(self, frequencies: List[float]):
         """
         Calculate self/mutual impedance and -- if specified by the type --
-        the lumped RLCM parameters for each frequency.
+        the phase impedance and the lumped RLCM parameters for each frequency.
 
         ``self_impedance`` and ``mutual_impedance`` are always recomputed.
-        Each of ``R_self``, ``L_self``, ``C_self``, ``R_mutual``,
-        ``M_mutual`` is recomputed only if the matching formula is set on
-        the branch type; otherwise the attribute is left as ``None``.
+        Each of ``phase_impedance``, ``R_self``, ``L_self``, ``C_self``,
+        ``R_mutual``, ``M_mutual`` is recomputed only if the matching
+        formula is set on the branch type; otherwise the attribute is left
+        as ``None``.
 
         Parameters
         ----------
@@ -676,7 +695,32 @@ class Branch(BaseModel):
         """
         self._calculate_self_impedance(frequencies)
         self._calculate_mutual_impedance(frequencies)
+        self._calculate_phase_impedance(frequencies)
         self._calculate_rlc_parameters(frequencies)
+
+    def _calculate_phase_impedance(self, frequencies: List[float]):
+        """
+        Evaluate the optional phase-conductor impedance formula.
+
+        Left at ``None`` when the branch type declares no
+        ``phase_impedance_formula``. The value is consumed only by the
+        automatic phase-current distribution and never enters the nodal
+        admittance matrix, so it is *not* checked for passivity -- a
+        phase conductor is allowed to be modelled with whatever the user
+        got from a short-circuit study.
+
+        Parameters
+        ----------
+        frequencies : List[float]
+            Frequencies at which to evaluate.
+        """
+        formula = self.type.phase_impedance_formula
+        if formula is None:
+            return
+        params = {"rho": self.specific_earth_resistance, "l": self.length}
+        self.phase_impedance = compute_impedance(
+            formula_str=formula, frequencies=frequencies, params=params
+        )
 
     def _calculate_rlc_parameters(self, frequencies: List[float]):
         """
@@ -793,6 +837,21 @@ class Branch(BaseModel):
 
     @field_validator("mutual_impedance", mode="before")
     def validate_mutual_impedance(cls, value):
+        if not isinstance(value, dict):
+            raise TypeError(
+                "Impedance must be a dictionary of frequency to impedance values."
+            )
+        new_value = {}
+        for freq, imp in value.items():
+            freq = float(freq)
+            new_value[freq] = ComplexNumber.validate_complex(imp)
+        return new_value
+
+    @field_validator("phase_impedance", mode="before")
+    def validate_phase_impedance(cls, value):
+        """Accept ``None`` or the same shapes as the other impedance dicts."""
+        if value is None:
+            return None
         if not isinstance(value, dict):
             raise TypeError(
                 "Impedance must be a dictionary of frequency to impedance values."
@@ -1231,12 +1290,53 @@ class ResultReductionFactor(BaseModel):
     fault_bus : str
         The bus where the fault occurred.
     value : dict of float to float, optional
-        Mapping from frequency to reduction factor ``r(f)``.
+        Mapping from frequency to the **EPR-based** reduction factor
+        ``r(f) = |u_fault with mutual| / |u_fault without mutual|``. This is
+        the quantity that reproduces the familiar closed form
+        ``r = |1 - Z_mutual / Z_self|`` for a single shielded line, and it is
+        what ``ResultGroundingImpedance`` divides by. It is structurally
+        independent of the impedance *at* the fault bus.
+    value_current : dict of float to float, optional
+        Mapping from frequency to the **current-based** reduction factor
+        ``r_I(f) = |I_E| / |I_F|`` -- the measured definition. ``I_E`` is the
+        **sum of the electrode currents of every bus that feeds the soil**, not
+        the electrode current at the faulted station: where the stations are
+        bonded through continuous cable shields the current spreads along them
+        and leaks into the soil at every one of them. Taking only the faulted
+        station understates it by a factor of 1.8 to 4.7 on the verification
+        feeder, depending on where the fault sits. Unlike ``value`` this factor
+        responds to the fault-bus characteristic, which is what makes it usable
+        as the ordinate of a rho-f sensitivity study. ``None`` per frequency
+        where the fault bus carries no injection or no bus is earthed.
+    i_earth : dict of float to complex, optional
+        The earth-return current ``I_E`` itself, per frequency, so a study can
+        read the ampere value rather than only the ratio.
+    earth_buses : dict of float to list of str, optional
+        The buses counted as feeding the soil at each frequency -- from the
+        fault outwards, in every direction, up to where the potential profile
+        turns. Reported because the split is a modelling statement and should
+        be inspectable; see :mod:`groundinsight.utils.earth_current`.
+    u_earthing : dict of float to complex, optional
+        The earthing voltage ``U_E`` of that bonded group: the mean potential
+        weighted by each station's electrode current.
+    z_earthing : dict of float to complex, optional
+        The earthing impedance ``Z_E = U_E / I_E`` of the group. Together with
+        the fields above this closes the EN 50522 chain
+        ``U_E = 3*I_0 * Z_E * r``, which holds in the model to machine
+        precision and can be checked from the result alone. Note that ``Z_E``
+        is *not* simply the electrodes in parallel: the shield sections between
+        the stations add to it (3.30 Ohm against 2.50 Ohm on the verification
+        feeder).
     """
 
     name: Optional[str] = None  # Make name optional with a default value
     fault_bus: str
     value: Dict[float, Optional[float]]  # Mapping from frequency to reduction factor
+    value_current: Dict[float, Optional[float]] = {}
+    i_earth: Dict[float, Optional[ComplexNumber]] = {}
+    earth_buses: Dict[float, List[str]] = {}
+    u_earthing: Dict[float, Optional[ComplexNumber]] = {}
+    z_earthing: Dict[float, Optional[ComplexNumber]] = {}
 
     def __str__(self):
         # The field is called ``value``; the old ``self.reduction_factor``
@@ -1245,7 +1345,8 @@ class ResultReductionFactor(BaseModel):
         # through __str__ -- so a bare cell in a notebook looked fine.
         return (
             f"ResultReductionFactor(name={self.name}, "
-            f"fault_bus={self.fault_bus}, value={self.value})"
+            f"fault_bus={self.fault_bus}, value={self.value}, "
+            f"value_current={self.value_current})"
         )
 
 
@@ -1973,6 +2074,7 @@ class Network(BaseModel):
             for freq in self.frequencies:
                 gi = grounding_impedance.value.get(freq)
                 rf = reduction_factor.value.get(freq)
+                rf_current = reduction_factor.value_current.get(freq)
                 if gi:
                     gi_real = gi.real
                     gi_imag = gi.imag
@@ -1992,6 +2094,7 @@ class Network(BaseModel):
                         "grounding_impedance_Ohm": gi_magnitude,
                         "grounding_impedance_deg": gi_angle,
                         "reduction_factor": rf,
+                        "reduction_factor_current": rf_current,
                     }
                 )
         df = pl.DataFrame(data)

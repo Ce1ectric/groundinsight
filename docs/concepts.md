@@ -310,11 +310,39 @@ ordered list of `Branch` objects; its injection signs follow the traversal
 order.
 
 In ring or meshed topologies a single source–fault pair yields multiple
-paths. By default every path carries the full source current. The optional
-`parallel_coefficient` on a branch lets you pre-scale the current share of
-individual parallel legs; if you set `auto_parallel_coefficients=True` on
-`run_fault`, `groundinsight` solves a reduced phase-only network first and
-uses its current distribution as the per-path scaling.
+paths, and the source current has to be *divided* between them.
+
+Since 0.6.0 that division is the default and is computed, not declared:
+`run_fault(..., phase_current_mode="auto")` solves a reduced
+**phase-conductor** network per source — the fault bus as reference node,
+the source current injected at the source bus — and reads the branch phase
+currents off that solution. The split then follows the topology and the
+conductor impedances, is independent of the order the branches were declared
+in, and needs no user input.
+
+The phase impedance used for that solve comes from
+`BranchType.phase_impedance_formula` (symbols `f`, `rho`, `l`, same as the
+other formulas). It is optional, because in a network without cycles the
+split is fixed by the topology alone and the impedance value cannot change
+it. Where cycles *do* exist and the formula is missing, the solve falls back
+to a proxy — `1/Z_self` for a branch with a grounding conductor, `1/length`
+for one without — and says so once per solve. Those two quantities are not
+comparable, so the split between routes of different construction is then a
+heuristic. Declare the formula whenever the ring mixes cable and overhead
+line.
+
+`phase_current_mode="paths"` selects the pre-0.6 behaviour: every branch on
+every enumerated path receives the **full** source current, scaled by that
+branch's `parallel_coefficient`. This is correct for a radial network — where
+both modes agree exactly — but in a meshed one it multiplies the current
+instead of dividing it. At the default coefficient of `1.0` a symmetric ring
+then solves to `EPR = 0 V`, `r = 0` and `Z_G = None`, because the doubled
+mutual injections cancel the source exactly. The mode is kept so studies
+produced before 0.6.0 stay reproducible, and for networks where the split is
+known from measurement and set by hand.
+
+The deprecated `auto_parallel_coefficients` argument still works and still
+wins when passed: `True` maps to `"auto"`, `False` to `"paths"`.
 
 Two different situations both end in "no paths", and `groundinsight` treats
 them differently on purpose. **No sources or no faults at all** is rejected:
@@ -345,12 +373,19 @@ For every branch and frequency the current through the grounding conductor
 is
 
 $$
-I_{\text{branch}}(f) = \frac{u_{\text{from}}(f) - u_{\text{to}}(f)}
+I_{\text{branch}}(f) = \frac{u_{\text{to}}(f) - u_{\text{from}}(f)}
                             {Z_{\text{self}}(f)} + I_{\text{mut}}(f),
 $$
 
 where the second term accounts for the Norton source representing the
 mutual coupling (`compute_branch_currents`).
+
+Mind the orientation: the numerator is $u_{\text{to}} - u_{\text{from}}$, so a
+**positive** `ResultBranch.i_s` means the shield current flows from `to_bus`
+towards `from_bus` — the opposite of the sign convention used for the phase
+currents, where positive is `from_bus` → `to_bus`. Earlier revisions of this
+page had the numerator the other way round; the formula above is what
+`compute_branch_currents` actually evaluates.
 
 ### Reduction factor
 
@@ -374,6 +409,218 @@ The same closed form applies to a fully symmetric ring with the fault
 diametrically opposite the source — the Norton injections in the two
 ring halves are then perfectly anti-parallel and superpose to the same
 expression as the single-line case.
+
+### Reduction factor on a current basis
+
+The ratio above is structurally blind to the impedance *at* the fault bus. Both
+solves use the same `Y`, so changing the diagonal entry `Y_ff` is a rank-1
+update whose effect cancels in the quotient. Sweeping the fault-bus electrode
+over four decades leaves `r` at `0.500000` while `Z_G` moves by two orders of
+magnitude and the potential rise by a factor of fifty. That is not a numerical
+artefact — the closed form in
+[Characterising a location](#characterising-a-location-without-its-electrode)
+derives it.
+
+`ResultReductionFactor.value_current` is the **measured** definition alongside
+it: the total earth-return current over the total fault current,
+
+$$
+r_I(f) = \frac{|\underline{I}_E(f)|}{|\underline{I}_F(f)|}.
+$$
+
+`I_E` is the sum of the electrode currents of **every bus that feeds the soil**
+— from the fault outwards in *every* direction, a ring or a mesh having more
+than one, up to where the potential profile turns — not the electrode current at
+the faulted station. In a cable network with
+continuous shields the stations are bonded to one another, so the current spreads
+along the shields and leaks into the soil at every one of them; the earthing
+current is distributed over the whole bonded system by construction. Measured on
+a six-station feeder, counting only the faulted station understates `r_I` by a
+factor of 1.8 to 4.7 depending on where the fault sits.
+
+Two things make the sum less obvious than it looks.
+
+**Summing over every bus gives exactly zero.** Whatever enters the soil somewhere
+leaves it somewhere else, so Kirchhoff at the whole network forces
+`Σ I_a = 0`. A group has to be selected — and "every bus except the faulted one"
+is not that group: by the same law it collapses back to the electrode current of
+the faulted station alone.
+
+**The group cannot be found from the potential profile.** The crossing between
+the two groups generally falls *between* two stations rather than on one, and
+when the fault sits close to the infeed the profile may never come near zero at
+all — it passes through a shallow minimum and rises again. On the verification
+feeder with the fault one station from the infeed, `|EPR|` runs 91.4, 19.6, 18.7,
+18.1, 17.7, 17.5 V: there is no crossing to find.
+
+What *is* unambiguous per bus is the **direction** of its electrode current, so
+the split is made in the complex plane: the group is the set of phasors in one
+half-plane, and the half-plane is the one whose sum has the largest magnitude.
+That needs no angle nominated and no tolerance tuned, and it reduces to the
+obvious answer whenever the two groups are cleanly opposed. Both groups carry the
+same sum with opposite signs, so `|I_E|` does not depend on which is called
+which; the fault bus anchors the naming.
+
+`ResultReductionFactor` reports `i_earth` (the ampere value) and `earth_buses`
+(the group) next to the ratio, because the split is a modelling statement and
+should be inspectable. `separation` — reported in the log when it degrades —
+says how cleanly the phasors separated; well below one means the electrode
+currents are spread in angle and a single scalar earth-return current is a
+coarser description than it looks. `res_all_impedances()` carries both factors.
+
+### Characterising a location without its electrode
+
+Adding an electrode `Y_B` at bus `b` is a rank-one change to the nodal matrix, so
+by Sherman-Morrison every nodal voltage is a **Möbius function** of it:
+
+$$
+\underline{u}(Y_B) = \underline{u}_0
+    - \frac{Y_B\, \underline{z}\, u_{0,b}}{1 + Y_B Z_\text{net}}
+$$
+
+Three objects on the right, none of which needs the electrode to be known:
+`u_0`, the fault solve with the electrode removed; `z`, the voltage everywhere
+per ampere injected at `b`; and `Z_net = z_b`, the driving-point impedance of
+everything except the local electrode — the parallel impedance the network
+offers at that point.
+
+`gi.bus_response(network, fault=..., bus=...)` builds those from two solves.
+Evaluating it afterwards costs nothing, for any electrode, including the two
+extremes as exact limits: `Z_B → ∞` (none installed) and `Z_B → 0` (ideal, which
+the solver itself will not accept because a zero impedance cannot be inverted).
+`.extremes()` returns the bracket, `.evaluate(z)` a single electrode and
+`.sweep([...])` any number of them.
+
+The driving-point impedance is exactly `Z_dp = 1/(Y_B + 1/Z_net)`, running
+monotonically from `Z_net` down to zero as the electrode improves. Over all
+*passive* electrodes the largest attainable magnitude is not quite at the open
+end: a purely reactive `Y_B = -j·Im(1/Z_net)` cancels the network's susceptance
+and gives `|Z_dp| = 1/Re(1/Z_net)`. In a cable network that is a fraction of a
+percent above `|Z_net|`, but it is the honest bound and `.extremes()` reports it
+as the `worst_passive` row.
+
+The closed form also *derives* the invariance of the EPR-based reduction factor
+that the sensitivity work runs into: `u_b(Y_B) = u_{0,b}/(1 + Y_B Z_net)` holds
+with and without mutual coupling alike, so the factor cancels out of the
+quotient exactly. It is algebra, not a numerical accident.
+
+#### Which one is the EN 50522 reduction factor
+
+`value_current`. The norm writes the earthing voltage as
+
+$$
+U_E = 3 I_0 \cdot Z_E \cdot r,
+$$
+
+and that chain closes in the model to machine precision, with `U_E` the
+earthing voltage of the bonded group, `I_E` its summed electrode current,
+`Z_E = U_E/I_E` its earthing impedance and `r = |I_E|/|3I_0|`. All three routes
+to `r` — the current ratio, `U_E/(Z_E \cdot 3I_0)`, and the reported factor —
+give the same number. `ResultReductionFactor` carries `u_earthing` and
+`z_earthing` so the chain can be checked from the result alone.
+
+Rearranging the norm to $U_E(r)/U_E(r{=}1) = r$ is correct, and it is worth
+being precise about what the reference case is: **`r = 1` means the whole fault
+current flows through `Z_E`**, so `U_E(r=1) = Z_E \cdot 3I_0`. On the
+verification feeder that is 3298 V.
+
+`value` uses a *different* reference: the mutual coupling removed, but the
+cable shield still in place as a metallic return path. That reference voltage
+is 214 V — fifteen times smaller, because most of the current still comes back
+through the shield rather than through the soil. The ratio of the two reference
+voltages is exactly the ratio of the two factors, and nothing else. Both are
+correct answers; they answer different questions.
+
+One caveat on `Z_E`: it is *not* the electrodes in parallel. The shield sections
+between the bonded stations add to it — 3.30 Ω against 2.50 Ω on the
+verification feeder — which is the quiet reason a hand calculation from the
+electrode values alone comes out low. And where the stations counted as one
+earthing system are not actually at one potential, `groundinsight` says so at
+INFO: the norm's lumped picture assumes they are, and `U_E` is otherwise a
+weighted average of genuinely different voltages.
+
+#### The two factors are not two computations of one number
+
+They coincide in exactly one case, and it is worth knowing which. For a route
+with shield impedance $Z_s$, mutual impedance $Z_m$ and station electrodes
+summing to $Z_E$ along the earth-return path,
+
+$$
+r_\text{coupling} = \frac{Z_s - Z_m}{Z_s},
+\qquad
+r_I = \frac{Z_s - Z_m}{Z_s + Z_E},
+$$
+
+so their ratio is the current divider $Z_s/(Z_s + Z_E)$ and nothing else. The
+first is the **ideally bonded limit** — the tabulated property of the cable,
+$1 - Z_m/Z_s$, independent of the station earths by construction. The second is
+what the earthing system of *this* network actually passes into the soil.
+
+Verified against the closed form to machine precision over five decades of
+electrode impedance on a two-section line with $Z_s = 0.2 + 0.4\mathrm{j}\ \Omega$:
+
+| electrode per station | $r_\text{coupling}$ | $r_I$ | ratio | $Z_s/(Z_s+Z_E)$ |
+|---|---|---|---|---|
+| 10 Ω | 0.500000 | 0.011067 | 0.022135 | 0.022135 |
+| 1 Ω | 0.500000 | 0.100000 | 0.200000 | 0.200000 |
+| 0.1 Ω | 0.500000 | 0.395285 | 0.790569 | 0.790569 |
+| 0.01 Ω | 0.500000 | 0.489820 | 0.979639 | 0.979639 |
+| 10 µΩ | 0.500000 | 0.499990 | 0.999980 | 0.999980 |
+
+A wide gap is therefore a statement about the network, not a defect: the
+stations are not bonded well enough for the cable's tabulated reduction factor
+to describe what the soil sees. `groundinsight` logs the divider at INFO where
+it falls below 0.5, rather than as a warning — with ordinary station electrodes
+it is the normal case, and a log that warns about the normal case stops being
+read.
+
+### Splitting the network at the fault
+
+A **cut** is a named set of branches, all incident to the fault bus. Cuts turn
+the question "how much grounding does each direction contribute" into numbers:
+
+```
+parallel impedance left --- fault location --- parallel impedance right
+```
+
+`gi.analyze_cuts(network, fault=..., cuts=[...])` reports two families of
+quantity per direction.
+
+**Impedances — a property of the network, not of the fault.** One ampere is
+injected at the fault bus with all sources and all mutual injections removed;
+the share leaving through each cut is read off, and `Z_side = u_fault / i_cut`.
+Because the shares and the local electrode current add up to the injected
+ampere, the decomposition closes by construction,
+
+$$
+\frac{1}{Z_\text{driving point}} = \frac{1}{Z_\text{local}}
+    + \sum_\text{sides} \frac{1}{Z_\text{side}},
+$$
+
+and the residual of that identity is reported next to the values. Being
+source-free, `Z_side` does not change when the fault bus's own characteristic is
+varied — which is the useful statement: the network's parallel contribution is a
+fixed property, the local electrode is the variable, and the total is their
+parallel combination.
+
+Isolating each side into its own sub-network would be equivalent wherever the
+sides are galvanically separate, and wrong in a ring: removing one branch of a
+ring separates nothing, so the far side comes out empty and the impedance
+infinite. Current division has no such blind spot.
+
+**Currents — how the fault current actually divides.** From a solved fault:
+`i_shield` per direction, and `current_share = |i_shield| / |i_inj|`. KCL at the
+fault bus closes, `i_inj = i_local + Σ i_shield`, and the residual is reported.
+Where the directions are disjoint — no ring — the far-side sums also give
+`i_earth`, `i_total` and the side reduction factor `r = |i_earth| / |i_total|`.
+Where they overlap, those three are `None` and `current_share` carries the
+meaning; `sides_are_disjoint` says which case you are in.
+
+Every cut branch has to be incident to the fault bus. A cut placed further out
+still separates the network, but its far side is no longer a parallel element of
+the fault location and the impedances would not sum. Incident branches that no
+cut claims form the implicit side `"rest"`, so the decomposition always covers
+the whole network.
 
 #### Frequency dependence of the reduction factor
 
@@ -417,6 +664,13 @@ from 50 Hz to 5 kHz and asserts both the closed form above and the
 monotonic decay towards zero.
 
 ### Grounding impedance
+
+`ResultGroundingImpedance.value` is `Z_E` in the EN 50522 sense: the earthing
+voltage of the bonded earthing system divided by the current it passes into the
+soil. The norm's chain `U_E = 3*I_0 * Z_E * r` therefore closes on the reported
+value, with `r` the current-based reduction factor. Note that `Z_E` is not the
+station electrodes in parallel — the shield sections between them add to it.
+
 
 The effective grounding impedance seen at the fault bus is
 

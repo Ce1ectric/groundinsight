@@ -364,6 +364,7 @@ class BranchTypeDB(Base):
     grounding_conductor = Column(Boolean, nullable=False)
     self_impedance_formula = Column(Text, nullable=False)
     mutual_impedance_formula = Column(Text, nullable=False)
+    phase_impedance_formula = Column(Text, nullable=True)
     R_self_formula = Column(Text, nullable=True)
     L_self_formula = Column(Text, nullable=True)
     C_self_formula = Column(Text, nullable=True)
@@ -381,6 +382,7 @@ class BranchTypeDB(Base):
             grounding_conductor=self.grounding_conductor,
             self_impedance_formula=self.self_impedance_formula,
             mutual_impedance_formula=self.mutual_impedance_formula,
+            phase_impedance_formula=self.phase_impedance_formula,
             R_self_formula=self.R_self_formula,
             L_self_formula=self.L_self_formula,
             C_self_formula=self.C_self_formula,
@@ -400,6 +402,7 @@ class BranchTypeDB(Base):
             grounding_conductor=branch_type.grounding_conductor,
             self_impedance_formula=branch_type.self_impedance_formula,
             mutual_impedance_formula=branch_type.mutual_impedance_formula,
+            phase_impedance_formula=branch_type.phase_impedance_formula,
             R_self_formula=branch_type.R_self_formula,
             L_self_formula=branch_type.L_self_formula,
             C_self_formula=branch_type.C_self_formula,
@@ -447,6 +450,7 @@ class BranchDB(Base):
     to_bus_name = Column(String)
     self_impedance = Column(JSON)
     mutual_impedance = Column(JSON)
+    phase_impedance = Column(JSON, nullable=True)
     specific_earth_resistance = Column(Float, default=100.0)
     parallel_coefficient = Column(Float, nullable=True)
     active = Column(Boolean, nullable=False, default=True)
@@ -506,6 +510,15 @@ class BranchDB(Base):
             else {}
         )
 
+        phase_impedance = (
+            {
+                float(freq): ComplexNumber(**value)
+                for freq, value in self.phase_impedance.items()
+            }
+            if self.phase_impedance
+            else None
+        )
+
         return Branch(
             name=self.name,
             description=self.description,
@@ -515,6 +528,7 @@ class BranchDB(Base):
             to_bus=self.to_bus_name,
             self_impedance=self_impedance,
             mutual_impedance=mutual_impedance,
+            phase_impedance=phase_impedance,
             specific_earth_resistance=self.specific_earth_resistance,
             parallel_coefficient=self.parallel_coefficient,
             active=True if self.active is None else bool(self.active),
@@ -563,6 +577,15 @@ class BranchDB(Base):
             else {}
         )
 
+        phase_impedance = (
+            {
+                str(freq): {"real": imp.real, "imag": imp.imag}
+                for freq, imp in branch.phase_impedance.items()
+            }
+            if branch.phase_impedance
+            else None
+        )
+
         return cls(
             network_name=network_name,
             position=position,
@@ -574,6 +597,7 @@ class BranchDB(Base):
             to_bus_name=branch.to_bus,
             self_impedance=self_impedance,
             mutual_impedance=mutual_impedance,
+            phase_impedance=phase_impedance,
             specific_earth_resistance=branch.specific_earth_resistance,
             parallel_coefficient=branch.parallel_coefficient,
             active=branch.active,

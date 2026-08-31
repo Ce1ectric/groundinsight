@@ -181,11 +181,14 @@ def test_overwrite_fault_and_source_emit_warning(caplog):
 
 def test_parallel_coefficient_warning_is_logged(caplog):
     """
-    The parallel-coefficient guidance message previously printed in
-    ``network_operations._warning_parallel_coeffcient`` is now a WARNING
-    on the ``groundinsight.network_operations`` logger. It is emitted
-    from inside ``run_fault`` when the network has more than one
-    source-to-fault path and ``auto_parallel_coefficients`` is False.
+    The parallel-coefficient guidance message is a WARNING on the
+    ``groundinsight.network_operations`` logger.
+
+    Since the phase-current default became ``phase_current_mode="auto"`` the
+    warning is scoped to the legacy path-based mode: ``auto`` splits the ring
+    correctly and has nothing to warn about, while ``"paths"`` on a ring with
+    default coefficients is exactly the configuration that collapses the
+    result, so it must still say so.
     """
     bus_type = BusType(
         name="BT_par",
@@ -238,17 +241,27 @@ def test_parallel_coefficient_warning_is_logged(caplog):
         network=net,
     )
 
+    def _parallel_warnings():
+        return [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING
+            and "parallel_coefficient" in r.getMessage()
+        ]
+
+    with caplog.at_level(logging.WARNING, logger="groundinsight.network_operations"):
+        gi.run_fault(net, fault_name="F1", phase_current_mode="paths")
+    assert _parallel_warnings(), (
+        "Expected a WARNING about parallel_coefficient for a ring solved in "
+        "the legacy path-based mode."
+    )
+
+    caplog.clear()
     with caplog.at_level(logging.WARNING, logger="groundinsight.network_operations"):
         gi.run_fault(net, fault_name="F1")
-
-    matching = [
-        r
-        for r in caplog.records
-        if r.levelno == logging.WARNING
-        and "parallel coefficients" in r.getMessage()
-    ]
-    assert matching, (
-        "Expected a WARNING about parallel coefficients in a ring network."
+    assert not _parallel_warnings(), (
+        "The default phase_current_mode='auto' splits the ring from the "
+        "topology, so there is nothing to warn about."
     )
 
 

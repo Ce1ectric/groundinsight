@@ -140,5 +140,10 @@ nav:
       - Database: api/database.md
       - "I/O — network importers": api/io.md
       - Outage studies: api/outage.md
+      - Parameter sweeps: api/sweep.md
       - Analysis: api/analysis.md
+      - Fault-location decomposition: api/decomposition.md
+      - Location response: api/response.md
+      - Reference cases: api/reference.md
+      - Statistics and classification: api/statistics.md
       - Transient simulations: api/transient.md

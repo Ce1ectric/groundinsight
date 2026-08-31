@@ -188,3 +188,10 @@ notebooks/network.json
 
 # Third-party license report (generated on release)
 THIRD_PARTY_NOTICES.md
+
+# Local working notes
+#  Session notes, project-state summaries and release plans written while
+#  working on the package. Useful locally, not part of the public history.
+projektstand_*.md
+release-plan-*.md
+*.patch

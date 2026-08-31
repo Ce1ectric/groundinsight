@@ -20,6 +20,12 @@ from .outage import (
     outage_context,
     run_outage_study,
 )
+from .sweep import (
+    SweepPoint,
+    SweepResult,
+    rho_f_points,
+    run_sweep,
+)
 from .transient import (
     ResultTransient,
     TransientStudy,
@@ -31,6 +37,10 @@ __all__ = [
     "OutageStudyResult",
     "outage_context",
     "run_outage_study",
+    "SweepPoint",
+    "SweepResult",
+    "rho_f_points",
+    "run_sweep",
     "ResultTransient",
     "TransientStudy",
     "waveforms",

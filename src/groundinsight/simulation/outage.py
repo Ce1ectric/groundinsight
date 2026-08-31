@@ -468,7 +468,8 @@ def run_outage_study(
     scenarios: List[Outage],
     include_base: bool = True,
     base_label: str = "base",
-    auto_parallel_coefficients: bool = False,
+    auto_parallel_coefficients: Optional[bool] = None,
+    phase_current_mode: str = "auto",
     redefine_paths: bool = True,
 ) -> OutageStudyResult:
     """
@@ -495,7 +496,14 @@ def run_outage_study(
         Label used to identify the base case in the stored DataFrames.
         Defaults to ``"base"``.
     auto_parallel_coefficients : bool, optional
-        Forwarded to :func:`run_fault`. Defaults to ``False``.
+        Deprecated alias, forwarded to :func:`run_fault`. Defaults to
+        ``None`` (not given).
+    phase_current_mode : {"auto", "paths"}, optional
+        Forwarded to :func:`run_fault`. Defaults to ``"auto"``, which is
+        the only mode that divides the source current correctly over a
+        ring or a mesh -- and an outage study is precisely where a ring
+        turns into a chain and back, so a per-scenario topology change
+        must not change the modelling assumption underneath it.
     redefine_paths : bool, optional
         If ``True`` (default), the pre-existing path cache on ``network``
         is dropped at the start of the study so that path definitions
@@ -561,6 +569,7 @@ def run_outage_study(
             network,
             fault_name=fault,
             auto_parallel_coefficients=auto_parallel_coefficients,
+            phase_current_mode=phase_current_mode,
         )
         bus_results[base_label] = network.res_buses(fault=fault)
         branch_results[base_label] = network.res_branches(fault=fault)
@@ -577,6 +586,7 @@ def run_outage_study(
                 network,
                 fault_name=fault,
                 auto_parallel_coefficients=auto_parallel_coefficients,
+                phase_current_mode=phase_current_mode,
             )
             bus_results[scenario.name] = network.res_buses(fault=fault)
             branch_results[scenario.name] = network.res_branches(fault=fault)
