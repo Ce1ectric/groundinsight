@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.6.0] — 2026-09-01
+
 ### Added
 
 - **Closed-form reference cases (`gi.run_reference_cases`).** Six
@@ -1051,7 +1057,8 @@ form — superseded by 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.4.0
 [0.3.2]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.2

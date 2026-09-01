@@ -230,7 +230,7 @@ __all__ = [
 # state-space solver, capacitance support, pandapower importer hardening,
 # frequency-order warning, pathfinder LRU cache, atomic rebind in
 # invalidate_paths, top-level set_active_fault factory, DC handling).
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 # Library logging: attach a NullHandler so that importing groundinsight does
 # not produce any output by default. Applications and notebooks opt in to
