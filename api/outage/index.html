@@ -16,7 +16,7 @@
         <link rel="prev" href="../io/">
       
       
-        <link rel="next" href="../analysis/">
+        <link rel="next" href="../sweep/">
       
       
         
@@ -614,6 +614,8 @@
       
         
       
+        
+      
     
     
     
@@ -808,6 +810,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/fault_decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decomposing a fault: cuts, both reduction factors and a location without its electrode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -828,6 +858,16 @@
       
         
           
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
         
       
         
@@ -1329,6 +1369,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter sweeps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../analysis/" class="md-nav__link">
         
   
@@ -1337,6 +1405,118 @@
     
   
     Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault-location decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../response/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Location response
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference cases
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../statistics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Statistics and classification
   
 
     
@@ -2889,9 +3069,10 @@ part of the network.</p>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">scenarios</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Outage</span><span class="p">],</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">include_base</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">base_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;base&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">auto_parallel_coefficients</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">redefine_paths</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutageStudyResult</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">auto_parallel_coefficients</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">phase_current_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">redefine_paths</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutageStudyResult</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3006,11 +3187,32 @@ Defaults to <code>"base"</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Forwarded to :func:<code>run_fault</code>. Defaults to <code>False</code>.</p>
+                <p>Deprecated alias, forwarded to :func:<code>run_fault</code>. Defaults to
+<code>None</code> (not given).</p>
               </div>
             </td>
             <td>
-                  <code>False</code>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>phase_current_mode</code>
+            </td>
+            <td>
+                  <code>(&#39;auto&#39;, &#39;paths&#39;)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Forwarded to :func:<code>run_fault</code>. Defaults to <code>"auto"</code>, which is
+the only mode that divides the source current correctly over a
+ring or a mesh -- and an outage study is precisely where a ring
+turns into a chain and back, so a per-scenario topology change
+must not change the modelling assumption underneath it.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#34;auto&#34;</code>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -3223,133 +3425,153 @@ collides with <code>base_label</code>.</p>
 <span class="normal"><a href="#__codelineno-0-587">587</a></span>
 <span class="normal"><a href="#__codelineno-0-588">588</a></span>
 <span class="normal"><a href="#__codelineno-0-589">589</a></span>
-<span class="normal"><a href="#__codelineno-0-590">590</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-464" name="__codelineno-0-464"></a><span class="k">def</span> <span class="nf">run_outage_study</span><span class="p">(</span>
+<span class="normal"><a href="#__codelineno-0-590">590</a></span>
+<span class="normal"><a href="#__codelineno-0-591">591</a></span>
+<span class="normal"><a href="#__codelineno-0-592">592</a></span>
+<span class="normal"><a href="#__codelineno-0-593">593</a></span>
+<span class="normal"><a href="#__codelineno-0-594">594</a></span>
+<span class="normal"><a href="#__codelineno-0-595">595</a></span>
+<span class="normal"><a href="#__codelineno-0-596">596</a></span>
+<span class="normal"><a href="#__codelineno-0-597">597</a></span>
+<span class="normal"><a href="#__codelineno-0-598">598</a></span>
+<span class="normal"><a href="#__codelineno-0-599">599</a></span>
+<span class="normal"><a href="#__codelineno-0-600">600</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-464" name="__codelineno-0-464"></a><span class="k">def</span> <span class="nf">run_outage_study</span><span class="p">(</span>
 <a id="__codelineno-0-465" name="__codelineno-0-465"></a>    <span class="n">network</span><span class="p">:</span> <span class="n">Network</span><span class="p">,</span>
 <a id="__codelineno-0-466" name="__codelineno-0-466"></a>    <span class="o">*</span><span class="p">,</span>
 <a id="__codelineno-0-467" name="__codelineno-0-467"></a>    <span class="n">fault</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 <a id="__codelineno-0-468" name="__codelineno-0-468"></a>    <span class="n">scenarios</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Outage</span><span class="p">],</span>
 <a id="__codelineno-0-469" name="__codelineno-0-469"></a>    <span class="n">include_base</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <a id="__codelineno-0-470" name="__codelineno-0-470"></a>    <span class="n">base_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;base&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-471" name="__codelineno-0-471"></a>    <span class="n">auto_parallel_coefficients</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-<a id="__codelineno-0-472" name="__codelineno-0-472"></a>    <span class="n">redefine_paths</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-0-473" name="__codelineno-0-473"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutageStudyResult</span><span class="p">:</span>
-<a id="__codelineno-0-474" name="__codelineno-0-474"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-0-475" name="__codelineno-0-475"></a><span class="sd">    Solve ``fault`` for the base case (optional) and a list of outage scenarios.</span>
-<a id="__codelineno-0-476" name="__codelineno-0-476"></a>
-<a id="__codelineno-0-477" name="__codelineno-0-477"></a><span class="sd">    Each scenario is applied via :func:`outage_context`, then ``run_fault``</span>
-<a id="__codelineno-0-478" name="__codelineno-0-478"></a><span class="sd">    is called. Bus and branch result DataFrames are pulled out of the</span>
-<a id="__codelineno-0-479" name="__codelineno-0-479"></a><span class="sd">    network and stored under the scenario label so that the network&#39;s own</span>
-<a id="__codelineno-0-480" name="__codelineno-0-480"></a><span class="sd">    ``results`` dict is left in a single, reproducible state at the end of</span>
-<a id="__codelineno-0-481" name="__codelineno-0-481"></a><span class="sd">    the study (the last scenario&#39;s solution).</span>
-<a id="__codelineno-0-482" name="__codelineno-0-482"></a>
-<a id="__codelineno-0-483" name="__codelineno-0-483"></a><span class="sd">    Parameters</span>
-<a id="__codelineno-0-484" name="__codelineno-0-484"></a><span class="sd">    ----------</span>
-<a id="__codelineno-0-485" name="__codelineno-0-485"></a><span class="sd">    network : Network</span>
-<a id="__codelineno-0-486" name="__codelineno-0-486"></a><span class="sd">        The network to study. Must contain ``fault``.</span>
-<a id="__codelineno-0-487" name="__codelineno-0-487"></a><span class="sd">    fault : str</span>
-<a id="__codelineno-0-488" name="__codelineno-0-488"></a><span class="sd">        Name of the fault to solve in every scenario.</span>
-<a id="__codelineno-0-489" name="__codelineno-0-489"></a><span class="sd">    scenarios : list of Outage</span>
-<a id="__codelineno-0-490" name="__codelineno-0-490"></a><span class="sd">        Scenarios to run, in order.</span>
-<a id="__codelineno-0-491" name="__codelineno-0-491"></a><span class="sd">    include_base : bool, optional</span>
-<a id="__codelineno-0-492" name="__codelineno-0-492"></a><span class="sd">        If ``True`` (default) the base case (no outages) is solved first</span>
-<a id="__codelineno-0-493" name="__codelineno-0-493"></a><span class="sd">        and stored under ``base_label``.</span>
-<a id="__codelineno-0-494" name="__codelineno-0-494"></a><span class="sd">    base_label : str, optional</span>
-<a id="__codelineno-0-495" name="__codelineno-0-495"></a><span class="sd">        Label used to identify the base case in the stored DataFrames.</span>
-<a id="__codelineno-0-496" name="__codelineno-0-496"></a><span class="sd">        Defaults to ``&quot;base&quot;``.</span>
-<a id="__codelineno-0-497" name="__codelineno-0-497"></a><span class="sd">    auto_parallel_coefficients : bool, optional</span>
-<a id="__codelineno-0-498" name="__codelineno-0-498"></a><span class="sd">        Forwarded to :func:`run_fault`. Defaults to ``False``.</span>
-<a id="__codelineno-0-499" name="__codelineno-0-499"></a><span class="sd">    redefine_paths : bool, optional</span>
-<a id="__codelineno-0-500" name="__codelineno-0-500"></a><span class="sd">        If ``True`` (default), the pre-existing path cache on ``network``</span>
-<a id="__codelineno-0-501" name="__codelineno-0-501"></a><span class="sd">        is dropped at the start of the study so that path definitions</span>
-<a id="__codelineno-0-502" name="__codelineno-0-502"></a><span class="sd">        match the current topology. Each scenario then triggers its own</span>
-<a id="__codelineno-0-503" name="__codelineno-0-503"></a><span class="sd">        path definition through :func:`run_fault`.</span>
-<a id="__codelineno-0-504" name="__codelineno-0-504"></a>
-<a id="__codelineno-0-505" name="__codelineno-0-505"></a><span class="sd">    Returns</span>
-<a id="__codelineno-0-506" name="__codelineno-0-506"></a><span class="sd">    -------</span>
-<a id="__codelineno-0-507" name="__codelineno-0-507"></a><span class="sd">    OutageStudyResult</span>
-<a id="__codelineno-0-508" name="__codelineno-0-508"></a><span class="sd">        Aggregated result with comparison helpers.</span>
-<a id="__codelineno-0-509" name="__codelineno-0-509"></a>
-<a id="__codelineno-0-510" name="__codelineno-0-510"></a><span class="sd">    Raises</span>
-<a id="__codelineno-0-511" name="__codelineno-0-511"></a><span class="sd">    ------</span>
-<a id="__codelineno-0-512" name="__codelineno-0-512"></a><span class="sd">    ValueError</span>
-<a id="__codelineno-0-513" name="__codelineno-0-513"></a><span class="sd">        If ``fault`` is not part of the network or if a scenario label</span>
-<a id="__codelineno-0-514" name="__codelineno-0-514"></a><span class="sd">        collides with ``base_label``.</span>
-<a id="__codelineno-0-515" name="__codelineno-0-515"></a>
-<a id="__codelineno-0-516" name="__codelineno-0-516"></a><span class="sd">    Examples</span>
-<a id="__codelineno-0-517" name="__codelineno-0-517"></a><span class="sd">    --------</span>
-<a id="__codelineno-0-518" name="__codelineno-0-518"></a><span class="sd">    &gt;&gt;&gt; study = run_outage_study(  # doctest: +SKIP</span>
-<a id="__codelineno-0-519" name="__codelineno-0-519"></a><span class="sd">    ...     net, fault=&quot;F1&quot;,</span>
-<a id="__codelineno-0-520" name="__codelineno-0-520"></a><span class="sd">    ...     scenarios=[</span>
-<a id="__codelineno-0-521" name="__codelineno-0-521"></a><span class="sd">    ...         Outage(name=&quot;b12_open&quot;, disabled_branches=[&quot;B12&quot;]),</span>
-<a id="__codelineno-0-522" name="__codelineno-0-522"></a><span class="sd">    ...         Outage(name=&quot;bus5_isolated&quot;, disabled_buses=[&quot;bus5&quot;]),</span>
-<a id="__codelineno-0-523" name="__codelineno-0-523"></a><span class="sd">    ...     ],</span>
-<a id="__codelineno-0-524" name="__codelineno-0-524"></a><span class="sd">    ... )</span>
-<a id="__codelineno-0-525" name="__codelineno-0-525"></a><span class="sd">    &gt;&gt;&gt; study.compare_buses()       # doctest: +SKIP</span>
-<a id="__codelineno-0-526" name="__codelineno-0-526"></a><span class="sd">    &gt;&gt;&gt; study.compare_branches()    # doctest: +SKIP</span>
-<a id="__codelineno-0-527" name="__codelineno-0-527"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-528" name="__codelineno-0-528"></a>    <span class="k">if</span> <span class="n">fault</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">network</span><span class="o">.</span><span class="n">faults</span><span class="p">:</span>
-<a id="__codelineno-0-529" name="__codelineno-0-529"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Fault &#39;</span><span class="si">{</span><span class="n">fault</span><span class="si">}</span><span class="s2">&#39; is not part of network &#39;</span><span class="si">{</span><span class="n">network</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;.&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-530" name="__codelineno-0-530"></a>
-<a id="__codelineno-0-531" name="__codelineno-0-531"></a>    <span class="n">seen_labels</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-<a id="__codelineno-0-532" name="__codelineno-0-532"></a>    <span class="k">if</span> <span class="n">include_base</span><span class="p">:</span>
-<a id="__codelineno-0-533" name="__codelineno-0-533"></a>        <span class="n">seen_labels</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">base_label</span><span class="p">)</span>
-<a id="__codelineno-0-534" name="__codelineno-0-534"></a>    <span class="k">for</span> <span class="n">scenario</span> <span class="ow">in</span> <span class="n">scenarios</span><span class="p">:</span>
-<a id="__codelineno-0-535" name="__codelineno-0-535"></a>        <span class="k">if</span> <span class="n">scenario</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="n">base_label</span> <span class="ow">and</span> <span class="n">include_base</span><span class="p">:</span>
-<a id="__codelineno-0-536" name="__codelineno-0-536"></a>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<a id="__codelineno-0-537" name="__codelineno-0-537"></a>                <span class="sa">f</span><span class="s2">&quot;Scenario name &#39;</span><span class="si">{</span><span class="n">scenario</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; collides with the base label.&quot;</span>
-<a id="__codelineno-0-538" name="__codelineno-0-538"></a>            <span class="p">)</span>
-<a id="__codelineno-0-539" name="__codelineno-0-539"></a>        <span class="k">if</span> <span class="n">scenario</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="n">seen_labels</span><span class="p">:</span>
-<a id="__codelineno-0-540" name="__codelineno-0-540"></a>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Duplicate scenario label &#39;</span><span class="si">{</span><span class="n">scenario</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;.&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-541" name="__codelineno-0-541"></a>        <span class="n">seen_labels</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">scenario</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-<a id="__codelineno-0-542" name="__codelineno-0-542"></a>
-<a id="__codelineno-0-543" name="__codelineno-0-543"></a>    <span class="n">bus_results</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">pl</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-<a id="__codelineno-0-544" name="__codelineno-0-544"></a>    <span class="n">branch_results</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">pl</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-<a id="__codelineno-0-545" name="__codelineno-0-545"></a>
-<a id="__codelineno-0-546" name="__codelineno-0-546"></a>    <span class="k">if</span> <span class="n">redefine_paths</span><span class="p">:</span>
-<a id="__codelineno-0-547" name="__codelineno-0-547"></a>        <span class="n">network</span><span class="o">.</span><span class="n">paths</span> <span class="o">=</span> <span class="p">{}</span>
-<a id="__codelineno-0-548" name="__codelineno-0-548"></a>
-<a id="__codelineno-0-549" name="__codelineno-0-549"></a>    <span class="c1"># Local import to avoid a circular dependency between simulation and</span>
-<a id="__codelineno-0-550" name="__codelineno-0-550"></a>    <span class="c1"># network_operations (network_operations imports core_models, which the</span>
-<a id="__codelineno-0-551" name="__codelineno-0-551"></a>    <span class="c1"># outage module also touches at module load time via Pydantic).</span>
-<a id="__codelineno-0-552" name="__codelineno-0-552"></a>    <span class="kn">from</span> <span class="nn">groundinsight.network_operations</span> <span class="kn">import</span> <span class="n">run_fault</span>
+<a id="__codelineno-0-471" name="__codelineno-0-471"></a>    <span class="n">auto_parallel_coefficients</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-472" name="__codelineno-0-472"></a>    <span class="n">phase_current_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-473" name="__codelineno-0-473"></a>    <span class="n">redefine_paths</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-0-474" name="__codelineno-0-474"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutageStudyResult</span><span class="p">:</span>
+<a id="__codelineno-0-475" name="__codelineno-0-475"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-476" name="__codelineno-0-476"></a><span class="sd">    Solve ``fault`` for the base case (optional) and a list of outage scenarios.</span>
+<a id="__codelineno-0-477" name="__codelineno-0-477"></a>
+<a id="__codelineno-0-478" name="__codelineno-0-478"></a><span class="sd">    Each scenario is applied via :func:`outage_context`, then ``run_fault``</span>
+<a id="__codelineno-0-479" name="__codelineno-0-479"></a><span class="sd">    is called. Bus and branch result DataFrames are pulled out of the</span>
+<a id="__codelineno-0-480" name="__codelineno-0-480"></a><span class="sd">    network and stored under the scenario label so that the network&#39;s own</span>
+<a id="__codelineno-0-481" name="__codelineno-0-481"></a><span class="sd">    ``results`` dict is left in a single, reproducible state at the end of</span>
+<a id="__codelineno-0-482" name="__codelineno-0-482"></a><span class="sd">    the study (the last scenario&#39;s solution).</span>
+<a id="__codelineno-0-483" name="__codelineno-0-483"></a>
+<a id="__codelineno-0-484" name="__codelineno-0-484"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-485" name="__codelineno-0-485"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-486" name="__codelineno-0-486"></a><span class="sd">    network : Network</span>
+<a id="__codelineno-0-487" name="__codelineno-0-487"></a><span class="sd">        The network to study. Must contain ``fault``.</span>
+<a id="__codelineno-0-488" name="__codelineno-0-488"></a><span class="sd">    fault : str</span>
+<a id="__codelineno-0-489" name="__codelineno-0-489"></a><span class="sd">        Name of the fault to solve in every scenario.</span>
+<a id="__codelineno-0-490" name="__codelineno-0-490"></a><span class="sd">    scenarios : list of Outage</span>
+<a id="__codelineno-0-491" name="__codelineno-0-491"></a><span class="sd">        Scenarios to run, in order.</span>
+<a id="__codelineno-0-492" name="__codelineno-0-492"></a><span class="sd">    include_base : bool, optional</span>
+<a id="__codelineno-0-493" name="__codelineno-0-493"></a><span class="sd">        If ``True`` (default) the base case (no outages) is solved first</span>
+<a id="__codelineno-0-494" name="__codelineno-0-494"></a><span class="sd">        and stored under ``base_label``.</span>
+<a id="__codelineno-0-495" name="__codelineno-0-495"></a><span class="sd">    base_label : str, optional</span>
+<a id="__codelineno-0-496" name="__codelineno-0-496"></a><span class="sd">        Label used to identify the base case in the stored DataFrames.</span>
+<a id="__codelineno-0-497" name="__codelineno-0-497"></a><span class="sd">        Defaults to ``&quot;base&quot;``.</span>
+<a id="__codelineno-0-498" name="__codelineno-0-498"></a><span class="sd">    auto_parallel_coefficients : bool, optional</span>
+<a id="__codelineno-0-499" name="__codelineno-0-499"></a><span class="sd">        Deprecated alias, forwarded to :func:`run_fault`. Defaults to</span>
+<a id="__codelineno-0-500" name="__codelineno-0-500"></a><span class="sd">        ``None`` (not given).</span>
+<a id="__codelineno-0-501" name="__codelineno-0-501"></a><span class="sd">    phase_current_mode : {&quot;auto&quot;, &quot;paths&quot;}, optional</span>
+<a id="__codelineno-0-502" name="__codelineno-0-502"></a><span class="sd">        Forwarded to :func:`run_fault`. Defaults to ``&quot;auto&quot;``, which is</span>
+<a id="__codelineno-0-503" name="__codelineno-0-503"></a><span class="sd">        the only mode that divides the source current correctly over a</span>
+<a id="__codelineno-0-504" name="__codelineno-0-504"></a><span class="sd">        ring or a mesh -- and an outage study is precisely where a ring</span>
+<a id="__codelineno-0-505" name="__codelineno-0-505"></a><span class="sd">        turns into a chain and back, so a per-scenario topology change</span>
+<a id="__codelineno-0-506" name="__codelineno-0-506"></a><span class="sd">        must not change the modelling assumption underneath it.</span>
+<a id="__codelineno-0-507" name="__codelineno-0-507"></a><span class="sd">    redefine_paths : bool, optional</span>
+<a id="__codelineno-0-508" name="__codelineno-0-508"></a><span class="sd">        If ``True`` (default), the pre-existing path cache on ``network``</span>
+<a id="__codelineno-0-509" name="__codelineno-0-509"></a><span class="sd">        is dropped at the start of the study so that path definitions</span>
+<a id="__codelineno-0-510" name="__codelineno-0-510"></a><span class="sd">        match the current topology. Each scenario then triggers its own</span>
+<a id="__codelineno-0-511" name="__codelineno-0-511"></a><span class="sd">        path definition through :func:`run_fault`.</span>
+<a id="__codelineno-0-512" name="__codelineno-0-512"></a>
+<a id="__codelineno-0-513" name="__codelineno-0-513"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-514" name="__codelineno-0-514"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-515" name="__codelineno-0-515"></a><span class="sd">    OutageStudyResult</span>
+<a id="__codelineno-0-516" name="__codelineno-0-516"></a><span class="sd">        Aggregated result with comparison helpers.</span>
+<a id="__codelineno-0-517" name="__codelineno-0-517"></a>
+<a id="__codelineno-0-518" name="__codelineno-0-518"></a><span class="sd">    Raises</span>
+<a id="__codelineno-0-519" name="__codelineno-0-519"></a><span class="sd">    ------</span>
+<a id="__codelineno-0-520" name="__codelineno-0-520"></a><span class="sd">    ValueError</span>
+<a id="__codelineno-0-521" name="__codelineno-0-521"></a><span class="sd">        If ``fault`` is not part of the network or if a scenario label</span>
+<a id="__codelineno-0-522" name="__codelineno-0-522"></a><span class="sd">        collides with ``base_label``.</span>
+<a id="__codelineno-0-523" name="__codelineno-0-523"></a>
+<a id="__codelineno-0-524" name="__codelineno-0-524"></a><span class="sd">    Examples</span>
+<a id="__codelineno-0-525" name="__codelineno-0-525"></a><span class="sd">    --------</span>
+<a id="__codelineno-0-526" name="__codelineno-0-526"></a><span class="sd">    &gt;&gt;&gt; study = run_outage_study(  # doctest: +SKIP</span>
+<a id="__codelineno-0-527" name="__codelineno-0-527"></a><span class="sd">    ...     net, fault=&quot;F1&quot;,</span>
+<a id="__codelineno-0-528" name="__codelineno-0-528"></a><span class="sd">    ...     scenarios=[</span>
+<a id="__codelineno-0-529" name="__codelineno-0-529"></a><span class="sd">    ...         Outage(name=&quot;b12_open&quot;, disabled_branches=[&quot;B12&quot;]),</span>
+<a id="__codelineno-0-530" name="__codelineno-0-530"></a><span class="sd">    ...         Outage(name=&quot;bus5_isolated&quot;, disabled_buses=[&quot;bus5&quot;]),</span>
+<a id="__codelineno-0-531" name="__codelineno-0-531"></a><span class="sd">    ...     ],</span>
+<a id="__codelineno-0-532" name="__codelineno-0-532"></a><span class="sd">    ... )</span>
+<a id="__codelineno-0-533" name="__codelineno-0-533"></a><span class="sd">    &gt;&gt;&gt; study.compare_buses()       # doctest: +SKIP</span>
+<a id="__codelineno-0-534" name="__codelineno-0-534"></a><span class="sd">    &gt;&gt;&gt; study.compare_branches()    # doctest: +SKIP</span>
+<a id="__codelineno-0-535" name="__codelineno-0-535"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-536" name="__codelineno-0-536"></a>    <span class="k">if</span> <span class="n">fault</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">network</span><span class="o">.</span><span class="n">faults</span><span class="p">:</span>
+<a id="__codelineno-0-537" name="__codelineno-0-537"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Fault &#39;</span><span class="si">{</span><span class="n">fault</span><span class="si">}</span><span class="s2">&#39; is not part of network &#39;</span><span class="si">{</span><span class="n">network</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-538" name="__codelineno-0-538"></a>
+<a id="__codelineno-0-539" name="__codelineno-0-539"></a>    <span class="n">seen_labels</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+<a id="__codelineno-0-540" name="__codelineno-0-540"></a>    <span class="k">if</span> <span class="n">include_base</span><span class="p">:</span>
+<a id="__codelineno-0-541" name="__codelineno-0-541"></a>        <span class="n">seen_labels</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">base_label</span><span class="p">)</span>
+<a id="__codelineno-0-542" name="__codelineno-0-542"></a>    <span class="k">for</span> <span class="n">scenario</span> <span class="ow">in</span> <span class="n">scenarios</span><span class="p">:</span>
+<a id="__codelineno-0-543" name="__codelineno-0-543"></a>        <span class="k">if</span> <span class="n">scenario</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="n">base_label</span> <span class="ow">and</span> <span class="n">include_base</span><span class="p">:</span>
+<a id="__codelineno-0-544" name="__codelineno-0-544"></a>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<a id="__codelineno-0-545" name="__codelineno-0-545"></a>                <span class="sa">f</span><span class="s2">&quot;Scenario name &#39;</span><span class="si">{</span><span class="n">scenario</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; collides with the base label.&quot;</span>
+<a id="__codelineno-0-546" name="__codelineno-0-546"></a>            <span class="p">)</span>
+<a id="__codelineno-0-547" name="__codelineno-0-547"></a>        <span class="k">if</span> <span class="n">scenario</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="n">seen_labels</span><span class="p">:</span>
+<a id="__codelineno-0-548" name="__codelineno-0-548"></a>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Duplicate scenario label &#39;</span><span class="si">{</span><span class="n">scenario</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-549" name="__codelineno-0-549"></a>        <span class="n">seen_labels</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">scenario</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+<a id="__codelineno-0-550" name="__codelineno-0-550"></a>
+<a id="__codelineno-0-551" name="__codelineno-0-551"></a>    <span class="n">bus_results</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">pl</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-552" name="__codelineno-0-552"></a>    <span class="n">branch_results</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">pl</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 <a id="__codelineno-0-553" name="__codelineno-0-553"></a>
-<a id="__codelineno-0-554" name="__codelineno-0-554"></a>    <span class="k">if</span> <span class="n">include_base</span><span class="p">:</span>
-<a id="__codelineno-0-555" name="__codelineno-0-555"></a>        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-<a id="__codelineno-0-556" name="__codelineno-0-556"></a>            <span class="s2">&quot;Outage study: solving base case for fault &#39;</span><span class="si">%s</span><span class="s2">&#39; under label &#39;</span><span class="si">%s</span><span class="s2">&#39;.&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-557" name="__codelineno-0-557"></a>            <span class="n">fault</span><span class="p">,</span>
-<a id="__codelineno-0-558" name="__codelineno-0-558"></a>            <span class="n">base_label</span><span class="p">,</span>
-<a id="__codelineno-0-559" name="__codelineno-0-559"></a>        <span class="p">)</span>
-<a id="__codelineno-0-560" name="__codelineno-0-560"></a>        <span class="n">run_fault</span><span class="p">(</span>
-<a id="__codelineno-0-561" name="__codelineno-0-561"></a>            <span class="n">network</span><span class="p">,</span>
-<a id="__codelineno-0-562" name="__codelineno-0-562"></a>            <span class="n">fault_name</span><span class="o">=</span><span class="n">fault</span><span class="p">,</span>
-<a id="__codelineno-0-563" name="__codelineno-0-563"></a>            <span class="n">auto_parallel_coefficients</span><span class="o">=</span><span class="n">auto_parallel_coefficients</span><span class="p">,</span>
-<a id="__codelineno-0-564" name="__codelineno-0-564"></a>        <span class="p">)</span>
-<a id="__codelineno-0-565" name="__codelineno-0-565"></a>        <span class="n">bus_results</span><span class="p">[</span><span class="n">base_label</span><span class="p">]</span> <span class="o">=</span> <span class="n">network</span><span class="o">.</span><span class="n">res_buses</span><span class="p">(</span><span class="n">fault</span><span class="o">=</span><span class="n">fault</span><span class="p">)</span>
-<a id="__codelineno-0-566" name="__codelineno-0-566"></a>        <span class="n">branch_results</span><span class="p">[</span><span class="n">base_label</span><span class="p">]</span> <span class="o">=</span> <span class="n">network</span><span class="o">.</span><span class="n">res_branches</span><span class="p">(</span><span class="n">fault</span><span class="o">=</span><span class="n">fault</span><span class="p">)</span>
-<a id="__codelineno-0-567" name="__codelineno-0-567"></a>
-<a id="__codelineno-0-568" name="__codelineno-0-568"></a>    <span class="k">for</span> <span class="n">scenario</span> <span class="ow">in</span> <span class="n">scenarios</span><span class="p">:</span>
-<a id="__codelineno-0-569" name="__codelineno-0-569"></a>        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-<a id="__codelineno-0-570" name="__codelineno-0-570"></a>            <span class="s2">&quot;Outage study: running scenario &#39;</span><span class="si">%s</span><span class="s2">&#39; (</span><span class="si">%s</span><span class="s2"> buses, </span><span class="si">%s</span><span class="s2"> branches).&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-571" name="__codelineno-0-571"></a>            <span class="n">scenario</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-<a id="__codelineno-0-572" name="__codelineno-0-572"></a>            <span class="nb">len</span><span class="p">(</span><span class="n">scenario</span><span class="o">.</span><span class="n">disabled_buses</span><span class="p">),</span>
-<a id="__codelineno-0-573" name="__codelineno-0-573"></a>            <span class="nb">len</span><span class="p">(</span><span class="n">scenario</span><span class="o">.</span><span class="n">disabled_branches</span><span class="p">),</span>
-<a id="__codelineno-0-574" name="__codelineno-0-574"></a>        <span class="p">)</span>
-<a id="__codelineno-0-575" name="__codelineno-0-575"></a>        <span class="k">with</span> <span class="n">outage_context</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="n">scenario</span><span class="p">):</span>
-<a id="__codelineno-0-576" name="__codelineno-0-576"></a>            <span class="n">run_fault</span><span class="p">(</span>
-<a id="__codelineno-0-577" name="__codelineno-0-577"></a>                <span class="n">network</span><span class="p">,</span>
-<a id="__codelineno-0-578" name="__codelineno-0-578"></a>                <span class="n">fault_name</span><span class="o">=</span><span class="n">fault</span><span class="p">,</span>
-<a id="__codelineno-0-579" name="__codelineno-0-579"></a>                <span class="n">auto_parallel_coefficients</span><span class="o">=</span><span class="n">auto_parallel_coefficients</span><span class="p">,</span>
-<a id="__codelineno-0-580" name="__codelineno-0-580"></a>            <span class="p">)</span>
-<a id="__codelineno-0-581" name="__codelineno-0-581"></a>            <span class="n">bus_results</span><span class="p">[</span><span class="n">scenario</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">network</span><span class="o">.</span><span class="n">res_buses</span><span class="p">(</span><span class="n">fault</span><span class="o">=</span><span class="n">fault</span><span class="p">)</span>
-<a id="__codelineno-0-582" name="__codelineno-0-582"></a>            <span class="n">branch_results</span><span class="p">[</span><span class="n">scenario</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">network</span><span class="o">.</span><span class="n">res_branches</span><span class="p">(</span><span class="n">fault</span><span class="o">=</span><span class="n">fault</span><span class="p">)</span>
-<a id="__codelineno-0-583" name="__codelineno-0-583"></a>
-<a id="__codelineno-0-584" name="__codelineno-0-584"></a>    <span class="k">return</span> <span class="n">OutageStudyResult</span><span class="p">(</span>
-<a id="__codelineno-0-585" name="__codelineno-0-585"></a>        <span class="n">fault</span><span class="o">=</span><span class="n">fault</span><span class="p">,</span>
-<a id="__codelineno-0-586" name="__codelineno-0-586"></a>        <span class="n">base_label</span><span class="o">=</span><span class="n">base_label</span><span class="p">,</span>
-<a id="__codelineno-0-587" name="__codelineno-0-587"></a>        <span class="n">scenarios</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">scenarios</span><span class="p">),</span>
-<a id="__codelineno-0-588" name="__codelineno-0-588"></a>        <span class="n">bus_results</span><span class="o">=</span><span class="n">bus_results</span><span class="p">,</span>
-<a id="__codelineno-0-589" name="__codelineno-0-589"></a>        <span class="n">branch_results</span><span class="o">=</span><span class="n">branch_results</span><span class="p">,</span>
-<a id="__codelineno-0-590" name="__codelineno-0-590"></a>    <span class="p">)</span>
+<a id="__codelineno-0-554" name="__codelineno-0-554"></a>    <span class="k">if</span> <span class="n">redefine_paths</span><span class="p">:</span>
+<a id="__codelineno-0-555" name="__codelineno-0-555"></a>        <span class="n">network</span><span class="o">.</span><span class="n">paths</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-556" name="__codelineno-0-556"></a>
+<a id="__codelineno-0-557" name="__codelineno-0-557"></a>    <span class="c1"># Local import to avoid a circular dependency between simulation and</span>
+<a id="__codelineno-0-558" name="__codelineno-0-558"></a>    <span class="c1"># network_operations (network_operations imports core_models, which the</span>
+<a id="__codelineno-0-559" name="__codelineno-0-559"></a>    <span class="c1"># outage module also touches at module load time via Pydantic).</span>
+<a id="__codelineno-0-560" name="__codelineno-0-560"></a>    <span class="kn">from</span> <span class="nn">groundinsight.network_operations</span> <span class="kn">import</span> <span class="n">run_fault</span>
+<a id="__codelineno-0-561" name="__codelineno-0-561"></a>
+<a id="__codelineno-0-562" name="__codelineno-0-562"></a>    <span class="k">if</span> <span class="n">include_base</span><span class="p">:</span>
+<a id="__codelineno-0-563" name="__codelineno-0-563"></a>        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+<a id="__codelineno-0-564" name="__codelineno-0-564"></a>            <span class="s2">&quot;Outage study: solving base case for fault &#39;</span><span class="si">%s</span><span class="s2">&#39; under label &#39;</span><span class="si">%s</span><span class="s2">&#39;.&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-565" name="__codelineno-0-565"></a>            <span class="n">fault</span><span class="p">,</span>
+<a id="__codelineno-0-566" name="__codelineno-0-566"></a>            <span class="n">base_label</span><span class="p">,</span>
+<a id="__codelineno-0-567" name="__codelineno-0-567"></a>        <span class="p">)</span>
+<a id="__codelineno-0-568" name="__codelineno-0-568"></a>        <span class="n">run_fault</span><span class="p">(</span>
+<a id="__codelineno-0-569" name="__codelineno-0-569"></a>            <span class="n">network</span><span class="p">,</span>
+<a id="__codelineno-0-570" name="__codelineno-0-570"></a>            <span class="n">fault_name</span><span class="o">=</span><span class="n">fault</span><span class="p">,</span>
+<a id="__codelineno-0-571" name="__codelineno-0-571"></a>            <span class="n">auto_parallel_coefficients</span><span class="o">=</span><span class="n">auto_parallel_coefficients</span><span class="p">,</span>
+<a id="__codelineno-0-572" name="__codelineno-0-572"></a>            <span class="n">phase_current_mode</span><span class="o">=</span><span class="n">phase_current_mode</span><span class="p">,</span>
+<a id="__codelineno-0-573" name="__codelineno-0-573"></a>        <span class="p">)</span>
+<a id="__codelineno-0-574" name="__codelineno-0-574"></a>        <span class="n">bus_results</span><span class="p">[</span><span class="n">base_label</span><span class="p">]</span> <span class="o">=</span> <span class="n">network</span><span class="o">.</span><span class="n">res_buses</span><span class="p">(</span><span class="n">fault</span><span class="o">=</span><span class="n">fault</span><span class="p">)</span>
+<a id="__codelineno-0-575" name="__codelineno-0-575"></a>        <span class="n">branch_results</span><span class="p">[</span><span class="n">base_label</span><span class="p">]</span> <span class="o">=</span> <span class="n">network</span><span class="o">.</span><span class="n">res_branches</span><span class="p">(</span><span class="n">fault</span><span class="o">=</span><span class="n">fault</span><span class="p">)</span>
+<a id="__codelineno-0-576" name="__codelineno-0-576"></a>
+<a id="__codelineno-0-577" name="__codelineno-0-577"></a>    <span class="k">for</span> <span class="n">scenario</span> <span class="ow">in</span> <span class="n">scenarios</span><span class="p">:</span>
+<a id="__codelineno-0-578" name="__codelineno-0-578"></a>        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+<a id="__codelineno-0-579" name="__codelineno-0-579"></a>            <span class="s2">&quot;Outage study: running scenario &#39;</span><span class="si">%s</span><span class="s2">&#39; (</span><span class="si">%s</span><span class="s2"> buses, </span><span class="si">%s</span><span class="s2"> branches).&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-580" name="__codelineno-0-580"></a>            <span class="n">scenario</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+<a id="__codelineno-0-581" name="__codelineno-0-581"></a>            <span class="nb">len</span><span class="p">(</span><span class="n">scenario</span><span class="o">.</span><span class="n">disabled_buses</span><span class="p">),</span>
+<a id="__codelineno-0-582" name="__codelineno-0-582"></a>            <span class="nb">len</span><span class="p">(</span><span class="n">scenario</span><span class="o">.</span><span class="n">disabled_branches</span><span class="p">),</span>
+<a id="__codelineno-0-583" name="__codelineno-0-583"></a>        <span class="p">)</span>
+<a id="__codelineno-0-584" name="__codelineno-0-584"></a>        <span class="k">with</span> <span class="n">outage_context</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="n">scenario</span><span class="p">):</span>
+<a id="__codelineno-0-585" name="__codelineno-0-585"></a>            <span class="n">run_fault</span><span class="p">(</span>
+<a id="__codelineno-0-586" name="__codelineno-0-586"></a>                <span class="n">network</span><span class="p">,</span>
+<a id="__codelineno-0-587" name="__codelineno-0-587"></a>                <span class="n">fault_name</span><span class="o">=</span><span class="n">fault</span><span class="p">,</span>
+<a id="__codelineno-0-588" name="__codelineno-0-588"></a>                <span class="n">auto_parallel_coefficients</span><span class="o">=</span><span class="n">auto_parallel_coefficients</span><span class="p">,</span>
+<a id="__codelineno-0-589" name="__codelineno-0-589"></a>                <span class="n">phase_current_mode</span><span class="o">=</span><span class="n">phase_current_mode</span><span class="p">,</span>
+<a id="__codelineno-0-590" name="__codelineno-0-590"></a>            <span class="p">)</span>
+<a id="__codelineno-0-591" name="__codelineno-0-591"></a>            <span class="n">bus_results</span><span class="p">[</span><span class="n">scenario</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">network</span><span class="o">.</span><span class="n">res_buses</span><span class="p">(</span><span class="n">fault</span><span class="o">=</span><span class="n">fault</span><span class="p">)</span>
+<a id="__codelineno-0-592" name="__codelineno-0-592"></a>            <span class="n">branch_results</span><span class="p">[</span><span class="n">scenario</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">network</span><span class="o">.</span><span class="n">res_branches</span><span class="p">(</span><span class="n">fault</span><span class="o">=</span><span class="n">fault</span><span class="p">)</span>
+<a id="__codelineno-0-593" name="__codelineno-0-593"></a>
+<a id="__codelineno-0-594" name="__codelineno-0-594"></a>    <span class="k">return</span> <span class="n">OutageStudyResult</span><span class="p">(</span>
+<a id="__codelineno-0-595" name="__codelineno-0-595"></a>        <span class="n">fault</span><span class="o">=</span><span class="n">fault</span><span class="p">,</span>
+<a id="__codelineno-0-596" name="__codelineno-0-596"></a>        <span class="n">base_label</span><span class="o">=</span><span class="n">base_label</span><span class="p">,</span>
+<a id="__codelineno-0-597" name="__codelineno-0-597"></a>        <span class="n">scenarios</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">scenarios</span><span class="p">),</span>
+<a id="__codelineno-0-598" name="__codelineno-0-598"></a>        <span class="n">bus_results</span><span class="o">=</span><span class="n">bus_results</span><span class="p">,</span>
+<a id="__codelineno-0-599" name="__codelineno-0-599"></a>        <span class="n">branch_results</span><span class="o">=</span><span class="n">branch_results</span><span class="p">,</span>
+<a id="__codelineno-0-600" name="__codelineno-0-600"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

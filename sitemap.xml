@@ -41,6 +41,10 @@
          <lastmod>2026-09-01</lastmod>
     </url>
     <url>
+         <loc>https://ce1ectric.github.io/groundinsight/api/decomposition/</loc>
+         <lastmod>2026-09-01</lastmod>
+    </url>
+    <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/electrical_network/</loc>
          <lastmod>2026-09-01</lastmod>
     </url>
@@ -65,11 +69,31 @@
          <lastmod>2026-09-01</lastmod>
     </url>
     <url>
+         <loc>https://ce1ectric.github.io/groundinsight/api/reference/</loc>
+         <lastmod>2026-09-01</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/api/response/</loc>
+         <lastmod>2026-09-01</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/api/statistics/</loc>
+         <lastmod>2026-09-01</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/api/sweep/</loc>
+         <lastmod>2026-09-01</lastmod>
+    </url>
+    <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/transient/</loc>
          <lastmod>2026-09-01</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/examples/</loc>
+         <lastmod>2026-09-01</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/examples/fault_decomposition/</loc>
          <lastmod>2026-09-01</lastmod>
     </url>
     <url>

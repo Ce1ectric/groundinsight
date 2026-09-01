@@ -736,6 +736,8 @@
       
         
       
+        
+      
     
     
     
@@ -930,6 +932,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/fault_decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decomposing a fault: cuts, both reduction factors and a location without its electrode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -948,6 +978,16 @@
       
         
           
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
         
       
         
@@ -1255,6 +1295,34 @@
   
   
     <li class="md-nav__item">
+      <a href="api/sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter sweeps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="api/analysis/" class="md-nav__link">
         
   
@@ -1263,6 +1331,118 @@
     
   
     Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault-location decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/response/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Location response
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference cases
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/statistics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Statistics and classification
   
 
     
@@ -1505,8 +1685,27 @@ equivalents of the mutual coupling between phase and shield conductors.</p>
   through SymPy</li>
 <li>Sparse LU solver for every frequency (SciPy <code>splu</code>)</li>
 <li>Mutual coupling treated as Norton sources along the path from source to fault</li>
-<li>Reduction factors computed from the ratio of EPR with and without mutual
-  coupling at the fault bus</li>
+<li><strong>Two reduction factors</strong>, both reported: the EPR ratio with and without
+  mutual coupling at the fault bus (<code>value</code>), and the share of the fault
+  current returning through earth (<code>value_current</code>) — the EN 50522 quantity,
+  and the one that responds to the electrode at the fault bus, see
+  <a href="concepts/">Concepts</a></li>
+<li><strong>Phase currents from a solve on the phase-conductor network</strong>
+  (<code>phase_current_mode="auto"</code>), so rings, meshes and parallel cables no
+  longer collapse onto enumerated paths;
+  <code>BranchType.phase_impedance_formula</code> describes the faulted conductor</li>
+<li><strong>Splitting the network at the fault</strong> (<code>gi.Cut</code>, <code>gi.analyze_cuts</code>) —
+  what each direction contributes, from source-free current division, see
+  <a href="api/decomposition/">Fault-location decomposition</a></li>
+<li><strong>Parameter sweeps</strong> (<code>run_sweep</code>, <code>rho_f_points</code>) into long-format
+  frames, with <code>summarize</code> and <code>classify</code> for statistics and
+  user-supplied limit bands, see <a href="api/sweep/">Parameter sweeps</a></li>
+<li><strong>Characterising a location without its electrode</strong> (<code>bus_response</code>):
+  two solves determine the response for every electrode impedance, see
+  <a href="api/response/">Location response</a></li>
+<li><strong>Closed-form reference cases</strong> (<code>run_reference_cases</code>) — six
+  configurations checked against results derived from first principles,
+  see <a href="api/reference/">Reference cases</a></li>
 <li>SQLite persistence and JSON export/import of networks and type libraries</li>
 <li>Polars DataFrames for result access; Matplotlib helpers for bar plots</li>
 <li><strong>Time-domain transient simulation</strong> (FFT and modified-nodal-analysis

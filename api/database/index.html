@@ -614,6 +614,8 @@
       
         
       
+        
+      
     
     
     
@@ -808,6 +810,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/fault_decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decomposing a fault: cuts, both reduction factors and a location without its electrode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -828,6 +858,16 @@
       
         
           
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
         
       
         
@@ -1590,6 +1630,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter sweeps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../analysis/" class="md-nav__link">
         
   
@@ -1598,6 +1666,118 @@
     
   
     Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault-location decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../response/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Location response
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference cases
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../statistics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Statistics and classification
   
 
     
@@ -3769,21 +3949,7 @@ to restore the dictionary order on load. Defaults to <code>0</code>.</p>
 
             <details class="quote">
               <summary>Source code in <code>src/groundinsight/models/database_models.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-528">528</a></span>
-<span class="normal"><a href="#__codelineno-0-529">529</a></span>
-<span class="normal"><a href="#__codelineno-0-530">530</a></span>
-<span class="normal"><a href="#__codelineno-0-531">531</a></span>
-<span class="normal"><a href="#__codelineno-0-532">532</a></span>
-<span class="normal"><a href="#__codelineno-0-533">533</a></span>
-<span class="normal"><a href="#__codelineno-0-534">534</a></span>
-<span class="normal"><a href="#__codelineno-0-535">535</a></span>
-<span class="normal"><a href="#__codelineno-0-536">536</a></span>
-<span class="normal"><a href="#__codelineno-0-537">537</a></span>
-<span class="normal"><a href="#__codelineno-0-538">538</a></span>
-<span class="normal"><a href="#__codelineno-0-539">539</a></span>
-<span class="normal"><a href="#__codelineno-0-540">540</a></span>
-<span class="normal"><a href="#__codelineno-0-541">541</a></span>
-<span class="normal"><a href="#__codelineno-0-542">542</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-542">542</a></span>
 <span class="normal"><a href="#__codelineno-0-543">543</a></span>
 <span class="normal"><a href="#__codelineno-0-544">544</a></span>
 <span class="normal"><a href="#__codelineno-0-545">545</a></span>
@@ -3826,64 +3992,98 @@ to restore the dictionary order on load. Defaults to <code>0</code>.</p>
 <span class="normal"><a href="#__codelineno-0-582">582</a></span>
 <span class="normal"><a href="#__codelineno-0-583">583</a></span>
 <span class="normal"><a href="#__codelineno-0-584">584</a></span>
-<span class="normal"><a href="#__codelineno-0-585">585</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-528" name="__codelineno-0-528"></a><span class="nd">@classmethod</span>
-<a id="__codelineno-0-529" name="__codelineno-0-529"></a><span class="k">def</span> <span class="nf">from_pydantic</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">branch</span><span class="p">:</span> <span class="n">Branch</span><span class="p">,</span> <span class="n">network_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
-<a id="__codelineno-0-530" name="__codelineno-0-530"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a ``BranchDB`` row from a Pydantic :class:`Branch`.</span>
-<a id="__codelineno-0-531" name="__codelineno-0-531"></a>
-<a id="__codelineno-0-532" name="__codelineno-0-532"></a><span class="sd">    Parameters</span>
-<a id="__codelineno-0-533" name="__codelineno-0-533"></a><span class="sd">    ----------</span>
-<a id="__codelineno-0-534" name="__codelineno-0-534"></a><span class="sd">    branch : Branch</span>
-<a id="__codelineno-0-535" name="__codelineno-0-535"></a><span class="sd">        The branch to convert.</span>
-<a id="__codelineno-0-536" name="__codelineno-0-536"></a><span class="sd">    network_name : str, optional</span>
-<a id="__codelineno-0-537" name="__codelineno-0-537"></a><span class="sd">        Name of the owning network. Part of the composite primary key.</span>
-<a id="__codelineno-0-538" name="__codelineno-0-538"></a><span class="sd">    position : int, optional</span>
-<a id="__codelineno-0-539" name="__codelineno-0-539"></a><span class="sd">        Zero-based index of the branch inside ``Network.branches``, used</span>
-<a id="__codelineno-0-540" name="__codelineno-0-540"></a><span class="sd">        to restore the dictionary order on load. Defaults to ``0``.</span>
-<a id="__codelineno-0-541" name="__codelineno-0-541"></a>
-<a id="__codelineno-0-542" name="__codelineno-0-542"></a><span class="sd">    Returns</span>
-<a id="__codelineno-0-543" name="__codelineno-0-543"></a><span class="sd">    -------</span>
-<a id="__codelineno-0-544" name="__codelineno-0-544"></a><span class="sd">    BranchDB</span>
-<a id="__codelineno-0-545" name="__codelineno-0-545"></a><span class="sd">        The unattached database row.</span>
-<a id="__codelineno-0-546" name="__codelineno-0-546"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-547" name="__codelineno-0-547"></a>    <span class="c1"># Convert impedance to JSON serializable format</span>
-<a id="__codelineno-0-548" name="__codelineno-0-548"></a>    <span class="n">self_impedance</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-0-549" name="__codelineno-0-549"></a>        <span class="p">{</span>
-<a id="__codelineno-0-550" name="__codelineno-0-550"></a>            <span class="nb">str</span><span class="p">(</span><span class="n">freq</span><span class="p">):</span> <span class="p">{</span><span class="s2">&quot;real&quot;</span><span class="p">:</span> <span class="n">imp</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="s2">&quot;imag&quot;</span><span class="p">:</span> <span class="n">imp</span><span class="o">.</span><span class="n">imag</span><span class="p">}</span>
-<a id="__codelineno-0-551" name="__codelineno-0-551"></a>            <span class="k">for</span> <span class="n">freq</span><span class="p">,</span> <span class="n">imp</span> <span class="ow">in</span> <span class="n">branch</span><span class="o">.</span><span class="n">self_impedance</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-<a id="__codelineno-0-552" name="__codelineno-0-552"></a>        <span class="p">}</span>
-<a id="__codelineno-0-553" name="__codelineno-0-553"></a>        <span class="k">if</span> <span class="n">branch</span><span class="o">.</span><span class="n">self_impedance</span>
-<a id="__codelineno-0-554" name="__codelineno-0-554"></a>        <span class="k">else</span> <span class="p">{}</span>
-<a id="__codelineno-0-555" name="__codelineno-0-555"></a>    <span class="p">)</span>
-<a id="__codelineno-0-556" name="__codelineno-0-556"></a>
-<a id="__codelineno-0-557" name="__codelineno-0-557"></a>    <span class="n">mutual_impedance</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-0-558" name="__codelineno-0-558"></a>        <span class="p">{</span>
-<a id="__codelineno-0-559" name="__codelineno-0-559"></a>            <span class="nb">str</span><span class="p">(</span><span class="n">freq</span><span class="p">):</span> <span class="p">{</span><span class="s2">&quot;real&quot;</span><span class="p">:</span> <span class="n">imp</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="s2">&quot;imag&quot;</span><span class="p">:</span> <span class="n">imp</span><span class="o">.</span><span class="n">imag</span><span class="p">}</span>
-<a id="__codelineno-0-560" name="__codelineno-0-560"></a>            <span class="k">for</span> <span class="n">freq</span><span class="p">,</span> <span class="n">imp</span> <span class="ow">in</span> <span class="n">branch</span><span class="o">.</span><span class="n">mutual_impedance</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-<a id="__codelineno-0-561" name="__codelineno-0-561"></a>        <span class="p">}</span>
-<a id="__codelineno-0-562" name="__codelineno-0-562"></a>        <span class="k">if</span> <span class="n">branch</span><span class="o">.</span><span class="n">mutual_impedance</span>
-<a id="__codelineno-0-563" name="__codelineno-0-563"></a>        <span class="k">else</span> <span class="p">{}</span>
-<a id="__codelineno-0-564" name="__codelineno-0-564"></a>    <span class="p">)</span>
-<a id="__codelineno-0-565" name="__codelineno-0-565"></a>
-<a id="__codelineno-0-566" name="__codelineno-0-566"></a>    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
-<a id="__codelineno-0-567" name="__codelineno-0-567"></a>        <span class="n">network_name</span><span class="o">=</span><span class="n">network_name</span><span class="p">,</span>
-<a id="__codelineno-0-568" name="__codelineno-0-568"></a>        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
-<a id="__codelineno-0-569" name="__codelineno-0-569"></a>        <span class="n">name</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-<a id="__codelineno-0-570" name="__codelineno-0-570"></a>        <span class="n">description</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
-<a id="__codelineno-0-571" name="__codelineno-0-571"></a>        <span class="n">type_name</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-<a id="__codelineno-0-572" name="__codelineno-0-572"></a>        <span class="n">length</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">length</span><span class="p">,</span>
-<a id="__codelineno-0-573" name="__codelineno-0-573"></a>        <span class="n">from_bus_name</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">from_bus</span><span class="p">,</span>
-<a id="__codelineno-0-574" name="__codelineno-0-574"></a>        <span class="n">to_bus_name</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">to_bus</span><span class="p">,</span>
-<a id="__codelineno-0-575" name="__codelineno-0-575"></a>        <span class="n">self_impedance</span><span class="o">=</span><span class="n">self_impedance</span><span class="p">,</span>
-<a id="__codelineno-0-576" name="__codelineno-0-576"></a>        <span class="n">mutual_impedance</span><span class="o">=</span><span class="n">mutual_impedance</span><span class="p">,</span>
-<a id="__codelineno-0-577" name="__codelineno-0-577"></a>        <span class="n">specific_earth_resistance</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">specific_earth_resistance</span><span class="p">,</span>
-<a id="__codelineno-0-578" name="__codelineno-0-578"></a>        <span class="n">parallel_coefficient</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">parallel_coefficient</span><span class="p">,</span>
-<a id="__codelineno-0-579" name="__codelineno-0-579"></a>        <span class="n">active</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">active</span><span class="p">,</span>
-<a id="__codelineno-0-580" name="__codelineno-0-580"></a>        <span class="n">R_self</span><span class="o">=</span><span class="n">_real_dict_to_json</span><span class="p">(</span><span class="n">branch</span><span class="o">.</span><span class="n">R_self</span><span class="p">),</span>
-<a id="__codelineno-0-581" name="__codelineno-0-581"></a>        <span class="n">L_self</span><span class="o">=</span><span class="n">_real_dict_to_json</span><span class="p">(</span><span class="n">branch</span><span class="o">.</span><span class="n">L_self</span><span class="p">),</span>
-<a id="__codelineno-0-582" name="__codelineno-0-582"></a>        <span class="n">C_self</span><span class="o">=</span><span class="n">_real_dict_to_json</span><span class="p">(</span><span class="n">branch</span><span class="o">.</span><span class="n">C_self</span><span class="p">),</span>
-<a id="__codelineno-0-583" name="__codelineno-0-583"></a>        <span class="n">R_mutual</span><span class="o">=</span><span class="n">_real_dict_to_json</span><span class="p">(</span><span class="n">branch</span><span class="o">.</span><span class="n">R_mutual</span><span class="p">),</span>
-<a id="__codelineno-0-584" name="__codelineno-0-584"></a>        <span class="n">M_mutual</span><span class="o">=</span><span class="n">_real_dict_to_json</span><span class="p">(</span><span class="n">branch</span><span class="o">.</span><span class="n">M_mutual</span><span class="p">),</span>
-<a id="__codelineno-0-585" name="__codelineno-0-585"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-585">585</a></span>
+<span class="normal"><a href="#__codelineno-0-586">586</a></span>
+<span class="normal"><a href="#__codelineno-0-587">587</a></span>
+<span class="normal"><a href="#__codelineno-0-588">588</a></span>
+<span class="normal"><a href="#__codelineno-0-589">589</a></span>
+<span class="normal"><a href="#__codelineno-0-590">590</a></span>
+<span class="normal"><a href="#__codelineno-0-591">591</a></span>
+<span class="normal"><a href="#__codelineno-0-592">592</a></span>
+<span class="normal"><a href="#__codelineno-0-593">593</a></span>
+<span class="normal"><a href="#__codelineno-0-594">594</a></span>
+<span class="normal"><a href="#__codelineno-0-595">595</a></span>
+<span class="normal"><a href="#__codelineno-0-596">596</a></span>
+<span class="normal"><a href="#__codelineno-0-597">597</a></span>
+<span class="normal"><a href="#__codelineno-0-598">598</a></span>
+<span class="normal"><a href="#__codelineno-0-599">599</a></span>
+<span class="normal"><a href="#__codelineno-0-600">600</a></span>
+<span class="normal"><a href="#__codelineno-0-601">601</a></span>
+<span class="normal"><a href="#__codelineno-0-602">602</a></span>
+<span class="normal"><a href="#__codelineno-0-603">603</a></span>
+<span class="normal"><a href="#__codelineno-0-604">604</a></span>
+<span class="normal"><a href="#__codelineno-0-605">605</a></span>
+<span class="normal"><a href="#__codelineno-0-606">606</a></span>
+<span class="normal"><a href="#__codelineno-0-607">607</a></span>
+<span class="normal"><a href="#__codelineno-0-608">608</a></span>
+<span class="normal"><a href="#__codelineno-0-609">609</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-542" name="__codelineno-0-542"></a><span class="nd">@classmethod</span>
+<a id="__codelineno-0-543" name="__codelineno-0-543"></a><span class="k">def</span> <span class="nf">from_pydantic</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">branch</span><span class="p">:</span> <span class="n">Branch</span><span class="p">,</span> <span class="n">network_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+<a id="__codelineno-0-544" name="__codelineno-0-544"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a ``BranchDB`` row from a Pydantic :class:`Branch`.</span>
+<a id="__codelineno-0-545" name="__codelineno-0-545"></a>
+<a id="__codelineno-0-546" name="__codelineno-0-546"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-547" name="__codelineno-0-547"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-548" name="__codelineno-0-548"></a><span class="sd">    branch : Branch</span>
+<a id="__codelineno-0-549" name="__codelineno-0-549"></a><span class="sd">        The branch to convert.</span>
+<a id="__codelineno-0-550" name="__codelineno-0-550"></a><span class="sd">    network_name : str, optional</span>
+<a id="__codelineno-0-551" name="__codelineno-0-551"></a><span class="sd">        Name of the owning network. Part of the composite primary key.</span>
+<a id="__codelineno-0-552" name="__codelineno-0-552"></a><span class="sd">    position : int, optional</span>
+<a id="__codelineno-0-553" name="__codelineno-0-553"></a><span class="sd">        Zero-based index of the branch inside ``Network.branches``, used</span>
+<a id="__codelineno-0-554" name="__codelineno-0-554"></a><span class="sd">        to restore the dictionary order on load. Defaults to ``0``.</span>
+<a id="__codelineno-0-555" name="__codelineno-0-555"></a>
+<a id="__codelineno-0-556" name="__codelineno-0-556"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-557" name="__codelineno-0-557"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-558" name="__codelineno-0-558"></a><span class="sd">    BranchDB</span>
+<a id="__codelineno-0-559" name="__codelineno-0-559"></a><span class="sd">        The unattached database row.</span>
+<a id="__codelineno-0-560" name="__codelineno-0-560"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-561" name="__codelineno-0-561"></a>    <span class="c1"># Convert impedance to JSON serializable format</span>
+<a id="__codelineno-0-562" name="__codelineno-0-562"></a>    <span class="n">self_impedance</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-563" name="__codelineno-0-563"></a>        <span class="p">{</span>
+<a id="__codelineno-0-564" name="__codelineno-0-564"></a>            <span class="nb">str</span><span class="p">(</span><span class="n">freq</span><span class="p">):</span> <span class="p">{</span><span class="s2">&quot;real&quot;</span><span class="p">:</span> <span class="n">imp</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="s2">&quot;imag&quot;</span><span class="p">:</span> <span class="n">imp</span><span class="o">.</span><span class="n">imag</span><span class="p">}</span>
+<a id="__codelineno-0-565" name="__codelineno-0-565"></a>            <span class="k">for</span> <span class="n">freq</span><span class="p">,</span> <span class="n">imp</span> <span class="ow">in</span> <span class="n">branch</span><span class="o">.</span><span class="n">self_impedance</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+<a id="__codelineno-0-566" name="__codelineno-0-566"></a>        <span class="p">}</span>
+<a id="__codelineno-0-567" name="__codelineno-0-567"></a>        <span class="k">if</span> <span class="n">branch</span><span class="o">.</span><span class="n">self_impedance</span>
+<a id="__codelineno-0-568" name="__codelineno-0-568"></a>        <span class="k">else</span> <span class="p">{}</span>
+<a id="__codelineno-0-569" name="__codelineno-0-569"></a>    <span class="p">)</span>
+<a id="__codelineno-0-570" name="__codelineno-0-570"></a>
+<a id="__codelineno-0-571" name="__codelineno-0-571"></a>    <span class="n">mutual_impedance</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-572" name="__codelineno-0-572"></a>        <span class="p">{</span>
+<a id="__codelineno-0-573" name="__codelineno-0-573"></a>            <span class="nb">str</span><span class="p">(</span><span class="n">freq</span><span class="p">):</span> <span class="p">{</span><span class="s2">&quot;real&quot;</span><span class="p">:</span> <span class="n">imp</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="s2">&quot;imag&quot;</span><span class="p">:</span> <span class="n">imp</span><span class="o">.</span><span class="n">imag</span><span class="p">}</span>
+<a id="__codelineno-0-574" name="__codelineno-0-574"></a>            <span class="k">for</span> <span class="n">freq</span><span class="p">,</span> <span class="n">imp</span> <span class="ow">in</span> <span class="n">branch</span><span class="o">.</span><span class="n">mutual_impedance</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+<a id="__codelineno-0-575" name="__codelineno-0-575"></a>        <span class="p">}</span>
+<a id="__codelineno-0-576" name="__codelineno-0-576"></a>        <span class="k">if</span> <span class="n">branch</span><span class="o">.</span><span class="n">mutual_impedance</span>
+<a id="__codelineno-0-577" name="__codelineno-0-577"></a>        <span class="k">else</span> <span class="p">{}</span>
+<a id="__codelineno-0-578" name="__codelineno-0-578"></a>    <span class="p">)</span>
+<a id="__codelineno-0-579" name="__codelineno-0-579"></a>
+<a id="__codelineno-0-580" name="__codelineno-0-580"></a>    <span class="n">phase_impedance</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-581" name="__codelineno-0-581"></a>        <span class="p">{</span>
+<a id="__codelineno-0-582" name="__codelineno-0-582"></a>            <span class="nb">str</span><span class="p">(</span><span class="n">freq</span><span class="p">):</span> <span class="p">{</span><span class="s2">&quot;real&quot;</span><span class="p">:</span> <span class="n">imp</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="s2">&quot;imag&quot;</span><span class="p">:</span> <span class="n">imp</span><span class="o">.</span><span class="n">imag</span><span class="p">}</span>
+<a id="__codelineno-0-583" name="__codelineno-0-583"></a>            <span class="k">for</span> <span class="n">freq</span><span class="p">,</span> <span class="n">imp</span> <span class="ow">in</span> <span class="n">branch</span><span class="o">.</span><span class="n">phase_impedance</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+<a id="__codelineno-0-584" name="__codelineno-0-584"></a>        <span class="p">}</span>
+<a id="__codelineno-0-585" name="__codelineno-0-585"></a>        <span class="k">if</span> <span class="n">branch</span><span class="o">.</span><span class="n">phase_impedance</span>
+<a id="__codelineno-0-586" name="__codelineno-0-586"></a>        <span class="k">else</span> <span class="kc">None</span>
+<a id="__codelineno-0-587" name="__codelineno-0-587"></a>    <span class="p">)</span>
+<a id="__codelineno-0-588" name="__codelineno-0-588"></a>
+<a id="__codelineno-0-589" name="__codelineno-0-589"></a>    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+<a id="__codelineno-0-590" name="__codelineno-0-590"></a>        <span class="n">network_name</span><span class="o">=</span><span class="n">network_name</span><span class="p">,</span>
+<a id="__codelineno-0-591" name="__codelineno-0-591"></a>        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
+<a id="__codelineno-0-592" name="__codelineno-0-592"></a>        <span class="n">name</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+<a id="__codelineno-0-593" name="__codelineno-0-593"></a>        <span class="n">description</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
+<a id="__codelineno-0-594" name="__codelineno-0-594"></a>        <span class="n">type_name</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+<a id="__codelineno-0-595" name="__codelineno-0-595"></a>        <span class="n">length</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">length</span><span class="p">,</span>
+<a id="__codelineno-0-596" name="__codelineno-0-596"></a>        <span class="n">from_bus_name</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">from_bus</span><span class="p">,</span>
+<a id="__codelineno-0-597" name="__codelineno-0-597"></a>        <span class="n">to_bus_name</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">to_bus</span><span class="p">,</span>
+<a id="__codelineno-0-598" name="__codelineno-0-598"></a>        <span class="n">self_impedance</span><span class="o">=</span><span class="n">self_impedance</span><span class="p">,</span>
+<a id="__codelineno-0-599" name="__codelineno-0-599"></a>        <span class="n">mutual_impedance</span><span class="o">=</span><span class="n">mutual_impedance</span><span class="p">,</span>
+<a id="__codelineno-0-600" name="__codelineno-0-600"></a>        <span class="n">phase_impedance</span><span class="o">=</span><span class="n">phase_impedance</span><span class="p">,</span>
+<a id="__codelineno-0-601" name="__codelineno-0-601"></a>        <span class="n">specific_earth_resistance</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">specific_earth_resistance</span><span class="p">,</span>
+<a id="__codelineno-0-602" name="__codelineno-0-602"></a>        <span class="n">parallel_coefficient</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">parallel_coefficient</span><span class="p">,</span>
+<a id="__codelineno-0-603" name="__codelineno-0-603"></a>        <span class="n">active</span><span class="o">=</span><span class="n">branch</span><span class="o">.</span><span class="n">active</span><span class="p">,</span>
+<a id="__codelineno-0-604" name="__codelineno-0-604"></a>        <span class="n">R_self</span><span class="o">=</span><span class="n">_real_dict_to_json</span><span class="p">(</span><span class="n">branch</span><span class="o">.</span><span class="n">R_self</span><span class="p">),</span>
+<a id="__codelineno-0-605" name="__codelineno-0-605"></a>        <span class="n">L_self</span><span class="o">=</span><span class="n">_real_dict_to_json</span><span class="p">(</span><span class="n">branch</span><span class="o">.</span><span class="n">L_self</span><span class="p">),</span>
+<a id="__codelineno-0-606" name="__codelineno-0-606"></a>        <span class="n">C_self</span><span class="o">=</span><span class="n">_real_dict_to_json</span><span class="p">(</span><span class="n">branch</span><span class="o">.</span><span class="n">C_self</span><span class="p">),</span>
+<a id="__codelineno-0-607" name="__codelineno-0-607"></a>        <span class="n">R_mutual</span><span class="o">=</span><span class="n">_real_dict_to_json</span><span class="p">(</span><span class="n">branch</span><span class="o">.</span><span class="n">R_mutual</span><span class="p">),</span>
+<a id="__codelineno-0-608" name="__codelineno-0-608"></a>        <span class="n">M_mutual</span><span class="o">=</span><span class="n">_real_dict_to_json</span><span class="p">(</span><span class="n">branch</span><span class="o">.</span><span class="n">M_mutual</span><span class="p">),</span>
+<a id="__codelineno-0-609" name="__codelineno-0-609"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -3955,11 +4155,7 @@ rationale.</p>
 
             <details class="quote">
               <summary>Source code in <code>src/groundinsight/models/database_models.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-466">466</a></span>
-<span class="normal"><a href="#__codelineno-0-467">467</a></span>
-<span class="normal"><a href="#__codelineno-0-468">468</a></span>
-<span class="normal"><a href="#__codelineno-0-469">469</a></span>
-<span class="normal"><a href="#__codelineno-0-470">470</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-470">470</a></span>
 <span class="normal"><a href="#__codelineno-0-471">471</a></span>
 <span class="normal"><a href="#__codelineno-0-472">472</a></span>
 <span class="normal"><a href="#__codelineno-0-473">473</a></span>
@@ -4015,67 +4211,91 @@ rationale.</p>
 <span class="normal"><a href="#__codelineno-0-523">523</a></span>
 <span class="normal"><a href="#__codelineno-0-524">524</a></span>
 <span class="normal"><a href="#__codelineno-0-525">525</a></span>
-<span class="normal"><a href="#__codelineno-0-526">526</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-466" name="__codelineno-0-466"></a><span class="k">def</span> <span class="nf">to_pydantic</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<a id="__codelineno-0-467" name="__codelineno-0-467"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert the row back into a Pydantic :class:`Branch`.</span>
-<a id="__codelineno-0-468" name="__codelineno-0-468"></a>
-<a id="__codelineno-0-469" name="__codelineno-0-469"></a><span class="sd">    Returns</span>
-<a id="__codelineno-0-470" name="__codelineno-0-470"></a><span class="sd">    -------</span>
-<a id="__codelineno-0-471" name="__codelineno-0-471"></a><span class="sd">    Branch</span>
-<a id="__codelineno-0-472" name="__codelineno-0-472"></a><span class="sd">        The reconstructed branch.</span>
-<a id="__codelineno-0-473" name="__codelineno-0-473"></a>
-<a id="__codelineno-0-474" name="__codelineno-0-474"></a><span class="sd">    Raises</span>
-<a id="__codelineno-0-475" name="__codelineno-0-475"></a><span class="sd">    ------</span>
-<a id="__codelineno-0-476" name="__codelineno-0-476"></a><span class="sd">    ValueError</span>
-<a id="__codelineno-0-477" name="__codelineno-0-477"></a><span class="sd">        If ``type_name`` does not resolve to a stored</span>
-<a id="__codelineno-0-478" name="__codelineno-0-478"></a><span class="sd">        ``BranchTypeDB``. See :meth:`BusDB.to_pydantic` for the</span>
-<a id="__codelineno-0-479" name="__codelineno-0-479"></a><span class="sd">        rationale.</span>
-<a id="__codelineno-0-480" name="__codelineno-0-480"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-481" name="__codelineno-0-481"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-482" name="__codelineno-0-482"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<a id="__codelineno-0-483" name="__codelineno-0-483"></a>            <span class="sa">f</span><span class="s2">&quot;Branch &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; of network &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">network_name</span><span class="si">}</span><span class="s2">&#39; &quot;</span>
-<a id="__codelineno-0-484" name="__codelineno-0-484"></a>            <span class="sa">f</span><span class="s2">&quot;references branch type &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">type_name</span><span class="si">}</span><span class="s2">&#39;, which is not &quot;</span>
-<a id="__codelineno-0-485" name="__codelineno-0-485"></a>            <span class="s2">&quot;stored in the database. The database is inconsistent -- &quot;</span>
-<a id="__codelineno-0-486" name="__codelineno-0-486"></a>            <span class="s2">&quot;re-save that branch type or point the branch at an existing &quot;</span>
-<a id="__codelineno-0-487" name="__codelineno-0-487"></a>            <span class="s2">&quot;one.&quot;</span>
-<a id="__codelineno-0-488" name="__codelineno-0-488"></a>        <span class="p">)</span>
-<a id="__codelineno-0-489" name="__codelineno-0-489"></a>
-<a id="__codelineno-0-490" name="__codelineno-0-490"></a>    <span class="c1"># Convert impedance JSON to Dict[float, ComplexNumber]</span>
-<a id="__codelineno-0-491" name="__codelineno-0-491"></a>    <span class="n">self_impedance</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-0-492" name="__codelineno-0-492"></a>        <span class="p">{</span>
-<a id="__codelineno-0-493" name="__codelineno-0-493"></a>            <span class="nb">float</span><span class="p">(</span><span class="n">freq</span><span class="p">):</span> <span class="n">ComplexNumber</span><span class="p">(</span><span class="o">**</span><span class="n">value</span><span class="p">)</span>
-<a id="__codelineno-0-494" name="__codelineno-0-494"></a>            <span class="k">for</span> <span class="n">freq</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">self_impedance</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-<a id="__codelineno-0-495" name="__codelineno-0-495"></a>        <span class="p">}</span>
-<a id="__codelineno-0-496" name="__codelineno-0-496"></a>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">self_impedance</span>
-<a id="__codelineno-0-497" name="__codelineno-0-497"></a>        <span class="k">else</span> <span class="p">{}</span>
-<a id="__codelineno-0-498" name="__codelineno-0-498"></a>    <span class="p">)</span>
-<a id="__codelineno-0-499" name="__codelineno-0-499"></a>
-<a id="__codelineno-0-500" name="__codelineno-0-500"></a>    <span class="n">mutual_impedance</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-0-501" name="__codelineno-0-501"></a>        <span class="p">{</span>
-<a id="__codelineno-0-502" name="__codelineno-0-502"></a>            <span class="nb">float</span><span class="p">(</span><span class="n">freq</span><span class="p">):</span> <span class="n">ComplexNumber</span><span class="p">(</span><span class="o">**</span><span class="n">value</span><span class="p">)</span>
-<a id="__codelineno-0-503" name="__codelineno-0-503"></a>            <span class="k">for</span> <span class="n">freq</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">mutual_impedance</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-<a id="__codelineno-0-504" name="__codelineno-0-504"></a>        <span class="p">}</span>
-<a id="__codelineno-0-505" name="__codelineno-0-505"></a>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mutual_impedance</span>
-<a id="__codelineno-0-506" name="__codelineno-0-506"></a>        <span class="k">else</span> <span class="p">{}</span>
-<a id="__codelineno-0-507" name="__codelineno-0-507"></a>    <span class="p">)</span>
-<a id="__codelineno-0-508" name="__codelineno-0-508"></a>
-<a id="__codelineno-0-509" name="__codelineno-0-509"></a>    <span class="k">return</span> <span class="n">Branch</span><span class="p">(</span>
-<a id="__codelineno-0-510" name="__codelineno-0-510"></a>        <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-<a id="__codelineno-0-511" name="__codelineno-0-511"></a>        <span class="n">description</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
-<a id="__codelineno-0-512" name="__codelineno-0-512"></a>        <span class="nb">type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">to_pydantic</span><span class="p">(),</span>
-<a id="__codelineno-0-513" name="__codelineno-0-513"></a>        <span class="n">length</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">length</span><span class="p">,</span>
-<a id="__codelineno-0-514" name="__codelineno-0-514"></a>        <span class="n">from_bus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">from_bus_name</span><span class="p">,</span>
-<a id="__codelineno-0-515" name="__codelineno-0-515"></a>        <span class="n">to_bus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">to_bus_name</span><span class="p">,</span>
-<a id="__codelineno-0-516" name="__codelineno-0-516"></a>        <span class="n">self_impedance</span><span class="o">=</span><span class="n">self_impedance</span><span class="p">,</span>
-<a id="__codelineno-0-517" name="__codelineno-0-517"></a>        <span class="n">mutual_impedance</span><span class="o">=</span><span class="n">mutual_impedance</span><span class="p">,</span>
-<a id="__codelineno-0-518" name="__codelineno-0-518"></a>        <span class="n">specific_earth_resistance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">specific_earth_resistance</span><span class="p">,</span>
-<a id="__codelineno-0-519" name="__codelineno-0-519"></a>        <span class="n">parallel_coefficient</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parallel_coefficient</span><span class="p">,</span>
-<a id="__codelineno-0-520" name="__codelineno-0-520"></a>        <span class="n">active</span><span class="o">=</span><span class="kc">True</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">active</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active</span><span class="p">),</span>
-<a id="__codelineno-0-521" name="__codelineno-0-521"></a>        <span class="n">R_self</span><span class="o">=</span><span class="n">_real_dict_from_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R_self</span><span class="p">),</span>
-<a id="__codelineno-0-522" name="__codelineno-0-522"></a>        <span class="n">L_self</span><span class="o">=</span><span class="n">_real_dict_from_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">L_self</span><span class="p">),</span>
-<a id="__codelineno-0-523" name="__codelineno-0-523"></a>        <span class="n">C_self</span><span class="o">=</span><span class="n">_real_dict_from_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">C_self</span><span class="p">),</span>
-<a id="__codelineno-0-524" name="__codelineno-0-524"></a>        <span class="n">R_mutual</span><span class="o">=</span><span class="n">_real_dict_from_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R_mutual</span><span class="p">),</span>
-<a id="__codelineno-0-525" name="__codelineno-0-525"></a>        <span class="n">M_mutual</span><span class="o">=</span><span class="n">_real_dict_from_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">M_mutual</span><span class="p">),</span>
-<a id="__codelineno-0-526" name="__codelineno-0-526"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-526">526</a></span>
+<span class="normal"><a href="#__codelineno-0-527">527</a></span>
+<span class="normal"><a href="#__codelineno-0-528">528</a></span>
+<span class="normal"><a href="#__codelineno-0-529">529</a></span>
+<span class="normal"><a href="#__codelineno-0-530">530</a></span>
+<span class="normal"><a href="#__codelineno-0-531">531</a></span>
+<span class="normal"><a href="#__codelineno-0-532">532</a></span>
+<span class="normal"><a href="#__codelineno-0-533">533</a></span>
+<span class="normal"><a href="#__codelineno-0-534">534</a></span>
+<span class="normal"><a href="#__codelineno-0-535">535</a></span>
+<span class="normal"><a href="#__codelineno-0-536">536</a></span>
+<span class="normal"><a href="#__codelineno-0-537">537</a></span>
+<span class="normal"><a href="#__codelineno-0-538">538</a></span>
+<span class="normal"><a href="#__codelineno-0-539">539</a></span>
+<span class="normal"><a href="#__codelineno-0-540">540</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-470" name="__codelineno-0-470"></a><span class="k">def</span> <span class="nf">to_pydantic</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<a id="__codelineno-0-471" name="__codelineno-0-471"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert the row back into a Pydantic :class:`Branch`.</span>
+<a id="__codelineno-0-472" name="__codelineno-0-472"></a>
+<a id="__codelineno-0-473" name="__codelineno-0-473"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-474" name="__codelineno-0-474"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-475" name="__codelineno-0-475"></a><span class="sd">    Branch</span>
+<a id="__codelineno-0-476" name="__codelineno-0-476"></a><span class="sd">        The reconstructed branch.</span>
+<a id="__codelineno-0-477" name="__codelineno-0-477"></a>
+<a id="__codelineno-0-478" name="__codelineno-0-478"></a><span class="sd">    Raises</span>
+<a id="__codelineno-0-479" name="__codelineno-0-479"></a><span class="sd">    ------</span>
+<a id="__codelineno-0-480" name="__codelineno-0-480"></a><span class="sd">    ValueError</span>
+<a id="__codelineno-0-481" name="__codelineno-0-481"></a><span class="sd">        If ``type_name`` does not resolve to a stored</span>
+<a id="__codelineno-0-482" name="__codelineno-0-482"></a><span class="sd">        ``BranchTypeDB``. See :meth:`BusDB.to_pydantic` for the</span>
+<a id="__codelineno-0-483" name="__codelineno-0-483"></a><span class="sd">        rationale.</span>
+<a id="__codelineno-0-484" name="__codelineno-0-484"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-485" name="__codelineno-0-485"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-486" name="__codelineno-0-486"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<a id="__codelineno-0-487" name="__codelineno-0-487"></a>            <span class="sa">f</span><span class="s2">&quot;Branch &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; of network &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">network_name</span><span class="si">}</span><span class="s2">&#39; &quot;</span>
+<a id="__codelineno-0-488" name="__codelineno-0-488"></a>            <span class="sa">f</span><span class="s2">&quot;references branch type &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">type_name</span><span class="si">}</span><span class="s2">&#39;, which is not &quot;</span>
+<a id="__codelineno-0-489" name="__codelineno-0-489"></a>            <span class="s2">&quot;stored in the database. The database is inconsistent -- &quot;</span>
+<a id="__codelineno-0-490" name="__codelineno-0-490"></a>            <span class="s2">&quot;re-save that branch type or point the branch at an existing &quot;</span>
+<a id="__codelineno-0-491" name="__codelineno-0-491"></a>            <span class="s2">&quot;one.&quot;</span>
+<a id="__codelineno-0-492" name="__codelineno-0-492"></a>        <span class="p">)</span>
+<a id="__codelineno-0-493" name="__codelineno-0-493"></a>
+<a id="__codelineno-0-494" name="__codelineno-0-494"></a>    <span class="c1"># Convert impedance JSON to Dict[float, ComplexNumber]</span>
+<a id="__codelineno-0-495" name="__codelineno-0-495"></a>    <span class="n">self_impedance</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-496" name="__codelineno-0-496"></a>        <span class="p">{</span>
+<a id="__codelineno-0-497" name="__codelineno-0-497"></a>            <span class="nb">float</span><span class="p">(</span><span class="n">freq</span><span class="p">):</span> <span class="n">ComplexNumber</span><span class="p">(</span><span class="o">**</span><span class="n">value</span><span class="p">)</span>
+<a id="__codelineno-0-498" name="__codelineno-0-498"></a>            <span class="k">for</span> <span class="n">freq</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">self_impedance</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+<a id="__codelineno-0-499" name="__codelineno-0-499"></a>        <span class="p">}</span>
+<a id="__codelineno-0-500" name="__codelineno-0-500"></a>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">self_impedance</span>
+<a id="__codelineno-0-501" name="__codelineno-0-501"></a>        <span class="k">else</span> <span class="p">{}</span>
+<a id="__codelineno-0-502" name="__codelineno-0-502"></a>    <span class="p">)</span>
+<a id="__codelineno-0-503" name="__codelineno-0-503"></a>
+<a id="__codelineno-0-504" name="__codelineno-0-504"></a>    <span class="n">mutual_impedance</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-505" name="__codelineno-0-505"></a>        <span class="p">{</span>
+<a id="__codelineno-0-506" name="__codelineno-0-506"></a>            <span class="nb">float</span><span class="p">(</span><span class="n">freq</span><span class="p">):</span> <span class="n">ComplexNumber</span><span class="p">(</span><span class="o">**</span><span class="n">value</span><span class="p">)</span>
+<a id="__codelineno-0-507" name="__codelineno-0-507"></a>            <span class="k">for</span> <span class="n">freq</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">mutual_impedance</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+<a id="__codelineno-0-508" name="__codelineno-0-508"></a>        <span class="p">}</span>
+<a id="__codelineno-0-509" name="__codelineno-0-509"></a>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mutual_impedance</span>
+<a id="__codelineno-0-510" name="__codelineno-0-510"></a>        <span class="k">else</span> <span class="p">{}</span>
+<a id="__codelineno-0-511" name="__codelineno-0-511"></a>    <span class="p">)</span>
+<a id="__codelineno-0-512" name="__codelineno-0-512"></a>
+<a id="__codelineno-0-513" name="__codelineno-0-513"></a>    <span class="n">phase_impedance</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-514" name="__codelineno-0-514"></a>        <span class="p">{</span>
+<a id="__codelineno-0-515" name="__codelineno-0-515"></a>            <span class="nb">float</span><span class="p">(</span><span class="n">freq</span><span class="p">):</span> <span class="n">ComplexNumber</span><span class="p">(</span><span class="o">**</span><span class="n">value</span><span class="p">)</span>
+<a id="__codelineno-0-516" name="__codelineno-0-516"></a>            <span class="k">for</span> <span class="n">freq</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">phase_impedance</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+<a id="__codelineno-0-517" name="__codelineno-0-517"></a>        <span class="p">}</span>
+<a id="__codelineno-0-518" name="__codelineno-0-518"></a>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">phase_impedance</span>
+<a id="__codelineno-0-519" name="__codelineno-0-519"></a>        <span class="k">else</span> <span class="kc">None</span>
+<a id="__codelineno-0-520" name="__codelineno-0-520"></a>    <span class="p">)</span>
+<a id="__codelineno-0-521" name="__codelineno-0-521"></a>
+<a id="__codelineno-0-522" name="__codelineno-0-522"></a>    <span class="k">return</span> <span class="n">Branch</span><span class="p">(</span>
+<a id="__codelineno-0-523" name="__codelineno-0-523"></a>        <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+<a id="__codelineno-0-524" name="__codelineno-0-524"></a>        <span class="n">description</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
+<a id="__codelineno-0-525" name="__codelineno-0-525"></a>        <span class="nb">type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">to_pydantic</span><span class="p">(),</span>
+<a id="__codelineno-0-526" name="__codelineno-0-526"></a>        <span class="n">length</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">length</span><span class="p">,</span>
+<a id="__codelineno-0-527" name="__codelineno-0-527"></a>        <span class="n">from_bus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">from_bus_name</span><span class="p">,</span>
+<a id="__codelineno-0-528" name="__codelineno-0-528"></a>        <span class="n">to_bus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">to_bus_name</span><span class="p">,</span>
+<a id="__codelineno-0-529" name="__codelineno-0-529"></a>        <span class="n">self_impedance</span><span class="o">=</span><span class="n">self_impedance</span><span class="p">,</span>
+<a id="__codelineno-0-530" name="__codelineno-0-530"></a>        <span class="n">mutual_impedance</span><span class="o">=</span><span class="n">mutual_impedance</span><span class="p">,</span>
+<a id="__codelineno-0-531" name="__codelineno-0-531"></a>        <span class="n">phase_impedance</span><span class="o">=</span><span class="n">phase_impedance</span><span class="p">,</span>
+<a id="__codelineno-0-532" name="__codelineno-0-532"></a>        <span class="n">specific_earth_resistance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">specific_earth_resistance</span><span class="p">,</span>
+<a id="__codelineno-0-533" name="__codelineno-0-533"></a>        <span class="n">parallel_coefficient</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parallel_coefficient</span><span class="p">,</span>
+<a id="__codelineno-0-534" name="__codelineno-0-534"></a>        <span class="n">active</span><span class="o">=</span><span class="kc">True</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">active</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active</span><span class="p">),</span>
+<a id="__codelineno-0-535" name="__codelineno-0-535"></a>        <span class="n">R_self</span><span class="o">=</span><span class="n">_real_dict_from_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R_self</span><span class="p">),</span>
+<a id="__codelineno-0-536" name="__codelineno-0-536"></a>        <span class="n">L_self</span><span class="o">=</span><span class="n">_real_dict_from_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">L_self</span><span class="p">),</span>
+<a id="__codelineno-0-537" name="__codelineno-0-537"></a>        <span class="n">C_self</span><span class="o">=</span><span class="n">_real_dict_from_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">C_self</span><span class="p">),</span>
+<a id="__codelineno-0-538" name="__codelineno-0-538"></a>        <span class="n">R_mutual</span><span class="o">=</span><span class="n">_real_dict_from_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R_mutual</span><span class="p">),</span>
+<a id="__codelineno-0-539" name="__codelineno-0-539"></a>        <span class="n">M_mutual</span><span class="o">=</span><span class="n">_real_dict_from_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">M_mutual</span><span class="p">),</span>
+<a id="__codelineno-0-540" name="__codelineno-0-540"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -4808,67 +5028,67 @@ restore the dictionary order on load. Defaults to <code>0</code>.</p>
 
             <details class="quote">
               <summary>Source code in <code>src/groundinsight/models/database_models.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-638">638</a></span>
-<span class="normal"><a href="#__codelineno-0-639">639</a></span>
-<span class="normal"><a href="#__codelineno-0-640">640</a></span>
-<span class="normal"><a href="#__codelineno-0-641">641</a></span>
-<span class="normal"><a href="#__codelineno-0-642">642</a></span>
-<span class="normal"><a href="#__codelineno-0-643">643</a></span>
-<span class="normal"><a href="#__codelineno-0-644">644</a></span>
-<span class="normal"><a href="#__codelineno-0-645">645</a></span>
-<span class="normal"><a href="#__codelineno-0-646">646</a></span>
-<span class="normal"><a href="#__codelineno-0-647">647</a></span>
-<span class="normal"><a href="#__codelineno-0-648">648</a></span>
-<span class="normal"><a href="#__codelineno-0-649">649</a></span>
-<span class="normal"><a href="#__codelineno-0-650">650</a></span>
-<span class="normal"><a href="#__codelineno-0-651">651</a></span>
-<span class="normal"><a href="#__codelineno-0-652">652</a></span>
-<span class="normal"><a href="#__codelineno-0-653">653</a></span>
-<span class="normal"><a href="#__codelineno-0-654">654</a></span>
-<span class="normal"><a href="#__codelineno-0-655">655</a></span>
-<span class="normal"><a href="#__codelineno-0-656">656</a></span>
-<span class="normal"><a href="#__codelineno-0-657">657</a></span>
-<span class="normal"><a href="#__codelineno-0-658">658</a></span>
-<span class="normal"><a href="#__codelineno-0-659">659</a></span>
-<span class="normal"><a href="#__codelineno-0-660">660</a></span>
-<span class="normal"><a href="#__codelineno-0-661">661</a></span>
-<span class="normal"><a href="#__codelineno-0-662">662</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-662">662</a></span>
 <span class="normal"><a href="#__codelineno-0-663">663</a></span>
 <span class="normal"><a href="#__codelineno-0-664">664</a></span>
 <span class="normal"><a href="#__codelineno-0-665">665</a></span>
 <span class="normal"><a href="#__codelineno-0-666">666</a></span>
 <span class="normal"><a href="#__codelineno-0-667">667</a></span>
-<span class="normal"><a href="#__codelineno-0-668">668</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-638" name="__codelineno-0-638"></a><span class="nd">@classmethod</span>
-<a id="__codelineno-0-639" name="__codelineno-0-639"></a><span class="k">def</span> <span class="nf">from_pydantic</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">fault</span><span class="p">:</span> <span class="n">Fault</span><span class="p">,</span> <span class="n">network_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
-<a id="__codelineno-0-640" name="__codelineno-0-640"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a ``FaultDB`` row from a Pydantic :class:`Fault`.</span>
-<a id="__codelineno-0-641" name="__codelineno-0-641"></a>
-<a id="__codelineno-0-642" name="__codelineno-0-642"></a><span class="sd">    Parameters</span>
-<a id="__codelineno-0-643" name="__codelineno-0-643"></a><span class="sd">    ----------</span>
-<a id="__codelineno-0-644" name="__codelineno-0-644"></a><span class="sd">    fault : Fault</span>
-<a id="__codelineno-0-645" name="__codelineno-0-645"></a><span class="sd">        The fault to convert.</span>
-<a id="__codelineno-0-646" name="__codelineno-0-646"></a><span class="sd">    network_name : str, optional</span>
-<a id="__codelineno-0-647" name="__codelineno-0-647"></a><span class="sd">        Name of the owning network. Part of the composite primary key.</span>
-<a id="__codelineno-0-648" name="__codelineno-0-648"></a><span class="sd">    position : int, optional</span>
-<a id="__codelineno-0-649" name="__codelineno-0-649"></a><span class="sd">        Zero-based index of the fault inside ``Network.faults``, used to</span>
-<a id="__codelineno-0-650" name="__codelineno-0-650"></a><span class="sd">        restore the dictionary order on load. Defaults to ``0``.</span>
-<a id="__codelineno-0-651" name="__codelineno-0-651"></a>
-<a id="__codelineno-0-652" name="__codelineno-0-652"></a><span class="sd">    Returns</span>
-<a id="__codelineno-0-653" name="__codelineno-0-653"></a><span class="sd">    -------</span>
-<a id="__codelineno-0-654" name="__codelineno-0-654"></a><span class="sd">    FaultDB</span>
-<a id="__codelineno-0-655" name="__codelineno-0-655"></a><span class="sd">        The unattached database row.</span>
-<a id="__codelineno-0-656" name="__codelineno-0-656"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-657" name="__codelineno-0-657"></a>    <span class="n">scalings</span> <span class="o">=</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">freq</span><span class="p">):</span> <span class="n">scale</span> <span class="k">for</span> <span class="n">freq</span><span class="p">,</span> <span class="n">scale</span> <span class="ow">in</span> <span class="n">fault</span><span class="o">.</span><span class="n">scalings</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-<a id="__codelineno-0-658" name="__codelineno-0-658"></a>    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
-<a id="__codelineno-0-659" name="__codelineno-0-659"></a>        <span class="n">network_name</span><span class="o">=</span><span class="n">network_name</span><span class="p">,</span>
-<a id="__codelineno-0-660" name="__codelineno-0-660"></a>        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
-<a id="__codelineno-0-661" name="__codelineno-0-661"></a>        <span class="n">name</span><span class="o">=</span><span class="n">fault</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-<a id="__codelineno-0-662" name="__codelineno-0-662"></a>        <span class="n">description</span><span class="o">=</span><span class="n">fault</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
-<a id="__codelineno-0-663" name="__codelineno-0-663"></a>        <span class="n">bus_name</span><span class="o">=</span><span class="n">fault</span><span class="o">.</span><span class="n">bus</span><span class="p">,</span>
-<a id="__codelineno-0-664" name="__codelineno-0-664"></a>        <span class="n">scalings</span><span class="o">=</span><span class="n">scalings</span><span class="p">,</span>
-<a id="__codelineno-0-665" name="__codelineno-0-665"></a>        <span class="n">active</span><span class="o">=</span><span class="n">fault</span><span class="o">.</span><span class="n">active</span><span class="p">,</span>
-<a id="__codelineno-0-666" name="__codelineno-0-666"></a>        <span class="n">t_k_s</span><span class="o">=</span><span class="n">fault</span><span class="o">.</span><span class="n">t_k_s</span><span class="p">,</span>
-<a id="__codelineno-0-667" name="__codelineno-0-667"></a>        <span class="n">n_factor</span><span class="o">=</span><span class="n">fault</span><span class="o">.</span><span class="n">n_factor</span><span class="p">,</span>
-<a id="__codelineno-0-668" name="__codelineno-0-668"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-668">668</a></span>
+<span class="normal"><a href="#__codelineno-0-669">669</a></span>
+<span class="normal"><a href="#__codelineno-0-670">670</a></span>
+<span class="normal"><a href="#__codelineno-0-671">671</a></span>
+<span class="normal"><a href="#__codelineno-0-672">672</a></span>
+<span class="normal"><a href="#__codelineno-0-673">673</a></span>
+<span class="normal"><a href="#__codelineno-0-674">674</a></span>
+<span class="normal"><a href="#__codelineno-0-675">675</a></span>
+<span class="normal"><a href="#__codelineno-0-676">676</a></span>
+<span class="normal"><a href="#__codelineno-0-677">677</a></span>
+<span class="normal"><a href="#__codelineno-0-678">678</a></span>
+<span class="normal"><a href="#__codelineno-0-679">679</a></span>
+<span class="normal"><a href="#__codelineno-0-680">680</a></span>
+<span class="normal"><a href="#__codelineno-0-681">681</a></span>
+<span class="normal"><a href="#__codelineno-0-682">682</a></span>
+<span class="normal"><a href="#__codelineno-0-683">683</a></span>
+<span class="normal"><a href="#__codelineno-0-684">684</a></span>
+<span class="normal"><a href="#__codelineno-0-685">685</a></span>
+<span class="normal"><a href="#__codelineno-0-686">686</a></span>
+<span class="normal"><a href="#__codelineno-0-687">687</a></span>
+<span class="normal"><a href="#__codelineno-0-688">688</a></span>
+<span class="normal"><a href="#__codelineno-0-689">689</a></span>
+<span class="normal"><a href="#__codelineno-0-690">690</a></span>
+<span class="normal"><a href="#__codelineno-0-691">691</a></span>
+<span class="normal"><a href="#__codelineno-0-692">692</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-662" name="__codelineno-0-662"></a><span class="nd">@classmethod</span>
+<a id="__codelineno-0-663" name="__codelineno-0-663"></a><span class="k">def</span> <span class="nf">from_pydantic</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">fault</span><span class="p">:</span> <span class="n">Fault</span><span class="p">,</span> <span class="n">network_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+<a id="__codelineno-0-664" name="__codelineno-0-664"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a ``FaultDB`` row from a Pydantic :class:`Fault`.</span>
+<a id="__codelineno-0-665" name="__codelineno-0-665"></a>
+<a id="__codelineno-0-666" name="__codelineno-0-666"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-667" name="__codelineno-0-667"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-668" name="__codelineno-0-668"></a><span class="sd">    fault : Fault</span>
+<a id="__codelineno-0-669" name="__codelineno-0-669"></a><span class="sd">        The fault to convert.</span>
+<a id="__codelineno-0-670" name="__codelineno-0-670"></a><span class="sd">    network_name : str, optional</span>
+<a id="__codelineno-0-671" name="__codelineno-0-671"></a><span class="sd">        Name of the owning network. Part of the composite primary key.</span>
+<a id="__codelineno-0-672" name="__codelineno-0-672"></a><span class="sd">    position : int, optional</span>
+<a id="__codelineno-0-673" name="__codelineno-0-673"></a><span class="sd">        Zero-based index of the fault inside ``Network.faults``, used to</span>
+<a id="__codelineno-0-674" name="__codelineno-0-674"></a><span class="sd">        restore the dictionary order on load. Defaults to ``0``.</span>
+<a id="__codelineno-0-675" name="__codelineno-0-675"></a>
+<a id="__codelineno-0-676" name="__codelineno-0-676"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-677" name="__codelineno-0-677"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-678" name="__codelineno-0-678"></a><span class="sd">    FaultDB</span>
+<a id="__codelineno-0-679" name="__codelineno-0-679"></a><span class="sd">        The unattached database row.</span>
+<a id="__codelineno-0-680" name="__codelineno-0-680"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-681" name="__codelineno-0-681"></a>    <span class="n">scalings</span> <span class="o">=</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">freq</span><span class="p">):</span> <span class="n">scale</span> <span class="k">for</span> <span class="n">freq</span><span class="p">,</span> <span class="n">scale</span> <span class="ow">in</span> <span class="n">fault</span><span class="o">.</span><span class="n">scalings</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+<a id="__codelineno-0-682" name="__codelineno-0-682"></a>    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+<a id="__codelineno-0-683" name="__codelineno-0-683"></a>        <span class="n">network_name</span><span class="o">=</span><span class="n">network_name</span><span class="p">,</span>
+<a id="__codelineno-0-684" name="__codelineno-0-684"></a>        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
+<a id="__codelineno-0-685" name="__codelineno-0-685"></a>        <span class="n">name</span><span class="o">=</span><span class="n">fault</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+<a id="__codelineno-0-686" name="__codelineno-0-686"></a>        <span class="n">description</span><span class="o">=</span><span class="n">fault</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
+<a id="__codelineno-0-687" name="__codelineno-0-687"></a>        <span class="n">bus_name</span><span class="o">=</span><span class="n">fault</span><span class="o">.</span><span class="n">bus</span><span class="p">,</span>
+<a id="__codelineno-0-688" name="__codelineno-0-688"></a>        <span class="n">scalings</span><span class="o">=</span><span class="n">scalings</span><span class="p">,</span>
+<a id="__codelineno-0-689" name="__codelineno-0-689"></a>        <span class="n">active</span><span class="o">=</span><span class="n">fault</span><span class="o">.</span><span class="n">active</span><span class="p">,</span>
+<a id="__codelineno-0-690" name="__codelineno-0-690"></a>        <span class="n">t_k_s</span><span class="o">=</span><span class="n">fault</span><span class="o">.</span><span class="n">t_k_s</span><span class="p">,</span>
+<a id="__codelineno-0-691" name="__codelineno-0-691"></a>        <span class="n">n_factor</span><span class="o">=</span><span class="n">fault</span><span class="o">.</span><span class="n">n_factor</span><span class="p">,</span>
+<a id="__codelineno-0-692" name="__codelineno-0-692"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -5090,63 +5310,63 @@ caller fills it once the branches of the network are known.</p>
 
             <details class="quote">
               <summary>Source code in <code>src/groundinsight/models/database_models.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-913">913</a></span>
-<span class="normal"><a href="#__codelineno-0-914">914</a></span>
-<span class="normal"><a href="#__codelineno-0-915">915</a></span>
-<span class="normal"><a href="#__codelineno-0-916">916</a></span>
-<span class="normal"><a href="#__codelineno-0-917">917</a></span>
-<span class="normal"><a href="#__codelineno-0-918">918</a></span>
-<span class="normal"><a href="#__codelineno-0-919">919</a></span>
-<span class="normal"><a href="#__codelineno-0-920">920</a></span>
-<span class="normal"><a href="#__codelineno-0-921">921</a></span>
-<span class="normal"><a href="#__codelineno-0-922">922</a></span>
-<span class="normal"><a href="#__codelineno-0-923">923</a></span>
-<span class="normal"><a href="#__codelineno-0-924">924</a></span>
-<span class="normal"><a href="#__codelineno-0-925">925</a></span>
-<span class="normal"><a href="#__codelineno-0-926">926</a></span>
-<span class="normal"><a href="#__codelineno-0-927">927</a></span>
-<span class="normal"><a href="#__codelineno-0-928">928</a></span>
-<span class="normal"><a href="#__codelineno-0-929">929</a></span>
-<span class="normal"><a href="#__codelineno-0-930">930</a></span>
-<span class="normal"><a href="#__codelineno-0-931">931</a></span>
-<span class="normal"><a href="#__codelineno-0-932">932</a></span>
-<span class="normal"><a href="#__codelineno-0-933">933</a></span>
-<span class="normal"><a href="#__codelineno-0-934">934</a></span>
-<span class="normal"><a href="#__codelineno-0-935">935</a></span>
-<span class="normal"><a href="#__codelineno-0-936">936</a></span>
-<span class="normal"><a href="#__codelineno-0-937">937</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-937">937</a></span>
 <span class="normal"><a href="#__codelineno-0-938">938</a></span>
 <span class="normal"><a href="#__codelineno-0-939">939</a></span>
 <span class="normal"><a href="#__codelineno-0-940">940</a></span>
-<span class="normal"><a href="#__codelineno-0-941">941</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-913" name="__codelineno-0-913"></a><span class="nd">@classmethod</span>
-<a id="__codelineno-0-914" name="__codelineno-0-914"></a><span class="k">def</span> <span class="nf">from_pydantic</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">network_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
-<a id="__codelineno-0-915" name="__codelineno-0-915"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a ``PathDB`` row from a Pydantic :class:`Path`.</span>
-<a id="__codelineno-0-916" name="__codelineno-0-916"></a>
-<a id="__codelineno-0-917" name="__codelineno-0-917"></a><span class="sd">    Parameters</span>
-<a id="__codelineno-0-918" name="__codelineno-0-918"></a><span class="sd">    ----------</span>
-<a id="__codelineno-0-919" name="__codelineno-0-919"></a><span class="sd">    path : Path</span>
-<a id="__codelineno-0-920" name="__codelineno-0-920"></a><span class="sd">        The path to convert.</span>
-<a id="__codelineno-0-921" name="__codelineno-0-921"></a><span class="sd">    network_name : str, optional</span>
-<a id="__codelineno-0-922" name="__codelineno-0-922"></a><span class="sd">        Name of the owning network. Part of the composite primary key.</span>
-<a id="__codelineno-0-923" name="__codelineno-0-923"></a><span class="sd">    position : int, optional</span>
-<a id="__codelineno-0-924" name="__codelineno-0-924"></a><span class="sd">        Zero-based index of the path inside ``Network.paths``, used to</span>
-<a id="__codelineno-0-925" name="__codelineno-0-925"></a><span class="sd">        restore the dictionary order on load. Defaults to ``0``.</span>
-<a id="__codelineno-0-926" name="__codelineno-0-926"></a>
-<a id="__codelineno-0-927" name="__codelineno-0-927"></a><span class="sd">    Returns</span>
-<a id="__codelineno-0-928" name="__codelineno-0-928"></a><span class="sd">    -------</span>
-<a id="__codelineno-0-929" name="__codelineno-0-929"></a><span class="sd">    PathDB</span>
-<a id="__codelineno-0-930" name="__codelineno-0-930"></a><span class="sd">        The unattached database row. ``segments`` is left empty; the</span>
-<a id="__codelineno-0-931" name="__codelineno-0-931"></a><span class="sd">        caller fills it once the branches of the network are known.</span>
-<a id="__codelineno-0-932" name="__codelineno-0-932"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-933" name="__codelineno-0-933"></a>    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
-<a id="__codelineno-0-934" name="__codelineno-0-934"></a>        <span class="n">network_name</span><span class="o">=</span><span class="n">network_name</span><span class="p">,</span>
-<a id="__codelineno-0-935" name="__codelineno-0-935"></a>        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
-<a id="__codelineno-0-936" name="__codelineno-0-936"></a>        <span class="n">name</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-<a id="__codelineno-0-937" name="__codelineno-0-937"></a>        <span class="n">description</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
-<a id="__codelineno-0-938" name="__codelineno-0-938"></a>        <span class="n">source_name</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">source</span><span class="p">,</span>
-<a id="__codelineno-0-939" name="__codelineno-0-939"></a>        <span class="n">fault_name</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">fault</span><span class="p">,</span>
-<a id="__codelineno-0-940" name="__codelineno-0-940"></a>        <span class="c1"># Segments will be added separately after the branches are saved</span>
-<a id="__codelineno-0-941" name="__codelineno-0-941"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-941">941</a></span>
+<span class="normal"><a href="#__codelineno-0-942">942</a></span>
+<span class="normal"><a href="#__codelineno-0-943">943</a></span>
+<span class="normal"><a href="#__codelineno-0-944">944</a></span>
+<span class="normal"><a href="#__codelineno-0-945">945</a></span>
+<span class="normal"><a href="#__codelineno-0-946">946</a></span>
+<span class="normal"><a href="#__codelineno-0-947">947</a></span>
+<span class="normal"><a href="#__codelineno-0-948">948</a></span>
+<span class="normal"><a href="#__codelineno-0-949">949</a></span>
+<span class="normal"><a href="#__codelineno-0-950">950</a></span>
+<span class="normal"><a href="#__codelineno-0-951">951</a></span>
+<span class="normal"><a href="#__codelineno-0-952">952</a></span>
+<span class="normal"><a href="#__codelineno-0-953">953</a></span>
+<span class="normal"><a href="#__codelineno-0-954">954</a></span>
+<span class="normal"><a href="#__codelineno-0-955">955</a></span>
+<span class="normal"><a href="#__codelineno-0-956">956</a></span>
+<span class="normal"><a href="#__codelineno-0-957">957</a></span>
+<span class="normal"><a href="#__codelineno-0-958">958</a></span>
+<span class="normal"><a href="#__codelineno-0-959">959</a></span>
+<span class="normal"><a href="#__codelineno-0-960">960</a></span>
+<span class="normal"><a href="#__codelineno-0-961">961</a></span>
+<span class="normal"><a href="#__codelineno-0-962">962</a></span>
+<span class="normal"><a href="#__codelineno-0-963">963</a></span>
+<span class="normal"><a href="#__codelineno-0-964">964</a></span>
+<span class="normal"><a href="#__codelineno-0-965">965</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-937" name="__codelineno-0-937"></a><span class="nd">@classmethod</span>
+<a id="__codelineno-0-938" name="__codelineno-0-938"></a><span class="k">def</span> <span class="nf">from_pydantic</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">network_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+<a id="__codelineno-0-939" name="__codelineno-0-939"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a ``PathDB`` row from a Pydantic :class:`Path`.</span>
+<a id="__codelineno-0-940" name="__codelineno-0-940"></a>
+<a id="__codelineno-0-941" name="__codelineno-0-941"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-942" name="__codelineno-0-942"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-943" name="__codelineno-0-943"></a><span class="sd">    path : Path</span>
+<a id="__codelineno-0-944" name="__codelineno-0-944"></a><span class="sd">        The path to convert.</span>
+<a id="__codelineno-0-945" name="__codelineno-0-945"></a><span class="sd">    network_name : str, optional</span>
+<a id="__codelineno-0-946" name="__codelineno-0-946"></a><span class="sd">        Name of the owning network. Part of the composite primary key.</span>
+<a id="__codelineno-0-947" name="__codelineno-0-947"></a><span class="sd">    position : int, optional</span>
+<a id="__codelineno-0-948" name="__codelineno-0-948"></a><span class="sd">        Zero-based index of the path inside ``Network.paths``, used to</span>
+<a id="__codelineno-0-949" name="__codelineno-0-949"></a><span class="sd">        restore the dictionary order on load. Defaults to ``0``.</span>
+<a id="__codelineno-0-950" name="__codelineno-0-950"></a>
+<a id="__codelineno-0-951" name="__codelineno-0-951"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-952" name="__codelineno-0-952"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-953" name="__codelineno-0-953"></a><span class="sd">    PathDB</span>
+<a id="__codelineno-0-954" name="__codelineno-0-954"></a><span class="sd">        The unattached database row. ``segments`` is left empty; the</span>
+<a id="__codelineno-0-955" name="__codelineno-0-955"></a><span class="sd">        caller fills it once the branches of the network are known.</span>
+<a id="__codelineno-0-956" name="__codelineno-0-956"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-957" name="__codelineno-0-957"></a>    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+<a id="__codelineno-0-958" name="__codelineno-0-958"></a>        <span class="n">network_name</span><span class="o">=</span><span class="n">network_name</span><span class="p">,</span>
+<a id="__codelineno-0-959" name="__codelineno-0-959"></a>        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
+<a id="__codelineno-0-960" name="__codelineno-0-960"></a>        <span class="n">name</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+<a id="__codelineno-0-961" name="__codelineno-0-961"></a>        <span class="n">description</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
+<a id="__codelineno-0-962" name="__codelineno-0-962"></a>        <span class="n">source_name</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">source</span><span class="p">,</span>
+<a id="__codelineno-0-963" name="__codelineno-0-963"></a>        <span class="n">fault_name</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">fault</span><span class="p">,</span>
+<a id="__codelineno-0-964" name="__codelineno-0-964"></a>        <span class="c1"># Segments will be added separately after the branches are saved</span>
+<a id="__codelineno-0-965" name="__codelineno-0-965"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -5217,67 +5437,67 @@ the owning network -- a corrupt or hand-edited database.</p>
 
             <details class="quote">
               <summary>Source code in <code>src/groundinsight/models/database_models.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-881">881</a></span>
-<span class="normal"><a href="#__codelineno-0-882">882</a></span>
-<span class="normal"><a href="#__codelineno-0-883">883</a></span>
-<span class="normal"><a href="#__codelineno-0-884">884</a></span>
-<span class="normal"><a href="#__codelineno-0-885">885</a></span>
-<span class="normal"><a href="#__codelineno-0-886">886</a></span>
-<span class="normal"><a href="#__codelineno-0-887">887</a></span>
-<span class="normal"><a href="#__codelineno-0-888">888</a></span>
-<span class="normal"><a href="#__codelineno-0-889">889</a></span>
-<span class="normal"><a href="#__codelineno-0-890">890</a></span>
-<span class="normal"><a href="#__codelineno-0-891">891</a></span>
-<span class="normal"><a href="#__codelineno-0-892">892</a></span>
-<span class="normal"><a href="#__codelineno-0-893">893</a></span>
-<span class="normal"><a href="#__codelineno-0-894">894</a></span>
-<span class="normal"><a href="#__codelineno-0-895">895</a></span>
-<span class="normal"><a href="#__codelineno-0-896">896</a></span>
-<span class="normal"><a href="#__codelineno-0-897">897</a></span>
-<span class="normal"><a href="#__codelineno-0-898">898</a></span>
-<span class="normal"><a href="#__codelineno-0-899">899</a></span>
-<span class="normal"><a href="#__codelineno-0-900">900</a></span>
-<span class="normal"><a href="#__codelineno-0-901">901</a></span>
-<span class="normal"><a href="#__codelineno-0-902">902</a></span>
-<span class="normal"><a href="#__codelineno-0-903">903</a></span>
-<span class="normal"><a href="#__codelineno-0-904">904</a></span>
-<span class="normal"><a href="#__codelineno-0-905">905</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-905">905</a></span>
 <span class="normal"><a href="#__codelineno-0-906">906</a></span>
 <span class="normal"><a href="#__codelineno-0-907">907</a></span>
 <span class="normal"><a href="#__codelineno-0-908">908</a></span>
 <span class="normal"><a href="#__codelineno-0-909">909</a></span>
 <span class="normal"><a href="#__codelineno-0-910">910</a></span>
-<span class="normal"><a href="#__codelineno-0-911">911</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-881" name="__codelineno-0-881"></a><span class="k">def</span> <span class="nf">to_pydantic</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<a id="__codelineno-0-882" name="__codelineno-0-882"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert the row back into a Pydantic :class:`Path`.</span>
-<a id="__codelineno-0-883" name="__codelineno-0-883"></a>
-<a id="__codelineno-0-884" name="__codelineno-0-884"></a><span class="sd">    Returns</span>
-<a id="__codelineno-0-885" name="__codelineno-0-885"></a><span class="sd">    -------</span>
-<a id="__codelineno-0-886" name="__codelineno-0-886"></a><span class="sd">    Path</span>
-<a id="__codelineno-0-887" name="__codelineno-0-887"></a><span class="sd">        The reconstructed path, with ``segments`` in stored order.</span>
-<a id="__codelineno-0-888" name="__codelineno-0-888"></a>
-<a id="__codelineno-0-889" name="__codelineno-0-889"></a><span class="sd">    Raises</span>
-<a id="__codelineno-0-890" name="__codelineno-0-890"></a><span class="sd">    ------</span>
-<a id="__codelineno-0-891" name="__codelineno-0-891"></a><span class="sd">    ValueError</span>
-<a id="__codelineno-0-892" name="__codelineno-0-892"></a><span class="sd">        If a stored segment references a branch that is not present in</span>
-<a id="__codelineno-0-893" name="__codelineno-0-893"></a><span class="sd">        the owning network -- a corrupt or hand-edited database.</span>
-<a id="__codelineno-0-894" name="__codelineno-0-894"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-895" name="__codelineno-0-895"></a>    <span class="n">segments</span> <span class="o">=</span> <span class="p">[]</span>
-<a id="__codelineno-0-896" name="__codelineno-0-896"></a>    <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">:</span>
-<a id="__codelineno-0-897" name="__codelineno-0-897"></a>        <span class="k">if</span> <span class="n">segment</span><span class="o">.</span><span class="n">branch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-898" name="__codelineno-0-898"></a>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<a id="__codelineno-0-899" name="__codelineno-0-899"></a>                <span class="sa">f</span><span class="s2">&quot;Path &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; of network &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">network_name</span><span class="si">}</span><span class="s2">&#39; references &quot;</span>
-<a id="__codelineno-0-900" name="__codelineno-0-900"></a>                <span class="sa">f</span><span class="s2">&quot;branch &#39;</span><span class="si">{</span><span class="n">segment</span><span class="o">.</span><span class="n">branch_name</span><span class="si">}</span><span class="s2">&#39;, which is not stored in that &quot;</span>
-<a id="__codelineno-0-901" name="__codelineno-0-901"></a>                <span class="s2">&quot;network. The database is inconsistent.&quot;</span>
-<a id="__codelineno-0-902" name="__codelineno-0-902"></a>            <span class="p">)</span>
-<a id="__codelineno-0-903" name="__codelineno-0-903"></a>        <span class="n">segments</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">segment</span><span class="o">.</span><span class="n">branch</span><span class="o">.</span><span class="n">to_pydantic</span><span class="p">())</span>
-<a id="__codelineno-0-904" name="__codelineno-0-904"></a>
-<a id="__codelineno-0-905" name="__codelineno-0-905"></a>    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span>
-<a id="__codelineno-0-906" name="__codelineno-0-906"></a>        <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-<a id="__codelineno-0-907" name="__codelineno-0-907"></a>        <span class="n">description</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
-<a id="__codelineno-0-908" name="__codelineno-0-908"></a>        <span class="n">source</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">source_name</span><span class="p">,</span>
-<a id="__codelineno-0-909" name="__codelineno-0-909"></a>        <span class="n">fault</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fault_name</span><span class="p">,</span>
-<a id="__codelineno-0-910" name="__codelineno-0-910"></a>        <span class="n">segments</span><span class="o">=</span><span class="n">segments</span><span class="p">,</span>
-<a id="__codelineno-0-911" name="__codelineno-0-911"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-911">911</a></span>
+<span class="normal"><a href="#__codelineno-0-912">912</a></span>
+<span class="normal"><a href="#__codelineno-0-913">913</a></span>
+<span class="normal"><a href="#__codelineno-0-914">914</a></span>
+<span class="normal"><a href="#__codelineno-0-915">915</a></span>
+<span class="normal"><a href="#__codelineno-0-916">916</a></span>
+<span class="normal"><a href="#__codelineno-0-917">917</a></span>
+<span class="normal"><a href="#__codelineno-0-918">918</a></span>
+<span class="normal"><a href="#__codelineno-0-919">919</a></span>
+<span class="normal"><a href="#__codelineno-0-920">920</a></span>
+<span class="normal"><a href="#__codelineno-0-921">921</a></span>
+<span class="normal"><a href="#__codelineno-0-922">922</a></span>
+<span class="normal"><a href="#__codelineno-0-923">923</a></span>
+<span class="normal"><a href="#__codelineno-0-924">924</a></span>
+<span class="normal"><a href="#__codelineno-0-925">925</a></span>
+<span class="normal"><a href="#__codelineno-0-926">926</a></span>
+<span class="normal"><a href="#__codelineno-0-927">927</a></span>
+<span class="normal"><a href="#__codelineno-0-928">928</a></span>
+<span class="normal"><a href="#__codelineno-0-929">929</a></span>
+<span class="normal"><a href="#__codelineno-0-930">930</a></span>
+<span class="normal"><a href="#__codelineno-0-931">931</a></span>
+<span class="normal"><a href="#__codelineno-0-932">932</a></span>
+<span class="normal"><a href="#__codelineno-0-933">933</a></span>
+<span class="normal"><a href="#__codelineno-0-934">934</a></span>
+<span class="normal"><a href="#__codelineno-0-935">935</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-905" name="__codelineno-0-905"></a><span class="k">def</span> <span class="nf">to_pydantic</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<a id="__codelineno-0-906" name="__codelineno-0-906"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert the row back into a Pydantic :class:`Path`.</span>
+<a id="__codelineno-0-907" name="__codelineno-0-907"></a>
+<a id="__codelineno-0-908" name="__codelineno-0-908"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-909" name="__codelineno-0-909"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-910" name="__codelineno-0-910"></a><span class="sd">    Path</span>
+<a id="__codelineno-0-911" name="__codelineno-0-911"></a><span class="sd">        The reconstructed path, with ``segments`` in stored order.</span>
+<a id="__codelineno-0-912" name="__codelineno-0-912"></a>
+<a id="__codelineno-0-913" name="__codelineno-0-913"></a><span class="sd">    Raises</span>
+<a id="__codelineno-0-914" name="__codelineno-0-914"></a><span class="sd">    ------</span>
+<a id="__codelineno-0-915" name="__codelineno-0-915"></a><span class="sd">    ValueError</span>
+<a id="__codelineno-0-916" name="__codelineno-0-916"></a><span class="sd">        If a stored segment references a branch that is not present in</span>
+<a id="__codelineno-0-917" name="__codelineno-0-917"></a><span class="sd">        the owning network -- a corrupt or hand-edited database.</span>
+<a id="__codelineno-0-918" name="__codelineno-0-918"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-919" name="__codelineno-0-919"></a>    <span class="n">segments</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-0-920" name="__codelineno-0-920"></a>    <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">:</span>
+<a id="__codelineno-0-921" name="__codelineno-0-921"></a>        <span class="k">if</span> <span class="n">segment</span><span class="o">.</span><span class="n">branch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-922" name="__codelineno-0-922"></a>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<a id="__codelineno-0-923" name="__codelineno-0-923"></a>                <span class="sa">f</span><span class="s2">&quot;Path &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; of network &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">network_name</span><span class="si">}</span><span class="s2">&#39; references &quot;</span>
+<a id="__codelineno-0-924" name="__codelineno-0-924"></a>                <span class="sa">f</span><span class="s2">&quot;branch &#39;</span><span class="si">{</span><span class="n">segment</span><span class="o">.</span><span class="n">branch_name</span><span class="si">}</span><span class="s2">&#39;, which is not stored in that &quot;</span>
+<a id="__codelineno-0-925" name="__codelineno-0-925"></a>                <span class="s2">&quot;network. The database is inconsistent.&quot;</span>
+<a id="__codelineno-0-926" name="__codelineno-0-926"></a>            <span class="p">)</span>
+<a id="__codelineno-0-927" name="__codelineno-0-927"></a>        <span class="n">segments</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">segment</span><span class="o">.</span><span class="n">branch</span><span class="o">.</span><span class="n">to_pydantic</span><span class="p">())</span>
+<a id="__codelineno-0-928" name="__codelineno-0-928"></a>
+<a id="__codelineno-0-929" name="__codelineno-0-929"></a>    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span>
+<a id="__codelineno-0-930" name="__codelineno-0-930"></a>        <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+<a id="__codelineno-0-931" name="__codelineno-0-931"></a>        <span class="n">description</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
+<a id="__codelineno-0-932" name="__codelineno-0-932"></a>        <span class="n">source</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">source_name</span><span class="p">,</span>
+<a id="__codelineno-0-933" name="__codelineno-0-933"></a>        <span class="n">fault</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fault_name</span><span class="p">,</span>
+<a id="__codelineno-0-934" name="__codelineno-0-934"></a>        <span class="n">segments</span><span class="o">=</span><span class="n">segments</span><span class="p">,</span>
+<a id="__codelineno-0-935" name="__codelineno-0-935"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -5499,31 +5719,7 @@ to restore the dictionary order on load. Defaults to <code>0</code>.</p>
 
             <details class="quote">
               <summary>Source code in <code>src/groundinsight/models/database_models.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-758">758</a></span>
-<span class="normal"><a href="#__codelineno-0-759">759</a></span>
-<span class="normal"><a href="#__codelineno-0-760">760</a></span>
-<span class="normal"><a href="#__codelineno-0-761">761</a></span>
-<span class="normal"><a href="#__codelineno-0-762">762</a></span>
-<span class="normal"><a href="#__codelineno-0-763">763</a></span>
-<span class="normal"><a href="#__codelineno-0-764">764</a></span>
-<span class="normal"><a href="#__codelineno-0-765">765</a></span>
-<span class="normal"><a href="#__codelineno-0-766">766</a></span>
-<span class="normal"><a href="#__codelineno-0-767">767</a></span>
-<span class="normal"><a href="#__codelineno-0-768">768</a></span>
-<span class="normal"><a href="#__codelineno-0-769">769</a></span>
-<span class="normal"><a href="#__codelineno-0-770">770</a></span>
-<span class="normal"><a href="#__codelineno-0-771">771</a></span>
-<span class="normal"><a href="#__codelineno-0-772">772</a></span>
-<span class="normal"><a href="#__codelineno-0-773">773</a></span>
-<span class="normal"><a href="#__codelineno-0-774">774</a></span>
-<span class="normal"><a href="#__codelineno-0-775">775</a></span>
-<span class="normal"><a href="#__codelineno-0-776">776</a></span>
-<span class="normal"><a href="#__codelineno-0-777">777</a></span>
-<span class="normal"><a href="#__codelineno-0-778">778</a></span>
-<span class="normal"><a href="#__codelineno-0-779">779</a></span>
-<span class="normal"><a href="#__codelineno-0-780">780</a></span>
-<span class="normal"><a href="#__codelineno-0-781">781</a></span>
-<span class="normal"><a href="#__codelineno-0-782">782</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-782">782</a></span>
 <span class="normal"><a href="#__codelineno-0-783">783</a></span>
 <span class="normal"><a href="#__codelineno-0-784">784</a></span>
 <span class="normal"><a href="#__codelineno-0-785">785</a></span>
@@ -5531,39 +5727,63 @@ to restore the dictionary order on load. Defaults to <code>0</code>.</p>
 <span class="normal"><a href="#__codelineno-0-787">787</a></span>
 <span class="normal"><a href="#__codelineno-0-788">788</a></span>
 <span class="normal"><a href="#__codelineno-0-789">789</a></span>
-<span class="normal"><a href="#__codelineno-0-790">790</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-758" name="__codelineno-0-758"></a><span class="nd">@classmethod</span>
-<a id="__codelineno-0-759" name="__codelineno-0-759"></a><span class="k">def</span> <span class="nf">from_pydantic</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">source</span><span class="p">:</span> <span class="n">Source</span><span class="p">,</span> <span class="n">network_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
-<a id="__codelineno-0-760" name="__codelineno-0-760"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a ``SourceDB`` row from a Pydantic :class:`Source`.</span>
-<a id="__codelineno-0-761" name="__codelineno-0-761"></a>
-<a id="__codelineno-0-762" name="__codelineno-0-762"></a><span class="sd">    Parameters</span>
-<a id="__codelineno-0-763" name="__codelineno-0-763"></a><span class="sd">    ----------</span>
-<a id="__codelineno-0-764" name="__codelineno-0-764"></a><span class="sd">    source : Source</span>
-<a id="__codelineno-0-765" name="__codelineno-0-765"></a><span class="sd">        The source to convert.</span>
-<a id="__codelineno-0-766" name="__codelineno-0-766"></a><span class="sd">    network_name : str, optional</span>
-<a id="__codelineno-0-767" name="__codelineno-0-767"></a><span class="sd">        Name of the owning network. Part of the composite primary key.</span>
-<a id="__codelineno-0-768" name="__codelineno-0-768"></a><span class="sd">    position : int, optional</span>
-<a id="__codelineno-0-769" name="__codelineno-0-769"></a><span class="sd">        Zero-based index of the source inside ``Network.sources``, used</span>
-<a id="__codelineno-0-770" name="__codelineno-0-770"></a><span class="sd">        to restore the dictionary order on load. Defaults to ``0``.</span>
-<a id="__codelineno-0-771" name="__codelineno-0-771"></a>
-<a id="__codelineno-0-772" name="__codelineno-0-772"></a><span class="sd">    Returns</span>
-<a id="__codelineno-0-773" name="__codelineno-0-773"></a><span class="sd">    -------</span>
-<a id="__codelineno-0-774" name="__codelineno-0-774"></a><span class="sd">    SourceDB</span>
-<a id="__codelineno-0-775" name="__codelineno-0-775"></a><span class="sd">        The unattached database row.</span>
-<a id="__codelineno-0-776" name="__codelineno-0-776"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-777" name="__codelineno-0-777"></a>    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
-<a id="__codelineno-0-778" name="__codelineno-0-778"></a>        <span class="n">network_name</span><span class="o">=</span><span class="n">network_name</span><span class="p">,</span>
-<a id="__codelineno-0-779" name="__codelineno-0-779"></a>        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
-<a id="__codelineno-0-780" name="__codelineno-0-780"></a>        <span class="n">name</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-<a id="__codelineno-0-781" name="__codelineno-0-781"></a>        <span class="n">description</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
-<a id="__codelineno-0-782" name="__codelineno-0-782"></a>        <span class="n">bus_name</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">bus</span><span class="p">,</span>
-<a id="__codelineno-0-783" name="__codelineno-0-783"></a>        <span class="n">source_type</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">source_type</span><span class="p">,</span>
-<a id="__codelineno-0-784" name="__codelineno-0-784"></a>        <span class="n">values</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">_freq_dict_to_json</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">values</span><span class="p">),</span>
-<a id="__codelineno-0-785" name="__codelineno-0-785"></a>        <span class="n">voltage</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">_freq_dict_to_json</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">voltage</span><span class="p">),</span>
-<a id="__codelineno-0-786" name="__codelineno-0-786"></a>        <span class="n">source_impedance</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">_freq_dict_to_json</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">source_impedance</span><span class="p">),</span>
-<a id="__codelineno-0-787" name="__codelineno-0-787"></a>        <span class="n">i_k_a</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">i_k_a</span><span class="p">,</span>
-<a id="__codelineno-0-788" name="__codelineno-0-788"></a>        <span class="n">r_to_x</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">r_to_x</span><span class="p">,</span>
-<a id="__codelineno-0-789" name="__codelineno-0-789"></a>        <span class="n">kappa</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">kappa</span><span class="p">,</span>
-<a id="__codelineno-0-790" name="__codelineno-0-790"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-790">790</a></span>
+<span class="normal"><a href="#__codelineno-0-791">791</a></span>
+<span class="normal"><a href="#__codelineno-0-792">792</a></span>
+<span class="normal"><a href="#__codelineno-0-793">793</a></span>
+<span class="normal"><a href="#__codelineno-0-794">794</a></span>
+<span class="normal"><a href="#__codelineno-0-795">795</a></span>
+<span class="normal"><a href="#__codelineno-0-796">796</a></span>
+<span class="normal"><a href="#__codelineno-0-797">797</a></span>
+<span class="normal"><a href="#__codelineno-0-798">798</a></span>
+<span class="normal"><a href="#__codelineno-0-799">799</a></span>
+<span class="normal"><a href="#__codelineno-0-800">800</a></span>
+<span class="normal"><a href="#__codelineno-0-801">801</a></span>
+<span class="normal"><a href="#__codelineno-0-802">802</a></span>
+<span class="normal"><a href="#__codelineno-0-803">803</a></span>
+<span class="normal"><a href="#__codelineno-0-804">804</a></span>
+<span class="normal"><a href="#__codelineno-0-805">805</a></span>
+<span class="normal"><a href="#__codelineno-0-806">806</a></span>
+<span class="normal"><a href="#__codelineno-0-807">807</a></span>
+<span class="normal"><a href="#__codelineno-0-808">808</a></span>
+<span class="normal"><a href="#__codelineno-0-809">809</a></span>
+<span class="normal"><a href="#__codelineno-0-810">810</a></span>
+<span class="normal"><a href="#__codelineno-0-811">811</a></span>
+<span class="normal"><a href="#__codelineno-0-812">812</a></span>
+<span class="normal"><a href="#__codelineno-0-813">813</a></span>
+<span class="normal"><a href="#__codelineno-0-814">814</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-782" name="__codelineno-0-782"></a><span class="nd">@classmethod</span>
+<a id="__codelineno-0-783" name="__codelineno-0-783"></a><span class="k">def</span> <span class="nf">from_pydantic</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">source</span><span class="p">:</span> <span class="n">Source</span><span class="p">,</span> <span class="n">network_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+<a id="__codelineno-0-784" name="__codelineno-0-784"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a ``SourceDB`` row from a Pydantic :class:`Source`.</span>
+<a id="__codelineno-0-785" name="__codelineno-0-785"></a>
+<a id="__codelineno-0-786" name="__codelineno-0-786"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-787" name="__codelineno-0-787"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-788" name="__codelineno-0-788"></a><span class="sd">    source : Source</span>
+<a id="__codelineno-0-789" name="__codelineno-0-789"></a><span class="sd">        The source to convert.</span>
+<a id="__codelineno-0-790" name="__codelineno-0-790"></a><span class="sd">    network_name : str, optional</span>
+<a id="__codelineno-0-791" name="__codelineno-0-791"></a><span class="sd">        Name of the owning network. Part of the composite primary key.</span>
+<a id="__codelineno-0-792" name="__codelineno-0-792"></a><span class="sd">    position : int, optional</span>
+<a id="__codelineno-0-793" name="__codelineno-0-793"></a><span class="sd">        Zero-based index of the source inside ``Network.sources``, used</span>
+<a id="__codelineno-0-794" name="__codelineno-0-794"></a><span class="sd">        to restore the dictionary order on load. Defaults to ``0``.</span>
+<a id="__codelineno-0-795" name="__codelineno-0-795"></a>
+<a id="__codelineno-0-796" name="__codelineno-0-796"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-797" name="__codelineno-0-797"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-798" name="__codelineno-0-798"></a><span class="sd">    SourceDB</span>
+<a id="__codelineno-0-799" name="__codelineno-0-799"></a><span class="sd">        The unattached database row.</span>
+<a id="__codelineno-0-800" name="__codelineno-0-800"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-801" name="__codelineno-0-801"></a>    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+<a id="__codelineno-0-802" name="__codelineno-0-802"></a>        <span class="n">network_name</span><span class="o">=</span><span class="n">network_name</span><span class="p">,</span>
+<a id="__codelineno-0-803" name="__codelineno-0-803"></a>        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
+<a id="__codelineno-0-804" name="__codelineno-0-804"></a>        <span class="n">name</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+<a id="__codelineno-0-805" name="__codelineno-0-805"></a>        <span class="n">description</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
+<a id="__codelineno-0-806" name="__codelineno-0-806"></a>        <span class="n">bus_name</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">bus</span><span class="p">,</span>
+<a id="__codelineno-0-807" name="__codelineno-0-807"></a>        <span class="n">source_type</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">source_type</span><span class="p">,</span>
+<a id="__codelineno-0-808" name="__codelineno-0-808"></a>        <span class="n">values</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">_freq_dict_to_json</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">values</span><span class="p">),</span>
+<a id="__codelineno-0-809" name="__codelineno-0-809"></a>        <span class="n">voltage</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">_freq_dict_to_json</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">voltage</span><span class="p">),</span>
+<a id="__codelineno-0-810" name="__codelineno-0-810"></a>        <span class="n">source_impedance</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">_freq_dict_to_json</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">source_impedance</span><span class="p">),</span>
+<a id="__codelineno-0-811" name="__codelineno-0-811"></a>        <span class="n">i_k_a</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">i_k_a</span><span class="p">,</span>
+<a id="__codelineno-0-812" name="__codelineno-0-812"></a>        <span class="n">r_to_x</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">r_to_x</span><span class="p">,</span>
+<a id="__codelineno-0-813" name="__codelineno-0-813"></a>        <span class="n">kappa</span><span class="o">=</span><span class="n">source</span><span class="o">.</span><span class="n">kappa</span><span class="p">,</span>
+<a id="__codelineno-0-814" name="__codelineno-0-814"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

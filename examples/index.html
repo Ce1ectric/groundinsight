@@ -616,6 +616,8 @@
       
         
       
+        
+      
     
     
     
@@ -813,6 +815,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="fault_decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decomposing a fault: cuts, both reduction factors and a location without its electrode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -831,6 +861,16 @@
       
         
           
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
         
       
         
@@ -1138,6 +1178,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../api/sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter sweeps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../api/analysis/" class="md-nav__link">
         
   
@@ -1146,6 +1214,118 @@
     
   
     Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault-location decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/response/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Location response
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference cases
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/statistics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Statistics and classification
   
 
     
@@ -1279,6 +1459,13 @@ figures and DataFrame outputs are visible inline.</p>
   every bus of a 10-bus MV cable line and visualise the resulting
   grounding impedance and reduction factor per fault bus and frequency.
   Uses <code>Network.res_all_impedances()</code> for the bookkeeping.</li>
+<li><strong><a href="fault_decomposition/">Fault decomposition</a></strong> — the analysis
+  layer on top of a solve: the two reduction factors and why they answer
+  different questions, <code>analyze_cuts</code> for what each direction away from
+  the fault contributes, <code>bus_response</code> for the response to <em>any</em>
+  electrode at the faulted station from two solves, <code>run_sweep</code> with
+  <code>summarize</code>/<code>classify</code> across soil resistivities, and the closed-form
+  <code>run_reference_cases</code>.</li>
 </ul>
 <p>Each notebook is self-contained: it builds the network in code, runs
 the fault calculation, extracts the results as Polars DataFrames and
