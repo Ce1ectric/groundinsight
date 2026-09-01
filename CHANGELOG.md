@@ -28,6 +28,17 @@ version section when a release is cut.
 
 ### Internal
 
+- **`scripts/generate_graphify_report.py` removed, replaced by
+  `scripts/refresh_graphify.sh`.** The Python script existed only because
+  `graphify` 0.7.x stopped emitting `graphify-out/GRAPH_REPORT.md` while the
+  `CLAUDE.md` hook still pointed at it. Verified against `graphifyy` 0.9.53:
+  the report is written again, by `cluster-only` rather than by `extract`
+  (`extract --code-only` alone leaves none). The shell script runs both passes
+  in order, pins the DeepSeek backend to `deepseek-v4-flash` with an explicit
+  `--model` rather than relying on the backend default, prompts for
+  `DEEPSEEK_API_KEY` rather than storing it, and falls back to a local
+  AST-only run when none is given. Development tooling only —
+  `graphify-out/` is gitignored and the package does not depend on any of it.
 - **Dependabot** for GitHub Actions and Python dependencies
   (`.github/dependabot.yml`), monthly, grouped into one pull request per
   ecosystem. Added because the Node 20 runner deprecation reached the release
