@@ -26,7 +26,15 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Internal
+
+- **Dependabot** for GitHub Actions and Python dependencies
+  (`.github/dependabot.yml`), monthly, grouped into one pull request per
+  ecosystem. Added because the Node 20 runner deprecation reached the release
+  workflow unnoticed: `v0.5.0` built with actions GitHub was already forcing
+  onto Node 24, and the warning only surfaced in a release log. Grouping is
+  deliberate — a single-maintainer repository reads a dozen separate bump PRs
+  as noise, which defeats the purpose.
 
 ---
 
@@ -1179,10 +1187,6 @@ distribution-network space.
 
 ### Near term — other
 
-- **Dependabot** for Python and GitHub Actions dependencies
-  (`.github/dependabot.yml`). The Node 20 deprecation reached the
-  release workflow before anyone noticed, which is exactly what this
-  would have caught.
 - **Codecov / Coveralls integration** — upload coverage from CI and
   show a PR diff badge; currently the XML report is only uploaded as
   a workflow artifact.

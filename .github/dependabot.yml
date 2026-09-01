@@ -1,0 +1,49 @@
+# Dependabot configuration for groundinsight.
+#
+# Added after the Node 20 runner deprecation reached the release workflow
+# unnoticed: v0.5.0 built with actions that GitHub was already forcing onto
+# Node 24, and the warning only surfaced in a release log. A monthly check
+# would have opened a pull request months earlier.
+#
+# Updates are grouped so a month's worth of bumps arrives as one pull request
+# rather than a dozen. This is a single-maintainer repository; a flood of
+# individual PRs would be read as noise and ignored, which defeats the point.
+
+version: 2
+
+updates:
+  # GitHub Actions — the case this file exists for. Runner deprecations show
+  # up here as ordinary version bumps well before they break a workflow.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  # Python dependencies via Poetry. Dependabot reads pyproject.toml and
+  # poetry.lock through the pip ecosystem; with caret constraints throughout,
+  # most of the value is in refreshing the lock file.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # Runtime dependencies move together or not at all — a solver stack
+      # split across two pull requests is harder to judge than one.
+      runtime:
+        dependency-type: "production"
+        patterns:
+          - "*"
+      development:
+        dependency-type: "development"
+        patterns:
+          - "*"
