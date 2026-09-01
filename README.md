@@ -42,8 +42,34 @@ it for every harmonic of interest.
 - Sparse LU solve per frequency (`scipy.sparse.linalg.splu`); mutual
   coupling injected as Norton equivalents along the source-to-fault
   path.
-- Ring and mesh topologies with optional automatic per-path current
-  sharing (`auto_parallel_coefficients=True` on `run_fault`).
+- Ring and mesh topologies: the phase current is determined by a solve
+  on the phase-conductor network itself (`phase_current_mode="auto"`,
+  the default), so a ring, a mesh or a second parallel cable no longer
+  collapses onto enumerated paths. `BranchType.phase_impedance_formula`
+  describes the faulted conductor; `phase_current_mode="paths"` keeps
+  the older path-based scheme.
+- Two reduction factors, both reported:
+  `ResultReductionFactor.value` is the EPR ratio and keeps the meaning
+  of the closed form `r = |1 - Z_m/Z_s|`; `value_current` is the share
+  of the fault current returning through earth — the EN 50522 quantity,
+  and the one that responds to the electrode at the fault bus.
+- Splitting the network at the fault location (`gi.Cut`,
+  `gi.analyze_cuts`): what each direction contributes, from source-free
+  current division, with `1/Z_dp = 1/Z_local + Σ 1/Z_side` closing on
+  the driving-point admittance.
+- Parameter sweeps (`gi.run_sweep`, `gi.SweepPoint`, `gi.rho_f_points`)
+  into long-format frames, with `gi.summarize` and `gi.classify` for
+  statistics and user-supplied limit bands on top.
+- Characterising a location without knowing its electrode
+  (`gi.bus_response`): two solves determine the response for *every*
+  electrode impedance. `BusResponse.extremes()` brackets the local
+  quantities (`EPR_V`, `Z_driving_point_Ohm`); transfer quantities at
+  other buses are not bounded by it and want `.sweep([...])`.
+  `z_network` is the site-independent driving-point impedance of
+  everything except the local electrode.
+- Closed-form reference cases (`gi.run_reference_cases`) — six
+  configurations, the ladder network among them, checked against
+  results derived from first principles and run as tests.
 - Outage / what-if studies via `Bus.active` / `Branch.active`,
   `gi.outage_context` and `gi.run_outage_study`.
 - Inverse rho analysis (`gi.find_max_rho_scaling`,
@@ -150,10 +176,14 @@ $$
 where $Y$ is the nodal admittance matrix (bus grounding admittances on the
 diagonal, branch self-admittances off-diagonal), $\underline{u}$ is the EPR
 vector and $\underline{i}$ combines source currents and the Norton
-equivalents of the phase-to-shield mutual coupling. The reduction factor at
-the fault bus is obtained by re-solving the same system with all mutual
-Norton sources removed and taking the ratio
+equivalents of the phase-to-shield mutual coupling. The EPR-based
+reduction factor at the fault bus is obtained by re-solving the same
+system with all mutual Norton sources removed and taking the ratio
 $|u_{\text{fault}}^{\text{with}}|/|u_{\text{fault}}^{\text{without}}|$.
+Because both solves share the same $Y$, that quotient is structurally
+insensitive to the electrode *at* the fault bus; the current-based
+factor $|I_E|/|3I_0|$ is reported alongside it and does respond, which
+is the one to use for sensitivity work and the one EN 50522 means.
 
 For the full model — objects, path finding, reduction factor and grounding
 impedance — see the [Concepts](https://ce1ectric.github.io/groundinsight/concepts/)

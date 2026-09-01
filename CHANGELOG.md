@@ -26,6 +26,159 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+### Added
+
+- **Closed-form reference cases (`gi.run_reference_cases`).** Six
+  configurations whose answer is known in closed form, run through the ordinary
+  public API and compared, with the derivation in each case's docstring rather
+  than a quoted equation number. Measured deviations: the textbook
+  `r = |1 - Z_m/Z_s|` under its own condition of negligible station electrodes
+  (2e-6), the same line with finite earthing (5e-16), the EN 50522 chain
+  (1e-16), the ladder-network input impedance
+  `Z_in = -Z'/2 + sqrt(Z'^2/4 + Z_e*Z')` over 80 sections (3e-9), the potential
+  decay `u_n/u_0 = e^(-n*gamma)` with `gamma = arccosh(1 + Z'/(2*Z_e))` (3e-7),
+  and the parallel decomposition at a station (1e-15). Each case states the
+  boundary conditions its closed form needs, because a deviation more often
+  means a condition was not met than that the model is wrong. Also run as tests,
+  so a change that quietly breaks agreement cannot reach a release.
+
+- **Characterising a location without knowing the electrode there
+  (`gi.bus_response`).** Adding an electrode is a rank-one change to the nodal
+  matrix, so by Sherman-Morrison every nodal voltage is a Möbius function of its
+  admittance. Two solves with the electrode removed therefore determine the
+  response for **every** electrode — measured against genuine solves at `Z_B`
+  from 0.05 Ω to 500 Ω and at `4+9j` Ω, the closed form agrees to `3e-15`
+  relative, on every bus and for the current-based reduction factor as well.
+  `BusResponse.extremes()` gives the bracket: `open` (no electrode), `ideal`
+  (`Z_B = 0`) and `worst_passive`. Both endpoints are exact limits rather than
+  numerical stand-ins — the ideal electrode in particular, which the solver
+  rejects outright because a zero impedance is not invertible. `.evaluate(z)`
+  and `.sweep([...])` cost no solve at all.
+  - `BusResponse.z_network` is the site-independent number the analysis is built
+    around: the driving-point impedance of everything except the local
+    electrode. Verified identical whether the response was built from a network
+    carrying a 0.5 Ω electrode or a 200 Ω one.
+  - `Z_dp = 1/(Y_B + 1/Z_net)` exactly, so it runs monotonically from `Z_net` to
+    zero. The largest magnitude over all *passive* electrodes is not at the open
+    end but at the reactive resonance `Y_B = -j·Im(1/Z_net)`, worth 0.1 % more
+    in the verification network — small, but reported rather than assumed.
+  - The closed form **derives** the invariance of the EPR-based reduction factor
+    that the electrode sweep above measured: `u_b(Y_B) = u_0b/(1 + Y_B·Z_net)`
+    holds with and without mutual coupling alike, so the quotient cancels.
+    Algebra, not an accident.
+  - The guard that the location is characterisable at all is structural, not a
+    tolerance: at least one *other* bus must carry a finite grounding impedance
+    once the electrode is removed. Leaving it to the linear solver is not enough
+    — on the exactly singular case numpy returns a finite but meaningless
+    `-2.25e15` instead of raising, the same inconsistency the DC work found in
+    scipy's `splu`.
+
+- **Splitting the network at the fault location (`gi.Cut`, `gi.analyze_cuts`).**
+  A cut is a named set of branches, all incident to the fault bus; the analysis
+  reports what each direction contributes.
+
+      parallel impedance left --- fault location --- parallel impedance right
+
+  `Z_side` comes from **source-free current division**: one ampere is injected
+  at the fault bus with all sources and mutual injections removed, and the share
+  leaving through each cut gives `Z_side = u_fault / i_cut`. The decomposition
+  closes by construction — `1/Z_local + Σ 1/Z_side` reproduces the
+  driving-point impedance of the whole network, measured residual `1.2e-15` on a
+  five-bus chain and on the same network with the ring closed. Isolating each
+  side into its own sub-network would have been equivalent for a radial network
+  and **wrong in a ring**, where removing one branch separates nothing and the
+  far side comes out empty; that formulation was discarded before it shipped.
+  From a solved fault the analysis additionally reports `i_shield` and
+  `current_share` per direction (KCL at the fault bus closes to `2.4e-16`), and
+  where the directions are disjoint also `i_earth`, `i_total` and the side
+  reduction factor. `sides_are_disjoint` says which case you are in; a passive
+  spur gets `r = None` rather than a division by zero. Results as a typed
+  `CutAnalysis` and as a long-format frame via `.to_polars()`.
+
+- **A second reduction factor, on a current basis
+  (`ResultReductionFactor.value_current`).** The existing EPR-based `value` is
+  structurally blind to the impedance *at* the fault bus: both solves use the
+  same `Y`, so changing `Y_ff` is a rank-1 update that cancels in the quotient.
+  Measured: sweeping the fault-bus electrode over four decades leaves it at
+  `0.500000` while `Z_G` moves by two orders of magnitude and the potential rise
+  by a factor of fifty. A rho-f sensitivity study plotted against it would be a
+  horizontal line. `value_current` is the share of the fault current that
+  returned through earth rather than through the shields and does respond —
+  `0.0414 → 0.00053` over the same sweep. **Both are kept**: `value` so earlier
+  results stay reproducible and so the closed form `r = |1 - Z_m/Z_s|` keeps its
+  meaning, `value_current` for sensitivity work. `res_all_impedances()` reports
+  both.
+
+- **Parameter sweeps (`gi.run_sweep`, `gi.SweepPoint`, `gi.rho_f_points`).**
+  Solve one fault once per parameter combination and stack the results into
+  long-format frames that carry the parameters as ordinary columns
+  (`.buses()`, `.branches()`, `.impedances()`, `.cuts()`). A point can override
+  bus impedance tables, soil resistivity, the fault location or the harmonic
+  scalings. `rho_f_points` builds the points from a catalogue of five-parameter
+  rho-f vectors — the form `groundfield` exports — and rejects a vector that
+  gives `Re(Z) <= 0` where it is built rather than three layers down in the
+  solver, because an unconstrained least-squares fit can land there. Overrides
+  are undone in a `finally` block, so a failing point leaves neither the network
+  nor the remaining points contaminated; failures are recorded per point and the
+  sweep carries on (`on_error="raise"` for the strict variant).
+
+- **Statistics and classification (`gi.summarize`, `gi.classify`).** Count,
+  spread, named quantiles and extremes for any numeric column, grouped or not;
+  and a class column that bins a quantity into user-supplied bands, closed on
+  the right so a value exactly on a limit stays in the lower band. There is
+  deliberately **no built-in table of admissible values** — touch-voltage limits
+  depend on the clearing time, the standard edition and the assumed additional
+  resistances, and a constant baked in here would be carried into a result
+  without ever being checked. The edges come from the caller, who can cite them.
+  `summarize` names the `frequency_Hz`-is-a-string trap in its error message
+  rather than just refusing.
+
+- **`BranchType.phase_impedance_formula`** (optional, symbols `f`, `rho`,
+  `l`) and the evaluated `Branch.phase_impedance`, mirrored in SQLite and
+  JSON. It describes the *phase* conductor -- the faulted conductor whose
+  current induces the longitudinal EMF on the shield -- and is what the
+  automatic phase-current distribution solves on. It never enters the nodal
+  admittance matrix and is therefore not passivity-checked. Where it is
+  absent **and** the phase network around the fault carries a cycle, the
+  solve falls back to `1/Z_self` (with a grounding conductor) or `1/length`
+  (without) and warns once per solve, naming the branches: those two
+  quantities are not comparable, so the split between routes of different
+  construction is a heuristic rather than a physical result. On a ring whose
+  two legs differ by a factor of ten in phase impedance the declared formula
+  divides the current 909.1 A / 90.9 A, as it should.
+
+### Changed
+
+- **Breaking: `ResultGroundingImpedance.value` is now `Z_E` in the EN 50522
+  sense** — the earthing voltage of the bonded earthing system over the current
+  it passes into the soil — instead of `u_EPR / (r_coupling * I_F)`. The old
+  expression mixed the coupling ratio into an impedance: on the verification
+  feeder it reported 0.219 Ω where the earthing system actually presents
+  3.298 Ω, a factor of fifteen, the same one that separates the two reduction
+  factors. With the new definition the norm's chain `U_E = 3*I_0 * Z_E * r`
+  closes on the reported value itself. Every ingredient of the old expression is
+  still in the result (`ResultBus.uepr`, `ResultReductionFactor.value`, the
+  source currents), so an earlier number can be reconstructed where a
+  comparison needs it.
+
+- `run_outage_study` forwards `phase_current_mode` and defaults it to
+  `"auto"` as well -- an outage study is precisely where a ring turns into a
+  chain and back, so the modelling assumption must not change underneath it.
+
+- **Breaking (behaviour, meshed networks only):** the default phase-current
+  determination moved from the path-based scheme to the phase-network solve.
+  A meshed network solved with the previous default returns different -- and
+  now non-degenerate -- numbers. Radial networks are unchanged.
+  `Branch.parallel_coefficient` is ignored in `"auto"` mode; it still applies
+  in `"paths"`.
+
+### Deprecated
+
+- `run_fault(auto_parallel_coefficients=...)` is deprecated in favour of
+  `phase_current_mode`. It still wins when passed explicitly, so existing
+  call sites keep their exact behaviour, and passing it logs that it is
+  deprecated.
+
 ### Fixed
 
 - **The current-based reduction factor summed the wrong thing.** `I_E` is the
@@ -57,6 +210,7 @@ version section when a release is cut.
   which is named which; the fault bus anchors the naming. `BusResponse` uses the
   same definition, and there the electrode under test contributes its own current
   rather than the one the response happened to be built with.
+
 - **The EN 50522 chain `U_E = 3*I_0 * Z_E * r` now closes in the result.**
   `ResultReductionFactor` gains `u_earthing` (the earthing voltage of the bonded
   group, the mean potential weighted by each station's electrode current) and
@@ -74,6 +228,7 @@ version section when a release is cut.
   sections between the bonded stations add to it, 3.30 Ω against 2.50 Ω — and
   where the group is not actually equipotential the lumped `U_E` is a weighted
   average of different voltages, which is reported at INFO.
+
 - **The two reduction factors are now documented as the different quantities
   they are, and the gap between them is reported.** They are not two
   computations of one number: for a route with shield impedance `Z_s`, mutual
@@ -89,16 +244,36 @@ version section when a release is cut.
   The divider is logged at INFO where it drops below 0.5 — a wide gap is a
   property of the network rather than a defect, and with ordinary station
   electrodes it is the normal case.
+
+- **`BusResponse.extremes()` was documented as a bracket for more than it
+  brackets.** The three cases are extremes of the *local* quantities — the
+  potential rise at the bus itself and its driving-point impedance. Transfer
+  quantities are not bounded by them: at the verification feeder a purely
+  capacitive `Z_B = -0.5569j` at the faulted station — passive, so inside the
+  same class the `worst_passive` case is drawn from — reaches
+  **`EPR_S0 = 1032.5 V` against the `ideal` case's 928.0 V** (+11 %) and
+  `r_current = 0.3429` against 0.2799 (+23 %), confirmed by a genuine solve and
+  not only by the closed form. The module docstring said the current-based
+  factor and the potential rise "are reported as brackets"; it now says which
+  columns the bracket covers and points at `.sweep([...])`, which costs no
+  solve, for the worst case of a transfer quantity. Behaviour unchanged — the
+  numbers `extremes()` returns were always correct for what they are.
+- **`EarthCurrentSplit.__repr__` was dead code.** It sat inside
+  `earthing_voltage` after that function's `return`, so the class never had it
+  and inspecting a split printed the default `<... object at 0x...>`. Moved
+  into the class.
 - **`earth_buses` now reports the fault side.** The two groups carry the same
   sum with opposite signs, so `|I_E|` never depended on the choice, but the
   reported membership did. It is now the set of stations from the fault
   outwards, in every direction — a ring or a mesh has more than one — up to
   where the potential profile turns, which is how the earthing current is read
   off a network.
+
 - **`compute_reduction_factors` raised a bare `KeyError` instead of skipping.**
   Its `except LinAlgError: continue` never wrote `u_vectors_no_mutual[freq]`,
   and the loop straight after it dereferenced that key. A frequency whose
   no-mutual solve fails is now reported as `None`.
+
 - **A ring, a mesh or a second parallel cable no longer collapses the
   result.** The phase current per branch used to be handed out by walking
   the enumerated source-to-fault paths and giving *every* branch on any
@@ -117,6 +292,7 @@ version section when a release is cut.
   branch appears on fixes its direction": the same topology gave
   `Z_G = -0.00272 + 0.11121j` or `+0.00272 - 0.11121j` depending on
   insertion order.
+
 - **`run_fault` gained `phase_current_mode`, defaulting to `"auto"`.** The
   new default solves a reduced phase-conductor network per source -- fault
   bus as reference, source current injected at the source bus -- and reads
@@ -127,6 +303,7 @@ version section when a release is cut.
   are unaffected**: both modes agree to 1e-9 there, so existing studies keep
   their numbers. `phase_current_mode="paths"` restores the old behaviour
   verbatim, including the collapse, so pre-0.6 studies stay reproducible.
+
 - **An island no longer discards a whole source contribution in silence.**
   The phase-network solve pinned the fault bus over the *whole* bus index
   range, which leaves any other island without a reference node and makes
@@ -138,157 +315,13 @@ version section when a release is cut.
   is now restricted to the fault bus's own galvanic component, a source with
   no phase-conductor route to the fault is reported by name, and a genuinely
   singular restricted system raises with the branch types to check.
+
 - **`_warning_parallel_coeffcient` no longer false-alarms.** It counted
   paths across *all* faults, so a strictly radial network that merely
   carried two fault definitions triggered the meshed-network warning. The
   check is now scoped to the active fault and to a single source reaching it
   over more than one path -- the only configuration in which the path-based
   mode multiplies the current.
-
-### Added
-
-- **Closed-form reference cases (`gi.run_reference_cases`).** Six
-  configurations whose answer is known in closed form, run through the ordinary
-  public API and compared, with the derivation in each case's docstring rather
-  than a quoted equation number. Measured deviations: the textbook
-  `r = |1 - Z_m/Z_s|` under its own condition of negligible station electrodes
-  (2e-6), the same line with finite earthing (5e-16), the EN 50522 chain
-  (1e-16), the ladder-network input impedance
-  `Z_in = -Z'/2 + sqrt(Z'^2/4 + Z_e*Z')` over 80 sections (3e-9), the potential
-  decay `u_n/u_0 = e^(-n*gamma)` with `gamma = arccosh(1 + Z'/(2*Z_e))` (3e-7),
-  and the parallel decomposition at a station (1e-15). Each case states the
-  boundary conditions its closed form needs, because a deviation more often
-  means a condition was not met than that the model is wrong. Also run as tests,
-  so a change that quietly breaks agreement cannot reach a release.
-
-### Changed
-
-- **Breaking: `ResultGroundingImpedance.value` is now `Z_E` in the EN 50522
-  sense** — the earthing voltage of the bonded earthing system over the current
-  it passes into the soil — instead of `u_EPR / (r_coupling * I_F)`. The old
-  expression mixed the coupling ratio into an impedance: on the verification
-  feeder it reported 0.219 Ω where the earthing system actually presents
-  3.298 Ω, a factor of fifteen, the same one that separates the two reduction
-  factors. With the new definition the norm's chain `U_E = 3*I_0 * Z_E * r`
-  closes on the reported value itself. Every ingredient of the old expression is
-  still in the result (`ResultBus.uepr`, `ResultReductionFactor.value`, the
-  source currents), so an earlier number can be reconstructed where a
-  comparison needs it.
-
-- **Characterising a location without knowing the electrode there
-  (`gi.bus_response`).** Adding an electrode is a rank-one change to the nodal
-  matrix, so by Sherman-Morrison every nodal voltage is a Möbius function of its
-  admittance. Two solves with the electrode removed therefore determine the
-  response for **every** electrode — measured against genuine solves at `Z_B`
-  from 0.05 Ω to 500 Ω and at `4+9j` Ω, the closed form agrees to `3e-15`
-  relative, on every bus and for the current-based reduction factor as well.
-  `BusResponse.extremes()` gives the bracket: `open` (no electrode), `ideal`
-  (`Z_B = 0`) and `worst_passive`. Both endpoints are exact limits rather than
-  numerical stand-ins — the ideal electrode in particular, which the solver
-  rejects outright because a zero impedance is not invertible. `.evaluate(z)`
-  and `.sweep([...])` cost no solve at all.
-  - `BusResponse.z_network` is the site-independent number the analysis is built
-    around: the driving-point impedance of everything except the local
-    electrode. Verified identical whether the response was built from a network
-    carrying a 0.5 Ω electrode or a 200 Ω one.
-  - `Z_dp = 1/(Y_B + 1/Z_net)` exactly, so it runs monotonically from `Z_net` to
-    zero. The largest magnitude over all *passive* electrodes is not at the open
-    end but at the reactive resonance `Y_B = -j·Im(1/Z_net)`, worth 0.1 % more
-    in the verification network — small, but reported rather than assumed.
-  - The closed form **derives** the invariance of the EPR-based reduction factor
-    that 0.6.0 measured: `u_b(Y_B) = u_0b/(1 + Y_B·Z_net)` holds with and without
-    mutual coupling alike, so the quotient cancels. Algebra, not an accident.
-  - The guard that the location is characterisable at all is structural, not a
-    tolerance: at least one *other* bus must carry a finite grounding impedance
-    once the electrode is removed. Leaving it to the linear solver is not enough
-    — on the exactly singular case numpy returns a finite but meaningless
-    `-2.25e15` instead of raising, the same inconsistency the DC work found in
-    scipy's `splu`.
-- **Splitting the network at the fault location (`gi.Cut`, `gi.analyze_cuts`).**
-  A cut is a named set of branches, all incident to the fault bus; the analysis
-  reports what each direction contributes.
-
-      parallel impedance left --- fault location --- parallel impedance right
-
-  `Z_side` comes from **source-free current division**: one ampere is injected
-  at the fault bus with all sources and mutual injections removed, and the share
-  leaving through each cut gives `Z_side = u_fault / i_cut`. The decomposition
-  closes by construction — `1/Z_local + Σ 1/Z_side` reproduces the
-  driving-point impedance of the whole network, measured residual `1.2e-15` on a
-  five-bus chain and on the same network with the ring closed. Isolating each
-  side into its own sub-network would have been equivalent for a radial network
-  and **wrong in a ring**, where removing one branch separates nothing and the
-  far side comes out empty; that formulation was discarded before it shipped.
-  From a solved fault the analysis additionally reports `i_shield` and
-  `current_share` per direction (KCL at the fault bus closes to `2.4e-16`), and
-  where the directions are disjoint also `i_earth`, `i_total` and the side
-  reduction factor. `sides_are_disjoint` says which case you are in; a passive
-  spur gets `r = None` rather than a division by zero. Results as a typed
-  `CutAnalysis` and as a long-format frame via `.to_polars()`.
-- **A second reduction factor, on a current basis
-  (`ResultReductionFactor.value_current`).** The existing EPR-based `value` is
-  structurally blind to the impedance *at* the fault bus: both solves use the
-  same `Y`, so changing `Y_ff` is a rank-1 update that cancels in the quotient.
-  Measured: sweeping the fault-bus electrode over four decades leaves it at
-  `0.500000` while `Z_G` moves by two orders of magnitude and the potential rise
-  by a factor of fifty. A rho-f sensitivity study plotted against it would be a
-  horizontal line. `value_current` is the share of the fault current that
-  returned through earth rather than through the shields and does respond —
-  `0.0414 → 0.00053` over the same sweep. **Both are kept**: `value` so earlier
-  results stay reproducible and so the closed form `r = |1 - Z_m/Z_s|` keeps its
-  meaning, `value_current` for sensitivity work. `res_all_impedances()` reports
-  both.
-- **Parameter sweeps (`gi.run_sweep`, `gi.SweepPoint`, `gi.rho_f_points`).**
-  Solve one fault once per parameter combination and stack the results into
-  long-format frames that carry the parameters as ordinary columns
-  (`.buses()`, `.branches()`, `.impedances()`, `.cuts()`). A point can override
-  bus impedance tables, soil resistivity, the fault location or the harmonic
-  scalings. `rho_f_points` builds the points from a catalogue of five-parameter
-  rho-f vectors — the form `groundfield` exports — and rejects a vector that
-  gives `Re(Z) <= 0` where it is built rather than three layers down in the
-  solver, because an unconstrained least-squares fit can land there. Overrides
-  are undone in a `finally` block, so a failing point leaves neither the network
-  nor the remaining points contaminated; failures are recorded per point and the
-  sweep carries on (`on_error="raise"` for the strict variant).
-- **Statistics and classification (`gi.summarize`, `gi.classify`).** Count,
-  spread, named quantiles and extremes for any numeric column, grouped or not;
-  and a class column that bins a quantity into user-supplied bands, closed on
-  the right so a value exactly on a limit stays in the lower band. There is
-  deliberately **no built-in table of admissible values** — touch-voltage limits
-  depend on the clearing time, the standard edition and the assumed additional
-  resistances, and a constant baked in here would be carried into a result
-  without ever being checked. The edges come from the caller, who can cite them.
-  `summarize` names the `frequency_Hz`-is-a-string trap in its error message
-  rather than just refusing.
-- **`BranchType.phase_impedance_formula`** (optional, symbols `f`, `rho`,
-  `l`) and the evaluated `Branch.phase_impedance`, mirrored in SQLite and
-  JSON. It describes the *phase* conductor -- the faulted conductor whose
-  current induces the longitudinal EMF on the shield -- and is what the
-  automatic phase-current distribution solves on. It never enters the nodal
-  admittance matrix and is therefore not passivity-checked. Where it is
-  absent **and** the phase network around the fault carries a cycle, the
-  solve falls back to `1/Z_self` (with a grounding conductor) or `1/length`
-  (without) and warns once per solve, naming the branches: those two
-  quantities are not comparable, so the split between routes of different
-  construction is a heuristic rather than a physical result. On a ring whose
-  two legs differ by a factor of ten in phase impedance the declared formula
-  divides the current 909.1 A / 90.9 A, as it should.
-- `run_outage_study` forwards `phase_current_mode` and defaults it to
-  `"auto"` as well -- an outage study is precisely where a ring turns into a
-  chain and back, so the modelling assumption must not change underneath it.
-
-### Changed
-
-- **Breaking (behaviour, meshed networks only):** the default phase-current
-  determination moved from the path-based scheme to the phase-network solve.
-  A meshed network solved with the previous default returns different -- and
-  now non-degenerate -- numbers. Radial networks are unchanged.
-  `Branch.parallel_coefficient` is ignored in `"auto"` mode; it still applies
-  in `"paths"`.
-- `run_fault(auto_parallel_coefficients=...)` is deprecated in favour of
-  `phase_current_mode`. It still wins when passed explicitly, so existing
-  call sites keep their exact behaviour, and passing it logs that it is
-  deprecated.
 
 ### Docs
 
@@ -299,20 +332,41 @@ version section when a release is cut.
   `(u_to - u_from)/Z_self`, so a positive `ResultBranch.i_s` means
   `to_bus` -> `from_bus`, the opposite of the phase-current convention. That
   sign is load-bearing for any side-resolved evaluation.
+
 - New notebook `notebooks/25_mesh_phase_currents.ipynb` reproducing the
   collapse, the fix and the phase-impedance-driven split.
+
 - New notebook `notebooks/26_cuts_and_rho_f_sweep.ipynb` walking the whole
   chain on a 20 kV feeder: cuts left and right of the fault, both reduction
   factors, a rho-f catalogue sweep and the statistics on top.
+
 - `docs/concepts.md` gains "Reduction factor on a current basis",
   "Splitting the network at the fault" and "Characterising a location without
   its electrode"; new API pages `api/decomposition.md`, `api/sweep.md`,
   `api/statistics.md` and `api/response.md`, all registered in the nav.
+
 - New notebook `notebooks/27_bus_response_extremes.ipynb`: the extremes, the
   closed form against genuine solves, and the whole curve at no solve cost. It
   also shows the counter-intuitive consequence the extremes exist to surface —
   an *ideal* electrode at the faulted station roughly doubles the potential rise
   at the source station.
+
+- **New published example `docs/examples/fault_decomposition.ipynb`**, the
+  curated counterpart to the three research notebooks above: a six-station
+  20 kV feeder carried through both reduction factors, `analyze_cuts`,
+  `bus_response` and a soil-resistivity sweep with `summarize`/`classify`,
+  closing on `run_reference_cases`. Registered in the nav and in
+  `docs/examples/index.md`. It also puts the `U_E`-versus-bus-EPR confusion
+  on the page rather than leaving it to be rediscovered: the norm's chain
+  closes on `u_earthing` (353.46 V here), **not** on the EPR at the fault bus
+  (500.17 V), and the notebook prints both side by side.
+- `README.md` and `docs/index.md`: the feature lists were still those of
+  0.5.0 and mentioned none of the analysis layer. Both now carry the phase
+  current solve, the two reduction factors, cuts, sweeps, `bus_response` and
+  the reference cases. The README's model overview said the reduction factor
+  *is* the EPR quotient; it now names the quotient's structural blindness to
+  the fault-bus electrode and points at the current-based factor for
+  sensitivity work.
 
 ---
 
@@ -1118,13 +1172,10 @@ distribution-network space.
 
 ### Near term — other
 
-- **Finish `auto_parallel_coefficients` path** — implement
-  `ElectricalNetwork._auto_assign_parallel_coefficients` (currently a
-  stub) so the phase-only pre-solve actually writes derived
-  `parallel_coefficient` values back onto branches. Covered in part by
-  the Variant B sketch added in 0.3.0.
 - **Dependabot** for Python and GitHub Actions dependencies
-  (`.github/dependabot.yml`).
+  (`.github/dependabot.yml`). The Node 20 deprecation reached the
+  release workflow before anyone noticed, which is exactly what this
+  would have caught.
 - **Codecov / Coveralls integration** — upload coverage from CI and
   show a PR diff badge; currently the XML report is only uploaded as
   a workflow artifact.

@@ -83,8 +83,27 @@ See the [Quickstart](quickstart.md) for the full walkthrough.
   through SymPy
 - Sparse LU solver for every frequency (SciPy `splu`)
 - Mutual coupling treated as Norton sources along the path from source to fault
-- Reduction factors computed from the ratio of EPR with and without mutual
-  coupling at the fault bus
+- **Two reduction factors**, both reported: the EPR ratio with and without
+  mutual coupling at the fault bus (`value`), and the share of the fault
+  current returning through earth (`value_current`) — the EN 50522 quantity,
+  and the one that responds to the electrode at the fault bus, see
+  [Concepts](concepts.md)
+- **Phase currents from a solve on the phase-conductor network**
+  (`phase_current_mode="auto"`), so rings, meshes and parallel cables no
+  longer collapse onto enumerated paths;
+  `BranchType.phase_impedance_formula` describes the faulted conductor
+- **Splitting the network at the fault** (`gi.Cut`, `gi.analyze_cuts`) —
+  what each direction contributes, from source-free current division, see
+  [Fault-location decomposition](api/decomposition.md)
+- **Parameter sweeps** (`run_sweep`, `rho_f_points`) into long-format
+  frames, with `summarize` and `classify` for statistics and
+  user-supplied limit bands, see [Parameter sweeps](api/sweep.md)
+- **Characterising a location without its electrode** (`bus_response`):
+  two solves determine the response for every electrode impedance, see
+  [Location response](api/response.md)
+- **Closed-form reference cases** (`run_reference_cases`) — six
+  configurations checked against results derived from first principles,
+  see [Reference cases](api/reference.md)
 - SQLite persistence and JSON export/import of networks and type libraries
 - Polars DataFrames for result access; Matplotlib helpers for bar plots
 - **Time-domain transient simulation** (FFT and modified-nodal-analysis

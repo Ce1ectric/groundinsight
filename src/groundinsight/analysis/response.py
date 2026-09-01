@@ -57,8 +57,15 @@ along the whole curve. The closed form shows why: the voltage at the bus is
 ``u_b(Y_B) = u_{0,b} / (1 + Y_B Z_\\text{net})`` with and without mutual coupling
 alike, so the factor cancels out of the quotient exactly. That is the same
 invariance the sensitivity study runs into, here derived rather than measured.
-The current-based factor and the potential rise are not invariant and are
-reported as brackets.
+
+The three cases are extremes of the **local** quantities only -- the potential
+rise at the bus itself and its driving-point impedance. Quantities transferred
+to *other* buses are not bounded by them: the EPR at a remote bus and the
+current-based reduction factor can both exceed the ``ideal`` value for a
+passive, purely capacitive ``Z_B``, because the phase of ``Y_B`` enters those
+through a different combination than through ``1 + Y_B Z_net`` alone. Use
+:meth:`BusResponse.sweep` -- which costs no solve -- when the worst case of a
+transfer quantity is what a study needs.
 """
 
 from __future__ import annotations

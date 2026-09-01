@@ -103,6 +103,12 @@ class EarthCurrentSplit:
         self.returning_buses = returning_buses
         self.separation = separation
 
+    def __repr__(self):
+        return (
+            f"EarthCurrentSplit(i_earth={self.i_earth:.4g}, "
+            f"feeding={self.feeding_buses}, separation={self.separation:.4f})"
+        )
+
 
 def earthing_voltage(
     potentials: Dict[str, complex],
@@ -148,12 +154,6 @@ def earthing_voltage(
     spread = sum(abs(potentials[b]) * weights[b] for b in buses) / total
     equipotential = float(abs(u_e) / spread) if spread > 0 else 0.0
     return complex(u_e), equipotential
-
-    def __repr__(self):
-        return (
-            f"EarthCurrentSplit(i_earth={self.i_earth:.4g}, "
-            f"feeding={self.feeding_buses}, separation={self.separation:.4f})"
-        )
 
 
 def split_earth_currents(

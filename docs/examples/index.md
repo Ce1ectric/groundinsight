@@ -28,6 +28,13 @@ figures and DataFrame outputs are visible inline.
   every bus of a 10-bus MV cable line and visualise the resulting
   grounding impedance and reduction factor per fault bus and frequency.
   Uses `Network.res_all_impedances()` for the bookkeeping.
+- **[Fault decomposition](fault_decomposition.ipynb)** — the analysis
+  layer on top of a solve: the two reduction factors and why they answer
+  different questions, `analyze_cuts` for what each direction away from
+  the fault contributes, `bus_response` for the response to *any*
+  electrode at the faulted station from two solves, `run_sweep` with
+  `summarize`/`classify` across soil resistivities, and the closed-form
+  `run_reference_cases`.
 
 Each notebook is self-contained: it builds the network in code, runs
 the fault calculation, extracts the results as Polars DataFrames and

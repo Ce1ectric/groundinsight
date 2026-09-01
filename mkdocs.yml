@@ -116,6 +116,7 @@ nav:
       - MV ring (transient): examples/mv_ring_transient.ipynb
       - Pandapower import: examples/pandapower_import.ipynb
       - Fault sweep: examples/fault_sweep.ipynb
+      - Fault decomposition: examples/fault_decomposition.ipynb
   # The ``notebooks/`` directory at the project root is *not* part of the
   # published site. It was listed here as a "Research notebooks" section
   # until 2026-07-19, but mkdocs only collects files below ``docs_dir``,
