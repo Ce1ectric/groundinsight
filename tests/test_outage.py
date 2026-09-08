@@ -174,7 +174,7 @@ def test_inactive_branch_acts_as_open_circuit_in_a_ring():
     rms_b13 = (
         df.filter(
             (pl.col("branch_name") == "b13")
-            & (pl.col("frequency_Hz").cast(pl.Utf8) == "RMS")
+            & pl.col("is_rms")
         )["I_branch_A"][0]
     )
     assert rms_b13 == pytest.approx(0.0, abs=1e-12)

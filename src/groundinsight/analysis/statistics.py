@@ -92,9 +92,8 @@ def summarize(
     if not frame.schema[value].is_numeric():
         raise ValueError(
             f"Column '{value}' has dtype {frame.schema[value]}, which cannot be "
-            f"summarised numerically. Note that res_buses() reports "
-            f"'frequency_Hz' as a string because it carries the 'RMS' marker "
-            f"row -- filter or cast it before grouping on it."
+            f"summarised numerically. Cast it, or group on it with `by=` "
+            f"instead of summarising it."
         )
     bad = [q for q in quantiles if not 0.0 <= q <= 1.0]
     if bad:

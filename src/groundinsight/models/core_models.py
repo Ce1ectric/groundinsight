@@ -109,6 +109,85 @@ def json_safe_float(value: float) -> Union[float, str]:
     return value
 
 
+#: Column layout of :meth:`Network.res_buses`, in output order.
+#:
+#: Pinned so an empty result is an empty frame *with these columns* instead of
+#: a 0x0 frame: every consumer downstream selects or filters on the names, and
+#: a 0x0 frame turns "no rows" into a missing-column error several calls away
+#: from the cause. The importers in :mod:`groundinsight.io` already pin their
+#: schemas for the same reason.
+RES_BUSES_SCHEMA: Dict[str, Any] = {
+    "bus_name": pl.Utf8,
+    "fault": pl.Utf8,
+    "frequency_Hz": pl.Float64,
+    "is_rms": pl.Boolean,
+    "EPR_V": pl.Float64,
+    "EPR_degree": pl.Float64,
+    "I_bus_A": pl.Float64,
+    "I_bus_degree": pl.Float64,
+    "I_inj_A": pl.Float64,
+    "I_inj_degree": pl.Float64,
+}
+
+#: Column layout of :meth:`Network.res_branches`, in output order.
+RES_BRANCHES_SCHEMA: Dict[str, Any] = {
+    "branch_name": pl.Utf8,
+    "fault": pl.Utf8,
+    "frequency_Hz": pl.Float64,
+    "is_rms": pl.Boolean,
+    "I_branch_A": pl.Float64,
+    "I_branch_degree": pl.Float64,
+}
+
+#: Column layout of :meth:`Network.res_all_impedances`, in output order.
+RES_ALL_IMPEDANCES_SCHEMA: Dict[str, Any] = {
+    "fault_name": pl.Utf8,
+    "fault_bus": pl.Utf8,
+    "frequency_Hz": pl.Float64,
+    "grounding_impedance_Ohm": pl.Float64,
+    "grounding_impedance_deg": pl.Float64,
+    "reduction_factor": pl.Float64,
+    "reduction_factor_current": pl.Float64,
+}
+
+
+def _magnitude_angle(
+    value: Optional["ComplexNumber"], magnitude_key: str, angle_key: str
+) -> Dict[str, Optional[float]]:
+    """
+    Magnitude and angle (degrees) of a phasor, as two frame columns.
+
+    Parameters
+    ----------
+    value : Optional[ComplexNumber]
+        The phasor, or ``None`` when the result carries no entry for this
+        frequency.
+    magnitude_key, angle_key : str
+        Column names to produce.
+
+    Returns
+    -------
+    Dict[str, Optional[float]]
+        ``{magnitude_key: |value|, angle_key: arg(value) in degrees}``, both
+        ``None`` when ``value`` is ``None``.
+
+    Notes
+    -----
+    A missing entry yields ``None`` rather than an ``AttributeError``. A
+    ``ResultBus`` whose ``ia_freq`` does not cover every frequency of
+    ``uepr_freq`` -- an older stored result, a hand-built one -- used to make
+    :meth:`Network.res_buses` crash on ``None.real`` while reporting nothing
+    about which bus or frequency was at fault.
+    """
+    if value is None:
+        return {magnitude_key: None, angle_key: None}
+    as_complex = complex(value.real, value.imag)
+    return {
+        magnitude_key: abs(as_complex),
+        angle_key: float(np.angle(as_complex) * 180 / np.pi),
+    }
+
+
 class ValidatedAssignmentModel(BaseModel):
     """
     Base class whose rejected assignments leave the object unchanged.
@@ -2208,12 +2287,37 @@ class Network(ValidatedAssignmentModel):
         Returns
         -------
         pl.DataFrame
-            A DataFrame containing bus results.
+            One row per (bus, frequency) plus one RMS row per bus, with the
+            pinned schema :data:`RES_BUSES_SCHEMA`:
+
+            ``bus_name``, ``fault``, ``frequency_Hz`` (``Float64``, ``null``
+            on the RMS row), ``is_rms`` (``Boolean``), ``EPR_V``,
+            ``EPR_degree``, ``I_bus_A``, ``I_bus_degree``, ``I_inj_A``,
+            ``I_inj_degree``.
 
         Raises
         ------
         ValueError
             If no active fault is set or if results for the specified fault are unavailable.
+
+        Notes
+        -----
+        ``frequency_Hz`` is numeric. Up to 0.6.0 it was a *string* column,
+        because the RMS row carried the literal ``"RMS"`` in it -- which meant
+        that the sibling accessor :meth:`res_all_impedances` typed the same
+        column as ``Float64`` while this one typed it as ``Utf8``, that
+        ``filter(pl.col("frequency_Hz") == 50.0)`` silently matched nothing,
+        and that :func:`groundinsight.summarize` refused the column outright.
+        The marker now lives in its own boolean column, ``is_rms``, and the
+        RMS row carries ``null`` for the frequency, which is what it is: no
+        single frequency.
+
+        ``I_inj_A`` / ``I_inj_degree`` report the *earthing-conductor* current
+        ``i_inj`` -- the lumped injection at a source or fault bus, which the
+        earthing conductor has to be sized for. It is a different current from
+        ``I_bus_A`` (the share dissipated into the soil through the electrode)
+        and was previously reachable only through ``Result.buses``; see
+        :class:`ResultBus`.
         """
         if fault is None:
             fault = self.active_fault
@@ -2229,23 +2333,16 @@ class Network(ValidatedAssignmentModel):
             # Add frequency-specific data
             for freq, voltage in result_bus.uepr_freq.items():
                 current = result_bus.ia_freq.get(freq)
-                voltage_abs = abs(complex(voltage.real, voltage.imag))
-                current_abs = abs(complex(current.real, current.imag))
-                voltage_ang = (
-                    np.angle(complex(voltage.real, voltage.imag)) * 180 / np.pi
-                )
-                current_ang = (
-                    np.angle(complex(current.real, current.imag)) * 180 / np.pi
-                )
+                injection = result_bus.i_inj_freq.get(freq)
                 data.append(
                     {
                         "bus_name": result_bus.name,
                         "fault": fault,
-                        "frequency_Hz": freq,
-                        "EPR_V": voltage_abs,
-                        "EPR_degree": voltage_ang,
-                        "I_bus_A": current_abs,
-                        "I_bus_degree": current_ang,
+                        "frequency_Hz": float(freq),
+                        "is_rms": False,
+                        **_magnitude_angle(voltage, "EPR_V", "EPR_degree"),
+                        **_magnitude_angle(current, "I_bus_A", "I_bus_degree"),
+                        **_magnitude_angle(injection, "I_inj_A", "I_inj_degree"),
                     }
                 )
             # Add RMS values
@@ -2253,16 +2350,18 @@ class Network(ValidatedAssignmentModel):
                 {
                     "bus_name": result_bus.name,
                     "fault": fault,
-                    "frequency_Hz": "RMS",
+                    "frequency_Hz": None,
+                    "is_rms": True,
                     "EPR_V": result_bus.uepr,
                     "EPR_degree": None,
                     "I_bus_A": result_bus.ia,
                     "I_bus_degree": None,
+                    "I_inj_A": result_bus.i_inj,
+                    "I_inj_degree": None,
                 }
             )
 
-        df = pl.DataFrame(data)
-        return df
+        return pl.DataFrame(data, schema=RES_BUSES_SCHEMA)
 
     def res_branches(self, fault: Optional[str] = None) -> pl.DataFrame:
         """
@@ -2278,12 +2377,21 @@ class Network(ValidatedAssignmentModel):
         Returns
         -------
         pl.DataFrame
-            A DataFrame containing branch results.
+            One row per (branch, frequency) plus one RMS row per branch, with
+            the pinned schema :data:`RES_BRANCHES_SCHEMA`: ``branch_name``,
+            ``fault``, ``frequency_Hz`` (``Float64``, ``null`` on the RMS
+            row), ``is_rms`` (``Boolean``), ``I_branch_A``,
+            ``I_branch_degree``.
 
         Raises
         ------
         ValueError
             If no active fault is set or if results for the specified fault are unavailable.
+
+        Notes
+        -----
+        See :meth:`res_buses` for why ``frequency_Hz`` is numeric and the RMS
+        marker lives in ``is_rms``.
         """
         if fault is None:
             fault = self.active_fault
@@ -2299,17 +2407,15 @@ class Network(ValidatedAssignmentModel):
             # Add frequency-specific data
             for freq, current in result_branch.i_s_freq.items():
                 if current:
-                    current_abs = abs(complex(current.real, current.imag))
-                    current_ang = (
-                        np.angle(complex(current.real, current.imag)) * 180 / np.pi
-                    )
                     data.append(
                         {
                             "branch_name": result_branch.name,
                             "fault": fault,
-                            "frequency_Hz": freq,
-                            "I_branch_A": current_abs,
-                            "I_branch_degree": current_ang,
+                            "frequency_Hz": float(freq),
+                            "is_rms": False,
+                            **_magnitude_angle(
+                                current, "I_branch_A", "I_branch_degree"
+                            ),
                         }
                     )
             # Add RMS current
@@ -2317,14 +2423,14 @@ class Network(ValidatedAssignmentModel):
                 {
                     "branch_name": result_branch.name,
                     "fault": fault,
-                    "frequency_Hz": "RMS",
+                    "frequency_Hz": None,
+                    "is_rms": True,
                     "I_branch_A": result_branch.i_s,
                     "I_branch_degree": None,
                 }
             )
 
-        df = pl.DataFrame(data)
-        return df
+        return pl.DataFrame(data, schema=RES_BRANCHES_SCHEMA)
 
     def res_all_impedances(self) -> pl.DataFrame:
         """
@@ -2336,12 +2442,18 @@ class Network(ValidatedAssignmentModel):
         Returns
         -------
         pl.DataFrame
-            A DataFrame containing grounding impedance and reduction factors.
+            A DataFrame with the pinned schema
+            :data:`RES_ALL_IMPEDANCES_SCHEMA`. There is no RMS row here --
+            a grounding impedance is defined per frequency.
 
         Notes
         -----
             - Faults without results are skipped.
             - Missing grounding impedance or reduction factor results are noted.
+            - The schema is pinned so an empty result is an empty frame with
+              the documented columns rather than a 0x0 one, which used to make
+              every downstream ``filter``/``join`` fail with a missing-column
+              error instead of returning nothing.
         """
         data = []
         for fault_name, fault in self.faults.items():
@@ -2377,13 +2489,9 @@ class Network(ValidatedAssignmentModel):
                 rf = reduction_factor.value.get(freq)
                 rf_current = reduction_factor.value_current.get(freq)
                 if gi:
-                    gi_real = gi.real
-                    gi_imag = gi.imag
                     gi_magnitude = abs(complex(gi.real, gi.imag))
                     gi_angle = np.degrees(np.angle(complex(gi.real, gi.imag)))
                 else:
-                    gi_real = None
-                    gi_imag = None
                     gi_magnitude = None
                     gi_angle = None
 
@@ -2391,15 +2499,14 @@ class Network(ValidatedAssignmentModel):
                     {
                         "fault_name": fault_name,
                         "fault_bus": fault_bus,
-                        "frequency_Hz": freq,
+                        "frequency_Hz": float(freq),
                         "grounding_impedance_Ohm": gi_magnitude,
                         "grounding_impedance_deg": gi_angle,
                         "reduction_factor": rf,
                         "reduction_factor_current": rf_current,
                     }
                 )
-        df = pl.DataFrame(data)
-        return df
+        return pl.DataFrame(data, schema=RES_ALL_IMPEDANCES_SCHEMA)
 
     def __str__(self):
         return f"Network(name={self.name})"

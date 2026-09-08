@@ -143,7 +143,7 @@ def _epr(net):
     return {
         row["bus_name"]: float(row["EPR_V"])
         for row in net.res_buses().to_dicts()
-        if row["frequency_Hz"] == "50"
+        if row["frequency_Hz"] == 50.0
     }
 
 

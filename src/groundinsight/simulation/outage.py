@@ -49,6 +49,40 @@ from groundinsight.models.core_models import Network
 logger = logging.getLogger(__name__)
 
 
+def _frequency_label(frame: pl.DataFrame, column: str) -> pl.Expr:
+    """
+    Render ``frequency_Hz`` as a non-null string key for the comparison join.
+
+    ``Network.res_buses`` reports the frequency numerically and marks the RMS
+    row with ``is_rms``; the RMS row therefore has ``null`` in
+    ``frequency_Hz``. A ``null`` join key is not equal to itself in Polars, so
+    joining the scenario frames on the raw column would silently drop every
+    RMS row -- and the RMS row is the one most outage comparisons are read
+    from. The label keeps the output column exactly as it was before the
+    numeric change: ``"RMS"`` on the RMS row, the frequency otherwise.
+
+    Parameters
+    ----------
+    frame : polars.DataFrame
+        One scenario's result table.
+    column : str
+        Name of the frequency column.
+
+    Returns
+    -------
+    polars.Expr
+        The labelled column, aliased back to ``column``.
+    """
+    if "is_rms" in frame.columns:
+        return (
+            pl.when(pl.col("is_rms"))
+            .then(pl.lit("RMS"))
+            .otherwise(pl.col(column).cast(pl.Utf8))
+            .alias(column)
+        )
+    return pl.col(column).cast(pl.Utf8).alias(column)
+
+
 class Outage(BaseModel):
     """
     Definition of a single what-if scenario.
@@ -258,8 +292,11 @@ class OutageStudyResult(BaseModel):
 
         The reference scenario provides the baseline value; absolute and
         relative deltas are computed for every other scenario. ``frequency_Hz``
-        is cast to ``Utf8`` so that the ``"RMS"`` row mixes cleanly with the
-        per-frequency floats.
+        is rendered as ``Utf8`` -- ``"RMS"`` for the RMS row, the frequency
+        otherwise -- because it is a *join key* here: the RMS row carries
+        ``null`` in the numeric column since 0.6.1, and joining on a null key
+        would drop exactly the row an outage study is usually read from. See
+        :func:`_frequency_label`.
 
         A zero reference value yields ``null`` in the relative column, not
         ``inf`` or ``NaN``. Zero baselines are ordinary in a grounding
@@ -284,7 +321,7 @@ class OutageStudyResult(BaseModel):
             sub = df.select(
                 [
                     pl.col(id_col_a),
-                    pl.col(id_col_b).cast(pl.Utf8).alias(id_col_b),
+                    _frequency_label(df, id_col_b),
                     *[pl.col(m) for m in metrics],
                 ]
             ).unpivot(

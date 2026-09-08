@@ -45,7 +45,7 @@ from groundinsight.simulation.transient import TransientStudy
 
 def _rms_epr(net, fault, bus):
     df = net.res_buses(fault)
-    row = df.filter((df["bus_name"] == bus) & (df["frequency_Hz"] == "RMS"))
+    row = df.filter((df["bus_name"] == bus) & df["is_rms"])
     return row["EPR_V"][0]
 
 

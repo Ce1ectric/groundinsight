@@ -38,3 +38,81 @@ def _reset_test_grounding_db():
     except FileNotFoundError:
         pass
     yield
+
+
+@pytest.fixture()
+def simple_network():
+    """
+    A four-bus radial grounding network with two faults, freshly built.
+
+    Audit pass 18 (finding T3/T5): ``conftest.py`` held a single fixture and
+    every test file rebuilt its own network from scratch -- roughly twenty
+    copies of the same twenty lines, which is why a change to the constructor
+    signature touched twenty files. This is the shared starting point for new
+    tests. It is deliberately *not* retrofitted onto the existing ones: their
+    networks encode the exact topology their finding needs, and rewriting them
+    to fit one fixture would lose that.
+
+    Topology::
+
+        A --- B --- C --- D
+
+    ``A`` carries the source, ``C`` the fault ``"F"``, ``D`` the second fault
+    ``"F2"``. Two frequencies (50 Hz and 250 Hz) so per-frequency and RMS rows
+    differ, and the branch type carries a ``phase_impedance_formula`` so the
+    default ``phase_current_mode="auto"`` is exercised.
+
+    Returns
+    -------
+    groundinsight.Network
+        An unsolved network -- call :func:`groundinsight.run_fault` on it.
+    """
+    import groundinsight as gi
+
+    bus_type = gi.BusType(
+        name="fixture_bus",
+        description="shared test bus type",
+        system_type="Substation",
+        voltage_level=110.0,
+        impedance_formula="rho*0.01 + 1 + I*f*0.002",
+    )
+    branch_type = gi.BranchType(
+        name="fixture_branch",
+        description="shared test branch type",
+        grounding_conductor=True,
+        self_impedance_formula="(0.25 + I*f*0.012)*l",
+        mutual_impedance_formula="(0.05 + I*f*0.010)*l",
+        phase_impedance_formula="(0.10 + I*f*0.004)*l",
+    )
+    network = gi.create_network(
+        name="simple_network", frequencies=[50.0, 250.0], description="shared fixture"
+    )
+    for label in ("A", "B", "C", "D"):
+        gi.create_bus(
+            name=label,
+            type=bus_type,
+            specific_earth_resistance=100.0,
+            network=network,
+        )
+    for from_bus, to_bus in (("A", "B"), ("B", "C"), ("C", "D")):
+        gi.create_branch(
+            name=f"{from_bus}{to_bus}",
+            type=branch_type,
+            from_bus=from_bus,
+            to_bus=to_bus,
+            length=1.0,
+            network=network,
+        )
+    gi.create_source(
+        name="s",
+        bus="A",
+        values={50.0: 1000.0 + 0.0j, 250.0: 100.0 + 0.0j},
+        network=network,
+    )
+    gi.create_fault(
+        name="F", bus="C", scalings={50.0: 1.0, 250.0: 1.0}, network=network
+    )
+    gi.create_fault(
+        name="F2", bus="D", scalings={50.0: 1.0, 250.0: 1.0}, network=network
+    )
+    return network

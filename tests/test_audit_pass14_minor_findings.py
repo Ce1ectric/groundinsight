@@ -424,7 +424,11 @@ def test_zero_in_both_scenarios_is_null_not_nan(study_without_fifth_harmonic, co
 
     # The 250 Hz rows are exactly the null ones, and nothing else is.
     nulls_at_250 = table.filter(pl.col(pct).is_null())["frequency_Hz"].to_list()
-    assert set(nulls_at_250) == {"250"}
+    # Audit pass 18 (M7): ``res_buses`` reports the frequency numerically, so
+    # the string label of the comparison frame is now the Float64 rendering
+    # ("250.0") instead of the mixed-column one ("250"). The "RMS" marker is
+    # unchanged.
+    assert set(nulls_at_250) == {"250.0"}
 
 
 @pytest.mark.parametrize("comparison", ["compare_buses", "compare_branches"])

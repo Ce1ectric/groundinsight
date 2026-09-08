@@ -124,11 +124,11 @@ def _open_type(name="open_end"):
                       voltage_level=110.0, impedance_formula="nan")
 
 
-def _epr(net, freq="50"):
+def _epr(net, freq=50.0):
     return {
         row["bus_name"]: row["EPR_V"]
         for row in net.res_buses().to_dicts()
-        if row["frequency_Hz"] == freq
+        if row["frequency_Hz"] == float(freq)
     }
 
 
@@ -137,7 +137,7 @@ def _rms(frame, key_column, value_column):
     return {
         row[key_column]: row[value_column]
         for row in frame.to_dicts()
-        if row["frequency_Hz"] == "RMS"
+        if row["is_rms"]
     }
 
 
@@ -451,7 +451,7 @@ def test_cutoff_formula_solves_below_the_cutoff():
         "p12_cutoff", types, self_formula=CUTOFF_FORMULA, frequencies=(50.0,)
     )
     gi.run_fault(net, "F")
-    epr = _epr(net, "50")
+    epr = _epr(net, 50.0)
     assert epr
     assert all(math.isfinite(value) for value in epr.values())
     assert max(epr.values()) > 0.0

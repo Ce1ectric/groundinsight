@@ -137,11 +137,10 @@ def _dc_network(
 
 def _epr_at(net, freq):
     """Earth potential rise per bus at one frequency, as floats."""
-    key = str(int(freq)) if float(freq).is_integer() else str(freq)
     return {
         row["bus_name"]: float(row["EPR_V"])
         for row in net.res_buses().to_dicts()
-        if row["frequency_Hz"] == key
+        if row["frequency_Hz"] == float(freq)
     }
 
 
@@ -399,7 +398,7 @@ def test_a_stationary_dc_bond_matches_the_merged_network():
     phases = {
         row["bus_name"]: float(row["EPR_degree"])
         for row in net.res_buses().to_dicts()
-        if row["frequency_Hz"] == "0"
+        if row["frequency_Hz"] == 0.0
     }
     assert phases["A"] == pytest.approx(0.0, abs=1e-6)
     assert abs(phases["C"]) == pytest.approx(180.0, abs=1e-6)
@@ -495,7 +494,7 @@ def test_a_pure_dc_study_runs_end_to_end_with_carson_conductors():
     assert branches
     assert all(
         math.isfinite(float(row["I_branch_A"])) for row in branches
-        if row["frequency_Hz"] == "0"
+        if row["frequency_Hz"] == 0.0
     )
 
 

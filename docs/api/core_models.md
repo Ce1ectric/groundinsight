@@ -70,7 +70,35 @@ restored = Network.model_validate_json(payload)
 
 Polars accessors `net.res_buses()`, `net.res_branches()` and
 `net.res_all_impedances()` produce DataFrames suitable for
-plotting and reporting.
+plotting and reporting. All three pin their column layout, so an
+empty result is an empty frame *with the documented columns*
+rather than a 0×0 one.
+
+`frequency_Hz` is `Float64` in all three. `res_buses()` and
+`res_branches()` add one **RMS row** per element, marked by the
+boolean column `is_rms`; that row carries `null` in
+`frequency_Hz`, because it belongs to no single frequency. Filter
+per frequency with
+
+```python
+per_50_hz = net.res_buses().filter(pl.col("frequency_Hz") == 50.0)
+rms       = net.res_buses().filter(pl.col("is_rms"))
+```
+
+!!! warning "Changed in 0.6.1"
+    Up to 0.6.0 the RMS row carried the literal string `"RMS"` in
+    `frequency_Hz`, which forced the whole column to `Utf8` —
+    `filter(pl.col("frequency_Hz") == 50.0)` then matched nothing,
+    and `gi.summarize` refused the column. Replace
+    `pl.col("frequency_Hz") == "RMS"` with `pl.col("is_rms")` and
+    `== "50"` with `== 50.0`.
+
+`res_buses()` also reports `I_inj_A` / `I_inj_degree`, the current
+carried by the **earthing conductor** at a source or fault bus.
+That is a different current from `I_bus_A`, the share dissipated
+into the soil through the electrode — see
+[`ResultBus`](#groundinsight.models.core_models.ResultBus) for why
+mixing the two is the classic sizing error.
 
 ## Active subset / cache invalidation
 
