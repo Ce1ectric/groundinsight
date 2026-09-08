@@ -16,10 +16,18 @@ instances, or a `Path` composed of many `Branch` segments) are
 modelled through association tables (`network_buses`,
 `path_segments`, ...). Two design choices are worth noting:
 
-- **Frequency lists** are stored as `PickleType` blobs. They are
+- **Frequency lists** are stored as a JSON array. They are
   conceptually atomic — a network has *one* frequency list, never
-  shared, never queried element-wise — so the round-trip price of
-  storing them as JSON or as a child table is not justified.
+  shared, never queried element-wise — so a child table is not
+  justified. Up to 0.6.0 the column was a `PickleType`, which meant
+  that *reading* a database file executed whatever the blob
+  contained, before any Pydantic validator saw it. A `.db` file is a
+  shared artefact — it gets mailed around and checked into
+  repositories — so that is the same trust problem the formula guard
+  in `utils.validations` exists for. Existing files are converted by
+  `gi.migrate_database(...)` with an unpickler that resolves nothing
+  but `list`, `float` and `int`; anything else aborts the migration
+  and leaves the file untouched.
 - **Impedance dicts** $Z(f) \in \mathbb{C}$ are stored as JSON
   with stringified frequency keys, because SQLite has no native
   complex type. The `ComplexNumber` Pydantic helper guarantees

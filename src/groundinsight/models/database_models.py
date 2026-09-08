@@ -47,7 +47,6 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     JSON,
     Boolean,
-    PickleType,
 )
 from .core_models import (
     ComplexNumber,
@@ -985,7 +984,16 @@ class NetworkDB(Base):
 
     name = Column(String, primary_key=True)
     description = Column(Text, nullable=True)
-    frequencies = Column(PickleType)  # Store list of frequencies
+    # Plain JSON list of floats. This column used to be a ``PickleType``,
+    # which made loading a database an *execution* of whatever the file
+    # contained: ``pickle.loads`` runs before any Pydantic validator ever sees
+    # the value, so a ``.db`` handed over by someone else was arbitrary code
+    # execution -- the very thing ``utils.validations.assert_safe_formula``
+    # exists to prevent on the formula side. A frequency list is a list of
+    # numbers and needs no object graph, so JSON is both sufficient and inert.
+    # Existing files written with the pickle column are converted by
+    # :func:`groundinsight.database.migration.migrate_database`.
+    frequencies = Column(JSON)  # Store list of frequencies
     results = Column(JSON, nullable=True)  # {fault_name: Result} serialised as JSON
     # Plain column rather than a foreign key into ``faults``: the faults table
     # now points back at ``networks``, and declaring both directions would make

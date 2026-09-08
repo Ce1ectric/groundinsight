@@ -686,7 +686,9 @@ def load_branchtypes_from_db() -> Dict[str, BranchType]:
     return branch_types
 
 
-def save_network_to_db(network: Network, overwrite: bool = False):
+def save_network_to_db(
+    network: Network, overwrite: bool = False, overwrite_types: bool = False
+):
     """
     Save a Network to the database.
 
@@ -701,13 +703,20 @@ def save_network_to_db(network: Network, overwrite: bool = False):
     overwrite : bool, optional
         Whether to overwrite an existing Network with the same name.
         Defaults to ``False``.
+    overwrite_types : bool, optional
+        Whether this save may rewrite the formulas of bus/branch types that
+        other stored networks also reference. Bus and branch types are a
+        *global* catalogue keyed by name, so such a change reaches those
+        networks as well. Defaults to ``False``, which raises instead.
 
     Raises
     ------
     RuntimeError
         If the database session is not started.
     ValueError
-        If the Network already exists and ``overwrite`` is ``False``.
+        If the Network already exists and ``overwrite`` is ``False``, or if a
+        shared type definition would be rewritten and ``overwrite_types`` is
+        ``False``.
     """
     if session is None:
         raise RuntimeError(
@@ -720,7 +729,9 @@ def save_network_to_db(network: Network, overwrite: bool = False):
             raise ValueError(
                 f"Network '{network.name}' already exists. Use overwrite=True to overwrite."
             )
-        _save_network(network, db_session, overwrite=overwrite)
+        _save_network(
+            network, db_session, overwrite=overwrite, overwrite_types=overwrite_types
+        )
     finally:
         db_session.close()
 

@@ -363,7 +363,15 @@ def test_failed_first_save_does_not_leave_a_half_written_network(db_path):
 
 
 def test_save_network_updates_an_existing_bustype(db_path):
-    """Editing a BusType and saving a network must persist the new physics."""
+    """Editing a BusType and saving a network must persist the new physics.
+
+    Amended in audit pass 18 (finding M3): the catalogue is global, so
+    rewriting the *formula* of a type another network references now needs an
+    explicit ``overwrite_types=True``. Without it the save raises instead of
+    silently changing NetA's physics. Everything the test asserted before --
+    that the consented write reaches both the network row and the catalogue --
+    still holds and is still asserted.
+    """
     net_a = gi.create_network(name="NetA", frequencies=FREQUENCIES)
     gi.create_bus(name="busA", type=make_bus_type("SharedType", 110.0, "rho*0 + 1"),
                   network=net_a)
@@ -372,7 +380,9 @@ def test_save_network_updates_an_existing_bustype(db_path):
     net_b = gi.create_network(name="NetB", frequencies=FREQUENCIES)
     gi.create_bus(name="busB", type=make_bus_type("SharedType", 380.0, "rho*0 + 99"),
                   network=net_b)
-    gi.save_network_to_db(net_b)
+    with pytest.raises(ValueError, match="overwrite_types"):
+        gi.save_network_to_db(net_b)
+    gi.save_network_to_db(net_b, overwrite_types=True)
 
     loaded_b = gi.load_network_from_db("NetB")
     assert loaded_b.buses["busB"].type.voltage_level == 380.0
@@ -408,7 +418,11 @@ def test_save_network_updates_an_existing_branchtype(db_path):
     second = make_branch_type("SharedBranchType", "(rho*0 + 9.75 + I*f*0.012)*l")
     net_b = build_network("NetB", ["b1", "b2"], [("br1", "b1", "b2")],
                           branch_type=second)
-    gi.save_network_to_db(net_b)
+    # Audit pass 18 (M3): the shared catalogue entry may only be rewritten
+    # with consent -- see test_save_network_updates_an_existing_bustype.
+    with pytest.raises(ValueError, match="overwrite_types"):
+        gi.save_network_to_db(net_b)
+    gi.save_network_to_db(net_b, overwrite_types=True)
 
     loaded_b = gi.load_network_from_db("NetB")
     stored_formula = loaded_b.branches["br1"].type.self_impedance_formula
