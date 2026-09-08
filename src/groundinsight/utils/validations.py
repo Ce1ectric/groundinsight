@@ -1,3 +1,4 @@
+from functools import lru_cache
 from sympy import sympify, I, symbols
 import ast
 import io
@@ -278,6 +279,65 @@ def validate_impedance_formula_value(value: str) -> str:
     This function checks whether the provided impedance formula string is valid by parsing
     it with SymPy. It ensures that all necessary symbols are defined and that the formula
     can be successfully interpreted.
+
+    The result is memoised per formula string (see
+    :func:`_validate_impedance_formula_str`): loading a network validates the
+    same handful of formulas hundreds of times, and every one of those calls
+    used to run a full ``sympify``.
+
+    Parameters
+    ----------
+    value : str
+        The impedance formula as a string.
+
+    Returns
+    -------
+    str
+        The original impedance formula if it is valid.
+
+    Raises
+    ------
+    ValueError
+        If the formula is invalid or cannot be parsed.
+    """
+    if isinstance(value, str):
+        return _validate_impedance_formula_str(value)
+    return _validate_impedance_formula_uncached(value)
+
+
+@lru_cache(maxsize=512)
+def _validate_impedance_formula_str(value: str) -> str:
+    """
+    Cached validation of a formula *string*.
+
+    Separated from :func:`validate_impedance_formula_value` so that the
+    ``lru_cache`` only ever sees hashable input. The cache is safe with
+    respect to the security guard: :func:`assert_safe_formula` is a pure
+    function of the same string that keys the cache, so a cache hit is a
+    string the guard has already accepted. ``lru_cache`` does not memoise
+    exceptions, so a rejected formula is re-checked on every call.
+
+    Parameters
+    ----------
+    value : str
+        The impedance formula as a string.
+
+    Returns
+    -------
+    str
+        The original impedance formula if it is valid.
+
+    Raises
+    ------
+    ValueError
+        If the formula is invalid or cannot be parsed.
+    """
+    return _validate_impedance_formula_uncached(value)
+
+
+def _validate_impedance_formula_uncached(value: str) -> str:
+    """
+    Run the security guard and the SymPy parse for one formula.
 
     Parameters
     ----------

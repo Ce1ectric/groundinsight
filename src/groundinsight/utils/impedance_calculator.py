@@ -32,6 +32,7 @@ sweeps that build many ad-hoc formulas) can release the compiled callables
 via :func:`clear_formula_cache`.
 """
 
+import math
 import warnings
 
 import sympy as sp
@@ -958,6 +959,12 @@ def _describe_source(formula_str: Optional[str], params: Optional[Dict[str, floa
     return f" Formula: '{formula_str}'."
 
 
+# Magnitude at or above which ``1/z`` is finite by construction: the
+# reciprocal is then at most 1e290, three orders of magnitude below DBL_MAX
+# (~1.8e308). Values below it are handed to the explicit overflow probe.
+_INVERTIBLE_FLOOR = 1e-290
+
+
 def is_short_circuit(z: complex) -> bool:
     """Is ``z`` a zero impedance that ``1/z`` cannot express?
 
@@ -980,21 +987,73 @@ def is_short_circuit(z: complex) -> bool:
     -------
     bool
         True if ``z`` is a short circuit in the sense above.
+
+    Notes
+    -----
+    This is one of the hottest functions in the package -- 59 850 calls in a
+    200-bus / 50-frequency profile, and far more in a transient study, which
+    evaluates every element at every FFT bin. The classification is therefore
+    done with ``math`` on the two C doubles; each ``numpy`` call on a Python
+    float costs an array coercion and a scalar dispatch for one bit of
+    information.
+
+    The overflow probe still asks the question that actually matters -- "can
+    this be inverted?" -- rather than comparing against a threshold that
+    would have to be re-derived whenever the complex division algorithm
+    changes. It is only *reached* for values whose magnitude is small enough
+    for the question to be open: if either component is at least
+    ``_INVERTIBLE_FLOOR``, then ``|z| >= _INVERTIBLE_FLOOR`` and hence
+    ``|1/z| <= 1/_INVERTIBLE_FLOOR``, three orders of magnitude below
+    ``DBL_MAX``, so the reciprocal is finite by construction.
     """
-    if np.isnan(z.real) or np.isnan(z.imag):
-        return False
-    if np.isinf(z.real) or np.isinf(z.imag):
-        return False
-    if z == 0:
+    re, im = z.real, z.imag
+    if re == 0.0 and im == 0.0:
         return True
-    # Ask the question that actually matters -- "can this be inverted?" --
-    # instead of comparing against a threshold that would have to be
-    # re-derived whenever the complex division algorithm changes. The errstate
-    # suppression is required because the overflow being detected here is
-    # precisely the condition numpy would warn about.
+    if math.isnan(re) or math.isnan(im):
+        return False
+    if math.isinf(re) or math.isinf(im):
+        return False
+    if abs(re) >= _INVERTIBLE_FLOOR or abs(im) >= _INVERTIBLE_FLOOR:
+        return False
+    # The errstate suppression is required because the overflow being
+    # detected here is precisely the condition numpy would warn about.
     with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
         admittance = np.complex128(1.0) / np.complex128(z)
     return not (np.isfinite(admittance.real) and np.isfinite(admittance.imag))
+
+
+def _short_circuit_mask(re: np.ndarray, im: np.ndarray) -> np.ndarray:
+    """Vectorised :func:`is_short_circuit` over two component arrays.
+
+    Same classification, one pass over the whole frequency grid instead of
+    one Python call per bin. ``check_passive_impedance`` runs this for every
+    bus and every branch of a network, at every frequency; a transient study
+    has several thousand bins.
+
+    Parameters
+    ----------
+    re, im : numpy.ndarray
+        Real and imaginary parts of the impedances, same shape.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean mask, ``True`` where the value is a short circuit in the
+        sense of :func:`is_short_circuit`. Non-finite entries are ``False``.
+    """
+    finite = np.isfinite(re) & np.isfinite(im)
+    zero = (re == 0.0) & (im == 0.0)
+    # Only values below the floor can fail to invert; everything else is
+    # finite by construction (see the note in ``is_short_circuit``).
+    candidate = finite & ~zero & (np.abs(re) < _INVERTIBLE_FLOOR) & (
+        np.abs(im) < _INVERTIBLE_FLOOR
+    )
+    mask = zero & finite
+    if candidate.any():
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            admittance = 1.0 / (re[candidate] + 1j * im[candidate])
+        mask[candidate] = ~np.isfinite(admittance)
+    return mask
 
 
 def dc_substitute_impedance(
@@ -1176,29 +1235,44 @@ def check_passive_impedance(
         impedance, or if any frequency at all carries a negative real part.
         Every offending frequency is listed, grouped by cause.
     """
-    zeros: List[float] = []
-    too_small: List[Tuple[float, float]] = []
-    negative: List[Tuple[float, float]] = []
+    if not z_dict:
+        return
 
-    for freq, value in z_dict.items():
-        zc = complex(float(value.real), float(value.imag))
-        # A failed computation, not an implausible one -- reported elsewhere.
-        if np.isnan(zc.real) or np.isnan(zc.imag):
-            continue
-        # The documented open-end sentinel. 1/inf == 0 is the right answer.
-        if np.isinf(zc.real) or np.isinf(zc.imag):
-            continue
-        if is_short_circuit(zc):
-            # At DC this is the physics, not a mistake: the solvers substitute
-            # a small finite value and warn. Above DC it is a mistake.
-            if freq != 0.0:
-                if zc == 0:
-                    zeros.append(float(freq))
-                else:
-                    too_small.append((float(freq), abs(zc)))
-            continue
-        if zc.real < 0:
-            negative.append((float(freq), zc.real))
+    # One pass over the whole frequency grid instead of one Python-level
+    # classification per bin. This function is called for every bus and every
+    # branch of a network -- and a transient study evaluates the same element
+    # at several thousand FFT bins -- so the scalar loop showed up as 1.5 s of
+    # a 6.9 s stationary profile and 4.4 s of a 9.9 s transient one.
+    count = len(z_dict)
+    freqs = np.fromiter((float(f) for f in z_dict), dtype=float, count=count)
+    re = np.fromiter(
+        (float(v.real) for v in z_dict.values()), dtype=float, count=count
+    )
+    im = np.fromiter(
+        (float(v.imag) for v in z_dict.values()), dtype=float, count=count
+    )
+
+    # A failed computation (NaN) is reported elsewhere; infinity is the
+    # documented open-end sentinel and 1/inf == 0 is the right answer.
+    finite = np.isfinite(re) & np.isfinite(im)
+    short = _short_circuit_mask(re, im)
+    exact_zero = (re == 0.0) & (im == 0.0) & finite
+    above_dc = freqs != 0.0
+
+    # At DC a short circuit is the physics, not a mistake: the solvers
+    # substitute a small finite value and warn. Above DC it is a mistake.
+    zeros: List[float] = freqs[exact_zero & above_dc].tolist()
+    small_mask = short & ~exact_zero & above_dc
+    too_small: List[Tuple[float, float]] = list(
+        zip(
+            freqs[small_mask].tolist(),
+            np.hypot(re[small_mask], im[small_mask]).tolist(),
+        )
+    )
+    negative_mask = finite & ~short & (re < 0.0)
+    negative: List[Tuple[float, float]] = list(
+        zip(freqs[negative_mask].tolist(), re[negative_mask].tolist())
+    )
 
     if not (zeros or too_small or negative):
         return
