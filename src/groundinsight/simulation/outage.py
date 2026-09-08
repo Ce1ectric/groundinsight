@@ -13,11 +13,10 @@ duration of a ``with`` block and restores the previous state on exit, and
 of scenarios in one go and packages the results into an
 :class:`OutageStudyResult` with ready-made comparison helpers.
 
-Example:
+Example (``net`` is a network that already carries a fault named ``"F1"``):
 
     >>> import groundinsight as gi
-    >>> # build a network, add fault "F1", then:
-    >>> study = gi.run_outage_study(
+    >>> study = gi.run_outage_study(  # doctest: +SKIP
     ...     network=net,
     ...     fault="F1",
     ...     scenarios=[
@@ -25,8 +24,8 @@ Example:
     ...         gi.Outage(name="bus5_isolated", disabled_buses=["bus5"]),
     ...     ],
     ... )
-    >>> df = study.compare_buses()
-    >>> df_branch = study.compare_branches()
+    >>> df = study.compare_buses()            # doctest: +SKIP
+    >>> df_branch = study.compare_branches()  # doctest: +SKIP
 
 Inactive elements are physically modelled as open circuits / removed nodes
 in the solver (see :mod:`groundinsight.electrical_network` and

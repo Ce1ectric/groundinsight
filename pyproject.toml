@@ -55,8 +55,8 @@ release = "scripts.release:main"
 generate-third-party-licenses = "scripts.generate_third_party_licenses:main"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-ra"
+testpaths = ["tests", "src/groundinsight"]
+addopts = "-ra --doctest-modules"
 
 [build-system]
 requires = ["poetry-core"]

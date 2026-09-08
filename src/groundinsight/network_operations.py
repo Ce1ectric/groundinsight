@@ -271,7 +271,12 @@ def create_fault(
     Examples
     --------
     >>> import groundinsight as gi
+    >>> bus_type = gi.BusType(
+    ...     name="StandardBus", system_type="Grounded", voltage_level=110,
+    ...     impedance_formula="1 + j * f / 50",
+    ... )
     >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60])
+    >>> _ = gi.create_bus(name="Bus1", type=bus_type, network=network)
     >>> fault = gi.create_fault(
     ...     name="Fault1", bus="Bus1",
     ...     scalings={50: 1.0, 60: 0.8},
@@ -396,7 +401,12 @@ def create_source(
     Examples
     --------
     >>> import groundinsight as gi
+    >>> bus_type = gi.BusType(
+    ...     name="StandardBus", system_type="Grounded", voltage_level=110,
+    ...     impedance_formula="1 + j * f / 50",
+    ... )
     >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60])
+    >>> _ = gi.create_bus(name="Bus1", type=bus_type, network=network)
     >>> source = gi.create_source(
     ...     name="Source1", bus="Bus1",
     ...     values={50: 10 + 5j, 60: 15 + 7j},
