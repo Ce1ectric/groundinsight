@@ -26,7 +26,90 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The inverse searches no longer leave a stale nodal system behind
+  (`analysis/inverse_rho.py`, `analysis/inverse_rho_f.py`).** Both `finally`
+  blocks restored `rho`, impedances, results, paths and the active fault but
+  not `network.electrical_network`, so the network was left carrying the `Y`
+  of the last bisection step next to the restored `rho`. `bus_response` read
+  a **negative** driving-point impedance out of that pair, without error or
+  warning. The pre-search object is put back (or `None`), and
+  `ElectricalNetwork` carries a fingerprint of the model values it was
+  assembled from so `bus_response` refuses a stale system by name.
+- **`BusResponse.evaluate` reports the current `Z_G` definition.** It computed
+  `Z_G = u_b/(r*I_F)` — the definition 0.6.0 replaced — with the *varied*
+  bus's voltage, a factor of 39 against `run_fault`. It is now
+  `Z_E = U_E/I_E` of the bonded group, matching `run_fault` to 1e-9.
+- **`BusResponse.evaluate` evaluates `r_epr` per electrode.** It was carried
+  through as an invariant, which it is only at the fault bus; away from it the
+  factor moves with the electrode by 18 %. A third right-hand side of the same
+  factorisation (the mutual-free injection) makes it exact for every
+  electrode.
+- **`analyze_cuts` decomposes the system that was solved.** It assembled its
+  own nodal matrix, which disagreed with the solver's in two places: a 0 Hz
+  short, which the solver substitutes and the decomposition read as an open
+  circuit (`Z_dp` 10 Ω against 2.5 Ω), and the Thévenin loop closure `Y_src`,
+  which exists only in the solver's matrix and carried up to 23 % of the fault
+  current out of the fault bus. The loop closure is reported as its own
+  direction `"source_loop"`; `kcl_residual` falls from 22.5 % to 1e-16.
+- **`find_max_rho_scaling` no longer assumes monotonicity.** Where only part
+  of the impedance formula carries `rho`, `EPR(c)` falls before it rises, and
+  the bisection reported "no scaling factor satisfies the constraint" for
+  limits a whole band of factors satisfies. A logarithmic pre-scan
+  (`monotonicity_grid`, default 9) measures the shape first.
+- **`kappa` and `n` are validated in the thermal checks.** Both docstrings
+  promised `(1, 2]` and `(0, 1]`; neither was enforced, and every out-of-range
+  value failed in the unsafe direction.
+- **The 0 Hz bin is no longer counted twice in `I_th`.** It entered both the
+  RMS and `m`; on the audit case `[50 Hz]` gave 1028 A and `[0, 50 Hz]` with
+  700 A of direct current gave 1255 A.
+- **`classify` leaves a NaN unassessed** instead of putting it in the highest
+  band, where a failed sweep point was counted among the violations.
+- **`analyze_cuts` explains an incomplete result** instead of raising a bare
+  `KeyError`, and `CutAnalysis.to_polars()` pins its schema so an unsolved
+  analysis stacks with a solved one.
+- **`sweep([])` and a non-positive network conductance in
+  `worst_case_electrode`** raise `ValueError` instead of a polars error and a
+  negative "worst case".
+
+### Changed
+
+- **Two reference cases were replaced by ones that can fail.**
+  `en50522_chain` checked `U_E = 3*I_0 * Z_E * r` with all three factors read
+  out of one result — an identity the implementation closes by construction,
+  so the case agreed to 1e-16 whatever the model did, and tripling every
+  electrode current made the deviation *smaller*. It now re-derives `I_E` from
+  an independently assembled nodal system (quantity and tolerance changed).
+  `ladder_potential_decay` built its matrix from local constants rather than
+  from the model and is now assembled from `bus.impedance` /
+  `branch.self_impedance`.
+- **`summarize` gains an `n_nan` column** and `check_conductor_limits` /
+  `check_node_limits` gain `I_dc_A` and `I_ac_rms_A`. Code that asserts an
+  exact column set has to be updated.
+- **`BusResponse.admittance` lost its `freq` argument**, which it never read.
+
+### Docs
+
+- `find_max_rho_f_scaling` states the monotonicity assumption and that it is
+  proven at a single bus and unproven in the coupled multi-bus case.
+- `resolve_fault_sc_characteristics` states exactly what it averages —
+  `kappa` over the sources carrying 60909 data, `i_k_a` over all of them — and
+  its warning names the share of the current the data does not cover.
+- `kappa_from_r_to_x` documents its actual range, `[1.02, 2]`.
+- `CutAnalysis.identity_residual` says what it can and cannot show.
+
 ### Internal
+
+- `analysis/_guards.py` holds the shared completeness guard, previously
+  private to `thermal.py`. Its lookup set is built once; it was quadratic
+  (398 ms at n = 4000).
+- Performance: `analyze_cuts` reuses the assembled `Y` (26.2 ms → 9.5 ms at
+  150 buses × 9 f), `bus_response` solves three right-hand sides against one
+  factorisation instead of two against two, `BusResponse.extremes()` is linear
+  in the frequency count (90.7 ms → 22.9 ms at 9 f), and
+  `find_max_rho_f_scaling` drops its closing re-evaluation
+  (`(iter + 3)·N` → `(iter + 2)·N` `run_fault` calls).
 
 - **`scripts/generate_graphify_report.py` removed, replaced by
   `scripts/refresh_graphify.sh`.** The Python script existed only because
