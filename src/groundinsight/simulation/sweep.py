@@ -32,6 +32,8 @@ directions::
         bus="Station_7",
         k_vectors={f"k1={k1:g}": (k1, 1e-4, 3e-4, 0.0, 0.0)
                    for k1 in (0.01, 0.02, 0.05, 0.1)},
+        frequencies=net.frequencies,
+        rho=100.0,
     )
     study = gi.run_sweep(
         net, fault="F_Station_7", points=points,
@@ -241,54 +243,126 @@ def rho_f_points(
     return points
 
 
-def _apply(network: Network, point: SweepPoint) -> Dict[str, Any]:
-    """Apply a point's overrides and return what is needed to undo them."""
-    saved: Dict[str, Any] = {
-        "impedance": {},
-        "rho": {},
+def _new_saved() -> Dict[str, Any]:
+    """Build the empty undo record :func:`_apply` fills in.
+
+    The record is created by the caller and handed *into* :func:`_apply`
+    rather than returned from it. That is the whole point: ``run_sweep``
+    restores in a ``finally`` block, and a record that only exists as a
+    return value never reaches that block when ``_apply`` raises half-way
+    through -- every mutation made up to that point then stayed on the
+    network and every later point of the sweep was solved on it.
+
+    Returns
+    -------
+    dict
+        ``{"buses": {}, "order": [], "scalings": None, "scalings_fault": None}``.
+        ``order`` lists the bus names in the order they were first touched,
+        so :func:`_restore` can undo them in reverse.
+    """
+    return {
+        "buses": {},
+        "order": [],
         "scalings": None,
         "scalings_fault": None,
     }
 
+
+def _snapshot_bus(saved: Dict[str, Any], bus_name: str, bus) -> None:
+    """Record a bus's pre-override state exactly once.
+
+    ``setdefault`` is essential rather than convenient: a point may override
+    both ``bus_impedance`` and ``bus_rho`` of the same bus, and the rho branch
+    re-evaluates the type formula *after* the impedance branch has already
+    written its table. A second snapshot would therefore capture the override
+    as if it were the original and the bus would keep it for the rest of the
+    sweep.
+
+    All five fields the overrides can reach are captured together --
+    ``specific_earth_resistance``, ``impedance`` and the lumped ``R``/``L``/``C``
+    that ``Bus.calculate_impedance`` recomputes alongside the impedance table.
+    """
+    if bus_name in saved["buses"]:
+        return
+    saved["buses"][bus_name] = {
+        "specific_earth_resistance": bus.specific_earth_resistance,
+        "impedance": dict(bus.impedance),
+        "R": dict(bus.R) if bus.R is not None else None,
+        "L": dict(bus.L) if bus.L is not None else None,
+        "C": dict(bus.C) if bus.C is not None else None,
+    }
+    saved["order"].append(bus_name)
+
+
+def _apply(network: Network, point: SweepPoint, saved: Dict[str, Any]) -> None:
+    """Apply a point's overrides, recording the undo information in ``saved``.
+
+    Every referenced bus name is validated *before* the first mutation, so a
+    point that names a bus the network does not have leaves the network
+    untouched instead of half-overridden. Whatever is mutated after that is
+    snapshotted into ``saved`` first, and ``saved`` belongs to the caller, so
+    :func:`_restore` can undo the work of a call that raised in the middle.
+
+    Parameters
+    ----------
+    network : Network
+        The network to mutate in place.
+    point : SweepPoint
+        The overrides to apply.
+    saved : dict
+        Undo record from :func:`_new_saved`, filled in as the overrides are
+        applied.
+
+    Raises
+    ------
+    ValueError
+        If the point references a bus that is not part of ``network``.
+    """
+    unknown = sorted(
+        {name for name in point.bus_impedance if name not in network.buses}
+        | {name for name in point.bus_rho if name not in network.buses}
+    )
+    if unknown:
+        raise ValueError(
+            f"Sweep point '{point.label}' overrides bus(es) {unknown}, which "
+            f"are not in network '{network.name}'. Available: "
+            f"{sorted(network.buses)}."
+        )
+
     for bus_name, table in point.bus_impedance.items():
-        if bus_name not in network.buses:
-            raise ValueError(
-                f"Sweep point '{point.label}' overrides bus '{bus_name}', which "
-                f"is not in network '{network.name}'."
-            )
         bus = network.buses[bus_name]
-        saved["impedance"][bus_name] = dict(bus.impedance)
+        _snapshot_bus(saved, bus_name, bus)
         bus.impedance = {
             float(f): ComplexNumber(real=complex(z).real, imag=complex(z).imag)
             for f, z in table.items()
         }
 
     for bus_name, rho in point.bus_rho.items():
-        if bus_name not in network.buses:
-            raise ValueError(
-                f"Sweep point '{point.label}' overrides rho of bus "
-                f"'{bus_name}', which is not in network '{network.name}'."
-            )
         bus = network.buses[bus_name]
-        saved["rho"][bus_name] = (bus.specific_earth_resistance, dict(bus.impedance))
+        _snapshot_bus(saved, bus_name, bus)
         bus.specific_earth_resistance = rho
         bus.calculate_impedance(network.frequencies)
-
-    return saved
 
 
 def _restore(network: Network, saved: Dict[str, Any]) -> None:
     """Undo :func:`_apply`. Never raises on a missing element -- a restore that
-    fails would leave the network in a state no later point can trust."""
-    for bus_name, table in saved["impedance"].items():
+    fails would leave the network in a state no later point can trust.
+
+    Buses are restored in reverse order of application, which is the order
+    that makes a restore correct when two overrides of one point interact
+    (an ``impedance`` table written first and then overwritten by the rho
+    branch's re-evaluation of the type formula).
+    """
+    for bus_name in reversed(saved["order"]):
         bus = network.buses.get(bus_name)
-        if bus is not None:
-            bus.impedance = table
-    for bus_name, (rho, table) in saved["rho"].items():
-        bus = network.buses.get(bus_name)
-        if bus is not None:
-            bus.specific_earth_resistance = rho
-            bus.impedance = table
+        if bus is None:
+            continue
+        state = saved["buses"][bus_name]
+        bus.specific_earth_resistance = state["specific_earth_resistance"]
+        bus.impedance = state["impedance"]
+        bus.R = state["R"]
+        bus.L = state["L"]
+        bus.C = state["C"]
     if saved["scalings_fault"] is not None:
         fault = network.faults.get(saved["scalings_fault"])
         if fault is not None:
@@ -392,9 +466,12 @@ def run_sweep(
             failures[point.label] = message
             continue
 
-        saved = None
+        # Bound before the call, not from its return value: ``_apply`` may
+        # raise after it has already mutated the network, and ``finally``
+        # has to see everything it did up to that point (S2).
+        saved = _new_saved()
         try:
-            saved = _apply(network, point)
+            _apply(network, point, saved)
             if point.fault_scalings is not None:
                 fault_obj = network.faults[target]
                 saved["scalings_fault"] = target
@@ -428,11 +505,14 @@ def run_sweep(
             )
             failures[point.label] = str(exc)
         finally:
-            if saved is not None:
-                _restore(network, saved)
+            _restore(network, saved)
 
     if previous_active is not None and previous_active in network.faults:
-        network.set_active_fault(previous_active)
+        # ``keep_results=True``: re-activating the fault that was active before
+        # the sweep must not throw away its cached ``Result``. Restoring the
+        # network's state is the promise of this function, and deleting a
+        # solved result is the opposite of restoring it (S8).
+        network.set_active_fault(previous_active, keep_results=True)
 
     result = SweepResult(fault=fault, labels=solved, failures=failures)
     result._buses = pl.concat(bus_frames, how="diagonal") if bus_frames else None
