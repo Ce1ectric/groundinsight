@@ -159,13 +159,25 @@ def test_from_pandapower_uses_supplied_types_and_rho():
 
 
 def test_from_pandapower_rejects_empty_frequencies():
+    """Audit pass 18 (M20): the refusal moved from the importer to the model.
+
+    ``ImportDefaults`` validates its own frequency list now, so the empty list
+    is rejected where it is written rather than after the caller has assembled
+    the types and reached ``from_pandapower``. The importer keeps its own
+    guard for a defaults object built some other way, so both call sites are
+    still asserted.
+    """
     net, _ = _build_three_bus_mv_with_lv_stub()
-    bad = gi.ImportDefaults(
-        rho=100.0,
-        frequencies=[],
-        default_bus_type=_bus_type(),
-        default_branch_type=_branch_type(),
-    )
+    with pytest.raises(ValueError, match="frequencies"):
+        gi.ImportDefaults(
+            rho=100.0,
+            frequencies=[],
+            default_bus_type=_bus_type(),
+            default_branch_type=_branch_type(),
+        )
+
+    bad = _defaults()
+    object.__setattr__(bad, "frequencies", [])
     with pytest.raises(ValueError, match="frequencies"):
         gi.from_pandapower(net, defaults=bad, voltage_level_kV=20.0)
 

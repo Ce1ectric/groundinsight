@@ -69,11 +69,16 @@ defaults = gi.ImportDefaults(
 )
 
 # 1. Pre-flight summary: kept vs. skipped elements with a reason column.
-preview = gi.preview_pandapower_import(net_pp, voltage_level_kV=20.0)
+#    Pass the same `defaults` so closed bus-to-bus switches are previewed
+#    the way they will actually be imported.
+preview = gi.preview_pandapower_import(
+    net_pp, voltage_level_kV=20.0, defaults=defaults
+)
 print(preview)
 
 # 2. Build the Network. Only buses / lines on the chosen voltage
-#    level are imported; switches, ext_grids, sgens, loads are ignored.
+#    level are imported; ext_grids, sgens and loads are ignored, and
+#    trafos / impedance elements are listed as skipped.
 net = gi.from_pandapower(
     net_pp,
     defaults=defaults,
@@ -102,10 +107,54 @@ matches the warning text:
 | `endpoint_off_target_voltage_level` | line  | One endpoint sits on a different voltage level.                         |
 | `endpoint_bus_missing`            | line    | An endpoint bus could not be resolved.                                  |
 | `self_loop`                       | line    | `from_bus == to_bus`. **New in 0.5.**                                   |
+| `no_switch_branch_type`           | switch  | A **closed** bus-to-bus switch, but no `ImportDefaults.switch_branch_type` to build it with. **New in 0.6.1.** |
+| `switch_open`                     | switch  | The switch is open — genuinely not a connection. **New in 0.6.1.**      |
+| `switch_not_bus_to_bus`           | switch  | `et != "b"`: the switching state of a line or trafo, not a bond. **New in 0.6.1.** |
+| `trafos_are_not_modelled`         | trafo   | `net.trafo` / `net.trafo3w`. **New in 0.6.1.**                          |
+| `impedance_elements_are_not_modelled` | impedance | `net.impedance`. **New in 0.6.1.**                                |
 
 If the importer produces a `Network` with zero buses or zero branches
 it now also emits a `logger.warning` so a wrong `voltage_level_kV`
 argument fails loudly rather than silently.
+
+### Closed switches bond grounding systems
+
+!!! warning "Changed in 0.6.1"
+    A **closed bus-to-bus switch** (`et="b"`, `closed=True`) bonds two
+    grounding systems. Up to 0.6.0 it was discarded without a word, so a
+    bus reachable only through a switch came out galvanically isolated
+    and the solver reported **0 V** for it — which reads as a safe
+    station. Set `ImportDefaults.switch_branch_type` (and optionally
+    `switch_length_km`, default 1 m) to import such switches as short
+    branches. Without it the behaviour is unchanged, but the omission is
+    now logged and appears in the preview.
+
+### Deriving the phase-conductor impedance
+
+`ImportDefaults.derive_phase_impedance=True` builds a per-line
+`phase_impedance_formula` from the pandapower columns `r_ohm_per_km`
+and `x_ohm_per_km`, i.e. `(r + I*x) * l`. That is what the default
+`phase_current_mode="auto"` solve needs; without it every imported
+mesh falls back to the older path-based proxy. Lines that share `r`
+and `x` share one derived branch type.
+
+The **earth-return** formulas (`self_impedance_formula`,
+`mutual_impedance_formula`) are deliberately *not* derived. They depend
+on the soil resistivity and the cable geometry, neither of which
+pandapower carries, and inventing them would produce a network that
+solves cleanly and is wrong. They stay exactly as the caller set them
+on `default_branch_type`.
+
+### Voltage level
+
+`voltage_level_kV` selects which pandapower buses are imported;
+`default_bus_type.voltage_level` states which level the type was
+written for. The two are independent, but a mismatch is now reported at
+`WARNING`, because every imported bus carries the *type's* value and
+that is what a touch-voltage assessment reads. The bus filter compares
+`vn_kv` with `math.isclose` rather than `==`, so rounding noise from a
+CSV or DGS export no longer reports the whole target level as a
+mismatch.
 
 ## Short-circuit characteristics (IEC 60909-0)
 
