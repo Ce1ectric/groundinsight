@@ -1688,6 +1688,57 @@ class Network(BaseModel):
         # flip or a rewiring and rebuild them instead of silently reusing them.
         self._paths_fingerprint = self._active_topology_fingerprint()
 
+    def sources_reaching(self, fault_name: str) -> List[str]:
+        """
+        Names of the sources that are connected to a fault over active elements.
+
+        The stationary solver in the default ``phase_current_mode="auto"``
+        needs to know *which* sources feed a fault, not *how* they get there.
+        This method answers that with one breadth-first search per source
+        over the active bus/branch sub-graph, in ``O(V + E)``, instead of
+        enumerating every simple path -- a count that is exponential in the
+        number of loops (1 262 816 paths and about a minute on a 6x6 grid,
+        against milliseconds in the solver itself).
+
+        The result is identical to the set of sources that appear in
+        ``self.paths`` for this fault after a full :meth:`define_paths`,
+        because both traverse the same active sub-graph.
+
+        Parameters
+        ----------
+        fault_name : str
+            Name of the fault to test reachability against.
+
+        Returns
+        -------
+        List[str]
+            Source names in the insertion order of ``self.sources``.
+
+        Raises
+        ------
+        ValueError
+            If ``fault_name`` is not a fault of this network.
+
+        Examples
+        --------
+        >>> network.sources_reaching("Fault1")  # doctest: +SKIP
+        ['Source1']
+        """
+        from groundinsight.pathfinder import PathFinder  # local import
+
+        if fault_name not in self.faults:
+            raise ValueError(
+                f"Fault '{fault_name}' does not exist in the network "
+                f"'{self.name}'."
+            )
+        fault_bus = self.faults[fault_name].bus
+        pathfinder = PathFinder(self)
+        return [
+            name
+            for name, source in self.sources.items()
+            if pathfinder.reaches(source.bus, fault_bus)
+        ]
+
     def _active_topology_fingerprint(self) -> tuple:
         """Fingerprint everything :meth:`define_paths` reads.
 

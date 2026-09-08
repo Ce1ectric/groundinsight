@@ -692,8 +692,20 @@ class ElectricalNetwork:
         """
         Return the list of source names that have at least one path to the active fault.
 
-        Paths are taken from ``self.network.paths`` which must have been populated
-        before the electrical network is solved (typically via ``network.define_paths()``).
+        In the default ``phase_current_mode="auto"`` the answer comes from
+        :meth:`groundinsight.models.core_models.Network.sources_reaching`,
+        a breadth-first reachability test over the active sub-graph. That
+        mode never reads ``Network.paths`` anywhere else, so enumerating
+        every simple path just to ask "is there one?" was pure waste --
+        exponential in the number of loops, 54-68 s on a 6x6 grid against
+        milliseconds in the solver.
+
+        In the legacy ``"paths"`` mode the enumerated paths carry the phase
+        currents themselves, so the source list is derived from
+        ``self.network.paths``, which must have been populated before the
+        electrical network is solved (via ``network.define_paths()``).
+        Both routes traverse the same active sub-graph and therefore
+        return the same source list.
 
         Returns
         -------
@@ -701,6 +713,26 @@ class ElectricalNetwork:
             Source names that contribute to the active fault.
         """
         fault_name = self.network.active_fault
+        if self.auto_phase_currents:
+            return self.network.sources_reaching(fault_name)
+
+        # Legacy mode: the enumerated paths are the data, not just an
+        # existence proof. ``run_fault`` no longer builds them in the
+        # default mode, so a caller that switches to ``"paths"`` may find
+        # them missing or stale. Silently reading an empty path set would
+        # inject nothing at all and report 0 V at every bus, so rebuild --
+        # the same choice the transient state-space solver makes.
+        if self.network._needs_path_rebuild():
+            logger.warning(
+                "phase_current_mode='paths' derives the branch phase currents "
+                "from the enumerated source-to-fault paths, but the network's "
+                "paths are missing or stale -- rebuilding them now. On a "
+                "meshed network this enumeration is expensive; the default "
+                "phase_current_mode='auto' does not need it."
+            )
+            self.network.invalidate_paths()
+            self.network.define_paths()
+
         sources = set()
         for path in self.network.paths.values():
             if path.fault == fault_name and path.source in self.network.sources:

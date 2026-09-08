@@ -284,6 +284,11 @@ def test_run_fault_rebuilds_paths_after_parallel_branch_rewiring():
     gi.run_fault(net, "F")
     actual = _epr(net, "F")
 
+    # Audit pass 18 (K2): run_fault no longer enumerates the paths in the
+    # default mode. The rebuild it does perform is the one that matters --
+    # the EPR below is computed from the rewired topology -- and the path
+    # set itself is still rebuilt correctly when asked for.
+    gi.create_paths(net)
     assert len(net.paths) == 2
     # The rewiring really changes the answer, so an unchanged result would be
     # a genuine failure rather than a coincidence.
@@ -424,6 +429,8 @@ def test_state_space_mutual_factor_is_first_path_wins_not_accumulated():
     """
     net = _ring_coupled_network("p10_t3b")
     gi.run_fault(net, fault_name="F1")
+    # Audit pass 18 (K2): paths are no longer a side effect of run_fault.
+    gi.create_paths(net)
     assert len(net.paths) == 2, "the ring must produce two parallel paths"
 
     study, result = _run_transient(net, ["C", "D"], ["bCD"])
@@ -462,6 +469,8 @@ def test_state_space_mutual_factor_control_single_path():
     net.branches["bEC"].active = False
     net.buses["E"].active = False
     gi.run_fault(net, fault_name="F1")
+    # Audit pass 18 (K2): paths are no longer a side effect of run_fault.
+    gi.create_paths(net)
     assert len(net.paths) == 1
 
     study, result = _run_transient(net, ["C", "D"], ["bCD"])

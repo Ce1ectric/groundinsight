@@ -299,15 +299,28 @@ $$
 
 Numerically the system is solved with SciPy's sparse LU decomposition
 (`scipy.sparse.csc_matrix` + `splu`) — this scales well to meshed
-low-voltage networks with thousands of buses.
+low-voltage networks with thousands of buses. The *path enumeration*
+described in the next section does not; see the note there.
 
 ## Path finding
 
-Mutual-coupling injections require a direction. `groundinsight` derives that
-direction by enumerating every simple path from each source bus to the active
-fault bus via a depth-first search (`PathFinder`). Each path is stored as an
-ordered list of `Branch` objects; its injection signs follow the traversal
-order.
+Mutual-coupling injections require a direction. In the legacy
+`phase_current_mode="paths"` `groundinsight` derives that direction by
+enumerating every simple path from each source bus to the active fault bus
+via a depth-first search (`PathFinder`). Each path is stored as an ordered
+list of `Branch` objects; its injection signs follow the traversal order.
+
+!!! warning "The enumeration is exponential in the number of loops"
+
+    The number of simple paths grows exponentially with the number of
+    independent loops, not with the number of buses: a 500-bus ring has
+    two paths, a 5×5 grid 8 512 and a 6×6 grid 1 262 816 — roughly a
+    minute of enumeration against milliseconds in the solver. The default
+    `phase_current_mode="auto"` therefore does **not** enumerate: it only
+    needs to know which sources reach the fault, and
+    `Network.sources_reaching(...)` answers that with a breadth-first
+    search. `network.paths` is empty after a default `run_fault`; call
+    `gi.create_paths(network)` if you want the paths as data.
 
 In ring or meshed topologies a single source–fault pair yields multiple
 paths, and the source current has to be *divided* between them.

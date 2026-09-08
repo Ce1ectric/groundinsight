@@ -13,7 +13,7 @@ The primary use cases include:
 - Facilitating impedance and grounding calculations based on identified paths.
 """
 
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from typing import List, Dict, Set, Tuple, FrozenSet, Optional
 from .models.core_models import Network, Bus, Branch, Path
 
@@ -50,6 +50,63 @@ _DEFAULT_CACHE_SIZE = 256
 _CACHE_SIZE = _DEFAULT_CACHE_SIZE
 _GRAPH_CACHE: "OrderedDict[TopologyKey, Dict[str, List[Branch]]]" = OrderedDict()
 _FIND_PATHS_CACHE: "OrderedDict[Tuple[int, str, int, int, FrozenSet[str], FrozenSet[str], str, str], List[Path]]" = OrderedDict()
+_REACHES_CACHE: "OrderedDict[Tuple, bool]" = OrderedDict()
+
+# Upper bound on the number of simple paths a single ``find_paths`` call may
+# enumerate. The count is exponential in the number of independent loops: a
+# 5x5 grid has 8 512 simple paths, a 6x6 grid 1 262 816 and the enumeration
+# takes about a minute while the solver itself needs milliseconds. Without a
+# cap a moderately meshed low-voltage network simply never returns, and the
+# user has no way of telling a slow run from a hung one.
+_DEFAULT_MAX_PATHS = 100_000
+_MAX_PATHS = _DEFAULT_MAX_PATHS
+
+
+class _PathLimitExceeded(Exception):
+    """Internal signal raised inside the DFS when the path cap is hit."""
+
+
+def set_pathfinder_max_paths(maxcount: int) -> int:
+    """Configure the maximum number of simple paths ``find_paths`` enumerates.
+
+    Parameters
+    ----------
+    maxcount : int
+        Maximum number of simple paths per ``(source_bus, fault_bus)`` pair.
+        Must be a positive integer.
+
+    Returns
+    -------
+    int
+        The previously configured limit.
+
+    Raises
+    ------
+    ValueError
+        If ``maxcount`` is not a positive integer.
+
+    Notes
+    -----
+    The default is ``100_000``. Exceeding the limit raises a ``ValueError``
+    from :meth:`PathFinder.find_paths` that names the bus pair and points at
+    ``phase_current_mode="auto"``, which does not need the enumeration at
+    all. Raise the limit only if the enumerated paths are genuinely
+    required -- the count grows exponentially with the number of loops.
+    """
+    global _MAX_PATHS
+
+    if not isinstance(maxcount, int) or maxcount <= 0:
+        raise ValueError(
+            f"pathfinder max_paths must be a positive integer; got {maxcount!r}."
+        )
+    previous = _MAX_PATHS
+    _MAX_PATHS = maxcount
+    return previous
+
+
+def get_pathfinder_max_paths() -> int:
+    """Return the currently configured cap on enumerated simple paths."""
+    return _MAX_PATHS
 
 
 def _cache_set(cache: "OrderedDict", key, value) -> None:
@@ -118,6 +175,8 @@ def set_pathfinder_cache_size(maxsize: int) -> int:
         _GRAPH_CACHE.popitem(last=False)
     while len(_FIND_PATHS_CACHE) > _CACHE_SIZE:
         _FIND_PATHS_CACHE.popitem(last=False)
+    while len(_REACHES_CACHE) > _CACHE_SIZE:
+        _REACHES_CACHE.popitem(last=False)
     return previous
 
 
@@ -153,6 +212,7 @@ def clear_pathfinder_cache(network: Optional[Network] = None) -> None:
     if network is None:
         _GRAPH_CACHE.clear()
         _FIND_PATHS_CACHE.clear()
+        _REACHES_CACHE.clear()
         return
 
     net_id = id(network)
@@ -164,6 +224,8 @@ def clear_pathfinder_cache(network: Optional[Network] = None) -> None:
         _GRAPH_CACHE.pop(key, None)
     for key in [k for k in _FIND_PATHS_CACHE if k[0] == net_id]:
         _FIND_PATHS_CACHE.pop(key, None)
+    for key in [k for k in _REACHES_CACHE if k[0] == net_id]:
+        _REACHES_CACHE.pop(key, None)
 
 
 class PathFinder:
@@ -344,7 +406,22 @@ class PathFinder:
             _cache_set(_FIND_PATHS_CACHE, cache_key, [])
             return []
 
-        self._dfs(source_bus_name, fault_bus_name, visited_buses, path, all_paths)
+        try:
+            self._dfs(source_bus_name, fault_bus_name, visited_buses, path, all_paths)
+        except _PathLimitExceeded:
+            raise ValueError(
+                f"Enumerating the simple paths from bus '{source_bus_name}' to "
+                f"bus '{fault_bus_name}' exceeded the limit of {_MAX_PATHS} "
+                "paths. The number of simple paths grows exponentially with "
+                "the number of loops in the network, so a moderately meshed "
+                "network never finishes this enumeration while the solver "
+                "itself needs milliseconds. The default "
+                "phase_current_mode='auto' does not need the enumeration -- "
+                "it solves a reduced phase-conductor network instead. Use it, "
+                "or raise the limit with "
+                "groundinsight.pathfinder.set_pathfinder_max_paths(...) if the "
+                "enumerated paths are genuinely required."
+            ) from None
 
         # Convert each list of Branch objects to a Path object
         paths = []
@@ -366,6 +443,71 @@ class PathFinder:
             )
             for p in paths
         ]
+
+    def reaches(self, source_bus_name: str, fault_bus_name: str) -> bool:
+        """
+        Report whether *any* route connects a source bus to a fault bus.
+
+        This is the question the stationary solver actually asks in the
+        default ``phase_current_mode="auto"``: a source contributes to a
+        fault if and only if at least one route exists. Answering it with
+        :meth:`find_paths` means enumerating *all* simple paths, whose count
+        is exponential in the number of independent loops -- 1 262 816 paths
+        and roughly a minute on a 6x6 grid, against milliseconds in the
+        solver. A breadth-first search over the same active sub-graph, with
+        an early exit at the target, answers it in ``O(V + E)``.
+
+        The result is exactly equivalent to ``len(find_paths(...)) > 0``:
+        both run over the adjacency list built by :meth:`_build_graph`, so
+        inactive buses and branches are excluded in the same way.
+
+        Parameters
+        ----------
+        source_bus_name : str
+            The name of the source bus.
+        fault_bus_name : str
+            The name of the fault bus.
+
+        Returns
+        -------
+        bool
+            ``True`` if a route over active buses and branches exists.
+        """
+        cache_key = (*self._topology_key, source_bus_name, fault_bus_name)
+        cached = _REACHES_CACHE.get(cache_key)
+        if cached is not None:
+            _REACHES_CACHE.move_to_end(cache_key)
+            return cached
+
+        if source_bus_name not in self.graph or fault_bus_name not in self.graph:
+            result = False
+        elif source_bus_name == fault_bus_name:
+            # A source sitting on the fault bus itself feeds the fault; the
+            # DFS reports the empty path for this case, so ``find_paths``
+            # returns one (zero-segment) path and the two agree.
+            result = True
+        else:
+            visited = {source_bus_name}
+            queue = deque([source_bus_name])
+            result = False
+            while queue:
+                current = queue.popleft()
+                for branch in self.graph[current]:
+                    neighbor = (
+                        branch.to_bus
+                        if branch.from_bus == current
+                        else branch.from_bus
+                    )
+                    if neighbor == fault_bus_name:
+                        result = True
+                        queue.clear()
+                        break
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        queue.append(neighbor)
+
+        _cache_set(_REACHES_CACHE, cache_key, result)
+        return result
 
     def _dfs(
         self,
@@ -397,6 +539,8 @@ class PathFinder:
         if current_bus == target_bus:
             # Found a path
             all_paths.append(list(path))
+            if len(all_paths) > _MAX_PATHS:
+                raise _PathLimitExceeded
             return
 
         visited_buses.add(current_bus)

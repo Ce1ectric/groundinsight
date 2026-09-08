@@ -538,6 +538,39 @@ def create_paths(network: Network):
     >>> import groundinsight as gi  # doctest: +SKIP
     >>> gi.create_paths(network=network)  # doctest: +SKIP
     """
+    _assert_network_is_excited(network)
+    network.define_paths()
+
+
+def _assert_network_is_excited(network: Network) -> None:
+    """
+    Reject a network that has no source or no fault at all.
+
+    Every downstream step succeeds on an unexcited system and reports 0 V
+    at every bus -- a plausible-looking result rather than an error
+    message. The check lives in its own helper because both
+    :func:`create_paths` and :func:`run_fault` need it: since ``run_fault``
+    no longer enumerates paths in the default ``phase_current_mode="auto"``,
+    it can no longer inherit the guard from ``create_paths``.
+
+    Parameters
+    ----------
+    network : Network
+        The network to check.
+
+    Raises
+    ------
+    ValueError
+        If the network defines no sources or no faults.
+
+    Notes
+    -----
+    The check is on *all* faults, not on ``active_fault``. Finding no path
+    between an existing source and an existing fault is a different matter
+    and stays permitted -- that is exactly what an outage scenario which
+    islands the fault bus produces, and the all-zero result is then the
+    correct answer.
+    """
     if not network.sources:
         raise ValueError(
             f"Network '{network.name}' defines no sources, so no source-to-fault "
@@ -550,7 +583,6 @@ def create_paths(network: Network):
             "path exists and the calculation would return 0 V at every bus. "
             "Add a fault with gi.create_fault(...)."
         )
-    network.define_paths()
 
 
 def build_electrical_network(network: Network, auto_phase_currents: bool = False):
@@ -746,10 +778,25 @@ def run_fault(
     Raises
     ------
     ValueError
-        If the specified fault does not exist in the network, or if
+        If the specified fault does not exist in the network, if the
+        network defines no sources or no faults at all, or if
         ``phase_current_mode`` is not one of the two accepted values.
     RuntimeError
         If there is an error during the network calculations.
+
+    Notes
+    -----
+    ``"auto"`` does **not** enumerate the source-to-fault paths. It only
+    needs to know which sources reach the fault, which
+    :meth:`~groundinsight.models.core_models.Network.sources_reaching`
+    answers with a breadth-first search over the active sub-graph. The
+    enumeration is exponential in the number of independent loops -- a
+    6x6 grid has 1 262 816 simple paths and used to cost about a minute
+    per ``run_fault`` while the solver itself needs milliseconds -- so it
+    now runs only in ``"paths"`` mode or when the user asks for it with
+    :func:`create_paths`. ``network.paths`` is therefore normally empty
+    after a default ``run_fault``; a path set that no longer matches the
+    active topology is dropped so no later reader picks it up.
 
     Examples
     --------
@@ -768,9 +815,26 @@ def run_fault(
     # flip or an in-place rewiring). Without this check run_fault would
     # silently reuse stale paths while the Y-matrix is rebuilt from the
     # current active flags, yielding a wrong EPR.
-    if network._needs_path_rebuild():
+    #
+    # Only the legacy ``phase_current_mode="paths"`` actually needs the
+    # enumerated paths -- there they carry the phase current per branch.
+    # ``"auto"`` (the default) solves a reduced phase-conductor network and
+    # only needs to know *which* sources reach the fault, which
+    # ``Network.sources_reaching`` answers with a breadth-first search. The
+    # enumeration is exponential in the number of loops (1.26 million paths
+    # and roughly a minute on a 6x6 grid, against milliseconds in the
+    # solver), so it is no longer triggered in the default mode. Stale
+    # paths are still dropped so that no later reader -- persistence, the
+    # transient state-space solver, the short-circuit aggregation -- picks
+    # up a path set that no longer matches the topology. Users who want the
+    # paths as data keep asking for them with ``gi.create_paths(network)``.
+    _assert_network_is_excited(network)
+    if not auto_phase_currents:
+        if network._needs_path_rebuild():
+            network.invalidate_paths()
+            create_paths(network)
+    elif network.paths and network._needs_path_rebuild():
         network.invalidate_paths()
-        create_paths(network)
 
     # Warn only in the legacy mode, and only when the network around this fault
     # actually has parallel routes -- see _warning_parallel_coeffcient.

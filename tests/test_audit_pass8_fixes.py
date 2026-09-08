@@ -134,6 +134,9 @@ def test_distinct_paths_still_deduplicated_within_pair():
     paths of the reachable topology (no spurious duplication)."""
     net = _line_network([("F1", "b3")], [("src", "b1")])
     gi.run_fault(net, "F1")
+    # Audit pass 18 (K2): the default phase_current_mode="auto" no longer
+    # enumerates the paths, so ask for them explicitly.
+    gi.create_paths(net)
     # exactly one simple path b1 -> b2 -> b3
     assert len(net.paths) == 1
 

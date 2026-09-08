@@ -56,6 +56,10 @@ def test_save_network_successful(tmp_path):
 
     # Load the network from JSON
     net2 = gi.load_network_from_json(path=str(json_file))
+    # Audit pass 18 (K2): run_fault no longer enumerates the paths in the
+    # default phase_current_mode="auto", so the reloaded network gets them
+    # the same way the original did -- by asking for them explicitly.
+    gi.create_paths(network=net2)
     gi.run_fault(network=net2, fault_name="fault1")
 
     # Check that the loaded network is the same as the original network

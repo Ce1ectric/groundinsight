@@ -27,12 +27,29 @@ sources correctly the algorithm has to:
    branch so that mesh and ring topologies receive the correct
    per-path current share.
 
-The DFS enumeration is exhaustive (NP-hard in the worst case)
-but the typical grounding networks are sparse enough — handfuls
-to a few dozen meshed branches — that it terminates quickly. For
-very dense topologies the result is cached on the `Network`
-object (`net.paths`) so that repeated `run_fault` calls do not
-re-traverse.
+The DFS enumeration is exhaustive, and its cost is **exponential
+in the number of independent loops** — not in the number of buses.
+A radial network of 500 buses has two paths and enumerates in
+milliseconds; a 5×5 grid of 25 buses already has 8 512 simple
+paths, and a 6×6 grid 1 262 816, which takes about a minute.
+Treat the enumeration as affordable only for radial and lightly
+meshed topologies.
+
+Since 0.6.1 the default `phase_current_mode="auto"` therefore does
+**not** enumerate at all. It only needs to know which sources
+reach the fault, and `Network.sources_reaching(fault_name)`
+answers that with a breadth-first search in `O(V + E)`. The
+enumeration runs for the legacy `phase_current_mode="paths"`, for
+the transient state-space solver, and whenever you ask for it with
+`gi.create_paths(network)`. `net.paths` is consequently empty
+after a default `run_fault`.
+
+`PathFinder.find_paths` refuses to enumerate more than
+`pathfinder.get_pathfinder_max_paths()` paths (default `100_000`)
+and raises a `ValueError` that names the bus pair instead of
+running for hours. Adjust it with
+`pathfinder.set_pathfinder_max_paths(...)` if you genuinely need
+the full set on a meshed network.
 
 ## Example
 
@@ -44,8 +61,8 @@ from groundinsight.pathfinder import PathFinder
 # for the create_* calls.
 net.set_active_fault("f1")
 
-# `create_paths` is called automatically by run_fault. To inspect
-# the enumerated paths manually:
+# `create_paths` is NOT called by run_fault in the default
+# phase_current_mode="auto". To enumerate the paths explicitly:
 gi.create_paths(network=net)
 for p in net.paths.values():
     print(p.source, "->", p.fault,

@@ -392,9 +392,32 @@ def _sources_feeding(network: Network, fault_name: str) -> List[str]:
     """
     Names of the sources that feed ``fault_name``.
 
-    Uses the enumerated paths when they are available (matching what the
-    solver actually superposes); otherwise falls back to every source
-    sitting on an active bus.
+    Uses the enumerated paths when they are available, because they are what
+    the legacy ``phase_current_mode="paths"`` solve actually superposes.
+    Since audit pass 18 the default mode no longer enumerates them, so the
+    next step asks the same question directly:
+    :meth:`~groundinsight.models.core_models.Network.sources_reaching` runs a
+    breadth-first search over the active sub-graph and returns exactly the
+    sources a full enumeration would have found. Without it the empty path
+    set would drop straight into the last resort below and count a
+    galvanically isolated infeed towards the characteristics of this fault.
+
+    The last resort -- every source on an active bus -- is unchanged and is
+    reached in exactly the same situation as before: no source connects to
+    the fault at all, so there is nothing to select and the caller is better
+    served by the stored source data than by an empty list.
+
+    Parameters
+    ----------
+    network : Network
+        The network holding the sources and the fault.
+    fault_name : str
+        The fault to find the feeding sources for.
+
+    Returns
+    -------
+    List[str]
+        Source names in the insertion order of ``network.sources``.
     """
     from_paths = {
         path.source
@@ -403,6 +426,11 @@ def _sources_feeding(network: Network, fault_name: str) -> List[str]:
     }
     if from_paths:
         return [name for name in network.sources if name in from_paths]
+
+    if fault_name in network.faults:
+        reaching = network.sources_reaching(fault_name)
+        if reaching:
+            return reaching
 
     result = []
     for name, source in network.sources.items():
