@@ -1,11 +1,15 @@
 from sympy import sympify, I, symbols
 import ast
 import io
+import keyword
 import tokenize
+import unicodedata
 
 
 # Names that must never appear in a formula string: the usual entry points
-# for sandbox escapes when SymPy evaluates the expression as Python.
+# for sandbox escapes when SymPy evaluates the expression as Python. The
+# call-position whitelist below already blocks every one of them, but the
+# denylist is kept as a second net and as documentation of the threat.
 _FORBIDDEN_FORMULA_NAMES = frozenset({
     "eval", "exec", "compile", "open", "input", "breakpoint", "exit", "quit",
     "help", "globals", "locals", "vars", "dir", "getattr", "setattr",
@@ -13,25 +17,169 @@ _FORBIDDEN_FORMULA_NAMES = frozenset({
     "object", "super", "license", "credits", "copyright", "lambda",
 })
 
-# Operators with no place in an arithmetic impedance formula; blocking them
-# closes attribute access and statement-level tricks.
-_FORBIDDEN_FORMULA_OPS = frozenset({".", ";", ":=", "@", "->", "..."})
+# The only operators an arithmetic impedance formula needs. Everything else
+# -- attribute access, subscripting, comparison, the walrus, the matrix
+# product, statement separators -- is rejected.
+_ALLOWED_FORMULA_OPS = frozenset({"+", "-", "*", "/", "**", "(", ")", ","})
+
+# Functions a formula may *call*. This is the security-relevant whitelist:
+# ``sympy.lambdify`` turns the parsed expression back into Python source and
+# ``exec``s it, so a name in call position is the one construct that can
+# reach a builtin. Everything here is a SymPy function that lambdify maps
+# onto NumPy, and every one of them is closed over the reals/complexes --
+# no ``factorial``, no ``gamma``, so no cheap way to build a huge number.
+_ALLOWED_FORMULA_FUNCTIONS = frozenset({
+    "sqrt", "exp", "log", "ln", "Abs", "abs", "sign", "conjugate",
+    "re", "im", "arg",
+    "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
+    "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
+    "Min", "Max", "floor", "ceiling",
+})
+
+# Token categories that may appear at all. Anything else (string and f-string
+# parts, error tokens) is rejected outright.
+_ALLOWED_TOKEN_TYPES = frozenset({
+    tokenize.NAME, tokenize.NUMBER, tokenize.OP,
+    tokenize.NEWLINE, tokenize.NL, tokenize.INDENT, tokenize.DEDENT,
+    tokenize.COMMENT, tokenize.ENDMARKER,
+})
+
+# Longest formula string the guard will look at. An impedance formula is a
+# handful of terms; anything past this is not a formula but an attempt to
+# make the checks themselves expensive. Bounding the input keeps every pass
+# below linear-in-practice cost.
+_MAX_FORMULA_LENGTH = 4096
+
+# Largest literal exponent a formula may use. ``10**10**9`` is pure
+# arithmetic over allowed tokens, but SymPy evaluates it eagerly and the
+# result has a billion digits -- a denial of service with a ten-character
+# formula. Physical formulas use exponents of single digits.
+_MAX_LITERAL_EXPONENT = 1000
+
+_SKIPPED_TOKEN_TYPES = frozenset({
+    tokenize.NEWLINE, tokenize.NL, tokenize.INDENT, tokenize.DEDENT,
+    tokenize.COMMENT, tokenize.ENDMARKER,
+})
+
+
+def _significant_tokens(tokens):
+    """
+    Drop the layout tokens so neighbours can be inspected in one pass.
+
+    Newlines, indentation, comments and the end marker carry no meaning for
+    an arithmetic expression, but they sit between the tokens whose
+    *adjacency* the guard needs -- "is this name followed by an opening
+    parenthesis?", "is this parenthesis preceded by a closing one?".
+    Filtering once keeps that lookahead O(1) per token instead of scanning
+    forward from every name.
+
+    Parameters
+    ----------
+    tokens : List[tokenize.TokenInfo]
+        The full token list of the formula.
+
+    Returns
+    -------
+    List[tokenize.TokenInfo]
+        The tokens that carry meaning, in order.
+    """
+    return [tok for tok in tokens if tok.type not in _SKIPPED_TOKEN_TYPES]
+
+
+def _assert_no_runaway_power(value: str) -> None:
+    """
+    Reject exponentiations that would blow up before anything is plotted.
+
+    ``sympy.sympify`` evaluates integer powers eagerly, so ``10**10**9``
+    allocates a number with a billion digits and never returns. The check
+    is structural rather than lexical: a power whose exponent is itself a
+    power, or whose exponent is a literal above
+    ``_MAX_LITERAL_EXPONENT``, is refused.
+
+    Parameters
+    ----------
+    value : str
+        The formula string, already tokenised successfully.
+
+    Raises
+    ------
+    ValueError
+        If the formula contains a runaway exponentiation.
+    """
+    try:
+        tree = ast.parse(value, mode="eval")
+    except SyntaxError:
+        # Not parseable as an expression -- the SymPy parse downstream will
+        # produce the familiar formula error.
+        return
+
+    def _literal_exponent(node):
+        """Numeric value of ``node`` if it is a (signed) numeric literal."""
+        if isinstance(node, ast.UnaryOp) and isinstance(
+            node.op, (ast.UAdd, ast.USub)
+        ):
+            return _literal_exponent(node.operand)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return abs(node.value)
+        return None
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.BinOp) or not isinstance(node.op, ast.Pow):
+            continue
+        if any(
+            isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.Pow)
+            for sub in ast.walk(node.right)
+        ):
+            raise ValueError(
+                "Impedance formula contains a nested exponentiation "
+                "(a power in the exponent). SymPy evaluates integer powers "
+                "eagerly, so such a formula can allocate an arbitrarily "
+                "large number before any impedance is computed."
+            )
+        exponent = _literal_exponent(node.right)
+        if exponent is not None and exponent > _MAX_LITERAL_EXPONENT:
+            raise ValueError(
+                f"Impedance formula uses the exponent {exponent!r}, which "
+                f"exceeds the limit of {_MAX_LITERAL_EXPONENT}. Physical "
+                "impedance formulas do not need exponents of that size."
+            )
 
 
 def assert_safe_formula(value: str) -> None:
     """
     Reject formula strings that could execute arbitrary code when parsed.
 
-    ``sympy.sympify`` evaluates its input as Python, so an unvalidated
-    formula such as ``"__import__(\'os\').system(\'...\')"`` is remote code
-    execution as soon as a (possibly shared) network JSON file or database
-    row is loaded. This guard tokenises ``value`` and rejects anything that
-    is not plain arithmetic over identifiers and numbers: dunder names, a
-    denylist of dangerous builtins, attribute access and other
-    non-arithmetic operators, and string literals. Ordinary free symbols
-    (``rho``, ``f``, ``l``, ``R`` ...) and numeric literals (including
-    scientific notation and the ``NaN`` open-end sentinel) are still
-    accepted, so no legitimate formula is affected.
+    ``sympy.sympify`` evaluates its input as Python and ``sympy.lambdify``
+    turns the parsed expression back into Python source that is ``exec``ed,
+    so an unvalidated formula is remote code execution as soon as a
+    (possibly shared) network JSON file or database row is loaded.
+
+    The guard tokenises ``value`` and applies three whitelists:
+
+    * **Names.** Every ``NAME`` token must be pure ASCII and unchanged by
+      NFKC normalisation. CPython normalises identifiers while compiling,
+      so the fullwidth ``ｅval`` reaches the generated lambdify source as
+      ``eval``; comparing the raw token against an ASCII denylist misses
+      that entirely. Dunder names and Python keywords (``lambda`` among
+      them) are rejected as well.
+    * **Calls.** A name immediately followed by ``(`` must be one of
+      ``_ALLOWED_FORMULA_FUNCTIONS``. This is the whitelist that matters:
+      a bare name becomes a SymPy symbol and cannot execute anything,
+      whereas a name in call position ends up as a real call in the
+      generated source. Names that are *not* called stay unrestricted --
+      an engineer may declare any parameter name (``S``, ``beta``,
+      ``gamma`` ...), and the calculator binds declared names to plain
+      symbols.
+    * **Operators.** Only ``+ - * / ** ( ) ,`` are allowed, which closes
+      attribute access, subscripting, slicing, comparisons, the walrus
+      operator and statement separators in one rule. A ``(`` directly
+      after ``)`` is rejected as well: that is a call on an expression.
+
+    String literals and every other token category are refused, and
+    :func:`_assert_no_runaway_power` blocks the ``10**10**9`` class of
+    resource exhaustion. Ordinary formulas -- ``"(0.25 + j*f*0.012)*l"``,
+    ``"sqrt(rho) + log(f)"``, the ``"NaN"`` open-end sentinel -- are
+    unaffected.
 
     Parameters
     ----------
@@ -42,34 +190,85 @@ def assert_safe_formula(value: str) -> None:
     ------
     ValueError
         If the formula contains a construct that is not permitted.
+
+    Examples
+    --------
+    >>> assert_safe_formula("(0.25 + j*f*0.012)*l")
+    >>> assert_safe_formula("sqrt(rho / f)")
     """
     if not isinstance(value, str):
         return
+    if len(value) > _MAX_FORMULA_LENGTH:
+        raise ValueError(
+            f"Impedance formula is {len(value)} characters long, above the "
+            f"limit of {_MAX_FORMULA_LENGTH}. An impedance formula is a "
+            "handful of terms; a string this size is not one."
+        )
     try:
         tokens = list(tokenize.generate_tokens(io.StringIO(value).readline))
     except (tokenize.TokenError, IndentationError, SyntaxError):
         # A string that cannot be tokenised is handed on unchanged; the
         # subsequent SymPy parse raises the familiar formula error.
         return
+
     for tok in tokens:
+        if tok.type not in _ALLOWED_TOKEN_TYPES:
+            raise ValueError(
+                "Impedance formula must not contain string literals or "
+                f"other non-arithmetic tokens (found {tok.string!r})."
+            )
+
+    significant = _significant_tokens(tokens)
+    for index, tok in enumerate(significant):
         if tok.type == tokenize.NAME:
             name = tok.string
-            if "__" in name or name in _FORBIDDEN_FORMULA_NAMES:
+            if not name.isascii() or unicodedata.normalize("NFKC", name) != name:
+                raise ValueError(
+                    f"Impedance formula contains the non-ASCII name {name!r}. "
+                    "Python normalises identifiers (NFKC) while compiling, so "
+                    "such a name can resolve to a builtin that the plain "
+                    "spelling would not reach. Use ASCII symbol names."
+                )
+            if "__" in name or keyword.iskeyword(name):
+                raise ValueError(
+                    f"Impedance formula contains a disallowed name {name!r}. "
+                    "Formulas may only use arithmetic over symbols "
+                    "(rho, f, l, R, X, ...) and numbers."
+                )
+            following = (
+                significant[index + 1] if index + 1 < len(significant) else None
+            )
+            if following is not None and following.string == "(":
+                if name not in _ALLOWED_FORMULA_FUNCTIONS:
+                    raise ValueError(
+                        f"Impedance formula calls {name!r}, which is not an "
+                        "allowed function. Permitted calls are: "
+                        f"{', '.join(sorted(_ALLOWED_FORMULA_FUNCTIONS))}."
+                    )
+            elif name in _FORBIDDEN_FORMULA_NAMES:
                 raise ValueError(
                     f"Impedance formula contains a disallowed name {name!r}. "
                     "Formulas may only use arithmetic over symbols "
                     "(rho, f, l, R, X, ...) and numbers."
                 )
         elif tok.type == tokenize.OP:
-            if tok.string in _FORBIDDEN_FORMULA_OPS:
+            if tok.string not in _ALLOWED_FORMULA_OPS:
                 raise ValueError(
                     "Impedance formula contains a disallowed operator "
-                    f"{tok.string!r}."
+                    f"{tok.string!r}. Permitted operators are "
+                    "+ - * / ** ( ) and the argument comma."
                 )
-        elif tok.type == tokenize.STRING:
-            raise ValueError(
-                "Impedance formula must not contain string literals."
-            )
+            if (
+                tok.string == "("
+                and index > 0
+                and significant[index - 1].string == ")"
+            ):
+                raise ValueError(
+                    "Impedance formula calls the result of an expression, "
+                    "which is never arithmetic."
+                )
+
+    _assert_no_runaway_power(value)
 
 
 def validate_impedance_formula_value(value: str) -> str:
