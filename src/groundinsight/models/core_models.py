@@ -49,6 +49,35 @@ class NetworkFrequencyOrderWarning(UserWarning):
     """
 
 
+class TransientModelWarning(UserWarning):
+    """Warning category for a transient run whose model is narrower than its input.
+
+    Emitted by :mod:`groundinsight.simulation.transient` when the network
+    carries something a solver path cannot represent, and the result is
+    therefore quantitatively different from what the same network yields
+    elsewhere. It is deliberately *not* an error: the remaining physics is
+    still solved correctly and the answer is often the one the user wants,
+    but the difference has to be visible rather than inferred from a
+    documentation chapter.
+
+    Current cases:
+
+    * the FFT solver meeting a branch with mutual coupling, which it does
+      not evaluate (the stationary solver and the state-space solver do),
+    * either transient solver meeting an active fault with per-frequency
+      ``scalings`` other than 1, which is a frequency-domain concept the
+      time-domain source waveform replaces,
+    * a mutual inductance larger than the branch's own ``L_self``, which is
+      not physically realisable for two coupled conductors and is almost
+      always a mH/H unit slip.
+
+    Notes
+    -----
+    Suppress with ``warnings.simplefilter('ignore', TransientModelWarning)``;
+    turn into an error with ``simplefilter('error', TransientModelWarning)``.
+    """
+
+
 # data types
 class ComplexNumber(BaseModel):
     """

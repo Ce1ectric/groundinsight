@@ -27,18 +27,26 @@ Design choices recorded in the Phase 3 discussion:
 * Mutual coupling is not yet evaluated by the FFT solver; the phase
   current along each path would itself be time-dependent and is more
   natural to handle in the state-space formulation. The FFT solver
-  ignores mutual impedance and emits no warning -- it is documented as a
-  known limitation and the demo notebook shows how to interpret the
-  resulting EPR.
+  ignores mutual impedance and says so: meeting a coupled branch it
+  raises a :class:`~groundinsight.models.core_models.TransientModelWarning`,
+  because the same network solved stationarily or with the state-space
+  solver returns a different peak (17 % on the two-branch reference
+  case) and a silent 17 % is indistinguishable from a modelling result.
+* Only sources that can actually reach the fault inject. The stationary
+  solver filters its sources through the source-to-fault paths; the FFT
+  solver reproduces that with a breadth-first reachability search over
+  the active branches, so a galvanically isolated source contributes
+  0 V in both solvers instead of its full spectrum in one of them.
 """
 
 import logging
-from typing import Callable, Dict, List, Optional, TYPE_CHECKING
+import warnings
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, TYPE_CHECKING
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from groundinsight.models.core_models import Network
+from groundinsight.models.core_models import Network, TransientModelWarning
 
 if TYPE_CHECKING:
     import polars as pl  # forward reference for type annotations only
@@ -54,6 +62,104 @@ logger = logging.getLogger(__name__)
 
 
 WaveformFunc = Callable[[np.ndarray], np.ndarray]
+
+
+def _passivity_message(
+    element: str, field: str, value: float, quantity: str
+) -> str:
+    """Compose the rejection message for a negative lumped RLC value.
+
+    The state-space solver inverts or integrates every one of these values.
+    A negative resistance generates energy, a negative inductance or
+    capacitance has no physical realisation at all, and the pre-0.6.0 code
+    silently *dropped* such an element via its ``> 0`` guards -- so a sign
+    error in a fitted formula came back as a lossless network rather than
+    as a message.
+
+    Parameters
+    ----------
+    element : str
+        How to name the element, e.g. ``"branch 'L12'"``.
+    field : str
+        The model field, e.g. ``"R_self"``.
+    value : float
+        The offending value.
+    quantity : str
+        The physical quantity, e.g. ``"resistance"``.
+
+    Returns
+    -------
+    str
+        The full message for the ``ValueError``.
+    """
+    return (
+        f"The state-space solver rejects {element}: {field} = {value:g} is "
+        f"negative. A passive earthing element cannot have a negative "
+        f"{quantity}. Up to 0.6.0 such a value was skipped by the "
+        f"positivity guards and the element simply vanished from the model, "
+        f"which reads as a lossless -- and therefore never decaying -- "
+        f"network rather than as the formula error it is. Check the "
+        f"*_formula on the type at the lowest rho and the shortest length "
+        f"in the model."
+    )
+
+
+def _time_grid(t_end: float, dt: float) -> Tuple[np.ndarray, int]:
+    """Build the time grid both transient solvers run on.
+
+    Until 0.6.0 the two solvers derived their own grid: the FFT solver used
+    ``round(t_end/dt)`` samples rounded *up* to an even count, the state-space
+    solver ``round(t_end/dt) + 1``. The two therefore differed in length by one
+    or two samples for the same ``(t_end, dt)``, so the cheapest cross-check
+    the package has -- comparing the two results element-wise -- failed on the
+    array shape, and the extra state-space sample sat one ``dt`` beyond the
+    window the FFT had solved.
+
+    One grid for both removes that. ``N = round(t_end/dt)``, rounded *up* to an
+    even count, over ``t = 0 ... (N-1)*dt``. Two properties are deliberate:
+
+    * ``N*dt >= t_end``: the requested duration is the *period* of the grid,
+      never less than asked for. It is the period rather than the last sample
+      because the DFT treats the trace as periodic -- a source that repeats
+      with ``t_end`` stays exactly periodic in the window, which is what keeps
+      a 50 Hz excitation on a bin instead of spreading it over two.
+    * ``N`` even, because ``rfft``/``irfft`` round-trip cleanly with the
+      default normalisation only then. The adjustment moves the end of the
+      window by one ``dt`` and is logged rather than applied silently.
+
+    Parameters
+    ----------
+    t_end : float
+        Length of the simulated window in seconds.
+    dt : float
+        Sample spacing in seconds.
+
+    Returns
+    -------
+    tuple of (numpy.ndarray, int)
+        The time samples ``0, dt, ..., (N-1)*dt`` and their count ``N``.
+
+    Raises
+    ------
+    ValueError
+        If ``t_end`` or ``dt`` is not strictly positive.
+    """
+    if t_end <= 0 or dt <= 0:
+        raise ValueError("t_end and dt must be strictly positive.")
+    n_samples = int(round(t_end / dt))
+    if n_samples % 2 == 1:
+        n_samples += 1
+        logger.debug(
+            "Transient time grid extended from %d to %d samples so N is even; "
+            "the window is %g s instead of the requested %g s, dt unchanged "
+            "at %g s.",
+            n_samples - 1,
+            n_samples,
+            n_samples * dt,
+            t_end,
+            dt,
+        )
+    return np.arange(n_samples) * dt, n_samples
 
 
 class ResultTransient(BaseModel):
@@ -156,7 +262,14 @@ class TransientStudy:
     ----------
     network : Network
         The network model. Buses, branches, sources and the active fault
-        are taken from this object. The network is not mutated.
+        are taken from this object. No impedance, no ``active`` flag and no
+        stored result is written back. The one exception is
+        ``network.paths``: the state-space solver reads the source-to-fault
+        paths to build the mutual-coupling feedforward and rebuilds them
+        (with a warning) when they are missing or stale, because guessing a
+        zero coupling factor cost 71 % of the peak EPR on a two-branch
+        reference case. Run ``gi.run_fault(...)`` or ``gi.create_paths(...)``
+        first and the study touches nothing at all.
     fault_name : str
         Name of the fault to activate for this study.
 
@@ -269,6 +382,8 @@ class TransientStudy:
         t_end: float,
         dt: float,
         solver: str = "fft",
+        f_eval: Optional[float] = None,
+        zero_pad: bool = False,
     ) -> ResultTransient:
         """
         Run the transient solve and return the resulting time series.
@@ -277,7 +392,9 @@ class TransientStudy:
         ----------
         t_end : float
             End time of the simulation in seconds. ``t=0`` is always the
-            start.
+            start. Both solvers use the same grid (see
+            :func:`_time_grid`), which may extend by one sample so the
+            sample count is even.
         dt : float
             Time-step in seconds. For the FFT solver this determines the
             Nyquist frequency ``f_max = 1/(2*dt)`` and therefore the
@@ -290,6 +407,25 @@ class TransientStudy:
             impedances); ``"state_space"`` uses the lumped RLC fields on
             ``BusType`` / ``BranchType`` and integrates with
             :func:`scipy.signal.lsim`. Defaults to ``"fft"``.
+        f_eval : float, optional
+            *State-space solver only.* The frequency in Hz at which the
+            lumped ``R`` / ``L`` / ``C`` values and the Thevenin source
+            impedance are read. The state-space model treats them as
+            frequency-independent, so this picks the operating point.
+            Must be one of ``network.frequencies``. Defaults to the
+            **smallest strictly positive** entry of ``network.frequencies``
+            rather than to its first element: with ``[0, 50]`` the first
+            element is 0 Hz, where ``L_src = Im(Z_src)/omega`` is not
+            defined and used to silently come out as zero -- a factor of
+            680 on the EPR of the reference case, decided by nothing but
+            the order of the frequency list.
+        zero_pad : bool, optional
+            *FFT solver only.* Solve on a window twice as long and return
+            only its first half. The DFT is periodic, so a response that
+            has not decayed by ``t_end`` wraps around into the start of
+            the trace; doubling the window pushes the wrap out of the
+            reported interval. Costs twice the solve time. Defaults to
+            ``False``.
 
         Returns
         -------
@@ -300,15 +436,25 @@ class TransientStudy:
         ------
         ValueError
             If no source waveform is set, if the time parameters are
-            invalid, or if the network is missing the lumped RLC fields
-            required by the state-space solver.
+            invalid, if ``f_eval`` is not one of ``network.frequencies``,
+            or if the network is missing the lumped RLC fields required by
+            the state-space solver.
         NotImplementedError
             If ``solver`` is not one of the supported identifiers.
+
+        Warns
+        -----
+        TransientModelWarning
+            If the network carries mutual coupling the FFT solver cannot
+            evaluate, if the active fault carries per-frequency
+            ``scalings`` other than 1 (both solvers apply the source
+            waveform as given and ignore them), or if the FFT window ends
+            while the response is still ringing.
         """
         if solver == "fft":
-            return self._solve_fft(t_end=t_end, dt=dt)
+            return self._solve_fft(t_end=t_end, dt=dt, zero_pad=zero_pad)
         if solver == "state_space":
-            return self._solve_state_space(t_end=t_end, dt=dt)
+            return self._solve_state_space(t_end=t_end, dt=dt, f_eval=f_eval)
         raise NotImplementedError(
             f"Unknown transient solver: '{solver}'. "
             "Supported: 'fft', 'state_space'."
@@ -318,9 +464,9 @@ class TransientStudy:
     # internals
     # ------------------------------------------------------------------
 
-    def _solve_fft(self, *, t_end: float, dt: float) -> ResultTransient:
-        if t_end <= 0 or dt <= 0:
-            raise ValueError("t_end and dt must be strictly positive.")
+    def _solve_fft(
+        self, *, t_end: float, dt: float, zero_pad: bool = False
+    ) -> ResultTransient:
         if not self._source_waveforms:
             raise ValueError(
                 "No source waveform set. Call set_source_waveform(...) first."
@@ -334,17 +480,24 @@ class TransientStudy:
                 )
 
         # --- time and frequency grids --------------------------------------
-        n_samples = int(round(t_end / dt))
-        # Even N so rfft / irfft round-trip cleanly with default normalisation.
-        if n_samples % 2 == 1:
-            n_samples += 1
-        if n_samples < 4:
+        t_out, n_out = _time_grid(t_end, dt)
+        if n_out < 4:
             raise ValueError(
                 "t_end / dt yields fewer than four samples; choose a finer dt."
             )
+        # ``zero_pad`` doubles the *solved* window and reports only its first
+        # half, which moves the periodic wraparound of the DFT out of the
+        # interval the user looks at. The waveform is sampled over the whole
+        # doubled window rather than zeroed on its second half: a step that is
+        # still on at ``t_end`` is still on afterwards, and forcing it to zero
+        # would inject a switching edge that is not in the model.
+        n_samples = 2 * n_out if zero_pad else n_out
         t = np.arange(n_samples) * dt
         freqs = np.fft.rfftfreq(n_samples, d=dt)
         n_freqs = freqs.size
+
+        self._warn_about_ignored_mutual_coupling()
+        self._warn_about_fault_scalings()
 
         # --- sample and FFT the source waveforms ---------------------------
         source_signals_t: Dict[str, np.ndarray] = {}
@@ -398,6 +551,20 @@ class TransientStudy:
             else None
         )
 
+        # --- sources that can reach the fault ------------------------------
+        # Same rule as the stationary solver, which injects only sources with
+        # a path to the active fault. Without it a source on a galvanically
+        # isolated bus injected its full spectrum there *and* subtracted it
+        # again at the fault bus, so every bus in the network came out wrong.
+        injecting = self._sources_reaching_fault(
+            list(source_spectra), bus_index, fault_bus
+        )
+        source_spectra = {
+            name: spectrum
+            for name, spectrum in source_spectra.items()
+            if name in injecting
+        }
+
         # --- per-frequency solve -------------------------------------------
         u_spectrum = np.zeros((n_buses, n_freqs), dtype=complex)
         for k in range(n_freqs):
@@ -418,21 +585,25 @@ class TransientStudy:
                 )
 
         # --- IFFT for each observation point -------------------------------
+        # ``[:n_out]`` is the identity unless ``zero_pad`` doubled the window.
         epr_t: Dict[str, List[float]] = {}
+        epr_full: Dict[str, np.ndarray] = {}
         for bus_name in self._obs_buses:
             if bus_name not in bus_index:
                 # Inactive bus -> all-zero response, but stay in the result
                 # to make the contract explicit.
-                epr_t[bus_name] = [0.0] * n_samples
+                epr_t[bus_name] = [0.0] * n_out
                 continue
             spec = u_spectrum[bus_index[bus_name], :]
-            epr_t[bus_name] = np.fft.irfft(spec, n=n_samples).tolist()
+            signal = np.fft.irfft(spec, n=n_samples)
+            epr_full[bus_name] = signal
+            epr_t[bus_name] = signal[:n_out].tolist()
 
         i_branch_t: Dict[str, List[float]] = {}
         for branch_name in self._obs_branches:
             branch = self.network.branches.get(branch_name)
             if branch is None or branch_name not in branch_Z:
-                i_branch_t[branch_name] = [0.0] * n_samples
+                i_branch_t[branch_name] = [0.0] * n_out
                 continue
             from_idx = bus_index[branch.from_bus]
             to_idx = bus_index[branch.to_bus]
@@ -442,18 +613,249 @@ class TransientStudy:
                 if Z == 0 or not np.isfinite(Z):
                     continue
                 i_spec[k] = (u_spectrum[to_idx, k] - u_spectrum[from_idx, k]) / Z
-            i_branch_t[branch_name] = np.fft.irfft(i_spec, n=n_samples).tolist()
+            i_branch_t[branch_name] = np.fft.irfft(i_spec, n=n_samples)[
+                :n_out
+            ].tolist()
+
+        self._check_fft_periodicity(epr_full, zero_pad=zero_pad)
 
         return ResultTransient(
-            time_s=t.tolist(),
+            time_s=t_out.tolist(),
             epr_t=epr_t,
             i_branch_t=i_branch_t,
             source_t={
-                name: sig.tolist() for name, sig in source_signals_t.items()
+                name: sig[:n_out].tolist()
+                for name, sig in source_signals_t.items()
             },
             fault=self.fault_name,
             solver="fft",
         )
+
+    # ------------------------------------------------------------------
+    # FFT solver guards
+    # ------------------------------------------------------------------
+
+    _PERIODICITY_TOLERANCE: float = 0.01
+
+    def _check_fft_periodicity(
+        self, signals: Dict[str, np.ndarray], *, zero_pad: bool
+    ) -> None:
+        """Warn when the FFT window ends while the response is still ringing.
+
+        The DFT treats the trace as one period of a periodic signal. If the
+        impulse response has not decayed by the end of the solved window, the
+        tail wraps around into the beginning -- which is where the user reads
+        the pre-fault state. Measured on an R-parallel-L bus with a step at
+        0.1 s and a 0.4 s window: 45.9 V at ``t = 0``, i.e. before the fault,
+        and a post-fault peak 37 % below the state-space answer. With the
+        window at 4 s the two solvers agree to 0.01 %.
+
+        The test is deliberately crude and cheap: the last sample of the
+        solved window, compared against the peak of the same signal. A
+        decayed response ends near zero; a ringing one does not. It is
+        evaluated on the *solved* window, so it still fires when
+        ``zero_pad`` doubled the window and the response has not decayed
+        even there.
+
+        Parameters
+        ----------
+        signals : dict of str to numpy.ndarray
+            The reconstructed EPR of every observed active bus, over the
+            full solved window.
+        zero_pad : bool
+            Whether the window was already doubled, which changes the advice.
+        """
+        offenders: List[str] = []
+        for name, signal in signals.items():
+            peak = float(np.max(np.abs(signal))) if signal.size else 0.0
+            if peak <= 0.0:
+                continue
+            if abs(float(signal[-1])) > self._PERIODICITY_TOLERANCE * peak:
+                offenders.append(name)
+        if not offenders:
+            return
+        shown = ", ".join(sorted(offenders)[:3])
+        if len(offenders) > 3:
+            shown += f", ... ({len(offenders)} buses in total)"
+        remedy = (
+            "Increase t_end further"
+            if zero_pad
+            else "Increase t_end, or pass zero_pad=True to solve on a window "
+            "twice as long and report only its first half"
+        )
+        warnings.warn(
+            f"The FFT window ends while the response is still ringing at "
+            f"{shown}: the last sample is more than "
+            f"{self._PERIODICITY_TOLERANCE:.0%} of the peak. The DFT is "
+            f"periodic, so that tail wraps around into the start of the "
+            f"trace and shows up as a potential rise before the fault and as "
+            f"a peak that is too small after it (measured -37 % on an R||L "
+            f"bus with a 0.4 s window). {remedy}, until t_end is well beyond "
+            f"the slowest time constant of the network.",
+            TransientModelWarning,
+            stacklevel=3,
+        )
+
+    def _warn_about_ignored_mutual_coupling(self) -> None:
+        """Warn when the FFT solver meets coupling it does not evaluate.
+
+        The FFT solver builds ``Y`` from the bus grounding impedances and the
+        branch *self* impedances only; ``BranchType.mutual_impedance_formula``
+        and the lumped ``R_mutual`` / ``M_mutual`` never enter it. The
+        stationary solver and the state-space solver both do evaluate them, so
+        the same network answers differently depending on which one is asked
+        (+17 % on the peak EPR of the two-branch reference case with
+        ``M_mutual = 8e-4 H``). That difference has to be visible.
+        """
+        coupled: List[str] = []
+        for name, branch in self.network.branches.items():
+            if not branch.active or not branch.type.grounding_conductor:
+                continue
+            if branch.from_bus not in self.network.buses:
+                continue
+            has_mutual = any(
+                complex(value.real, value.imag) != 0
+                for value in (branch.mutual_impedance or {}).values()
+            )
+            if not has_mutual:
+                has_mutual = any(
+                    float(value) != 0.0
+                    for table in (branch.M_mutual, branch.R_mutual)
+                    if table
+                    for value in table.values()
+                )
+            if has_mutual:
+                coupled.append(name)
+        if not coupled:
+            return
+        shown = ", ".join(sorted(coupled)[:3])
+        if len(coupled) > 3:
+            shown += f", ... ({len(coupled)} branches in total)"
+        warnings.warn(
+            f"The FFT transient solver does not evaluate mutual coupling, but "
+            f"the network carries it on: {shown}. The phase current along "
+            f"each source-to-fault path is itself time-dependent, which the "
+            f"frequency-domain injection cannot express; the Norton-equivalent "
+            f"mutual currents of the stationary solver are therefore missing "
+            f"from this result. Expect a lower earth potential rise than "
+            f"gi.run_fault(...) reports for the same network (+17 % on the "
+            f"reference case). Use solver='state_space', which does model the "
+            f"coupling for current sources.",
+            TransientModelWarning,
+            stacklevel=3,
+        )
+
+    def _warn_about_fault_scalings(self) -> None:
+        """Warn when the active fault carries per-frequency scalings.
+
+        ``Fault.scalings`` weights the source phasors per frequency in the
+        stationary solve. Both transient solvers take the source *waveform*
+        as the literal injection instead -- the waveform already carries the
+        spectral content, and applying a per-frequency factor on top of an
+        FFT bin grid that has nothing to do with ``network.frequencies``
+        would be meaningless. That is a deliberate decision, but it makes a
+        factor-of-3 difference against the stationary result and was only
+        ever recorded in an inline comment.
+        """
+        fault = self.network.faults[self.fault_name]
+        scaled = {
+            freq: value
+            for freq, value in (fault.scalings or {}).items()
+            if float(value) != 1.0
+        }
+        if not scaled:
+            return
+        shown = ", ".join(
+            f"{freq:g} Hz: {value:g}" for freq, value in sorted(scaled.items())
+        )
+        warnings.warn(
+            f"Fault '{self.fault_name}' carries scalings other than 1 "
+            f"({shown}), and the transient solvers ignore them. The source "
+            f"waveform passed to set_source_waveform(...) is used as the "
+            f"literal injection, because the FFT bin grid is set by t_end and "
+            f"dt and has no relation to network.frequencies. Scale the "
+            f"waveform itself if the transient is meant to carry the same "
+            f"weighting as the stationary solve.",
+            TransientModelWarning,
+            stacklevel=3,
+        )
+
+    def _sources_reaching_fault(
+        self,
+        source_names: Sequence[str],
+        bus_index: Dict[str, int],
+        fault_bus: str,
+    ) -> List[str]:
+        """Return the sources that are galvanically connected to the fault bus.
+
+        Mirrors
+        :meth:`~groundinsight.electrical_network.ElectricalNetwork._sources_with_path_to_active_fault`,
+        which filters the stationary injections through ``network.paths``.
+        The reachability is recomputed here with a breadth-first search over
+        the *active* branches rather than read off the paths, so a transient
+        study does not depend on a path set having been built first and does
+        not trigger the path enumeration itself.
+
+        The search walks every active branch whose two endpoints are both
+        active -- exactly the graph :class:`~groundinsight.pathfinder.PathFinder`
+        builds -- and *not* only the branches carrying a grounding conductor.
+        A line without an earth wire still carries the phase current that
+        drives the fault, which is why the stationary solver counts its
+        source as feeding the fault too.
+
+        Parameters
+        ----------
+        source_names : sequence of str
+            Candidate source names.
+        bus_index : dict of str to int
+            The active buses of this solve.
+        fault_bus : str
+            Bus the active fault sits on.
+
+        Returns
+        -------
+        list of str
+            The subset of ``source_names`` that can reach ``fault_bus``,
+            in the order of ``network.sources``.
+        """
+        adjacency: Dict[str, List[str]] = {name: [] for name in bus_index}
+        for branch in self.network.branches.values():
+            if not branch.active:
+                continue
+            if branch.from_bus not in bus_index or branch.to_bus not in bus_index:
+                continue
+            adjacency[branch.from_bus].append(branch.to_bus)
+            adjacency[branch.to_bus].append(branch.from_bus)
+
+        reachable = {fault_bus}
+        queue = [fault_bus]
+        while queue:
+            current = queue.pop()
+            for neighbour in adjacency.get(current, ()):
+                if neighbour not in reachable:
+                    reachable.add(neighbour)
+                    queue.append(neighbour)
+
+        candidates = set(source_names)
+        keeping: List[str] = []
+        dropped: List[str] = []
+        for name in self.network.sources:
+            if name not in candidates:
+                continue
+            bus = self.network.sources[name].bus
+            if bus in reachable:
+                keeping.append(name)
+            else:
+                dropped.append(name)
+        if dropped:
+            logger.warning(
+                "Transient FFT solve: source(s) %s have no galvanic "
+                "connection to fault bus '%s' and do not inject, matching "
+                "the stationary solver's path filter.",
+                dropped,
+                fault_bus,
+            )
+        return keeping
 
     @staticmethod
     def _dc_substitute_for(
@@ -670,7 +1072,100 @@ class TransientStudy:
     # state-space solver
     # ------------------------------------------------------------------
 
-    def _solve_state_space(self, *, t_end: float, dt: float) -> ResultTransient:
+    #: Prefix of the synthetic loop branches the state-space solver creates
+    #: for Thevenin voltage sources. A real branch of the same name would be
+    #: mistaken for one of them, so the prefix is reserved (see
+    #: :meth:`_reject_reserved_branch_names`).
+    _VSRC_PREFIX = "__vsrc__"
+
+    def _reject_reserved_branch_names(self) -> None:
+        """Reject real branches whose name starts with the ``__vsrc__`` sentinel.
+
+        The state-space solver appends synthetic loop branches named
+        ``__vsrc__<source>`` to ``branch_inductive`` and later tells them
+        apart from real branches by that prefix alone. A real branch called
+        ``__vsrc__x`` would be skipped where the synthetic ones are skipped
+        (mutual coupling, branch-current output) and looked up in
+        ``network.branches`` where they are not, which fails with a
+        ``KeyError`` far from the cause. Rejecting the name up front is the
+        cheap half of the fix; the expensive half -- carrying an explicit
+        "synthetic" flag through the tuples -- buys nothing a user would see.
+
+        Raises
+        ------
+        ValueError
+            If any branch name starts with the reserved prefix.
+        """
+        clashing = sorted(
+            name
+            for name in self.network.branches
+            if name.startswith(self._VSRC_PREFIX)
+        )
+        if clashing:
+            raise ValueError(
+                f"Branch name(s) {clashing} start with '{self._VSRC_PREFIX}', "
+                f"which the state-space solver reserves for the synthetic loop "
+                f"branches it builds for Thevenin voltage sources. Rename the "
+                f"branch; the prefix is an internal sentinel and a real branch "
+                f"carrying it would be silently treated as one of them."
+            )
+
+    def _resolve_f_eval(self, f_eval: Optional[float]) -> float:
+        """Pick the frequency the lumped RLC values are read at.
+
+        The state-space model has one set of ``R`` / ``L`` / ``C`` values, so
+        one frequency of ``network.frequencies`` has to be chosen as the
+        operating point. Until 0.6.0 that was ``frequencies[0]`` --
+        the *list position*, not a physical choice. With ``[0, 50]`` the
+        chosen frequency is 0 Hz, where ``L_src = Im(Z_src) / omega`` divides
+        by zero and came out as a plain 0.0; the reference case's EPR moved
+        from 0.24 V to 161 V purely by prepending a DC bin to the frequency
+        list.
+
+        The default is therefore the smallest strictly positive frequency,
+        which is the lowest AC operating point the model was parameterised
+        for. A network whose frequency list is exactly ``[0.0]`` still
+        resolves to 0 Hz -- there is nothing else to choose -- and the
+        divide-by-zero is caught where it happens.
+
+        Parameters
+        ----------
+        f_eval : float or None
+            The caller's choice, or ``None`` for the default.
+
+        Returns
+        -------
+        float
+            The frequency in Hz.
+
+        Raises
+        ------
+        ValueError
+            If the network has no frequencies, or if ``f_eval`` is not one
+            of them.
+        """
+        frequencies = list(self.network.frequencies or [])
+        if not frequencies:
+            raise ValueError(
+                "The network has no frequencies; the state-space solver needs "
+                "at least one to read the lumped R/L/C values at."
+            )
+        if f_eval is None:
+            positive = [freq for freq in frequencies if freq > 0.0]
+            return float(min(positive)) if positive else float(min(frequencies))
+        chosen = float(f_eval)
+        if chosen not in frequencies:
+            raise ValueError(
+                f"f_eval = {chosen} Hz is not one of the network's frequencies "
+                f"{frequencies}. The lumped R/L/C tables are evaluated at "
+                f"exactly those frequencies, so a value in between has no "
+                f"stored counterpart."
+            )
+        return chosen
+
+    def _solve_state_space(
+        self, *, t_end: float, dt: float, f_eval: Optional[float] = None
+    ) -> ResultTransient:
         """
         Solve the transient via modified-nodal-analysis state-space form.
 
@@ -691,16 +1186,17 @@ class TransientStudy:
         are sampled on the regular time grid and integrated with
         ``scipy.signal.lsim``.
         """
-        if t_end <= 0 or dt <= 0:
-            raise ValueError("t_end and dt must be strictly positive.")
         if not self._source_waveforms:
             raise ValueError(
                 "No source waveform set. Call set_source_waveform(...) first."
             )
+        self._reject_reserved_branch_names()
+        self._warn_about_fault_scalings()
 
         # Frequency at which the lumped RLC values are sampled. The
-        # state-space model treats RLC as frequency-independent.
-        f_eval = self.network.frequencies[0]
+        # state-space model treats RLC as frequency-independent; see
+        # :meth:`_resolve_f_eval` for why this is not ``frequencies[0]``.
+        f_eval = self._resolve_f_eval(f_eval)
         omega_eval = 2.0 * np.pi * f_eval
 
         # --- bus index map (active buses only) ----------------------------
@@ -728,18 +1224,32 @@ class TransientStudy:
                 )
             bus_index[name] = len(bus_index)
             bus_R[name] = R_val
-            bus_L[name] = (
+            L_val = (
                 float(bus.L[f_eval])
-                if bus.L is not None and f_eval in bus.L and float(bus.L[f_eval]) > 0
+                if bus.L is not None and f_eval in bus.L
                 else None
             )
+            if L_val is not None and L_val < 0:
+                raise ValueError(
+                    _passivity_message(
+                        f"bus '{name}'", "L", L_val, "inductance"
+                    )
+                )
+            bus_L[name] = L_val if L_val is not None and L_val > 0 else None
             # Bus's own grounding capacitance; per-branch shunt
             # capacitance is added below via the pi-section lumping.
-            bus_C[name] = (
+            C_val = (
                 float(bus.C[f_eval])
-                if bus.C is not None and f_eval in bus.C and float(bus.C[f_eval]) > 0
-                else 0.0
+                if bus.C is not None and f_eval in bus.C
+                else None
             )
+            if C_val is not None and C_val < 0:
+                raise ValueError(
+                    _passivity_message(
+                        f"bus '{name}'", "C", C_val, "capacitance"
+                    )
+                )
+            bus_C[name] = C_val if C_val is not None and C_val > 0 else 0.0
         n_bus = len(bus_index)
         if n_bus == 0:
             raise ValueError("Network has no active buses.")
@@ -776,6 +1286,45 @@ class TransientStudy:
                 if branch.L_self and f_eval in branch.L_self
                 else None
             )
+            # Passivity of the lumped fields. A negative R_self used to be
+            # dropped silently by the ``> 0`` tests below, which turned a
+            # sign error into a lossless branch: the ring-down of a
+            # reference case went from 21.9 V to exactly 0 V at t_end with
+            # no message at all. Reject it where the value is read.
+            if R_val is not None and R_val < 0:
+                raise ValueError(
+                    _passivity_message(
+                        f"branch '{name}'", "R_self", R_val, "resistance"
+                    )
+                )
+            if L_val is not None and L_val < 0:
+                raise ValueError(
+                    _passivity_message(
+                        f"branch '{name}'", "L_self", L_val, "inductance"
+                    )
+                )
+            M_val = (
+                float(branch.M_mutual[f_eval])
+                if branch.M_mutual and f_eval in branch.M_mutual
+                else None
+            )
+            if (
+                M_val is not None
+                and L_val is not None
+                and L_val > 0
+                and abs(M_val) > L_val
+            ):
+                warnings.warn(
+                    f"Branch '{name}' has |M_mutual| = {abs(M_val):g} H larger "
+                    f"than its own L_self = {L_val:g} H at {f_eval:g} Hz. Two "
+                    f"coupled conductors cannot have a mutual inductance above "
+                    f"the smaller self-inductance (k = M/sqrt(L1*L2) <= 1), so "
+                    f"this is almost always a unit slip -- mH written where H "
+                    f"is expected scales the coupled EPR by a factor of 1000. "
+                    f"The solve continues with the values as given.",
+                    TransientModelWarning,
+                    stacklevel=3,
+                )
             from_idx = bus_index[branch.from_bus]
             to_idx = bus_index[branch.to_bus]
             if L_val is not None and L_val > 0:
@@ -822,7 +1371,13 @@ class TransientStudy:
             if branch.C_self is None or f_eval not in branch.C_self:
                 continue
             C_branch = float(branch.C_self[f_eval])
-            if C_branch <= 0:
+            if C_branch < 0:
+                raise ValueError(
+                    _passivity_message(
+                        f"branch '{name}'", "C_self", C_branch, "capacitance"
+                    )
+                )
+            if C_branch == 0:
                 continue
             half_C = 0.5 * C_branch
             bus_C[branch.from_bus] += half_C
@@ -866,6 +1421,19 @@ class TransientStudy:
                 )
             z = src.source_impedance[f_eval]
             R_src = float(z.real)
+            if omega_eval == 0.0 and float(z.imag) != 0.0:
+                raise ValueError(
+                    f"Voltage source '{src_name}' has a reactive source "
+                    f"impedance (Im(Z_src) = {float(z.imag):g} Ohm) and the "
+                    f"lumped values are being read at f_eval = 0 Hz, where "
+                    f"L_src = Im(Z_src) / omega is not defined. Up to 0.6.0 "
+                    f"this silently produced L_src = 0, i.e. a purely "
+                    f"resistive source, and the answer then depended on "
+                    f"nothing but the position of 0 Hz in "
+                    f"network.frequencies. Pass f_eval=<power frequency> to "
+                    f"solve(), or give the network an AC frequency to "
+                    f"parameterise the source loop at."
+                )
             L_src = float(z.imag) / omega_eval if omega_eval > 0 else 0.0
             if R_src < 0:
                 raise ValueError(
@@ -886,7 +1454,7 @@ class TransientStudy:
                 # ``R_src`` may legitimately be zero here (pure inductive
                 # source impedance), in which case the loop has only L.
                 branch_inductive.append((
-                    f"__vsrc__{src_name}",
+                    f"{self._VSRC_PREFIX}{src_name}",
                     src_bus_idx,
                     fault_bus_idx,
                     R_src if R_src > 0 else None,
@@ -1027,7 +1595,7 @@ class TransientStudy:
         for k, (br_name, fi, ti, R_self_val, L_self_val) in enumerate(
             branch_inductive
         ):
-            if br_name.startswith("__vsrc__"):
+            if br_name.startswith(self._VSRC_PREFIX):
                 continue
             branch = self.network.branches[br_name]
             R_mut = (
@@ -1246,8 +1814,9 @@ class TransientStudy:
                 D_rows.append(gri @ B_kcl_R)
 
         # --- time grid and source samples ---------------------------------
-        n_samples = int(round(t_end / dt)) + 1
-        t = np.arange(n_samples) * dt
+        # Same grid as the FFT solver, so the two results can be compared
+        # element-wise without resampling (see :func:`_time_grid`).
+        t, n_samples = _time_grid(t_end, dt)
         u = np.zeros((n_samples, n_src))
         signals_t: Dict[str, np.ndarray] = {}
         for col, src_name in enumerate(src_names):
@@ -1314,7 +1883,7 @@ class TransientStudy:
         ind_state_offset = {}
         for idx, entry in enumerate(branch_inductive):
             br_name = entry[0]
-            if br_name.startswith("__vsrc__"):
+            if br_name.startswith(self._VSRC_PREFIX):
                 continue
             ind_state_offset[br_name] = n_bus_L + idx
         res_branch_lookup = {

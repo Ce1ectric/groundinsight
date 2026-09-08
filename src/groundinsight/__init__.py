@@ -39,6 +39,7 @@ from .models.core_models import (
     BranchType,
     Network,
     NetworkFrequencyOrderWarning,
+    TransientModelWarning,
 )
 from .models.database_models import BusTypeDB, BranchTypeDB, NetworkDB
 from .utils.impedance_calculator import DCLimitWarning
@@ -156,6 +157,8 @@ __all__ = [
     "set_pathfinder_cache_size",
     # Frequency-order warning.
     "NetworkFrequencyOrderWarning",
+    # Transient model-scope warning.
+    "TransientModelWarning",
     # DC (0 Hz) evaluation warning.
     "DCLimitWarning",
     "Outage",
