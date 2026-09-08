@@ -216,6 +216,16 @@ def find_max_rho_scaling(
     active_fault_backup = network.active_fault
     result_backup = network.results.get(fault_name)
     had_result = fault_name in network.results
+    # The assembled nodal system is *not* recomputed by anything the caller
+    # does afterwards -- ``bus_response`` and ``analyze_cuts`` read it back as
+    # it stands. Every ``run_fault`` below replaces it with the matrices of a
+    # trial rho, so without this backup the network would be left carrying the
+    # Y of the last bisection step next to the restored rho. That combination
+    # is not merely stale, it is inconsistent: it produced a *negative*
+    # driving-point impedance in the review case. The pre-search object was
+    # built from exactly the state restored below, so putting it back is
+    # correct rather than merely conservative.
+    electrical_backup = network.electrical_network
 
     def _epr_rms_at(c: float) -> float:
         """Evaluate the RMS EPR at the fault bus for a given scaling factor."""
@@ -314,6 +324,11 @@ def find_max_rho_scaling(
                 _flt._set_active(False)
         elif active_fault_backup in network.faults:
             network.set_active_fault(active_fault_backup, keep_results=True)
+        # Restore the assembled system last: it has to agree with the rho,
+        # results and active fault put back above. If the network carried none
+        # on entry it gets none back -- a stale matrix is worse than no matrix,
+        # because the readers above it raise on the second and not on the first.
+        network.electrical_network = electrical_backup
 
     return {
         "c_max": c_max,

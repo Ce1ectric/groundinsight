@@ -212,8 +212,78 @@ class ElectricalNetwork:
         # circuit there. Only 0 Hz can have an entry, and only when the network
         # actually contains such an element. See _dc_substitute_at.
         self._dc_substitutes: Dict[float, float] = {}
+        # Digest of the model values the matrices below were assembled from.
+        # Filled once the assembly is done; see :meth:`state_fingerprint`.
+        self._build_fingerprint: Optional[tuple] = None
 
         self._initialize()
+        self._build_fingerprint = self.state_fingerprint()
+
+    def state_fingerprint(self) -> tuple:
+        """
+        Digest of every model value the assembled matrices depend on.
+
+        The assembled system is a *snapshot*: once ``Y`` is built, later
+        changes to a bus impedance, to an ``active`` flag or to the active
+        fault do not reach it. Anything that reads ``Y_matrices`` back out
+        afterwards -- :func:`~groundinsight.analysis.response.bus_response`
+        above all -- therefore has to be able to tell whether the snapshot
+        still describes the network in hand. This fingerprint is that test:
+        it covers exactly the inputs :meth:`_construct_Y_matrices` reads, in
+        their stored form, so an equal fingerprint means an equal matrix.
+
+        Returns
+        -------
+        tuple
+            Hashable digest. Compare it against :attr:`_build_fingerprint`
+            (or use :meth:`matches_network_state`); the value itself carries
+            no meaning beyond equality.
+        """
+        def _imp(mapping) -> tuple:
+            if not mapping:
+                return ()
+            return tuple(
+                (float(f), float(z.real), float(z.imag))
+                for f, z in sorted(mapping.items())
+            )
+
+        buses = tuple(
+            (name, bool(bus.active), _imp(bus.impedance))
+            for name, bus in sorted(self.network.buses.items())
+        )
+        branches = tuple(
+            (
+                name,
+                bool(branch.active),
+                bool(branch.type.grounding_conductor),
+                branch.from_bus,
+                branch.to_bus,
+                _imp(branch.self_impedance),
+            )
+            for name, branch in sorted(self.network.branches.items())
+        )
+        sources = tuple(
+            (name, source.source_type, source.bus, _imp(source.source_impedance))
+            for name, source in sorted(self.network.sources.items())
+            if source.source_type == "voltage"
+        )
+        return (
+            tuple(float(f) for f in self.network.frequencies),
+            self.network.active_fault,
+            buses,
+            branches,
+            sources,
+        )
+
+    def matches_network_state(self) -> bool:
+        """
+        ``True`` while the assembled matrices still describe ``self.network``.
+
+        See :meth:`state_fingerprint` for what "still describe" covers.
+        """
+        if self._build_fingerprint is None:  # pragma: no cover -- mid-assembly
+            return True
+        return self.state_fingerprint() == self._build_fingerprint
 
     def _initialize(self):
         """

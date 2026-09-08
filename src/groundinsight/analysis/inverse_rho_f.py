@@ -167,6 +167,12 @@ def evaluate_max_epr_under_k(
 
     temp_faults_created: List[str] = []
     active_fault_backup = network.active_fault
+    # Same reasoning as in ``inverse_rho``: every ``run_fault`` in the sweep
+    # replaces ``network.electrical_network``, and nothing recomputes it once
+    # the sweep is over. Leaving the last trial's matrices behind next to the
+    # restored impedances makes every later ``bus_response`` / ``analyze_cuts``
+    # read a system that does not describe this network any more.
+    electrical_backup = network.electrical_network
     # Snapshot results of any *pre-existing* fault we are about to reuse so we
     # can restore them (run_fault overwrites results[fault] with the k-form EPR).
     reused_fault_names = set(existing_faults_by_bus.values())
@@ -281,6 +287,9 @@ def evaluate_max_epr_under_k(
             network.active_fault = None
             for _flt in network.faults.values():
                 _flt._set_active(False)
+        # Restore the assembled system last, so it agrees with the impedances,
+        # results and active fault put back above.
+        network.electrical_network = electrical_backup
 
     return epr_per_bus
 
