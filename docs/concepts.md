@@ -685,14 +685,24 @@ value, with `r` the current-based reduction factor. Note that `Z_E` is not the
 station electrodes in parallel — the shield sections between them add to it.
 
 
-The effective grounding impedance seen at the fault bus is
+The effective earthing impedance is
 
 $$
-Z_G(f) = \frac{u_{\text{EPR}}(f)}{r(f)\,I_{\text{fault}}(f)}.
+Z_G(f) = Z_E(f) = \frac{\underline{U}_E(f)}{\underline{I}_E(f)},
 $$
 
-It is exposed per frequency and as RMS-scalar through
-`net.res_all_impedances()`.
+the earthing voltage of the bonded earthing system over the current that
+system passes into the soil. Both quantities come from the same split of the
+electrode currents that produces the current-based reduction factor, so the
+normative chain $U_E = 3 I_0 \, Z_E \, r$ closes on the reported value by
+construction.
+
+The older definition $u_{\text{EPR}}/(r \cdot I_{\text{fault}})$ was replaced
+in 0.6.0. The two agree only in the equipotential limit -- one bonded earthing
+system at a single potential -- and diverge as soon as the shield sections
+between the stations carry a noticeable potential difference.
+
+It is exposed per frequency through `net.res_all_impedances()`.
 
 ## Active flag and outage studies
 

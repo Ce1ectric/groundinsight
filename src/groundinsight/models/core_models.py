@@ -1032,11 +1032,14 @@ class Source(BaseModel):
         ``"voltage"`` for a Thevenin equivalent (EMF in series with
         ``source_impedance``).
     values : dict of float to ComplexNumber, optional
-        Frequency-dependent current injection. Required when
-        ``source_type == "current"`` and must be ``None`` otherwise.
+        Frequency-dependent current injection, one phasor per frequency.
+        Required when ``source_type == "current"`` and must be ``None``
+        otherwise. **The phasors are RMS amplitudes**, not peak values --
+        see the RMS convention in the Notes.
     voltage : dict of float to ComplexNumber, optional
-        Frequency-dependent Thevenin EMF. Required when
-        ``source_type == "voltage"`` and must be ``None`` otherwise.
+        Frequency-dependent Thevenin EMF, one phasor per frequency, again
+        as RMS amplitudes. Required when ``source_type == "voltage"`` and
+        must be ``None`` otherwise.
     source_impedance : dict of float to ComplexNumber, optional
         Frequency-dependent internal impedance of the Thevenin source.
         Required when ``source_type == "voltage"`` and must be ``None``
@@ -1070,6 +1073,24 @@ class Source(BaseModel):
     :func:`groundinsight.analysis.shortcircuit.resolve_fault_sc_characteristics`.
     Superposing ``i_p`` or ``I_th`` of individual sources directly would
     be wrong; see that module's docstring for the derivation.
+
+    **RMS convention.** Every phasor in ``values``, ``voltage`` and every
+    phasor the solver derives from them is an **RMS amplitude**, not a
+    peak amplitude. The convention is package-wide and it is what makes
+    the RMS columns of the results correct: the total RMS of a quantity
+    with several frequency components is
+
+    .. math::
+
+        X_{\\mathrm{RMS}} = \\sqrt{\\sum_f |X(f)|^2}
+
+    with the 0 Hz term entering as ``|X_dc|`` -- a DC component
+    contributes its own magnitude, not ``|X_dc|/sqrt(2)``. Peak-valued
+    phasors would make that sum too large by ``sqrt(2)`` for every AC
+    component while leaving the DC term right, so the two conventions
+    cannot be mixed. If a data source gives peak amplitudes, divide the
+    AC components by ``sqrt(2)`` before filling ``values``. See
+    :meth:`groundinsight.electrical_network.ElectricalNetwork._calculate_rms`.
     """
 
     name: str

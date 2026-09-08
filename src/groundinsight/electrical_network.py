@@ -58,6 +58,7 @@ from groundinsight.models.core_models import (
     ResultReductionFactor,
 )
 from groundinsight.utils.impedance_calculator import (
+    _render_frequencies,
     check_passive_impedance,
     dc_substitute_impedance,
     is_short_circuit,
@@ -222,6 +223,7 @@ class ElectricalNetwork:
         and builds voltage and current vectors for each frequency.
         """
         self._assign_bus_indices()
+        self._validate_frequency_coverage()
         self._construct_Y_matrices()
         self._construct_vectors()
 
@@ -265,6 +267,105 @@ class ElectricalNetwork:
             for freq in self.network.frequencies
             if freq in z_dict
         }
+
+    def _validate_frequency_coverage(self):
+        """Reject an active element that has no impedance at a solved frequency.
+
+        Impedance dictionaries are filled once, when the element is added to
+        the network or when its type is re-evaluated -- never at solve time.
+        A frequency that is in ``network.frequencies`` but not in the
+        element's dictionary therefore reaches ``_construct_Y_matrices`` as
+        ``None``, and the element is skipped **without a word**: the bus
+        contributes no admittance, the branch no coupling. The result looks
+        like an ordinary solve.
+
+        The way into that state is ordinary too. Extending
+        ``network.frequencies`` in place and recomputing only the buses --
+        or loading a network written before a frequency was added -- was
+        measured to report 1000 V instead of 4.95 V at 250 Hz, with a
+        reduction factor of 1.0, and nothing in the output said why.
+
+        Only the elements that actually enter the nodal system are checked:
+        active buses, active grounding-conductor branches between two active
+        buses, and the source impedance of voltage sources on an active bus.
+        A stored frequency that the network is *not* solving at stays
+        permitted -- see :meth:`_relevant`.
+
+        Raises
+        ------
+        ValueError
+            If an active element is missing an entry for a frequency the
+            network is being solved at. The message names the element, the
+            missing frequencies and how to refill them.
+        """
+        frequencies = list(self.network.frequencies)
+        if not frequencies:
+            return
+
+        missing: List[Tuple[str, List[float]]] = []
+
+        def _check(z_dict, label: str) -> None:
+            absent = [
+                freq
+                for freq in frequencies
+                if not z_dict or freq not in z_dict
+            ]
+            if absent:
+                missing.append((label, absent))
+
+        for bus_name, bus in self.network.buses.items():
+            if not bus.active:
+                continue
+            _check(bus.impedance, f"bus '{bus_name}' (grounding impedance)")
+
+        for branch in self.network.branches.values():
+            if not branch.active:
+                continue
+            if branch.from_bus not in self.bus_indices:
+                continue
+            if branch.to_bus not in self.bus_indices:
+                continue
+            if branch.type.grounding_conductor:
+                _check(
+                    branch.self_impedance,
+                    f"branch '{branch.name}' (self impedance)",
+                )
+            _check(
+                branch.mutual_impedance,
+                f"branch '{branch.name}' (mutual impedance)",
+            )
+
+        for source in self.network.sources.values():
+            if source.source_type != "voltage":
+                continue
+            if source.bus not in self.bus_indices:
+                continue
+            _check(
+                source.source_impedance,
+                f"source '{source.name}' (source impedance)",
+            )
+
+        if not missing:
+            return
+
+        details = "; ".join(
+            f"{label} at {_render_frequencies(freqs)}" for label, freqs in missing
+        )
+        raise ValueError(
+            "The network is being solved at "
+            f"{_render_frequencies(frequencies)}, but the following active "
+            f"elements carry no impedance there: {details}. Impedances are "
+            "evaluated when an element is added to the network, not at solve "
+            "time, so a frequency added to network.frequencies afterwards -- "
+            "or a network stored before that frequency existed -- leaves the "
+            "element without a value. It would then be dropped from the "
+            "admittance matrix without a word, which is indistinguishable "
+            "from an element with no electrode at all. Recompute the "
+            "impedances for the current frequency list -- "
+            "element.calculate_impedance(network.frequencies) for every "
+            "affected bus and branch, or re-add the elements -- before "
+            "solving."
+        )
 
     def _validate_passive_impedances(self):
         """Reject stored impedances that cannot become an admittance.
@@ -1634,6 +1735,29 @@ class ElectricalNetwork:
         -------
         float
             The calculated RMS value.
+
+        Notes
+        -----
+        **RMS convention.** Every phasor in this package -- from
+        :attr:`groundinsight.models.core_models.Source.values` through the
+        solution vectors to these result columns -- is an **RMS amplitude**,
+        not a peak amplitude. Under that convention the total RMS over all
+        frequency components is
+
+        .. math::
+
+            X_{\\mathrm{RMS}} = \\sqrt{\\sum_f |X(f)|^2}
+
+        which is exactly what this method computes, with the 0 Hz term
+        entering as ``|X_dc|``: a DC component contributes its own
+        magnitude, an AC component its RMS amplitude, and the two add in
+        quadrature. Peak-valued phasors would make every AC term too large
+        by ``sqrt(2)`` while leaving the DC term right, so the two
+        conventions must not be mixed in one model.
+
+        A ``None`` entry -- a frequency at which the quantity is not
+        defined, e.g. no electrode current at an open end -- contributes
+        nothing rather than propagating NaN through the whole column.
         """
         rms_squared = 0.0
         for value in freq_values.values():
@@ -1745,7 +1869,7 @@ class ElectricalNetwork:
             earth_buses,
             earthing_voltages,
             earthing_impedances,
-        ) = self._compute_current_reduction_factors(fault_bus_idx)
+        ) = self._compute_current_reduction_factors()
 
         # The two definitions answer different questions and only coincide in
         # the limit of ideally bonded stations. Saying so where they part
@@ -1772,7 +1896,7 @@ class ElectricalNetwork:
         self.results = result  # Update self.results
 
     def _compute_current_reduction_factors(
-        self, fault_bus_idx: int
+        self,
     ) -> Tuple[
         Dict[float, Optional[float]],
         Dict[float, Optional[complex]],
@@ -1810,11 +1934,6 @@ class ElectricalNetwork:
         alongside it: that one keeps the closed form ``r = |1 - Z_m/Z_s|`` for a
         single shielded line and is what ``Z_G`` divides by.
 
-        Parameters
-        ----------
-        fault_bus_idx : int
-            Row index of the fault bus in the nodal system.
-
         Returns
         -------
         tuple
@@ -1836,11 +1955,22 @@ class ElectricalNetwork:
             earthing_impedances[freq] = None
 
             u_vector = self.u_vectors.get(freq)
-            inj_vector = self.source_injections.get(freq)
-            if u_vector is None or inj_vector is None:
+            if u_vector is None:
                 continue
 
-            i_fault = complex(inj_vector[fault_bus_idx])
+            # The fault current is the sum of the source injections that reach
+            # this fault, ``Sum(scaling * I_src)``, and it is recorded as such
+            # by ``_construct_vectors``. Reading it off the injection vector at
+            # the fault bus instead gives the *net* nodal injection there, and
+            # those two differ as soon as a source sits on the fault bus:
+            # the entry is then ``I_src,F - Sum(I_src)``. With S1 = 100 A at a
+            # remote bus and S2 = 50 A on the fault bus, the net entry is
+            # -100 A instead of 150 A and the current-based reduction factor
+            # came out 100x too small.
+            total = self.total_source_currents.get(freq)
+            if total is None:
+                continue
+            i_fault = complex(total)
             if i_fault == 0:
                 continue
 
@@ -1990,14 +2120,27 @@ class ElectricalNetwork:
 
             Z_G = Z_E = U_E / I_E
 
-        where ``I_fault`` is the (signed) sum of source injections at the
-        active fault. For current-mode sources this is ``Σ scaling * I_src``
-        as before; for Thevenin (voltage-mode) sources it is the corresponding
-        Norton injection ``Σ scaling * U_emf / Z_src``. In Thevenin mode the
-        resulting ``Z_G`` is therefore the EPR per Norton ampere, which
-        depends on both the grounding network and ``Z_src``; it recovers the
-        classic grounding impedance in the limit ``Z_src -> ∞`` with
-        ``U_emf = I_src * Z_src`` held constant.
+        ``U_E`` is the earthing voltage of the bonded earthing system and
+        ``I_E`` the current that system passes into the soil. Both come from
+        the same split of the electrode currents that produces the
+        current-based reduction factor
+        (:meth:`_compute_current_reduction_factors`), so the normative chain
+        ``U_E = 3*I_0 * Z_E * r`` of EN 50522 closes on the reported value by
+        construction.
+
+        This replaced the pre-0.6.0 definition ``Z_G = u_EPR / (r * I_fault)``,
+        which the 0.6.0 changelog lists as a breaking change. The two agree
+        only in the equipotential limit -- one bonded system at a single
+        potential -- and diverge as soon as the shield sections between the
+        stations carry a noticeable potential difference. ``CLAUDE.md``,
+        ``docs/concepts.md`` and ``docs/api/electrical_network.md`` name the
+        current definition.
+
+        The fault current itself is the sum of the source injections that
+        reach the active fault. For current-mode sources that is
+        ``Sum(scaling * I_src)``; for Thevenin (voltage-mode) sources it is the
+        corresponding Norton injection ``Sum(scaling * U_emf / Z_src)``. It
+        enters the current-based reduction factor rather than ``Z_E``.
 
         The results are stored in the network's results object.
         """
