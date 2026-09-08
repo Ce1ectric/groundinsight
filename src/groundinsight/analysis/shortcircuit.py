@@ -88,7 +88,13 @@ def kappa_from_r_to_x(r_to_x: float) -> float:
     """
     Peak factor ``kappa`` from the ``R/X`` ratio (IEC 60909-0).
 
-    ``kappa = 1.02 + 0.98 * exp(-3 * R/X)``, bounded to ``(1, 2]``.
+    ``kappa = 1.02 + 0.98 * exp(-3 * R/X)``.
+
+    The range of the expression is ``[1.02, 2]``, not the ``(1, 2]`` the IEC
+    formula is often quoted with: the constant term is 1.02, so the exponential
+    approaches 1.02 from above as ``R/X`` grows and never reaches 1. Consumers
+    that range-check ``kappa`` against ``(1, 2]`` therefore accept everything
+    this function can return, which is the point of saying so here.
 
     The ``R/X`` to insert is the ratio of the **fault loop**, not of the
     positive-sequence system alone. For a three-phase fault the two
@@ -457,6 +463,28 @@ def resolve_fault_sc_characteristics(
     solve, and one effective ``kappa`` is resolved here so that the
     *non-linear* 60909 factors are applied exactly once, to the aggregate.
 
+    What the aggregation actually does, stated exactly
+    --------------------------------------------------
+    The two returned quantities are not taken over the same set of sources,
+    and it matters:
+
+    * ``kappa`` is the weighted mean over the sources that **carry** 60909
+      data (``kappa`` or ``r_to_x``). Sources without it cannot contribute a
+      value and are left out; they are listed in ``sources_without_kappa``.
+    * ``i_k_a`` is the sum over **all** feeding sources, those included.
+
+    A consumer that then forms ``i_p = kappa * sqrt(2) * i_k_a`` -- which is
+    what :func:`~groundinsight.check_conductor_limits` and
+    :func:`~groundinsight.check_node_limits` do -- therefore applies the peak
+    factor of one subset to the current of the whole. Where every source
+    carries data the subsets coincide and the result is exact; where they do
+    not, the answer is an approximation whose quality is the share of the
+    current the data covers. That share is reported in the ``logging.WARNING``
+    this function emits, and above half of the current the message says
+    outright that ``i_p`` rests mostly on an assumption. The alternative --
+    dropping the undocumented sources from ``i_k_a`` as well -- would
+    understate the current, which is the unsafe direction.
+
     Parameters
     ----------
     network : Network
@@ -522,6 +550,7 @@ def resolve_fault_sc_characteristics(
     r_values: List[float] = []
     without_kappa: List[str] = []
     i_k_total = 0.0
+    weight_without_kappa = 0.0
 
     for source_name in _sources_feeding(network, fault_name):
         source = network.sources[source_name]
@@ -530,6 +559,7 @@ def resolve_fault_sc_characteristics(
         if kappa_i is None:
             if weight > 0:
                 without_kappa.append(source_name)
+                weight_without_kappa += weight
             i_k_total += weight
             continue
         # A source that carries 60909 data but injects nothing at this
@@ -593,12 +623,26 @@ def resolve_fault_sc_characteristics(
             kappa_eff,
         )
     if without_kappa:
+        share = weight_without_kappa / i_k_total if i_k_total > 0 else 0.0
         logger.warning(
-            "Fault %r: source(s) %s inject current at %.1f Hz but carry no "
-            "IEC 60909 data; they are excluded from the kappa aggregation.",
+            "Fault %r: source(s) %s inject %.0f %% of the current at %.1f Hz "
+            "but carry no IEC 60909 data. They are excluded from the kappa "
+            "aggregation and included in i_k_a, so kappa_eff = %.4f is the "
+            "figure of the remaining %.0f %% and i_p applies it to the whole "
+            "current.%s",
             fault_name,
             ", ".join(without_kappa),
+            100.0 * share,
             frequency,
+            kappa_eff,
+            100.0 * (1.0 - share),
+            (
+                " That is the majority of the current, so i_p and I_th rest "
+                "mostly on an assumption: give those sources an r_to_x or a "
+                "kappa, or pass kappa explicitly."
+                if share > 0.5
+                else ""
+            ),
         )
 
     r_to_x_eff = None

@@ -77,6 +77,7 @@ from .shortcircuit import (
     kappa_from_r_to_x,
     peak_short_circuit_current,
     resolve_fault_sc_characteristics,
+    thermal_equivalent_current,
 )
 
 
@@ -265,6 +266,8 @@ class _SCInputs(NamedTuple):
 #: empty frame *selectable* instead of degenerating into a schema-less
 #: ``pl.DataFrame([])`` on which ``pl.col(...)`` raises.
 _COMMON_SCHEMA: Dict[str, Any] = {
+    "I_dc_A": pl.Float64,
+    "I_ac_rms_A": pl.Float64,
     "i_p_A": pl.Float64,
     "kappa": pl.Float64,
     "m": pl.Float64,
@@ -337,6 +340,56 @@ def _warn_half_declared(
 _require_complete_results = require_complete_results
 
 
+def _split_dc(
+    rms: float, per_frequency: Optional[Dict[float, Any]], has_dc_bin: bool
+) -> Tuple[Optional[float], float]:
+    """
+    Separate the 0 Hz component out of an RMS current.
+
+    IEC 60909-0 counts the DC content of the fault current **once**, through
+    ``m``: ``I_th = I_k'' * sqrt(m + n)`` where ``I_k''`` is the *AC* initial
+    symmetrical current. ``ResultBranch.i_s`` and ``ResultBus.i_inj`` / ``ia``
+    are ``sqrt(sum_f |X(f)|^2)`` over **all** frequencies of the study, 0 Hz
+    included -- so a network solved with a DC bin fed its direct current into
+    ``I_th`` twice: once inside the RMS and once through ``m``. Measured on
+    the audit case, ``[50 Hz]`` gave ``I_th = 1028 A`` and ``[0, 50 Hz]`` with
+    700 A of direct current gave 1255 A, and none of that difference is
+    physics.
+
+    The DC bin is therefore taken out and reported in its own column. It is
+    *not* discarded: a direct current through an earthing conductor is a real
+    thermal load, but it is a continuous one and belongs in the continuous
+    rating rather than in an adiabatic short-time check.
+
+    Parameters
+    ----------
+    rms : float
+        The stored RMS value over all frequencies.
+    per_frequency : dict of float to ComplexNumber, optional
+        The per-frequency phasors of the same quantity.
+    has_dc_bin : bool
+        Whether the network was solved with a 0 Hz frequency at all. When it
+        was not there is nothing to separate and the DC column stays ``None``,
+        which reads differently from a measured zero.
+
+    Returns
+    -------
+    tuple of (float or None, float)
+        ``(I_dc, I_ac_rms)``. ``I_ac_rms`` is ``rms`` itself when there is no
+        DC bin.
+    """
+    if not has_dc_bin or not per_frequency:
+        return None, rms
+    value = per_frequency.get(0.0)
+    if value is None:
+        return None, rms
+    i_dc = abs(complex(value))
+    # Numerically the difference can come out very slightly negative when the
+    # DC bin *is* the whole current; clamp rather than hand sqrt a -1e-17.
+    i_ac = math.sqrt(max(rms * rms - i_dc * i_dc, 0.0))
+    return i_dc, i_ac
+
+
 def _resolve_sc_inputs(
     network: Network,
     fault_name: str,
@@ -360,8 +413,22 @@ def _resolve_sc_inputs(
     ------
     ValueError
         If ``fault_name`` has no results, if both ``kappa`` and ``r_to_x``
-        are given, if ``t_k`` is neither given nor stored and positive, or
-        if ``kappa`` can be resolved from neither arguments nor sources.
+        are given, if ``t_k`` is neither given nor stored and positive, if
+        ``kappa`` can be resolved from neither arguments nor sources, or if
+        the resolved ``kappa`` is outside ``(1, 2]`` or ``n`` outside
+        ``(0, 1]``.
+
+    Notes
+    -----
+    ``kappa`` and ``n`` are range-checked here rather than where they are
+    used, because both fail *silently downwards* and both reach this
+    function from three places (argument, ``Fault`` / ``Source`` field,
+    ``kappa_from_r_to_x``). ``kappa = -1`` gives ``i_p/I = -1.41``, a peak
+    current pointing the wrong way; ``kappa = 0.5`` gives 0.71, an
+    under-estimate that a limit check reports as headroom. ``n = 3`` raises
+    ``I_th`` by 70 % and ``n = -2`` reaches ``math.sqrt`` as a bare
+    ``math domain error``. The docstrings of both public checks have
+    promised these ranges all along.
     """
     if kappa is not None and r_to_x is not None:
         raise ValueError(
@@ -391,6 +458,15 @@ def _resolve_sc_inputs(
     if n is None:
         n = float(getattr(fault, "n_factor", 1.0) or 1.0)
     n = float(n)
+    if not (math.isfinite(n) and 0.0 < n <= 1.0):
+        raise ValueError(
+            f"n must lie in (0, 1], got {n!r}. It is the AC-decay heat "
+            f"factor of IEC 60909-0: 1.0 for a far-from-generator fault and "
+            f"below that where the AC component decays. A value above one "
+            f"raises I_th without any physical reading (n = 3 by 70 %), and "
+            f"a negative one reaches sqrt(m + n) as a bare math domain "
+            f"error. Pass n=... explicitly or fix Fault.n_factor."
+        )
 
     if f is None:
         f = next((float(x) for x in network.frequencies if x > 0), 50.0)
@@ -412,6 +488,18 @@ def _resolve_sc_inputs(
                 "gi.apply_shortcircuit_characteristics from a pandapower run)."
             )
     kappa = float(kappa)
+    if not (math.isfinite(kappa) and 1.0 < kappa <= 2.0):
+        raise ValueError(
+            f"kappa must lie in (1, 2], got {kappa!r}. It is the IEC 60909-0 "
+            f"peak factor i_p / (sqrt(2) * I_k''): one means no DC offset at "
+            f"all, two is the theoretical maximum of a purely inductive "
+            f"circuit. Outside that range the results are not conservative "
+            f"but wrong in the unsafe direction -- kappa = 0.5 gives a peak "
+            f"below the AC amplitude, kappa = -1 one that points the other "
+            f"way, and a limit check reports both as headroom. Pass kappa "
+            f"or r_to_x explicitly, or fix the value stored on the sources "
+            f"feeding fault {fault_name!r}."
+        )
 
     m = iec60909_m(kappa, f, t_k)
     return _SCInputs(
@@ -535,7 +623,7 @@ def check_conductor_limits(
 
     For the given fault the RMS shield current of every branch (from the
     most recent :func:`groundinsight.run_fault`) is converted into the
-    thermally equivalent short-time current ``I_th = I_s_rms * sqrt(m + n)``
+    thermally equivalent short-time current ``I_th = I_ac_rms * sqrt(m + n)``
     (IEC 60909-0) and compared against the admissible adiabatic current
     ``I_adm = k * S / sqrt(t_k)`` (IEC 60949) of the branch conductor. A
     branch is checked only if its :class:`BranchType` carries both
@@ -550,6 +638,21 @@ def check_conductor_limits(
        (a material without a cross-section or the reverse) is the one case
        that is announced with a ``logging.WARNING``, because such a row is
        indistinguishable from a passing one at a glance.
+
+    .. note::
+       **The 0 Hz bin is taken out of** ``I_th``. ``ResultBranch.i_s`` is
+       ``sqrt(sum_f |I(f)|^2)`` over every frequency of the study, and
+       ``sqrt(m + n)`` already accounts for the DC content of the fault
+       current through ``m``. A network solved with a 0 Hz bin would
+       therefore carry its direct current into ``I_th`` twice — measured on
+       the audit case, ``[50 Hz]`` gave 1028 A and ``[0, 50 Hz]`` with 700 A
+       of direct current gave 1255 A, none of which is physics. The direct
+       current is reported in its own column ``I_dc_A`` instead
+       (``None`` when the study has no 0 Hz bin, which reads differently
+       from a measured zero), and ``I_ac_rms_A`` carries the RMS the check
+       is built on. A standing direct current is a real thermal load, but a
+       continuous one: it belongs in the conductor's continuous rating, not
+       in an adiabatic short-time check.
 
     All three IEC 60909 inputs — ``t_k``, ``kappa`` and ``n`` — can either
     be passed explicitly or be left to the network data:
@@ -601,8 +704,9 @@ def check_conductor_limits(
         ``I_th_factor``, ``I_th_A``, ``material``, ``cross_section_mm2``,
         ``k``, ``I_admissible_A``, ``utilization`` (``I_th / I_adm``) and
         ``within_limit`` (``bool`` or ``None`` when the branch has no
-        thermal parameters). ``i_p_A = kappa * sqrt(2) * I_s_rms`` is the
-        peak current of that branch and is the input for a later
+        thermal parameters), plus ``I_dc_A`` and ``I_ac_rms_A`` (see the
+        note on the DC bin below). ``i_p_A = kappa * sqrt(2) * I_ac_rms`` is
+        the peak current of that branch and is the input for a later
         electrodynamic-force check.
 
     Raises
@@ -638,12 +742,16 @@ def check_conductor_limits(
         [rb.name for rb in result.branches],
         "branch",
     )
+    has_dc_bin = any(float(x) == 0.0 for x in network.frequencies)
     rows: List[Dict[str, Any]] = []
     incomplete: List[Tuple[str, str]] = []
     for result_branch in result.branches:
         name = result_branch.name
         i_s_rms = float(result_branch.i_s)
-        i_th = i_s_rms * i_th_factor
+        i_dc, i_ac_rms = _split_dc(
+            i_s_rms, getattr(result_branch, "i_s_freq", None), has_dc_bin
+        )
+        i_th = thermal_equivalent_current(i_ac_rms, m, n)
 
         branch = network.branches.get(name)
         material = None
@@ -674,7 +782,9 @@ def check_conductor_limits(
             {
                 "branch_name": name,
                 "I_s_rms_A": i_s_rms,
-                "i_p_A": peak_short_circuit_current(i_s_rms, kappa),
+                "I_dc_A": i_dc,
+                "I_ac_rms_A": float(i_ac_rms),
+                "i_p_A": peak_short_circuit_current(i_ac_rms, kappa),
                 "kappa": float(kappa),
                 "m": float(m),
                 "n": float(n),
@@ -768,6 +878,15 @@ def check_node_limits(
        ``logging.WARNING``, because such a row is indistinguishable from a
        passing one at a glance.
 
+    .. note::
+       **The 0 Hz bin is taken out of** ``I_th``, exactly as in
+       :func:`check_conductor_limits`: ``ResultBus.i_inj`` and
+       ``ResultBus.ia`` are RMS values over every frequency of the study,
+       and ``sqrt(m + n)`` already carries the DC content through ``m``, so
+       a study with a 0 Hz bin counted its direct current twice. It is
+       reported in ``I_dc_A`` instead (``None`` without a 0 Hz bin), and
+       ``I_ac_rms_A`` is what ``I_th`` and ``i_p`` are built on.
+
     Current split
     -------------
     Each element carries a free factor ``current_split`` in ``(0, 1]``
@@ -832,7 +951,8 @@ def check_node_limits(
         columns ``bus_name``, ``element``, ``I_rms_A`` (the bus current
         before the split), ``current_split``, ``I_conductor_A``,
         ``i_p_A``, ``kappa``, ``m``, ``n``, ``t_k_s``, ``I_th_factor``,
-        ``I_th_A``, ``material``, ``cross_section_mm2``, ``k``,
+        ``I_th_A``, ``I_dc_A``, ``I_ac_rms_A``, ``material``,
+        ``cross_section_mm2``, ``k``,
         ``I_admissible_A``, ``utilization`` and ``within_limit``.
         ``within_limit`` is ``None`` where the ``BusType`` declares no
         material / cross-section for that element — the current columns
@@ -886,6 +1006,7 @@ def check_node_limits(
         [rb.name for rb in result.buses],
         "bus",
     )
+    has_dc_bin = any(float(x) == 0.0 for x in network.frequencies)
     rows: List[Dict[str, Any]] = []
     incomplete: List[Tuple[str, str]] = []
     for result_bus in result.buses:
@@ -914,7 +1035,18 @@ def check_node_limits(
                 cross_section = getattr(btype, f"{prefix}cross_section_mm2", None)
 
             i_conductor = i_rms * split
-            i_th = i_conductor * sc.i_th_factor
+            i_dc, i_ac_conductor = _split_dc(
+                i_conductor,
+                {
+                    freq: value * split
+                    for freq, value in (
+                        getattr(result_bus, spec["current_attr"] + "_freq", None)
+                        or {}
+                    ).items()
+                },
+                has_dc_bin,
+            )
+            i_th = thermal_equivalent_current(i_ac_conductor, sc.m, sc.n)
 
             if material is not None and cross_section is not None:
                 k_val = iec60949_k(
@@ -939,7 +1071,9 @@ def check_node_limits(
                     "I_rms_A": i_rms,
                     "current_split": split,
                     "I_conductor_A": i_conductor,
-                    "i_p_A": peak_short_circuit_current(i_conductor, sc.kappa),
+                    "I_dc_A": i_dc,
+                    "I_ac_rms_A": float(i_ac_conductor),
+                    "i_p_A": peak_short_circuit_current(i_ac_conductor, sc.kappa),
                     "kappa": sc.kappa,
                     "m": sc.m,
                     "n": sc.n,
