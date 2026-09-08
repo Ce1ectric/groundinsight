@@ -58,7 +58,6 @@ from groundinsight.pathfinder import (
 )
 from groundinsight.simulation.outage import (
     Outage,
-    _OUTAGE_BASELINE_STACK,
     outage_context,
 )
 
@@ -124,11 +123,9 @@ def _reset_caches_and_cap():
     """Each test starts with a clean cache and the default cap restored."""
     clear_pathfinder_cache()
     previous = set_pathfinder_cache_size(256)
-    _OUTAGE_BASELINE_STACK.clear()
     yield
     clear_pathfinder_cache()
     set_pathfinder_cache_size(previous if previous > 0 else 256)
-    _OUTAGE_BASELINE_STACK.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -252,8 +249,11 @@ def test_outage_context_nested_restores_outer_baseline():
     # original state.
     assert net.branches["L12"].active is True
     assert net.branches["L23"].active is True
-    # The bookkeeping stack must be clean.
-    assert id(net) not in _OUTAGE_BASELINE_STACK
+    # Audit pass 18 (S15): the nesting used to also push onto a
+    # module-level ``_OUTAGE_BASELINE_STACK`` keyed by ``id(network)``
+    # that nothing ever read back. It has been removed -- the per-level
+    # baseline lives in each generator frame, which is what the assertions
+    # above actually exercise. Nothing to check here any more.
 
 
 def test_outage_context_nested_uses_outer_baseline_not_inner_state():

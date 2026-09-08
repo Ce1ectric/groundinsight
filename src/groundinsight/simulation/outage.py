@@ -49,18 +49,6 @@ from groundinsight.models.core_models import Network
 logger = logging.getLogger(__name__)
 
 
-# Per-network nesting stack for :func:`outage_context`. Keyed by
-# ``id(network)``; each value is a list of per-level baselines pushed by
-# nested ``with`` blocks. Each per-level baseline is a
-# ``{"buses": {name: original_active}, "branches": {name: original_active}}``
-# mapping captured *immediately before* the level flips its targets, so
-# the level's exit can revert exactly its own changes (and nothing the
-# inner level did to untouched-by-this-level elements). The stack
-# bookkeeping lives at module scope rather than on the
-# :class:`Network` instance so the public Pydantic surface stays clean.
-_OUTAGE_BASELINE_STACK: Dict[int, List[Dict[str, Dict[str, bool]]]] = {}
-
-
 class Outage(BaseModel):
     """
     Definition of a single what-if scenario.
@@ -117,6 +105,11 @@ class OutageStudyResult(BaseModel):
         every scenario.
     branch_results : dict of str to polars.DataFrame
         Same as ``bus_results`` but for branch results.
+    failures : dict of str to str
+        Scenarios that raised, mapped to the exception text, when the study
+        was run with ``on_error="record"``. They are absent from
+        ``bus_results`` / ``branch_results`` and from :meth:`labels`.
+        Always empty for ``on_error="raise"``, which is the default.
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -126,6 +119,7 @@ class OutageStudyResult(BaseModel):
     scenarios: List[Outage]
     bus_results: Dict[str, pl.DataFrame] = Field(default_factory=dict)
     branch_results: Dict[str, pl.DataFrame] = Field(default_factory=dict)
+    failures: Dict[str, str] = Field(default_factory=dict)
 
     def labels(self) -> List[str]:
         """
@@ -331,7 +325,8 @@ class OutageStudyResult(BaseModel):
     def __str__(self) -> str:
         return (
             f"OutageStudyResult(fault={self.fault}, "
-            f"scenarios={[s.name for s in self.scenarios]})"
+            f"scenarios={[s.name for s in self.scenarios]}, "
+            f"failures={len(self.failures)})"
         )
 
 
@@ -371,14 +366,18 @@ def outage_context(network: Network, outage: Outage) -> Iterator[Network]:
       outage sweep was accumulating one cache entry per scenario
       indefinitely; together with the new LRU cap the cache footprint
       now matches the user-visible state of ``network``.
-    - The function is now **nestable**. Nested ``with`` blocks store
-      the *outer-block-baseline* on a per-(bus, branch) basis using
-      ``setdefault`` so the inner block does not capture the
-      already-modified outer state as its own baseline. On
-      outer-block exit the originally-captured baseline is restored,
-      so changes made by the inner block to buses/branches that are
-      not part of the outer outage are correctly preserved through
-      the unwind.
+    - The function is **nestable**. Each level snapshots the ``active``
+      flag of the elements *it* touches immediately before flipping
+      them, and its exit reverts exactly those. An inner block
+      therefore does not capture the already-modified outer state as
+      its own baseline, and changes an inner block made to elements
+      the outer one does not list survive the outer unwind. The
+      snapshot is a plain local of this generator, which is all the
+      nesting needs -- an earlier revision also pushed it onto a
+      module-level ``_OUTAGE_BASELINE_STACK`` keyed by ``id(network)``
+      that nothing ever read back, and that carried a real risk: CPython
+      reuses ``id()`` after garbage collection, so the key of a
+      collected network could silently name a different one.
 
     Examples
     --------
@@ -401,25 +400,13 @@ def outage_context(network: Network, outage: Outage) -> Iterator[Network]:
             f"Outage '{outage.name}' references unknown branches: {unknown_branches}"
         )
 
-    # Nestable baseline tracking. Each ``outage_context`` level pushes a
-    # per-level baseline onto the module-level
-    # ``_OUTAGE_BASELINE_STACK`` (keyed by ``id(network)``) that records
-    # the ``active`` flag for every bus / branch *this level* touches
-    # *immediately before* it flips them. On exit, only that level's
-    # changes are reverted; nothing the inner block has done to
-    # untouched-by-this-level elements is overwritten. This makes
-    # ``with outage_context(net, A): with outage_context(net, B): ...``
-    # behave like a stack so nested contexts compose cleanly.
-    # ``id(network)`` rather than a Pydantic ``PrivateAttr`` keeps the
-    # bookkeeping out of the public ``Network`` surface.
-    net_key = id(network)
-    stack = _OUTAGE_BASELINE_STACK.setdefault(net_key, [])
-
-    # Snapshot the pre-flip state for *this* level. We snapshot *before*
-    # mutating so an outer level that has already flipped a flag to
-    # ``False`` does not see the inner level "restore" it to ``False``
-    # on exit (correct behaviour: inner level only restores what it
-    # itself changed at the moment it changed it).
+    # Nestable baseline tracking. Snapshot the pre-flip state for *this*
+    # level, *before* mutating, so an outer level that has already flipped a
+    # flag to ``False`` does not see the inner level "restore" it to ``False``
+    # on exit: each level only reverts what it itself changed, at the moment
+    # it changed it. That is the whole mechanism -- the generator frame of
+    # each nested ``with`` holds its own ``level_baseline``, so the nesting is
+    # the Python call stack and needs no bookkeeping of its own.
     level_baseline = {
         "buses": {
             name: network.buses[name].active for name in outage.disabled_buses
@@ -429,7 +416,6 @@ def outage_context(network: Network, outage: Outage) -> Iterator[Network]:
             for name in outage.disabled_branches
         },
     }
-    stack.append(level_baseline)
 
     saved_paths = dict(network.paths)
 
@@ -451,9 +437,6 @@ def outage_context(network: Network, outage: Outage) -> Iterator[Network]:
             network.buses[name].active = value
         for name, value in level_baseline["branches"].items():
             network.branches[name].active = value
-        stack.pop()
-        if not stack:
-            _OUTAGE_BASELINE_STACK.pop(net_key, None)
         network.paths = saved_paths
         # Drop the cache entries this context built up so the resident
         # footprint matches the externally-visible state of ``network``.
@@ -470,6 +453,7 @@ def run_outage_study(
     auto_parallel_coefficients: Optional[bool] = None,
     phase_current_mode: str = "auto",
     redefine_paths: bool = True,
+    on_error: str = "raise",
 ) -> OutageStudyResult:
     """
     Solve ``fault`` for the base case (optional) and a list of outage scenarios.
@@ -508,6 +492,19 @@ def run_outage_study(
         is dropped at the start of the study so that path definitions
         match the current topology. Each scenario then triggers its own
         path definition through :func:`run_fault`.
+    on_error : {"raise", "record"}, optional
+        What to do when a scenario's solve raises. ``"raise"`` (default,
+        and the historic behaviour) propagates and abandons the study.
+        ``"record"`` notes the scenario in
+        :attr:`OutageStudyResult.failures` and carries on with the next
+        one -- which is what an outage study usually wants, because the
+        interesting scenarios are exactly the ones that disconnect
+        something, and a scenario that isolates the fault bus or leaves a
+        bus without a return path is a legitimate answer ("this outage is
+        not survivable") rather than a reason to throw away the other
+        twenty. The base case is *not* covered by ``"record"``: if the
+        intact network does not solve, every comparison in the result
+        would be against nothing.
 
     Returns
     -------
@@ -517,8 +514,9 @@ def run_outage_study(
     Raises
     ------
     ValueError
-        If ``fault`` is not part of the network or if a scenario label
-        collides with ``base_label``.
+        If ``fault`` is not part of the network, if a scenario label
+        collides with ``base_label``, or if ``on_error`` is not one of the
+        two accepted values.
 
     Examples
     --------
@@ -532,6 +530,10 @@ def run_outage_study(
     >>> study.compare_buses()       # doctest: +SKIP
     >>> study.compare_branches()    # doctest: +SKIP
     """
+    if on_error not in ("raise", "record"):
+        raise ValueError(
+            f"on_error must be 'raise' or 'record', got {on_error!r}."
+        )
     if fault not in network.faults:
         raise ValueError(f"Fault '{fault}' is not part of network '{network.name}'.")
 
@@ -549,6 +551,7 @@ def run_outage_study(
 
     bus_results: Dict[str, pl.DataFrame] = {}
     branch_results: Dict[str, pl.DataFrame] = {}
+    failures: Dict[str, str] = {}
 
     if redefine_paths:
         network.paths = {}
@@ -580,15 +583,37 @@ def run_outage_study(
             len(scenario.disabled_buses),
             len(scenario.disabled_branches),
         )
-        with outage_context(network, scenario):
-            run_fault(
-                network,
-                fault_name=fault,
-                auto_parallel_coefficients=auto_parallel_coefficients,
-                phase_current_mode=phase_current_mode,
+        try:
+            with outage_context(network, scenario):
+                run_fault(
+                    network,
+                    fault_name=fault,
+                    auto_parallel_coefficients=auto_parallel_coefficients,
+                    phase_current_mode=phase_current_mode,
+                )
+                bus_results[scenario.name] = network.res_buses(fault=fault)
+                branch_results[scenario.name] = network.res_branches(fault=fault)
+        except Exception as exc:  # noqa: BLE001 -- recorded, then re-raised or not
+            if on_error == "raise":
+                raise
+            # ``outage_context`` has already unwound the scenario at this
+            # point, so the network is intact for the next one.
+            logger.warning(
+                "Outage study: scenario '%s' failed and was skipped: %s",
+                scenario.name,
+                exc,
             )
-            bus_results[scenario.name] = network.res_buses(fault=fault)
-            branch_results[scenario.name] = network.res_branches(fault=fault)
+            failures[scenario.name] = str(exc)
+            bus_results.pop(scenario.name, None)
+            branch_results.pop(scenario.name, None)
+
+    if failures:
+        logger.warning(
+            "%d of %d outage scenarios failed: %s",
+            len(failures),
+            len(scenarios),
+            ", ".join(sorted(failures)),
+        )
 
     return OutageStudyResult(
         fault=fault,
@@ -596,4 +621,5 @@ def run_outage_study(
         scenarios=list(scenarios),
         bus_results=bus_results,
         branch_results=branch_results,
+        failures=failures,
     )
