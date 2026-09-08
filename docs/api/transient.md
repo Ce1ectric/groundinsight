@@ -23,7 +23,14 @@ behaviour:
   reuses `BusType.impedance_formula` and
   `BranchType.self_impedance_formula` and is therefore consistent
   with the stationary results bin-by-bin. Only current sources are
-  accepted, and mutual coupling is not evaluated by this path.
+  accepted, and only those with a galvanic connection to the fault bus
+  inject — the same rule the stationary solver applies through its
+  source-to-fault paths. Mutual coupling is **not** evaluated by this
+  path; a network that carries it raises a `TransientModelWarning`, and
+  the state-space solver is the one that models it. The DFT's
+  periodicity is checked at the end of the window and
+  `solve(..., zero_pad=True)` solves on a doubled window when the
+  response has not decayed.
 - **State-space solver (`solver="state_space"`)** — assembles a
   modified-nodal-analysis ODE system $\dot x = A x + B u$,
   $y = C x + D u$ from the lumped RLC fields on `BusType` and
@@ -72,7 +79,15 @@ df = result.to_polars()
 
 Switching to the state-space solver only requires changing the
 `solver` argument and ensuring the network's bus and branch types
-carry the lumped RLC formulas required by the ODE form.
+carry the lumped RLC formulas required by the ODE form. That path reads
+those values at one frequency — the smallest strictly positive entry of
+`network.frequencies` unless `solve(..., f_eval=...)` names another one —
+and rejects a negative `R`, `L` or `C` instead of dropping the element.
+
+Both solvers ignore `Fault.scalings` (the source waveform is the literal
+injection) and both warn when the active fault carries any. See
+[Transient simulation](../transient.md) for the derivations, the
+limitations of each path and the measured cross-checks.
 
 ## API reference
 

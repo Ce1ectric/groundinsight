@@ -918,7 +918,7 @@ def compute_impedance_array(
     Examples
     --------
     >>> compute_impedance_array("0.25 + I*2*pi*f*1e-3", [0.0, 50.0], {})
-    array([0.25      +0.j        , 0.25      +0.31415927j])
+    array([0.25+0.j        , 0.25+0.31415927j])
     """
     _, values = _impedance_array(
         formula_str, frequencies, params, dc_real_fallback=dc_real_fallback

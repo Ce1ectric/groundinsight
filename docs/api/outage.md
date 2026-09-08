@@ -27,6 +27,15 @@ calculation per scenario and returns long-format Polars DataFrames
 with absolute and relative deltas against a reference scenario
 (default: the base case).
 
+A scenario whose solve fails aborts the study by default
+(`on_error="raise"`). Pass `on_error="record"` to note it in
+`OutageStudyResult.failures` and carry on with the next scenario
+instead — the interesting scenarios of an outage study are exactly the
+ones that disconnect something, and "this outage is not survivable" is
+an answer rather than a reason to discard the other twenty. The base
+case is never covered by `"record"`: without it every comparison in the
+result would be against nothing.
+
 ## Example
 
 ```python
