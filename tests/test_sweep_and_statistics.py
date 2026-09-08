@@ -226,8 +226,12 @@ def test_summarize_reports_count_spread_quantiles_and_extremes():
     study = gi.run_sweep(net, fault="F", points=_k_points(net))
     frame = study.buses().filter(pl.col("frequency_Hz") == "RMS")
     summary = gi.summarize(frame, "EPR_V", by=["bus_name"])
+    # ``n_nan`` joined the schema in pass 18: polars counts a NaN as a value,
+    # so it lands in ``n`` and not in ``n_null`` while poisoning mean and the
+    # quantiles -- the column is what makes that visible in the row itself.
     assert set(summary.columns) == {
-        "bus_name", "n", "n_null", "mean", "std", "min", "p05", "p50", "p95", "max"
+        "bus_name", "n", "n_null", "n_nan", "mean", "std", "min",
+        "p05", "p50", "p95", "max",
     }
     assert summary.height == len(BUSES)
     assert summary["bus_name"].to_list() == sorted(BUSES)

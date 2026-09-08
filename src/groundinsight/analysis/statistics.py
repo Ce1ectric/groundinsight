@@ -57,8 +57,21 @@ def summarize(
     -------
     pl.DataFrame
         One row per group: the grouping columns, then ``n``, ``n_null``,
-        ``mean``, ``std``, ``min``, the quantiles, and ``max``. Sorted by the
-        grouping columns so repeated runs produce identical output.
+        ``n_nan``, ``mean``, ``std``, ``min``, the quantiles, and ``max``.
+        Sorted by the grouping columns so repeated runs produce identical
+        output.
+
+    Notes
+    -----
+    **Read ``n_nan`` before the statistics.** Polars counts a NaN as a
+    *value*, not as a null: it lands in ``n``, not in ``n_null``, it
+    propagates through ``mean``, ``std`` and every quantile, and ``min`` /
+    ``max`` skip it -- so a single NaN leaves a summary in which the extremes
+    look sound and the mean is NaN, with nothing in the row saying why. That
+    is a realistic input here rather than a hypothetical: a sweep point that
+    failed under ``on_error="record"`` writes NaN into the value column.
+    ``n_nan`` is the column that says how many, and it is ``0`` for an integer
+    column, which cannot carry one.
 
     Raises
     ------
@@ -87,9 +100,17 @@ def summarize(
     if bad:
         raise ValueError(f"Quantile(s) {bad} lie outside [0, 1].")
 
+    # ``is_nan`` is only defined on the float dtypes; an integer column cannot
+    # carry a NaN, so the count is a constant zero there rather than an error.
+    n_nan = (
+        pl.col(value).is_nan().sum().alias("n_nan")
+        if frame.schema[value].is_float()
+        else pl.lit(0, dtype=pl.UInt32).alias("n_nan")
+    )
     aggregations = [
         pl.col(value).count().alias("n"),
         pl.col(value).null_count().alias("n_null"),
+        n_nan,
         pl.col(value).mean().alias("mean"),
         pl.col(value).std().alias("std"),
         pl.col(value).min().alias("min"),
@@ -146,8 +167,12 @@ def classify(
     Returns
     -------
     pl.DataFrame
-        The input with one column added. Rows whose value is null get a null
-        class rather than being forced into the lowest band.
+        The input with one column added. Rows whose value is null **or NaN**
+        get a null class rather than being forced into a band. A NaN used to
+        land in the *highest* class, because every ``NaN <= edge`` is false
+        and the chain fell through to the ``otherwise`` branch -- so a failed
+        sweep point was reported as the worst case rather than as unassessed,
+        and a study reading the top band as its violations counted it.
 
     Raises
     ------
@@ -192,7 +217,10 @@ def classify(
             f"{len(labels)} label(s) were given."
         )
 
-    expression = pl.when(pl.col(value).is_null()).then(None)
+    unassessable = pl.col(value).is_null()
+    if frame.schema[value].is_float():
+        unassessable = unassessable | pl.col(value).is_nan()
+    expression = pl.when(unassessable).then(None)
     for edge, label in zip(edges, labels):
         expression = expression.when(pl.col(value) <= edge).then(pl.lit(label))
     expression = expression.otherwise(pl.lit(labels[-1]))
