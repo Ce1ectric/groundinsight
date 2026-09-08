@@ -382,6 +382,22 @@ def find_max_rho_f_scaling(
         ``c = c_bounds[0]`` already violates the EPR limit, or if the
         model returns a non-finite EPR at some trial factor.
 
+    Notes
+    -----
+    **The monotonicity assumption.** The bisection finds *the* crossing of
+    ``max EPR(c)`` with ``u_limit`` and therefore presumes there is only one.
+    Unlike :func:`~groundinsight.analysis.find_max_rho_scaling`, this search
+    scales all five ``k`` and with them every term of the impedance, so at a
+    single bus the whole impedance scales with ``c`` and monotonicity follows.
+    In a coupled multi-bus network it does **not** follow: the swept maximum
+    is a maximum over buses, each of which sees the others through the
+    shields, and a chain resonance can in principle make it turn. That case
+    has not been constructed, so treat it as unproven rather than as excluded
+    -- if ``c_max`` looks implausible, sweep ``c`` explicitly with
+    :func:`evaluate_max_epr_under_k` and look at the curve. The rho-only
+    search has a pre-scan for exactly this (``monotonicity_grid``); here the
+    same scan would cost a full bus sweep per point and is left to the caller.
+
     Examples
     --------
     >>> import groundinsight as gi  # doctest: +SKIP
@@ -471,15 +487,16 @@ def find_max_rho_f_scaling(
                 max_iter, c_lo, c_hi, (c_hi - c_lo) / c_lo, tol_rel, c_lo,
             )
 
-    # Defensive consistency check: the maximum of the per-bus EPRs at
-    # c_max must equal the reported ``max_epr_rms_at_c_max``. A drift
-    # here would mean the snapshot and the headline figure refer to
-    # different iterations — historically a bug surface (the
-    # ``eprs_lo_snapshot`` shadow variable was added in 0.4.0 to plug
-    # exactly this gap). Re-evaluate once at ``c_max`` to lock the
-    # invariant in place; the cost is one extra ``run_fault`` per sweep.
-    epr_at = _max_epr_at(c_max)
-    epr_per_bus_at = dict(last_epr_per_bus["value"])
+    # The invariant this used to re-measure: the maximum of the per-bus EPRs
+    # at c_max is the reported ``max_epr_rms_at_c_max``. It was locked in by
+    # evaluating ``c_max`` once more -- a full bus sweep, ``N`` run_fault calls
+    # -- which is the one thing the snapshot makes unnecessary:
+    # ``eprs_lo_snapshot`` is the per-bus dict of exactly the evaluation that
+    # set ``epr_lo``, at exactly this ``c``. Taking the headline figure *from*
+    # the snapshot rather than beside it makes the two agree by construction
+    # instead of by repetition, and the sweep count drops from (iter + 3)*N to
+    # (iter + 2)*N.
+    epr_at = max(epr_per_bus_at.values()) if epr_per_bus_at else epr_at
 
     return {
         "c_max": c_max,

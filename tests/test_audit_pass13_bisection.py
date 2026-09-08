@@ -239,8 +239,16 @@ def test_max_iter_exhaustion_is_reported(net):
 def test_truncated_c_max_is_wrong_but_still_admissible(converged_result):
     """The truncated answer is *conservative*, not arbitrary: it is a
     factor whose EPR was measured and found admissible. It is simply far
-    below the true maximum, and only ``converged`` says so."""
-    truncated = _search(_build_net(), max_iter=3)
+    below the true maximum, and only ``converged`` says so.
+
+    The pre-scan added in pass 18 is switched off here on purpose. It narrows
+    the starting bracket to one grid interval, so three steps then leave 14 %
+    rather than 81 % -- a genuine improvement, and precisely what would stop
+    this test from demonstrating anything. The point being pinned is that a
+    *truncated bisection* can be badly wrong, not that the default settings
+    make it so.
+    """
+    truncated = _search(_build_net(), max_iter=3, monotonicity_grid=0)
     assert truncated["c_max"] < converged_result["c_max"]
     assert truncated["u_epr_rms_at_c_max"] <= U_MAX
     rel_err = abs(truncated["c_max"] - converged_result["c_max"])
