@@ -71,6 +71,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 import polars as pl
 
 from ..models.core_models import Network
+from ._guards import require_complete_results
 from .shortcircuit import (
     iec60909_m,
     kappa_from_r_to_x,
@@ -331,53 +332,9 @@ def _warn_half_declared(
     )
 
 
-def _require_complete_results(
-    fault_name: str, expected: Sequence[str], reported: Sequence[str], kind: str
-) -> None:
-    """
-    Fail loudly when the stored result does not cover the whole network.
-
-    A limit check that silently reports *nothing* is worse than one that
-    raises: the natural safety gates (iterating the rows, or testing
-    ``frame.is_empty()``) then read an incomplete result as "no violations",
-    and the ``logger.warning`` channel of the check goes silent as well.
-
-    This happens in practice: ``ElectricalNetwork.solve_network()`` resets
-    ``network.results[fault]`` and only :meth:`~groundinsight.electrical_network.
-    ElectricalNetwork.compute_branch_currents` refills the branch list, so
-    solving a hand-built :class:`ElectricalNetwork` for inspection leaves the
-    stored result without any branches. Adding a branch or activating a bus
-    after :func:`groundinsight.run_fault` leaves the same gap.
-
-    Parameters
-    ----------
-    fault_name : str
-        Name of the fault whose result is being checked, for the message.
-    expected : Sequence[str]
-        Names that a complete result must contain.
-    reported : Sequence[str]
-        Names actually present in the stored result.
-    kind : str
-        ``"branch"`` or ``"bus"``, used in the message only.
-
-    Raises
-    ------
-    ValueError
-        If any expected name is missing from the stored result.
-    """
-    missing = [name for name in expected if name not in set(reported)]
-    if not missing:
-        return
-    shown = missing[:5]
-    suffix = "" if len(missing) == len(shown) else f", ... (+{len(missing) - len(shown)})"
-    raise ValueError(
-        f"Incomplete results for fault {fault_name!r}: {len(missing)} of "
-        f"{len(expected)} {kind}es are missing from the stored result "
-        f"({shown}{suffix}). The check would silently report no violations "
-        f"for them. Call run_fault(network, {fault_name!r}) to rebuild the "
-        f"results; note that calling ElectricalNetwork.solve_network() on its "
-        f"own resets them and must be followed by compute_branch_currents()."
-    )
+#: Shared guard, kept importable here under its historic name so the two
+#: thermal checks below read as they did before it moved to ``_guards``.
+_require_complete_results = require_complete_results
 
 
 def _resolve_sc_inputs(
