@@ -59,6 +59,7 @@ from .core_models import (
     Path,
     Network,
     Result,
+    json_safe_float,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -82,7 +83,12 @@ class ComplexNumberDB(Base):
 
     @classmethod
     def from_pydantic(cls, complex_number: ComplexNumber):
-        return cls(value={"real": complex_number.real, "imag": complex_number.imag})
+        return cls(
+            value={
+                "real": json_safe_float(complex_number.real),
+                "imag": json_safe_float(complex_number.imag),
+            }
+        )
 
 
 class BusTypeDB(Base):
@@ -190,7 +196,10 @@ def _real_dict_to_json(values):
     keys), or ``None`` if the input is ``None``/empty."""
     if not values:
         return None
-    return {str(freq): float(val) for freq, val in values.items()}
+    # ``json_safe_float`` keeps the stored document RFC 8259 valid; a bare
+    # ``inf`` would render as ``Infinity`` and SQLite's ``json_valid()`` would
+    # report 0 for the whole column.
+    return {str(freq): json_safe_float(float(val)) for freq, val in values.items()}
 
 
 def _real_dict_from_json(stored):
@@ -323,7 +332,10 @@ class BusDB(Base):
         # Convert impedance to JSON serializable format
         impedance = (
             {
-                str(freq): {"real": imp.real, "imag": imp.imag}
+                str(freq): {
+                    "real": json_safe_float(imp.real),
+                    "imag": json_safe_float(imp.imag),
+                }
                 for freq, imp in bus.impedance.items()
             }
             if bus.impedance
@@ -560,7 +572,10 @@ class BranchDB(Base):
         # Convert impedance to JSON serializable format
         self_impedance = (
             {
-                str(freq): {"real": imp.real, "imag": imp.imag}
+                str(freq): {
+                    "real": json_safe_float(imp.real),
+                    "imag": json_safe_float(imp.imag),
+                }
                 for freq, imp in branch.self_impedance.items()
             }
             if branch.self_impedance
@@ -569,7 +584,10 @@ class BranchDB(Base):
 
         mutual_impedance = (
             {
-                str(freq): {"real": imp.real, "imag": imp.imag}
+                str(freq): {
+                    "real": json_safe_float(imp.real),
+                    "imag": json_safe_float(imp.imag),
+                }
                 for freq, imp in branch.mutual_impedance.items()
             }
             if branch.mutual_impedance
@@ -578,7 +596,10 @@ class BranchDB(Base):
 
         phase_impedance = (
             {
-                str(freq): {"real": imp.real, "imag": imp.imag}
+                str(freq): {
+                    "real": json_safe_float(imp.real),
+                    "imag": json_safe_float(imp.imag),
+                }
                 for freq, imp in branch.phase_impedance.items()
             }
             if branch.phase_impedance
@@ -758,7 +779,10 @@ class SourceDB(Base):
         out = {}
         for freq, val in values.items():
             if isinstance(val, ComplexNumber):
-                out[str(freq)] = {"real": val.real, "imag": val.imag}
+                out[str(freq)] = {
+                    "real": json_safe_float(val.real),
+                    "imag": json_safe_float(val.imag),
+                }
             else:
                 out[str(freq)] = val  # Assume float or int
         return out

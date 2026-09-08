@@ -1,4 +1,4 @@
-from groundinsight.models.core_models import ComplexNumber
+from groundinsight.models.core_models import ComplexNumber, json_safe_float
 
 
 def serialize_impedance(impedance_dict):
@@ -21,9 +21,22 @@ def serialize_impedance(impedance_dict):
         A JSON-compatible dictionary where each key is a frequency
         represented as a string, and each value is a dictionary
         with 'real' and 'imag' keys corresponding to the impedance components.
+
+    Notes
+    -----
+    Non-finite components are written as the strings ``"inf"``, ``"-inf"``
+    and ``"nan"``. The open-end sentinel of this package *is* an infinite
+    impedance, and ``json.dumps`` would otherwise emit the bare
+    ``Infinity`` literal, which SQLite's ``json_valid()`` rejects and no
+    non-Python reader accepts. :func:`deserialize_impedance` reads the
+    strings back through the ``ComplexNumber`` validator, so the round-trip
+    is lossless.
     """
     return {
-        str(freq): {"real": imp.real, "imag": imp.imag}
+        str(freq): {
+            "real": json_safe_float(imp.real),
+            "imag": json_safe_float(imp.imag),
+        }
         for freq, imp in impedance_dict.items()
     }
 

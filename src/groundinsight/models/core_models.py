@@ -2,6 +2,7 @@
 
 import logging
 import math
+import numbers
 import warnings
 
 import numpy as np
@@ -10,11 +11,11 @@ from pydantic import (
     ConfigDict,
     PrivateAttr,
     computed_field,
+    field_serializer,
     field_validator,
     model_validator,
 )
 from typing import Any, Optional, List, Dict, Literal, Union
-from sympy import lambdify, sympify, symbols
 from groundinsight.utils.validations import validate_impedance_formula_value
 from groundinsight.utils.impedance_calculator import (
     check_passive_impedance,
@@ -78,6 +79,79 @@ class TransientModelWarning(UserWarning):
     """
 
 
+def json_safe_float(value: float) -> Union[float, str]:
+    """
+    Render a float so that ``json.dumps`` produces RFC 8259 JSON.
+
+    Python writes ``Infinity`` / ``-Infinity`` / ``NaN`` for the non-finite
+    floats, which no other JSON reader accepts: SQLite's ``json_valid()``
+    returns 0 and JavaScript's ``JSON.parse`` raises. ``inf`` is not an
+    accident in this package -- it is the open-end sentinel produced by the
+    ``"nan"`` impedance formula -- so it cannot simply be dropped to ``null``
+    either. The compromise is a string, which both survives the round-trip
+    (``float("inf")`` reads it back) and keeps the document valid.
+
+    Parameters
+    ----------
+    value : float
+        The value to render.
+
+    Returns
+    -------
+    Union[float, str]
+        ``value`` itself when finite, otherwise ``"inf"``, ``"-inf"`` or
+        ``"nan"``.
+    """
+    if math.isnan(value):
+        return "nan"
+    if math.isinf(value):
+        return "inf" if value > 0 else "-inf"
+    return value
+
+
+class ValidatedAssignmentModel(BaseModel):
+    """
+    Base class whose rejected assignments leave the object unchanged.
+
+    ``model_config = ConfigDict(validate_assignment=True)`` makes Pydantic
+    re-validate a field on ``setattr``, which is what the models below want:
+    a value that is refused at construction has to be refused later, too.
+    Pydantic applies the new value to ``__dict__`` *before* it runs the
+    model-level ``mode="after"`` validators, though, and does not undo it when
+    one of them raises. A caller that catches the ``ValidationError`` -- which
+    is the normal thing to do around a bulk import -- would then be holding an
+    object in exactly the state the validator just rejected, and the point of
+    validating on assignment is that such an object never exists.
+
+    Field-level validators are unaffected (they run before the write); this
+    only matters for the cross-field checks such as
+    :meth:`Source._validate_source_mode`. The previous value, and the
+    ``__pydantic_fields_set__`` bookkeeping that goes with it, are restored
+    before the exception is re-raised.
+    """
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        fields = type(self).model_fields
+        if name not in fields:
+            super().__setattr__(name, value)
+            return
+        had_value = name in self.__dict__
+        previous = self.__dict__.get(name)
+        was_set = name in self.__pydantic_fields_set__
+        try:
+            super().__setattr__(name, value)
+        except Exception:
+            if had_value:
+                self.__dict__[name] = previous
+            else:
+                self.__dict__.pop(name, None)
+            if was_set:
+                self.__pydantic_fields_set__.add(name)
+            else:
+                self.__pydantic_fields_set__.discard(name)
+            raise
+
+
 # data types
 class ComplexNumber(BaseModel):
     """
@@ -92,12 +166,31 @@ class ComplexNumber(BaseModel):
         The real part of the complex number.
     imag : float
         The imaginary part of the complex number.
+
+    Notes
+    -----
+    Non-finite parts are serialised as the **strings** ``"inf"``,
+    ``"-inf"`` and ``"nan"`` rather than as the bare JavaScript-style
+    ``Infinity`` / ``NaN`` literals Python's ``json`` module emits.
+    ``inf`` is a load-bearing value here -- it is the open-end sentinel
+    produced by the ``"nan"`` impedance formula -- so it must survive a
+    round-trip, and the file must stay RFC 8259 JSON: SQLite's
+    ``json_valid()`` returns 0 for ``Infinity``, and a browser's
+    ``JSON.parse`` refuses it outright, which would make every stored
+    network with an open end unreadable to anything but Python. The
+    validator already accepts those strings, so the round-trip is
+    symmetric.
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
 
     real: float
     imag: float
+
+    @field_serializer("real", "imag", when_used="json")
+    def _serialise_part(self, value: float) -> Union[float, str]:
+        """Write ``inf`` / ``-inf`` / ``nan`` as RFC-8259-safe strings."""
+        return json_safe_float(value)
 
     @field_validator("real", "imag", mode="before")
     def convert_to_float(cls, value: Any) -> float:
@@ -160,6 +253,18 @@ class ComplexNumber(BaseModel):
                 return {"real": c.real, "imag": c.imag}
             except ValueError:
                 raise ValueError(f"Invalid complex number string: {value}")
+        elif isinstance(value, (np.generic, numbers.Complex)):
+            # NumPy scalars reach the models straight from the solver arrays;
+            # ``np.complex128`` happens to subclass ``complex`` but
+            # ``np.complex64`` and the integer types do not, so they used to
+            # be rejected with a bare TypeError.
+            try:
+                c = complex(value)
+            except (TypeError, ValueError) as exc:
+                raise TypeError(
+                    f"Cannot parse ComplexNumber from type {type(value)}"
+                ) from exc
+            return {"real": c.real, "imag": c.imag}
         else:
             raise TypeError(f"Cannot parse ComplexNumber from type {type(value)}")
 
@@ -167,7 +272,11 @@ class ComplexNumber(BaseModel):
         return complex(self.real, self.imag)
 
     def __repr__(self):
-        return f"({self.real}+{self.imag}j)"
+        # Round-trippable: ``eval(repr(z))`` reconstructs the value with
+        # ``ComplexNumber`` in scope. The previous form ``(-1.0+-2.0j)``
+        # produced ``+-`` for a negative imaginary part and was neither valid
+        # Python nor a valid complex literal.
+        return f"ComplexNumber(real={self.real!r}, imag={self.imag!r})"
 
     # Implementing arithmetic operations
     def __add__(self, other):
@@ -216,29 +325,48 @@ class ComplexNumber(BaseModel):
         return abs(complex(self.real, self.imag))
 
     def __eq__(self, other):
-        other = self._convert_to_complex_number(other)
+        """Compare against anything convertible; defer otherwise.
+
+        Returning ``NotImplemented`` instead of raising is what the data
+        model asks for: Python then tries the reflected operation and finally
+        falls back to identity, so ``z == None`` is ``False`` rather than a
+        ``TypeError``. Every ``Optional[ComplexNumber]`` field in this package
+        is compared against ``None`` somewhere, and the raising version turned
+        that ordinary check into a crash.
+        """
+        try:
+            other = self._convert_to_complex_number(other)
+        except TypeError:
+            return NotImplemented
         return self.real == other.real and self.imag == other.imag
+
+    def __hash__(self):
+        """Hash as the equivalent :class:`complex`.
+
+        Defining ``__eq__`` sets ``__hash__`` to ``None``, which made
+        ``ComplexNumber`` unusable as a dict key or set member. Hashing the
+        equivalent ``complex`` keeps the hash/eq contract across the types
+        this class compares equal to: ``hash(ComplexNumber(real=1, imag=0))``
+        equals ``hash(1.0)``.
+        """
+        return hash(complex(self.real, self.imag))
 
     # Implementing exponentiation
     def __pow__(self, power, modulo=None):
         if modulo is not None:
             raise ValueError("Modulo operation is not supported for complex numbers.")
-        if isinstance(power, ComplexNumber):
-            power = complex(power.real, power.imag)
-        elif isinstance(power, (int, float)):
-            power = float(power)
-        else:
+        try:
+            power = complex(self._convert_to_complex_number(power))
+        except TypeError:
             raise TypeError(f"Unsupported type for exponentiation: {type(power)}")
         base = complex(self.real, self.imag)
         result = base**power
         return ComplexNumber(real=result.real, imag=result.imag)
 
     def __rpow__(self, other):
-        if isinstance(other, ComplexNumber):
-            other = complex(other.real, other.imag)
-        elif isinstance(other, (int, float)):
-            other = float(other)
-        else:
+        try:
+            other = complex(self._convert_to_complex_number(other))
+        except TypeError:
             raise TypeError(f"Unsupported type for exponentiation: {type(other)}")
         exponent = complex(self.real, self.imag)
         result = other**exponent
@@ -250,8 +378,13 @@ class ComplexNumber(BaseModel):
 
         Parameters
         ----------
-        value : ComplexNumber, complex, float, int, dict, str
-            The value to convert.
+        value : ComplexNumber, complex, float, int, numpy scalar
+            The value to convert. NumPy scalars (``np.int64``,
+            ``np.float32``, ``np.complex64``, ...) and anything else
+            registered as :class:`numbers.Complex` are accepted, because the
+            solver hands NumPy scalars back out of the linear algebra and
+            ``z * np.complex64(2)`` used to fail while ``np.complex64(2) * z``
+            worked -- the asymmetry was invisible until it hit a user.
 
         Returns
         -------
@@ -265,12 +398,21 @@ class ComplexNumber(BaseModel):
         """
         if isinstance(value, ComplexNumber):
             return value
-        elif isinstance(value, complex):
-            return ComplexNumber(real=value.real, imag=value.imag)
-        elif isinstance(value, (int, float)):
-            return ComplexNumber(real=float(value), imag=0.0)
+        if isinstance(value, (complex, int, float)):
+            converted = complex(value)
+        elif isinstance(value, (np.generic, numbers.Complex)):
+            # ``np.generic`` also catches NumPy scalars that are not numbers
+            # (``np.str_``, ``np.bool_``); ``complex()`` rejects those and the
+            # failure is reported as a TypeError like any other bad operand.
+            try:
+                converted = complex(value)
+            except (TypeError, ValueError) as exc:
+                raise TypeError(
+                    f"Cannot convert {type(value)} to ComplexNumber"
+                ) from exc
         else:
             raise TypeError(f"Cannot convert {type(value)} to ComplexNumber")
+        return ComplexNumber(real=converted.real, imag=converted.imag)
 
 
 # user interface
@@ -365,6 +507,8 @@ class BusType(BaseModel):
     earthing conductor.
     """
 
+    model_config = ConfigDict(ser_json_inf_nan="constants")
+
     name: str
     description: Optional[str] = None
     system_type: str
@@ -426,7 +570,7 @@ class BusType(BaseModel):
         return f"BusType(name={self.name}, system_type={self.system_type}, voltage_level={self.voltage_level})"
 
 
-class Bus(BaseModel):
+class Bus(ValidatedAssignmentModel):
     """
     Represents a grounding bus within the network.
 
@@ -458,7 +602,9 @@ class Bus(BaseModel):
         Farad. Populated only if ``type.C_formula`` is set.
     """
 
-    model_config = ConfigDict(ser_json_inf_nan="constants")
+    model_config = ConfigDict(
+        ser_json_inf_nan="constants", validate_assignment=True
+    )
 
     name: str
     description: Optional[str] = None
@@ -602,6 +748,8 @@ class BranchType(BaseModel):
         solvers.
     """
 
+    model_config = ConfigDict(ser_json_inf_nan="constants")
+
     name: str
     description: Optional[str] = None
     grounding_conductor: bool
@@ -648,7 +796,7 @@ class BranchType(BaseModel):
         return f"BranchType(name={self.name}, grounding_conductor={self.grounding_conductor})"
 
 
-class Branch(BaseModel):
+class Branch(ValidatedAssignmentModel):
     """
     Represents a branch (conductor) connecting two buses in the network.
 
@@ -685,7 +833,9 @@ class Branch(BaseModel):
         what-if machinery in :mod:`groundinsight.simulation.outage`.
     """
 
-    model_config = ConfigDict(ser_json_inf_nan="constants")
+    model_config = ConfigDict(
+        ser_json_inf_nan="constants", validate_assignment=True
+    )
 
     name: str
     description: Optional[str] = None
@@ -895,7 +1045,7 @@ class Branch(BaseModel):
         return f"Branch(name={self.name}, from={self.from_bus}, to={self.to_bus})"
 
 
-class Fault(BaseModel):
+class Fault(ValidatedAssignmentModel):
     """
     Represents a fault within the network.
 
@@ -935,6 +1085,10 @@ class Fault(BaseModel):
     *feeding* side (``I_k''``, ``R/X``, ``kappa``) live on
     :class:`Source` instead.
     """
+
+    model_config = ConfigDict(
+        ser_json_inf_nan="constants", validate_assignment=True
+    )
 
     name: str
     description: Optional[str] = None
@@ -994,6 +1148,13 @@ class Fault(BaseModel):
         silently masking the ``int``-keyed override. This validator
         coerces every key to ``float`` and raises ``ValueError`` on
         duplicate frequencies that would otherwise collide silently.
+
+        The *values* are checked as well. A scaling multiplies the source
+        injection, so ``nan`` propagates into every voltage of that frequency
+        bin without raising anywhere, ``inf`` turns the whole result into
+        ``inf``, and a negative factor reverses the fault current -- which is
+        not a scaling but a different fault. All three used to be accepted and
+        only showed up as an unserialisable network afterwards.
         """
         if value is None:
             return value
@@ -1013,7 +1174,28 @@ class Fault(BaseModel):
                     "after int → float coercion. Drop the duplicate "
                     "entry to make the intended scaling unambiguous."
                 )
-            normalised[f_key] = scaling
+            try:
+                f_scaling = float(scaling)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Fault.scalings: value {scaling!r} at {f_key} Hz is not "
+                    "convertible to float."
+                ) from exc
+            if not math.isfinite(f_scaling):
+                raise ValueError(
+                    f"Fault.scalings: value at {f_key} Hz must be finite, got "
+                    f"{f_scaling}. A non-finite scaling propagates into every "
+                    "voltage of that frequency bin without raising, and makes "
+                    "the network unserialisable afterwards."
+                )
+            if f_scaling < 0:
+                raise ValueError(
+                    f"Fault.scalings: value at {f_key} Hz must be >= 0, got "
+                    f"{f_scaling}. A negative factor reverses the fault "
+                    "current; express that through the source phasor, not "
+                    "through the scaling."
+                )
+            normalised[f_key] = f_scaling
         return normalised
 
     @computed_field()
@@ -1030,7 +1212,7 @@ class Fault(BaseModel):
         return f"Fault(name={self.name}, bus={self.bus})"
 
 
-class Source(BaseModel):
+class Source(ValidatedAssignmentModel):
     """
     Represents a current or Thevenin (voltage) source within the network.
 
@@ -1121,6 +1303,10 @@ class Source(BaseModel):
     AC components by ``sqrt(2)`` before filling ``values``. See
     :meth:`groundinsight.electrical_network.ElectricalNetwork._calculate_rms`.
     """
+
+    model_config = ConfigDict(
+        ser_json_inf_nan="constants", validate_assignment=True
+    )
 
     name: str
     description: Optional[str] = None
@@ -1294,6 +1480,8 @@ class ResultBus(BaseModel):
         empty mapping for backwards compatibility.
     """
 
+    model_config = ConfigDict(ser_json_inf_nan="constants")
+
     name: str  # name of the bus
     uepr: float  # Earth potential rise
     ia: float  # Current dissipated into the soil (earth electrode)
@@ -1320,6 +1508,8 @@ class ResultBranch(BaseModel):
     i_s_freq : dict of float to ComplexNumber
         Mapping of frequency to complex shield current values.
     """
+
+    model_config = ConfigDict(ser_json_inf_nan="constants")
 
     name: str  # name of the branch
     i_s: float  # Shield current
@@ -1379,6 +1569,8 @@ class ResultReductionFactor(BaseModel):
         feeder).
     """
 
+    model_config = ConfigDict(ser_json_inf_nan="constants")
+
     name: Optional[str] = None  # Make name optional with a default value
     fault_bus: str
     value: Dict[float, Optional[float]]  # Mapping from frequency to reduction factor
@@ -1414,6 +1606,8 @@ class ResultGroundingImpedance(BaseModel):
         Mapping from frequency to grounding impedance ``Z_G(f)``.
     """
 
+    model_config = ConfigDict(ser_json_inf_nan="constants")
+
     name: Optional[str] = None  # Make name optional with a default value
     fault_bus: str
     value: Dict[
@@ -1447,6 +1641,8 @@ class Result(BaseModel):
         The name of the fault that was active during the calculation.
     """
 
+    model_config = ConfigDict(ser_json_inf_nan="constants")
+
     buses: List[ResultBus] = []
     branches: List[ResultBranch] = []
     reduction_factor: Optional[ResultReductionFactor] = None
@@ -1476,6 +1672,8 @@ class Path(BaseModel):
         ``source`` to ``fault``.
     """
 
+    model_config = ConfigDict(ser_json_inf_nan="constants")
+
     name: str
     description: Optional[str] = None
     source: str
@@ -1486,7 +1684,7 @@ class Path(BaseModel):
         return f"Path(name={self.name}, source={self.source}, fault={self.fault})"
 
 
-class Network(BaseModel):
+class Network(ValidatedAssignmentModel):
     """
     Top-level container for an entire grounding network.
 
@@ -1519,7 +1717,9 @@ class Network(BaseModel):
         Name of the currently active fault.
     """
 
-    model_config = ConfigDict(ser_json_inf_nan="constants")
+    model_config = ConfigDict(
+        ser_json_inf_nan="constants", validate_assignment=True
+    )
 
     name: str
     description: Optional[str] = None

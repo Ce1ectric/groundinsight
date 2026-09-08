@@ -68,7 +68,7 @@ import numpy as np
 import pytest
 
 import groundinsight as gi
-from groundinsight.models.core_models import ComplexNumber
+from groundinsight.models.core_models import ComplexNumber, Source
 from groundinsight.simulation import waveforms
 from groundinsight.simulation.transient import TransientStudy
 from groundinsight.utils.impedance_calculator import (
@@ -504,10 +504,22 @@ def test_a_dc_study_with_a_voltage_source_survives_the_thevenin_loop():
     separate site from the three in the matrix build and is only reached by a
     ``source_type='voltage'`` source."""
     net = _dc_network("p16_dc_voltage")
-    src = net.sources["s"]
-    src.source_type = "voltage"
-    src.source_impedance = {0.0: ComplexNumber(real=0.5, imag=0.0)}
-    src.values = {0.0: 1000.0 + 0.0j}
+    # Audit pass 18 (M4): ``Source`` validates on assignment now, so the
+    # source is rebuilt in one consistent step instead of being walked through
+    # the intermediate states ``source_type='voltage'`` with no ``voltage`` and
+    # then ``values`` set alongside it -- a combination ``_validate_source_mode``
+    # rejects at construction and which left ``_norton_current`` returning
+    # ``None``, so the Thevenin branch this test is named after was never
+    # actually taken. It is now.
+    previous = net.sources["s"]
+    net.sources["s"] = Source(
+        name=previous.name,
+        bus=previous.bus,
+        source_type="voltage",
+        voltage={0.0: ComplexNumber(real=1000.0, imag=0.0)},
+        source_impedance={0.0: ComplexNumber(real=0.5, imag=0.0)},
+        r_to_x=previous.r_to_x,
+    )
     gi.run_fault(net, "F")
     epr = _epr_at(net, 0.0)
     assert all(math.isfinite(v) for v in epr.values())
