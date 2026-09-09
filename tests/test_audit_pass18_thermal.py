@@ -82,9 +82,24 @@ def test_an_out_of_range_n_is_refused(n):
 
 def test_a_stored_out_of_range_kappa_is_refused_too():
     """The value does not have to come from the call: a hand-edited frame can
-    put it on the source, which is where the pandapower importer writes it."""
+    put it on the source, which is where the pandapower importer writes it.
+
+    Two layers now stand in the way. Assignment is validated (M4), so the
+    ordinary write is refused on the spot; and a value that bypasses Pydantic
+    altogether (``model_construct``, the only remaining route) is still caught
+    by the thermal guard (A9) before it can inflate ``i_p``.
+    """
     net = _network([50.0], {50.0: 1000.0})
-    net.sources["SRC"].kappa = 42.0
+    with pytest.raises(ValueError, match="kappa must lie in"):
+        net.sources["SRC"].kappa = 42.0
+    assert net.sources["SRC"].kappa is None
+
+    original = net.sources["SRC"]
+    tampered = gi.Source.model_construct(
+        **{name: getattr(original, name) for name in type(original).model_fields},
+    )
+    tampered.__dict__["kappa"] = 42.0
+    net.sources["SRC"] = tampered
     with pytest.raises(ValueError, match="kappa must lie in"):
         gi.check_conductor_limits(net, "F", t_k=0.5)
 

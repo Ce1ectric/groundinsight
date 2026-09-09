@@ -131,6 +131,9 @@ def test_the_new_argument_warns_about_nothing(simple_network):
 
 
 def test_restored_paths_survive_the_next_run_fault(simple_network):
+    # Since K2 the default ``phase_current_mode="auto"`` no longer enumerates
+    # paths, so a persisted path set only exists when it was asked for.
+    gi.create_paths(simple_network)
     gi.run_fault(simple_network, "F")
     payload = simple_network.model_dump_json()
 
@@ -149,6 +152,7 @@ def test_restored_paths_are_rebuilt_when_the_topology_no_longer_matches(
     simple_network,
 ):
     """A hand-edited file whose branches moved must not keep its paths."""
+    gi.create_paths(simple_network)
     gi.run_fault(simple_network, "F")
     payload = simple_network.model_dump_json()
 
