@@ -14,7 +14,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.14"]
+        # 3.13 is the floor pyproject declares (audit pass 18, M23) and what
+        # the distribution pythons and most pandapower environments ship;
+        # 3.14 is the version the docs and the release workflow use. Both are
+        # tested so the declared floor is a claim the CI actually backs.
+        python-version: ["3.13", "3.14"]
 
     steps:
       - name: Check out repository
@@ -50,3 +54,72 @@ jobs:
           name: coverage-xml
           path: coverage.xml
           if-no-files-found: ignore
+
+  docs:
+    name: Docs build (strict)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v6
+        with:
+          path: .venv
+          key: venv-docs-${{ runner.os }}-py3.14-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install project with docs group
+        run: poetry install --no-interaction --with docs
+
+      # ``docs.yml`` only runs on ``main``, i.e. after the merge -- a broken
+      # cross-reference was therefore always found too late, on the branch
+      # that publishes the site. ``--strict`` turns every mkdocs warning into
+      # an error, which is what the deploy already relies on.
+      - name: Build the site strictly
+        run: poetry run mkdocs build --strict
+
+  notebooks:
+    name: Curated notebooks execute
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Install project with docs and dev groups
+        run: >-
+          poetry install --no-interaction --with docs,dev
+          --extras pandapower
+
+      # ``mkdocs.yml`` sets ``execute: false``, so the notebooks under
+      # ``docs/examples`` are published with their *stored* output. Nothing
+      # checked that the stored output still matched the code:
+      # ``mv_ring_transient.ipynb`` shipped a reduction factor of 0.904 next
+      # to a cell that raised ``KeyError: 'F1'`` when run. This job runs them.
+      - name: Execute the curated example notebooks
+        run: >-
+          poetry run jupyter nbconvert --to notebook --execute
+          --ExecutePreprocessor.timeout=600
+          --output-dir /tmp/nbconvert
+          docs/examples/*.ipynb

@@ -33,15 +33,39 @@ from .database.migration import (
 )
 from typing import Optional
 from typing import Dict
-from pathlib import Path
+
+# ``pathlib.Path`` is imported under an alias on purpose. Imported plainly it
+# became ``groundinsight.Path``, so ``gi.Path`` -- which every reader takes
+# for the source-to-fault :class:`~groundinsight.models.core_models.Path` of
+# this package -- was the standard library's filesystem path. ``gi.Path`` is
+# the domain model now; the filesystem one is private to this module.
+from pathlib import Path as _Path
 from .models.core_models import (
-    BusType,
+    Branch,
     BranchType,
+    Bus,
+    BusType,
+    ComplexNumber,
+    Fault,
     Network,
     NetworkFrequencyOrderWarning,
+    Path,
+    Result,
+    ResultBranch,
+    ResultBus,
+    Source,
     TransientModelWarning,
 )
-from .models.database_models import BusTypeDB, BranchTypeDB, NetworkDB
+
+# The ORM mirrors are an implementation detail of the persistence layer and
+# are deliberately *not* re-exported: they were reachable as ``gi.BusTypeDB``
+# only because this module needed them for its own ``session.get`` calls.
+# Their public entry points are ``save_*_to_db`` / ``load_*_from_db``.
+from .models.database_models import (
+    BusTypeDB as _BusTypeDB,
+    BranchTypeDB as _BranchTypeDB,
+    NetworkDB as _NetworkDB,
+)
 from .utils.impedance_calculator import DCLimitWarning
 from .network_operations import (
     create_network,
@@ -134,6 +158,23 @@ __all__ = [
     # working without any runtime cost.
     "session",
     "db_session",
+    # Core models. Every documented example builds a network out of these,
+    # and until 0.6.1 none of them was in ``__all__``: ``gi.BusType`` worked
+    # by attribute access, ``from groundinsight import *`` did not import it,
+    # type checkers flagged it, and the notebooks reached for a third spelling
+    # (``from groundinsight.models.core_models import ...``).
+    "Network",
+    "Bus",
+    "BusType",
+    "Branch",
+    "BranchType",
+    "Fault",
+    "Source",
+    "Path",
+    "Result",
+    "ResultBus",
+    "ResultBranch",
+    "ComplexNumber",
     "create_network",
     "create_bus",
     "create_branch",
@@ -588,7 +629,7 @@ def save_bustype_to_db(bus_type: BusType, overwrite: bool = False):
         )
     db_session = session()
     try:
-        existing = db_session.get(BusTypeDB, bus_type.name)
+        existing = db_session.get(_BusTypeDB, bus_type.name)
         if existing and not overwrite:
             raise ValueError(
                 f"BusType '{bus_type.name}' already exists. Use overwrite=True to overwrite."
@@ -653,7 +694,7 @@ def save_branchtype_to_db(branch_type: BranchType, overwrite: bool = False):
         )
     db_session = session()
     try:
-        existing = db_session.get(BranchTypeDB, branch_type.name)
+        existing = db_session.get(_BranchTypeDB, branch_type.name)
         if existing and not overwrite:
             raise ValueError(
                 f"BranchType '{branch_type.name}' already exists. Use overwrite=True to overwrite."
@@ -727,7 +768,7 @@ def save_network_to_db(
         )
     db_session = session()
     try:
-        existing = db_session.get(NetworkDB, network.name)
+        existing = db_session.get(_NetworkDB, network.name)
         if existing and not overwrite:
             raise ValueError(
                 f"Network '{network.name}' already exists. Use overwrite=True to overwrite."
@@ -791,7 +832,7 @@ def save_network_to_json(network: Network, path: str):
     IOError
         If there is an error writing to the file.
     """
-    path = Path(path)
+    path = _Path(path)
     with path.open("w") as f:
         f.write(network.model_dump_json(indent=4))
 
@@ -818,7 +859,7 @@ def load_network_from_json(path: str) -> Network:
         If the JSON content is invalid or does not conform to the Network
         model.
     """
-    path = Path(path)
+    path = _Path(path)
     with path.open("r") as f:
         json_string = f.read()
         model_instance = Network.model_validate_json(json_string)

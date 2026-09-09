@@ -186,8 +186,13 @@ notebooks/grounding.db
 notebooks/network.json
 *.db-journal
 
-# Third-party license report (generated on release)
-THIRD_PARTY_NOTICES.md
+# THIRD_PARTY_NOTICES.md is NOT ignored (audit pass 18, M24).
+# It is the attribution file the MIT licences of the dependencies require to
+# be distributed with the package. Ignoring it meant it existed only on the
+# machine that last ran scripts/generate_third_party_licenses.py, so no
+# release ever contained one. Regenerate it before a release with
+#   poetry run python scripts/generate_third_party_licenses.py
+# and commit the result.
 
 # Local working notes
 #  Session notes, project-state summaries and release plans written while

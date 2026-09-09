@@ -7,13 +7,19 @@ license = "MIT"
 repository = "https://github.com/Ce1ectric/groundinsight"
 documentation = "https://ce1ectric.github.io/groundinsight/"
 readme = "README.md"
+# ``scripts`` is deliberately NOT packaged. It holds maintainer tooling --
+# the release bumper and the third-party-licence generator -- which has no
+# business in a user's site-packages, and shipping it made the top-level name
+# ``scripts`` importable from any environment that installs groundinsight.
 packages = [
     { include = "groundinsight", from = "src" },
-    { include = "scripts" },
 ]
 
 [tool.poetry.dependencies]
-python = "^3.14"
+# 0.6.1: relaxed from "^3.14". The package runs unchanged on 3.13 (full suite
+# green), and 3.13 is what the distribution pythons and most pandapower
+# environments still ship. The CI matrix covers both.
+python = "^3.13"
 pydantic = "^2.12"
 numpy = "^2.1.0"
 sqlalchemy = "^2.0.32"
@@ -50,9 +56,15 @@ mkdocstrings = { extras = ["python"], version = "^0.26.1" }
 pymdown-extensions = "^10.9"
 mkdocs-jupyter = "^0.25.0"
 
-[tool.poetry.scripts]
-release = "scripts.release:main"
-generate-third-party-licenses = "scripts.generate_third_party_licenses:main"
+# No [tool.poetry.scripts] block on purpose. The two maintainer commands used
+# to install executables named ``release`` and
+# ``generate-third-party-licenses`` into the PATH of every user who installs
+# groundinsight -- a name as generic as ``release`` shadowing whatever else
+# the user has is not something a library should do. Run them from the
+# repository root instead:
+#
+#     poetry run python scripts/release.py patch
+#     poetry run python scripts/generate_third_party_licenses.py
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "src/groundinsight"]

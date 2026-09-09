@@ -71,7 +71,16 @@ def _runtime_dependency_names(pyproject: Path) -> list[str]:
     -------
     list[str]
         Dependency names, sorted case-insensitively, excluding the
-        implicit ``python`` entry.
+        implicit ``python`` entry and every dependency marked
+        ``optional = true``.
+
+    Notes
+    -----
+    An optional dependency belongs to an *extra* and is not installed by
+    ``pip install groundinsight``, so listing it in a notices file that
+    ships with the default install claims a distribution requirement the
+    package does not have. ``pandapower`` is the current case; a user who
+    opts into the extra gets its own notices with it.
     """
     data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
     deps = (
@@ -79,10 +88,15 @@ def _runtime_dependency_names(pyproject: Path) -> list[str]:
         .get("poetry", {})
         .get("dependencies", {})
     )
-    return sorted(
-        (name for name in deps if name.lower() != "python"),
-        key=str.lower,
-    )
+    names = []
+    for name, spec in deps.items():
+        if name.lower() == "python":
+            continue
+        if isinstance(spec, dict) and spec.get("optional", False):
+            logger.info("skipping optional dependency %r (extra, not runtime)", name)
+            continue
+        names.append(name)
+    return sorted(names, key=str.lower)
 
 
 def _license_identifier(meta: metadata.PackageMetadata) -> str:

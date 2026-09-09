@@ -15,8 +15,40 @@ on:
         type: string
 
 jobs:
+  # A tag can be pushed from a machine where the suite was never run, and the
+  # publish is irreversible: a version number on PyPI cannot be reused. The
+  # test gate runs on the tagged commit itself, so what is published is what
+  # was tested. It duplicates ci.yml on purpose -- ci.yml runs on branches and
+  # pull requests, and neither of those is what ``release.yml`` builds from.
+  test:
+    name: Tests on the tagged commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Install project
+        run: poetry install --no-interaction --with dev
+
+      - name: Run pytest
+        run: poetry run pytest -q
+
   build:
     name: Build sdist and wheel
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository

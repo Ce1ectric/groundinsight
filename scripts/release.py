@@ -519,13 +519,15 @@ def _update_changelog(
     return True
 
 
-def _run_git(args: list[str], *, dry_run: bool) -> None:
-    """Run a git command, honouring ``dry_run``.
+def _run_git(args: list[str], *, root: Path, dry_run: bool) -> None:
+    """Run a git command in the repository root, honouring ``dry_run``.
 
     Parameters
     ----------
     args : list[str]
         Arguments passed to ``git`` (without the ``git`` prefix).
+    root : Path
+        Repository root; the command runs there.
     dry_run : bool
         When ``True`` the command is only logged, not executed.
 
@@ -533,13 +535,48 @@ def _run_git(args: list[str], *, dry_run: bool) -> None:
     ------
     subprocess.CalledProcessError
         If git exits with a non-zero status.
+
+    Notes
+    -----
+    ``cwd=root`` is not cosmetic. The file rewrites use absolute paths, but
+    ``git add`` was handed paths *relative to the repository root* while
+    inheriting the caller's working directory: run from ``scripts/`` or from
+    ``docs/``, the ``add`` failed, the ``commit`` then either failed or
+    committed nothing, and the working tree was left half-bumped -- three
+    rewritten version files and no tag. ``_git_clean`` already passed
+    ``cwd=root``; this brings the write side in line with it.
     """
     command = ["git", *args]
     if dry_run:
         logger.info("[dry-run] %s", " ".join(command))
         return
     logger.info("$ %s", " ".join(command))
-    subprocess.run(command, check=True)
+    subprocess.run(command, cwd=root, check=True)
+
+
+def _git_tag_exists(tag: str, *, root: Path) -> bool:
+    """Return ``True`` if ``tag`` already exists in the repository.
+
+    Parameters
+    ----------
+    tag : str
+        Tag name, e.g. ``"v0.6.1"``.
+    root : Path
+        Repository root.
+
+    Returns
+    -------
+    bool
+        Whether the tag is present.
+    """
+    result = subprocess.run(
+        ["git", "tag", "--list", tag],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() != ""
 
 
 def _git_clean(root: Path) -> bool:
@@ -690,6 +727,22 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    # Refuse a tag that already exists *before* rewriting any file. Without
+    # this the three version files were rewritten and committed, and only the
+    # ``git tag`` at the very end failed -- leaving a release commit with no
+    # tag, which the release workflow never sees and which the next run then
+    # reports as "version drift".
+    tag = f"v{new_version}"
+    if _git_tag_exists(tag, root=root):
+        logger.error(
+            "tag %s already exists. Re-publishing an existing tag is a job "
+            "for the release workflow's workflow_dispatch input, not for a "
+            "second bump; if the tag is wrong, delete it locally and on the "
+            "remote first.",
+            tag,
+        )
+        return 2
+
     # Rewrite files.
     for location in locations:
         if args.dry_run:
@@ -724,17 +777,18 @@ def main(argv: list[str] | None = None) -> int:
     rel_paths = [str(loc.path.relative_to(root)) for loc in locations]
     if changelog_updated:
         rel_paths.append("CHANGELOG.md")
-    _run_git(["add", *rel_paths], dry_run=args.dry_run)
+    _run_git(["add", *rel_paths], root=root, dry_run=args.dry_run)
     commit_message = f"chore(release): v{new_version}"
-    _run_git(["commit", "-m", commit_message], dry_run=args.dry_run)
-    tag = f"v{new_version}"
-    _run_git(["tag", "-a", tag, "-m", commit_message], dry_run=args.dry_run)
+    _run_git(["commit", "-m", commit_message], root=root, dry_run=args.dry_run)
+    _run_git(
+        ["tag", "-a", tag, "-m", commit_message], root=root, dry_run=args.dry_run
+    )
 
     if args.no_push:
         logger.info("skipping push (--no-push)")
     else:
-        _run_git(["push"], dry_run=args.dry_run)
-        _run_git(["push", "origin", tag], dry_run=args.dry_run)
+        _run_git(["push"], root=root, dry_run=args.dry_run)
+        _run_git(["push", "origin", tag], root=root, dry_run=args.dry_run)
 
     logger.info("release %s complete", tag)
     return 0

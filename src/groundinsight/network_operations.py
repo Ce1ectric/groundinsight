@@ -10,6 +10,7 @@ calculations and updates.
 """
 
 import logging
+import warnings
 
 from .models.core_models import Network, Bus, BusType, Branch, BranchType, Fault, Source
 from typing import Optional, List, Dict
@@ -669,13 +670,21 @@ def _resolve_phase_current_mode(
             f"pre-0.6 behaviour driven by Branch.parallel_coefficient."
         )
     if auto_parallel_coefficients is not None:
-        logger.warning(
-            "run_fault(auto_parallel_coefficients=%s) is deprecated; pass "
-            "phase_current_mode=%r instead. The old argument still wins when "
-            "given, so this call is unaffected.",
-            auto_parallel_coefficients,
-            "auto" if auto_parallel_coefficients else "paths",
+        replacement = "auto" if auto_parallel_coefficients else "paths"
+        message = (
+            f"run_fault(auto_parallel_coefficients={auto_parallel_coefficients}) "
+            f"is deprecated; pass phase_current_mode={replacement!r} instead. "
+            "The old argument still wins when given, so this call is "
+            "unaffected."
         )
+        # Both channels on purpose. The logger line is what a user with
+        # ``gi.set_log_level("WARNING")`` sees; the DeprecationWarning is what
+        # ``pytest -W error::DeprecationWarning``, ``python -W error`` and
+        # every linting/CI setup that watches for removals see -- and the
+        # library default is a NullHandler, so the log line alone reaches
+        # nobody who has not configured logging.
+        warnings.warn(message, DeprecationWarning, stacklevel=3)
+        logger.warning("%s", message)
         return bool(auto_parallel_coefficients)
     return phase_current_mode == "auto"
 

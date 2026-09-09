@@ -230,18 +230,25 @@ poetry install --with docs
 poetry run mkdocs serve
 ```
 
-A release is cut via the built-in Poetry script, which bumps the version in
-`pyproject.toml`, `src/groundinsight/__init__.py` and `CITATION.cff`, creates
-an annotated tag and pushes the commit plus the tag. The GitHub Actions
-release workflow then takes over, builds sdist and wheel and publishes to
-PyPI via OIDC Trusted Publishing.
+A release is cut with the maintainer script in `scripts/`, which bumps the
+version in `pyproject.toml`, `src/groundinsight/__init__.py` and
+`CITATION.cff`, creates an annotated tag and pushes the commit plus the tag.
+The GitHub Actions release workflow then takes over, runs the test suite on
+the tagged commit, builds sdist and wheel and publishes to PyPI via OIDC
+Trusted Publishing.
+
+Run it from the repository root:
 
 ```bash
-poetry run release patch
-poetry run release minor
-poetry run release major
-poetry run release set 1.2.3
+poetry run python scripts/release.py patch
+poetry run python scripts/release.py minor
+poetry run python scripts/release.py major
+poetry run python scripts/release.py set 1.2.3
 ```
+
+(Up to 0.6.0 this was the console command `poetry run release`. The entry
+point installed an executable named `release` into the PATH of everyone who
+installed the package, so it was removed; the script itself is unchanged.)
 
 ## Citation
 

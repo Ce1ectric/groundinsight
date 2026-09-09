@@ -1898,7 +1898,47 @@ class Network(ValidatedAssignmentModel):
         if self.active_fault is not None and self.active_fault in self.faults:
             for _name, _fault in self.faults.items():
                 _fault._set_active(_name == self.active_fault)
+        self._adopt_loaded_paths()
         return self
+
+    def _adopt_loaded_paths(self) -> None:
+        """Trust restored paths when they still match the restored topology.
+
+        ``Path.segments`` is persisted in full -- 37 % of the JSON of a solved
+        network -- and was then thrown away by the first
+        :func:`~groundinsight.run_fault`: ``_paths_fingerprint`` is a
+        ``PrivateAttr`` and is not serialised, so
+        :meth:`_needs_path_rebuild` saw ``None`` and re-enumerated the paths
+        from scratch. The stored data was pure overhead, twice over -- it cost
+        a second ``Branch`` validation per segment on load and bought nothing.
+
+        Recomputing the fingerprint here closes that. It is not a guess: the
+        fingerprint is a function of the network's *own* stored state, so if
+        the paths were built from this topology the value is exactly the one
+        :meth:`define_paths` recorded when they were. The paths are only
+        adopted after checking that every segment still names a branch of this
+        network with the same endpoints -- a hand-edited file that dropped a
+        branch keeps rebuilding, as it must.
+
+        The alternative -- persisting segments as *names* instead of full
+        ``Branch`` copies -- would shrink the file further but changes the
+        stored format of every existing ``.json`` and ``.db``, and
+        ``Path.segments`` is public API (the solver walks the ``Branch``
+        objects). That is a separate, breaking change; this one is not.
+        """
+        if not self.paths or self._paths_fingerprint is not None:
+            return
+        for path in self.paths.values():
+            for segment in path.segments:
+                current = self.branches.get(segment.name)
+                if current is None:
+                    return
+                if (current.from_bus, current.to_bus) != (
+                    segment.from_bus,
+                    segment.to_bus,
+                ):
+                    return
+        self._paths_fingerprint = self._active_topology_fingerprint()
 
     @property
     def electrical_network(self):
