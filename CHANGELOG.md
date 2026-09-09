@@ -52,6 +52,84 @@ version section when a release is cut.
   onto Node 24, and the warning only surfaced in a release log. Grouping is
   deliberate — a single-maintainer repository reads a dozen separate bump PRs
   as noise, which defeats the purpose.
+- **Audit pass 18 — full review of the 0.6.0 code base, documentation and
+  project setup (2026-09-08).** Review only; nothing below is fixed yet. The
+  complete record — reproduction scripts, measurements, the proposed order of
+  work and the GUI concept it was commissioned with — is kept with the
+  maintainer's working notes outside this repository. The
+  suite was green throughout (992 passed, `mkdocs build --strict` clean),
+  and every finding listed here was reproduced twice — once by the reviewer
+  who raised it and once independently — so the list is short on
+  speculation. What the pass confirmed as *correct* is worth stating first:
+  the coupling model and both reduction factors, the Thévenin ⇄ Norton
+  equivalence in both solvers, the Sherman–Morrison/Möbius form
+  (1.4e-14 at every bus), the ring current split, `iec60909_m` against
+  numerical integration (1e-15), `iec60949_k`, and all four closed forms
+  in `analysis/reference.py` re-derived by hand. The findings sit one layer
+  above the core and at the edges.
+  - *Two ways to execute code by loading foreign data.* The formula guard
+    in `utils/validations.py` compares raw token strings against an ASCII
+    denylist, but CPython NFKC-normalises identifiers when it compiles the
+    source that `sympy.lambdify` generates — a fullwidth `ｅval` passes
+    the guard and reaches the builtin `eval` (verified through
+    `create_bus`). And `NetworkDB.frequencies` is a `PickleType`: a
+    `.db` file from another hand runs `pickle.loads` before Pydantic sees
+    a single field. Both contradict what `assert_safe_formula` promises.
+  - *`run_fault` enumerates every simple source→fault path in every
+    mode.* The default `phase_current_mode="auto"` only needs
+    reachability, yet `define_paths` runs the full DFS: a 6×6 grid of 36
+    buses takes 54–68 s for 1.26 million paths while the solve itself is
+    milliseconds. `docs/concepts.md` and `docs/api/pathfinder.md` state
+    the opposite scaling.
+  - *The transient FFT solver ignores mutual coupling* (17 % on the
+    verification case, no warning) while `docs/transient.md` says it
+    injects mutual currents like the stationary solver; it also injects
+    sources that have no path to the fault, and the state-space solver
+    reads its evaluation frequency from `frequencies[0]`, so a leading
+    0 Hz silently drops the source inductance.
+  - *`run_sweep` does not restore the network after a point fails in
+    `_apply`* (the return value is never bound, so `finally` skips the
+    restore) and the following points are solved on the corrupted model;
+    three smaller restore gaps (`R/L/C`, impedance-plus-rho on one bus,
+    the previous fault's cached result) sit next to it.
+  - *The 0.6.0 analysis layer against its own core:* `bus_response`
+    passes `r_epr` through as invariant although it is only invariant at
+    the fault bus, and computes `Z_G_Ohm` with the `u/(r·I)` expression
+    that 0.6.0 replaced; the inverse-rho searches leave a stale
+    `network.electrical_network` behind from which `bus_response` then
+    reads a *negative* driving-point impedance; the bisection assumes a
+    monotonicity that a rho-only sweep with a fixed reactive part does
+    not have; `analyze_cuts` assembles its own `Y` and therefore treats a
+    0 Hz short circuit as an open end and omits the Thévenin loop
+    admittance, while its `identity_residual` is structurally zero and
+    cannot show either.
+  - *Persistence and models:* the `add_columns` migration cannot add the
+    eight NOT-NULL columns with Python-side defaults it exists for and
+    leaves the file unopenable; `save_network` merges bus/branch types
+    globally and leaves the other network inconsistent; no model sets
+    `validate_assignment`, so `apply_shortcircuit_characteristics` can
+    write `kappa = 42` past the validator that promises to reject it.
+  - *Documentation:* `docs/examples/mv_ring_transient.ipynb` does not run
+    (`KeyError: 'F1'`, cell 10) while its stored output shows a result;
+    the README still recommends the deprecated
+    `auto_parallel_coefficients=True`; `concepts.md` claims an RMS row in
+    `res_all_impedances` that does not exist; the migration API is absent
+    from the site; and the four chapters an engineer without Python
+    routine needs most — assumptions and limits of the stationary model,
+    where the impedance formulas come from, how to read the result
+    columns and carry a verification through to an EN 50522 limit, and a
+    glossary — do not exist yet.
+  - *Runtime, without touching the architecture:* reuse the `splu`
+    factorisation in `compute_reduction_factors` instead of a dense
+    re-factorisation (13× on the linear-algebra share), vectorise the
+    scalar passivity/short-circuit checks (three hot loops at once), an
+    `lru_cache` on `validate_impedance_formula_value` (8.4× on
+    `model_validate_json`), and a batched `(K, n, n)` assembly in the FFT
+    solver (≈10× end to end).
+  The open items are listed under **Roadmap → From the 2026-09-08
+  review**. Fixes follow the house rule: a test that is red without the
+  change, in `tests/test_audit_pass18_*.py`, with the measurement protocol
+  in `docs/audit-log.md`.
 
 ---
 
@@ -1363,6 +1441,122 @@ reduced network, `groundmeas` measurement store).
   future dashboard can resume a notebook session.
 - **`docs/api/database.md` sub-section for `gi.show_versions()`** — the
   helper is in `__all__` but has no rendered docs page entry.
+
+### From the 2026-09-08 review (audit pass 18)
+
+Open findings of the full review, ordered by the sequence the review
+proposes; the IDs refer to that review record, where each item carries its
+reproduction. Everything here is confirmed, nothing is implemented.
+
+**Before the next release.**
+
+- **K1 — formula guard: NFKC-normalise every NAME token, then switch to
+  a whitelist** of symbols and SymPy functions; the fullwidth variants of
+  `eval`, `exec`, `open`, `breakpoint` become the regression test.
+- **M1 — `NetworkDB.frequencies` from `PickleType` to a JSON column**,
+  with an `add_columns` migration and a read fallback that never
+  unpickles foreign bytes without a whitelist; document that `.db` and
+  network JSON files are code-equivalent input.
+- **M2 — `_add_missing_columns` renders `DEFAULT <value>`** for the
+  eight NOT-NULL columns with Python-side defaults, reusing
+  `_declared_defaults` from the rebuild path.
+- **K2 — reachability instead of enumeration in
+  `phase_current_mode="auto"`**; full path enumeration only for
+  `"paths"`, with a cap and a warning; `docs/concepts.md:300` and
+  `docs/api/pathfinder.md:28` restated as "linear in buses for the solve,
+  exponential in cycles for the enumeration" with the measured table.
+- **S2/S6/S7/S8 — `run_sweep` restores in every case**: validate names
+  before mutating, bind `saved` before `_apply`, save `R/L/C`, one
+  snapshot per bus, `set_active_fault(previous, keep_results=True)`.
+- **S1 — FFT solver warns on non-zero mutual impedance** and
+  `docs/transient.md:104-106` states that the FFT path has no mutual
+  term; **S3** the FFT path applies `_sources_with_path_to_active_fault`;
+  **S4** `f_eval` becomes an argument defaulting to the first frequency
+  above 0 Hz, and `ω = 0` with a reactive `Z_src` is refused.
+- **A5 — the inverse-rho searches drop `network.electrical_network` in
+  `finally`**, and `bus_response` refuses a `Y` whose diagonal does not
+  match the current bus impedances.
+- **A2 — `BusResponse.evaluate` reports `Z_E = U_E/I_E`** or drops the
+  `Z_G_Ohm` column; **A1** `r_epr` is filled only for `bus == fault_bus`
+  (or recomputed per electrode from a third right-hand side).
+- **M4 — `validate_assignment=True`** on `Source`, `Fault`, `Bus`,
+  `Branch`, `Network`; **A9** `kappa ∈ (1, 2]` and `n ∈ (0, 1]` enforced
+  in `_resolve_sc_inputs`, `i_th` via `thermal_equivalent_current`.
+- **Docs D-2/D-3/D-7 and K6** — the transient example notebook runs
+  again (and a CI job executes `docs/examples/*.ipynb`), the README drops
+  `auto_parallel_coefficients`, `concepts.md:681` loses the RMS-row claim,
+  and the three places still quoting `Z_G = u_EPR/(r·I_F)` follow the
+  0.6.0 definition.
+
+**Runtime (no architecture change).**
+
+- **K3** keep the per-frequency `splu` object and reuse it for the
+  no-mutual right-hand side. **K7** array variants of
+  `check_passive_impedance`, `is_short_circuit`, `_is_open_circuit`.
+  **L1** `lru_cache` on `validate_impedance_formula_value`. **FFT** a
+  `compute_impedance_array()` raw path, a stacked `(K, n, n)` assembly
+  solved in blocks, and a column-wise `ResultTransient.to_polars()`.
+  **M12** persist `Path.segments` as branch names (or serialise the
+  fingerprint). **A** reuse the assembled `Y` in `analyze_cuts`, one
+  solve with two right-hand sides in `bus_response`, linear `extremes()`,
+  build the `set(reported)` once in `_require_complete_results`.
+
+**Correctness, second wave.**
+
+- **A3/A4/A13** `_unit_injection` on the solver's `Y` (fixes the 0 Hz
+  short circuit and the missing `Y_src`, and makes `identity_residual`
+  meaningful). **A6** a coarse log grid before the bisection with a
+  status flag on non-monotone EPR, the assumption named in the docstring.
+  **A7/A8** `en50522_chain` checked against the ladder closed form,
+  `ladder_potential_decay` assembled from the network's own impedances.
+  **A10** the 0 Hz bin excluded from the `I_th` RMS and reported
+  separately. **A11/A14/A15/A16** the complete-results guard in
+  `analyze_cuts`, pinned schema in `CutAnalysis.to_polars()`, an `n_nan`
+  column in `summarize` and NaN treated like null in `classify`,
+  `sweep([])` and `worst_case_electrode` with `Re(Y_net) ≤ 0` rejected.
+  **K4** every active element must cover `network.frequencies`. **K5**
+  `I_fault` as `Σ scaling·I_src`. **S5** wrap-around self-test or
+  internal zero-padding in the FFT solver; **S9/S17/S18/S19** `scalings`,
+  the Nyquist bin, the non-causal constant-reactance kernel and the sign
+  of the transient EPR listed under *Limitations*. **S10** passivity
+  check for `R/L/C/M` fields. **S11** one `_time_grid` helper for both
+  solvers. **S12** `on_error` for `run_outage_study`. **S15** remove the
+  dead `_OUTAGE_BASELINE_STACK` and its comments.
+- **M3** type merge in `save_network` warns on a differing formula and
+  the loader checks stored impedances against the formula. **M5/M6**
+  `ComplexNumber.__eq__` returns `NotImplemented`, `__hash__`, NumPy
+  scalars via `numbers.Complex`. **M7** numeric `frequency_Hz` with an
+  `is_rms` flag. **M8/M9** `ser_json_inf_nan` on every model, validated
+  `Fault.scalings` values, an RFC-8259-safe encoding of the open-end
+  sentinel. **M10** closed bus–bus switches, transformers and impedances
+  counted and previewed by the pandapower importer; a
+  `phase_impedance_formula` derived from `r/x_ohm_per_km`. **M11**
+  `cwd=root` in `_run_git`. **M13** `scripts/` out of the wheel, the
+  `release` entry point renamed or moved to the dev group. **M14**
+  `I_inj_A` in `res_buses`. **M15** a real `DeprecationWarning`. **M16**
+  `BusType`, `BranchType`, `Network`, `Bus`, `Branch`, `Fault`, `Source`,
+  `Result`, `ComplexNumber` exported, `gi.Path` no longer `pathlib.Path`.
+  **M17–M24** pinned `res_*` schemas, `try/finally` around the plot
+  helpers, `ImportDefaults` validation, the dead SymPy import, a
+  re-readable `ComplexNumber.__repr__`, tests before publish in
+  `release.yml`, `mkdocs build --strict` on pull requests, CI matrix
+  `["3.13", "3.14"]` once `python = "^3.13"` is released (the suite
+  passes on 3.13 unchanged).
+- **T1/T2** `--doctest-modules src/groundinsight` in `addopts` and the
+  three broken examples repaired; a parametrised operator matrix for
+  `ComplexNumber` in both operand orders including NumPy scalars, `None`
+  and `inf`/`nan`; a shared `simple_network` fixture in `conftest.py`.
+
+**Documentation** — the nine chapters and the Diátaxis navigation the review
+proposes: `theory.md`, `input-data.md`,
+`results.md` (with the EN 50522 touch-voltage comparison and the
+liability note), `verification.md`, `faq.md`, `persistence.md`,
+`performance.md`, `glossary.md`, and the project pages (changelog,
+contributing, citation with BibTeX, license); `audit-log.md` moved to the
+end of the navigation and excluded from search; `api/toplevel.md` with
+`::: groundinsight` so the 23 unrendered `__all__` symbols get a page;
+`api/index.md` listing all API pages; the `scalings` default of 1.0
+documented; a "Thermal and short-circuit checks" example notebook.
 
 ### Explicit non-goals
 
