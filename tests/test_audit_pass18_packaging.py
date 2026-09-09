@@ -36,7 +36,6 @@ import pathlib
 import tomllib
 import warnings
 
-import pytest
 
 import groundinsight as gi
 

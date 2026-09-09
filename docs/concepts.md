@@ -702,7 +702,13 @@ in 0.6.0. The two agree only in the equipotential limit -- one bonded earthing
 system at a single potential -- and diverge as soon as the shield sections
 between the stations carry a noticeable potential difference.
 
-It is exposed per frequency through `net.res_all_impedances()`.
+It is exposed **per frequency** through `net.res_all_impedances()`, which
+has one row per (fault, frequency) and no RMS row: a grounding impedance is
+defined for a frequency, and there is no meaningful way to reduce a set of
+complex impedances at different frequencies to one scalar. The RMS rows live
+on `net.res_buses()` and `net.res_branches()`, where they aggregate
+*quantities* ($\sqrt{\sum_f |x(f)|^2}$), and are marked there by the
+`is_rms` column.
 
 ## Active flag and outage studies
 

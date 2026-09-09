@@ -156,8 +156,9 @@ gi.run_fault(network=net, fault_name="fault1")
 print(net.res_all_impedances())
 ```
 
-For the full walkthrough — including ring topologies with
-`auto_parallel_coefficients=True`, outage / what-if studies,
+For the full walkthrough — including ring and meshed topologies, which
+`run_fault` handles with its default `phase_current_mode="auto"` (the old
+`auto_parallel_coefficients=True` is deprecated), outage / what-if studies,
 transient simulations and the pandapower importer — see the
 [Quickstart](https://ce1ectric.github.io/groundinsight/quickstart/)
 and the [example notebooks](https://ce1ectric.github.io/groundinsight/examples/)

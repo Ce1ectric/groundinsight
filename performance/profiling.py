@@ -25,7 +25,7 @@ bus_type = gi.BusType(
 branch_type = gi.BranchType(
     name="TestBranchType",
     description="A test branch type",
-    carry_current=True,
+    grounding_conductor=True,
     self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
     mutual_impedance_formula="(rho * 0 + 0.0 + I * f * 0.010)*l"
 )
@@ -84,8 +84,10 @@ start_time = time.time()
 
 # Loop through all faults and run fault calculations
 for i in range(1, num_buses + 1):
-    net.set_active_fault(f"fault{i}")
-    gi.run_fault(net)
+    # ``run_fault`` takes the fault name; it activates it itself. The old
+    # ``set_active_fault`` + ``run_fault(net)`` pair predates that signature
+    # and raised ``TypeError`` on every run of this script.
+    gi.run_fault(net, f"fault{i}")
 
 # Measure elapsed time
 elapsed_time = time.time() - start_time

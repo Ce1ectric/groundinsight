@@ -96,8 +96,8 @@ the full earthing-platform stack with a single call:
 ```python
 >>> import groundinsight as gi
 >>> gi.show_versions()
-{'groundinsight': '0.5.0',
- 'python': '3.11.7',
+{'groundinsight': '<installed version>',
+ 'python': '<running interpreter>',
  'platform': 'Linux-...-x86_64-...'}
 ```
 

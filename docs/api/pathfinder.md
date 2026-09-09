@@ -23,9 +23,17 @@ sources correctly the algorithm has to:
    bus/branch graph,
 2. preserve the **traversal direction** along each branch — the
    sign of the impressed Norton current depends on it,
-3. take into account the optional `parallel_coefficient` on each
-   branch so that mesh and ring topologies receive the correct
-   per-path current share.
+3. record the branch chain, which the **legacy** phase-current mode
+   `run_fault(..., phase_current_mode="paths")` then weights with the
+   optional `parallel_coefficient` on each branch.
+
+!!! note "`parallel_coefficient` only applies to `phase_current_mode="paths"`"
+    Since 0.6.0 the default mode is `"auto"`, which solves a reduced
+    phase-conductor network from `BranchType.phase_impedance_formula`
+    instead of splitting a prescribed current over enumerated paths.
+    In that mode `parallel_coefficient` is not read at all — the split
+    follows from the phase-conductor impedances. Set it only when you
+    deliberately run the older `"paths"` mode.
 
 The DFS enumeration is exhaustive, and its cost is **exponential
 in the number of independent loops** — not in the number of buses.

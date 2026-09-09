@@ -159,6 +159,11 @@ def create_branch(
     parallel_coefficient : float, optional
         Per-branch share of the source-to-fault phase current; used by
         the path-based mutual-coupling injection. Defaults to ``1.0``.
+        **Only read in the legacy phase-current mode**
+        ``run_fault(..., phase_current_mode="paths")``. The default mode
+        ``"auto"`` solves a reduced phase-conductor network from
+        ``BranchType.phase_impedance_formula``, where the split follows from
+        the phase impedances and this value is ignored.
 
     Returns
     -------
