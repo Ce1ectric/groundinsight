@@ -10,13 +10,18 @@ which triggers on the ``v*`` tag via OIDC Trusted Publishing.
 
 Usage
 -----
-Invoke via the Poetry script entry point::
+``groundinsight`` uses calendar versioning, ``YYYY.M.MICRO``: the calendar
+year, the month *without* a leading zero and a counter that restarts at 0 in
+every month (``2026.11.0``, ``2026.11.1``, ``2026.12.0``, ``2027.1.0``). The
+month carries no leading zero because PEP 440 normalises ``2026.01.0`` to
+``2026.1.0``; a zero-padded tag would never match the version on PyPI.
+Run it from a Poetry environment::
 
-    poetry run release            # defaults to a patch bump
-    poetry run release patch
-    poetry run release minor
-    poetry run release major
-    poetry run release set 1.2.3
+    poetry run python scripts/release.py              # next CalVer version
+    poetry run python scripts/release.py set 2026.11.2
+
+The SemVer bump kinds ``major``/``minor``/``patch`` of the 0.x releases are
+retired; passing one stops with an explanation instead of guessing.
 
 Options
 -------
@@ -38,10 +43,10 @@ Options
 Notes
 -----
 The script expects to be run from the repository root, which is
-automatically derived from the location of ``pyproject.toml``. Semantic
-versioning is enforced: only ``MAJOR.MINOR.PATCH`` strings (with optional
-pre-release suffix) are accepted, and ``set`` refuses to move the version
-backwards.
+automatically derived from the location of ``pyproject.toml``. The version
+month must be the month of the release date (``--date``, default today), so
+the number on PyPI always says when a release was cut, and ``set`` refuses
+to move the version backwards.
 
 ``CHANGELOG.md`` is optional — if it does not exist, the changelog step
 is skipped silently. If it exists, the script looks for a heading of the
@@ -71,6 +76,19 @@ SEMVER_RE = re.compile(
     r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)"
     r"(?:-(?P<pre>[0-9A-Za-z.-]+))?$"
 )
+
+# ``YYYY.M.MICRO`` -- four-digit year, month 1..12 without a leading zero,
+# counter without a leading zero. Anything else is either not PEP 440
+# normalised (``2026.01.0``) or not a calendar version at all.
+CALVER_RE = re.compile(
+    r"^(?P<year>(19|20|21)\d{2})\.(?P<month>[1-9]|1[0-2])\.(?P<micro>0|[1-9]\d*)$"
+)
+
+# The last release published under semantic versioning. Everything after it
+# is a calendar version.
+LAST_SEMVER_RELEASE = "0.6.0"
+
+_RETIRED_KINDS = ("major", "minor", "patch")
 
 
 # Lower-cased strings that mark an '[Unreleased]' section as effectively
@@ -250,9 +268,135 @@ def _is_newer(old: str, new: str) -> bool:
         ``True`` iff the semver-tuple of ``new`` compares greater than
         ``old``. Pre-release suffixes are ignored for this comparison.
     """
-    om, oi, op, _ = _parse_semver(old)
-    nm, ni, np_, _ = _parse_semver(new)
-    return (nm, ni, np_) > (om, oi, op)
+    return _release_tuple(new) > _release_tuple(old)
+
+
+def _release_tuple(version: str) -> tuple[int, int, int]:
+    """Return the numeric release segment of a SemVer or CalVer string.
+
+    Both schemes have exactly three numeric components, so comparing the
+    tuples orders ``0.6.0 < 2026.11.0 < 2026.11.1 < 2027.1.0`` correctly.
+
+    Parameters
+    ----------
+    version : str
+        ``X.Y.Z`` with an optional SemVer pre-release suffix.
+
+    Returns
+    -------
+    tuple[int, int, int]
+        The three numeric components.
+
+    Raises
+    ------
+    ValueError
+        If ``version`` has no three-component numeric release segment.
+    """
+    major, minor, patch, _ = _parse_semver(version)
+    return major, minor, patch
+
+
+def validate_calver(version: str, release_date: _datetime.date) -> None:
+    """Check that ``version`` is a valid calendar version for ``release_date``.
+
+    Parameters
+    ----------
+    version : str
+        Candidate version, without the ``v`` tag prefix.
+    release_date : datetime.date
+        Date the release is cut on; its year and month must match.
+
+    Raises
+    ------
+    ValueError
+        If ``version`` is not ``YYYY.M.MICRO`` in PEP 440 normal form, or if
+        its year and month differ from ``release_date``.
+    """
+    match = CALVER_RE.match(version)
+    if match is None:
+        raise ValueError(
+            f"{version!r} is not a calendar version of the form YYYY.M.MICRO "
+            "(year, month 1-12 without a leading zero, counter without a "
+            "leading zero; e.g. 2026.11.0). Leading zeros are rejected because "
+            "PEP 440 strips them, so the tag would not match the version "
+            "published on PyPI."
+        )
+    year, month = int(match["year"]), int(match["month"])
+    if (year, month) != (release_date.year, release_date.month):
+        raise ValueError(
+            f"version {version} names {year}-{month:02d}, but the release "
+            f"date is {release_date.isoformat()}: the version month must be "
+            "the month the release is cut in. Pass --date to release with "
+            "another date."
+        )
+
+
+def next_calver(current: str, release_date: _datetime.date) -> str:
+    """Return the calendar version that follows ``current``.
+
+    The first release in a month gets the counter 0; every further release
+    in the same month increments it.
+
+    Parameters
+    ----------
+    current : str
+        Version recorded in the repository (SemVer before the switch, CalVer
+        after it).
+    release_date : datetime.date
+        Date the release is cut on.
+
+    Returns
+    -------
+    str
+        The next version, ``YYYY.M.MICRO``.
+
+    Raises
+    ------
+    ValueError
+        If the computed version would not be newer than ``current`` -- e.g.
+        when ``current`` was set by hand for a month that has not begun yet.
+    """
+    year, month = release_date.year, release_date.month
+    match = CALVER_RE.match(current)
+    if match and (int(match["year"]), int(match["month"])) == (year, month):
+        candidate = f"{year}.{month}.{int(match['micro']) + 1}"
+    else:
+        candidate = f"{year}.{month}.0"
+    if _release_tuple(candidate) <= _release_tuple(current):
+        raise ValueError(
+            f"the next calendar version for {release_date.isoformat()} would "
+            f"be {candidate}, which is not newer than the current {current}"
+        )
+    return candidate
+
+
+def _write_release_date(path: Path, release_date: _datetime.date) -> None:
+    """Write ``date-released`` into ``CITATION.cff``.
+
+    The line is replaced when present and appended after the ``version``
+    line otherwise, so citation metadata always names the release date of
+    the version it describes.
+
+    Parameters
+    ----------
+    path : Path
+        The ``CITATION.cff`` file.
+    release_date : datetime.date
+        Release date to record.
+    """
+    text = path.read_text(encoding="utf-8")
+    line = f'date-released: "{release_date.isoformat()}"'
+    pattern = re.compile(r"^date-released:.*$", flags=re.MULTILINE)
+    if pattern.search(text):
+        text = pattern.sub(line, text, count=1)
+    else:
+        version_line = re.compile(r"^(version:.*)$", flags=re.MULTILINE)
+        if version_line.search(text):
+            text = version_line.sub(lambda m: f"{m.group(1)}\n{line}", text, count=1)
+        else:
+            text = text.rstrip("\n") + f"\n{line}\n"
+    path.write_text(text, encoding="utf-8")
+    logger.info("updated %s -> date-released %s", path.name, release_date.isoformat())
 
 
 def _read_current_version(location: VersionLocation) -> str:
@@ -615,23 +759,28 @@ def _build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         prog="release",
-        description="Bump groundinsight version, commit, tag and push.",
+        description=(
+            "Cut a groundinsight release with a calendar version "
+            "(YYYY.M.MICRO): rewrite the version sources, roll the "
+            "changelog, commit, tag and push."
+        ),
     )
     parser.add_argument(
         "kind",
         nargs="?",
-        default="patch",
-        choices=("major", "minor", "patch", "set"),
+        default="calver",
+        choices=("calver", "set", *_RETIRED_KINDS),
         help=(
-            "semver bump kind; defaults to 'patch' when omitted. "
-            "'set' requires an explicit VERSION argument"
+            "'calver' (default) computes the next calendar version from the "
+            "release date; 'set' takes an explicit VERSION. The SemVer kinds "
+            "major/minor/patch are retired and only explain why"
         ),
     )
     parser.add_argument(
         "version",
         nargs="?",
         default=None,
-        help="explicit version when KIND is 'set'",
+        help="explicit calendar version when KIND is 'set', e.g. 2026.11.2",
     )
     parser.add_argument(
         "--dry-run",
@@ -699,13 +848,26 @@ def main(argv: list[str] | None = None) -> int:
     current = distinct.pop()
     logger.info("current version: %s", current)
 
+    # The release date fixes the version month, so it is resolved first.
+    release_date = args.date if args.date is not None else _datetime.date.today()
+
     # Determine the new version.
+    if args.kind in _RETIRED_KINDS:
+        logger.error(
+            "'%s' is a semantic-versioning bump, and groundinsight switched to "
+            "calendar versioning (YYYY.M.MICRO) after %s. Run the script "
+            "without a kind to get the next calendar version, or use "
+            "'set YYYY.M.MICRO'.",
+            args.kind,
+            LAST_SEMVER_RELEASE,
+        )
+        return 2
     if args.kind == "set":
         if args.version is None:
             logger.error("'set' requires a VERSION argument")
             return 2
         try:
-            _parse_semver(args.version)
+            validate_calver(args.version, release_date)
         except ValueError as exc:
             logger.error("%s", exc)
             return 2
@@ -718,7 +880,11 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
     else:
-        new_version = _bump(current, args.kind)
+        try:
+            new_version = next_calver(current, release_date)
+        except ValueError as exc:
+            logger.error("%s", exc)
+            return 2
     logger.info("new version:     %s", new_version)
 
     if not args.allow_dirty and not _git_clean(root):
@@ -754,13 +920,21 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             _write_new_version(location, new_version)
+    citation = root / "CITATION.cff"
+    if citation.is_file():
+        if args.dry_run:
+            logger.info(
+                "[dry-run] would set date-released in CITATION.cff to %s",
+                release_date.isoformat(),
+            )
+        else:
+            _write_release_date(citation, release_date)
 
     # Roll the '[Unreleased]' block of CHANGELOG.md into a new dated
     # version section. Failures raise and abort the release before any
     # git operations are performed, leaving the working tree untouched
     # except for the version-string files (which are still easy to
     # revert with 'git checkout --').
-    release_date = args.date if args.date is not None else _datetime.date.today()
     try:
         changelog_updated = _update_changelog(
             root,
