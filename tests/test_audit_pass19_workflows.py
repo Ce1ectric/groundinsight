@@ -594,3 +594,30 @@ def test_step_parser_sees_every_checkout():
             for step in _steps(lines)
         )
         assert in_steps == len(re.findall(r"uses:\s*actions/checkout@", text)), name
+
+
+# ---------------------------------------------------------------------------
+# SEC2 -- the dependency audit job
+# ---------------------------------------------------------------------------
+
+
+def test_the_dependency_audit_runs_on_changes_and_on_a_schedule():
+    """New advisories arrive against an unchanged lock, hence the schedule."""
+    text = _text("audit.yml")
+    for trigger in ("pull_request:", "push:", "schedule:", "workflow_dispatch:"):
+        assert re.search(rf"^  {trigger}", text, re.MULTILINE), trigger
+    assert re.search(r"^\s*-\s*cron:\s*\"[^\"]+\"", text, re.MULTILINE)
+    assert "python scripts/audit_dependencies.py" in text
+    assert "--requirement .github/audit/requirements.txt" in text
+
+
+def test_pip_audit_itself_is_pinned_and_kept_current():
+    requirements = (ROOT / ".github" / "audit" / "requirements.txt").read_text(
+        encoding="utf-8"
+    )
+    pins = [line for line in requirements.splitlines() if _is_content(line)]
+    assert len(pins) == 1 and re.fullmatch(r"pip-audit==\d+\.\d+\.\d+", pins[0]), pins
+    dependabot = (ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8")
+    assert re.search(
+        r'package-ecosystem:\s*"pip"\s*\n\s*directory:\s*"/\.github/audit"', dependabot
+    ), dependabot

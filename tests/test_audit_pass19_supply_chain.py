@@ -245,3 +245,147 @@ def test_installation_page_names_every_runtime_dependency():
     page = (ROOT / "docs" / "installation.md").read_text(encoding="utf-8")
     missing = [name for name in runtime if f"`{name}`" not in page]
     assert missing == []
+
+
+# ---------------------------------------------------------------------------
+# SEC2 -- the dependency audit (scripts/audit_dependencies.py)
+# ---------------------------------------------------------------------------
+
+
+def _audit_module():
+    """
+    Load ``scripts/audit_dependencies.py`` from its file path.
+
+    ``scripts`` is maintainer tooling and deliberately not packaged, so it is
+    loaded the way ``tests/test_release_calver.py`` loads the release script.
+
+    Returns
+    -------
+    module
+        The executed script module.
+    """
+    import importlib.util
+    import sys
+
+    spec = importlib.util.spec_from_file_location(
+        "groundinsight_audit_script", ROOT / "scripts" / "audit_dependencies.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _raw_lock_pins() -> list:
+    """
+    ``name==version`` of every lock entry, read with a regular expression.
+
+    Independent of the script's TOML parsing: Poetry writes ``name`` and
+    ``version`` as the first two lines of every ``[[package]]`` table.
+
+    Returns
+    -------
+    list of str
+        The pins in file order.
+    """
+    text = (ROOT / "poetry.lock").read_text(encoding="utf-8")
+    return [
+        f"{name}=={version}"
+        for name, version in re.findall(
+            r'^\[\[package\]\]\nname = "([^"]+)"\nversion = "([^"]+)"', text, re.MULTILINE
+        )
+    ]
+
+
+def test_audit_covers_every_locked_package_exactly_once():
+    audit = _audit_module()
+    layers = audit.audit_layers(audit.locked_requirements(ROOT / "poetry.lock"))
+    audited = [pin for layer in layers for pin in layer]
+    assert sorted(audited) == sorted(_raw_lock_pins())
+    assert len(audited) == len(set(audited))
+
+
+def test_audit_layers_never_repeat_a_package():
+    """pip-audit refuses two pins of one package in a requirements file; the
+    lock has such pairs (networkx 3.6 / 3.7, split by a Python marker)."""
+    audit = _audit_module()
+    layers = audit.audit_layers(["a==1", "b==2", "a==3", "a==2"])
+    assert layers == [["a==1", "b==2"], ["a==2"], ["a==3"]]
+    for layer in audit.audit_layers(audit.locked_requirements(ROOT / "poetry.lock")):
+        names = [pin.split("==")[0] for pin in layer]
+        assert len(names) == len(set(names))
+
+
+def test_the_shipped_ignore_list_is_well_formed():
+    audit = _audit_module()
+    entries = audit.read_ignore_list(ROOT / ".github" / "pip-audit-ignore.txt")
+    assert all(entry.reason for entry in entries)
+
+
+def test_ignore_entries_need_a_reason_and_an_end_date():
+    audit = _audit_module()
+    entries = audit.parse_ignore_list(
+        "# comment\n\nGHSA-abcd-efgh-ijkl  # only reachable via the GUI; until 2027-01-31\n"
+    )
+    assert [(e.advisory, e.until.isoformat()) for e in entries] == [
+        ("GHSA-abcd-efgh-ijkl", "2027-01-31")
+    ]
+    for bad in (
+        "GHSA-abcd-efgh-ijkl\n",
+        "GHSA-abcd-efgh-ijkl  # until 2027-01-31\n",
+        "GHSA-abcd-efgh-ijkl  # a reason without an end date\n",
+        "GHSA-abcd-efgh-ijkl  # a reason; until 2027-02-30\n",
+    ):
+        with pytest.raises(ValueError):
+            audit.parse_ignore_list(bad)
+
+
+def test_pip_audit_runs_offline_from_pins_and_strictly():
+    audit = _audit_module()
+    command = audit.pip_audit_command(Path("req.txt"), ["PYSEC-1", "GHSA-x"])
+    assert command[1:3] == ["-m", "pip_audit"]
+    for flag in ("--no-deps", "--disable-pip", "--strict"):
+        assert flag in command
+    pairs = [command[i + 1] for i, part in enumerate(command) if part == "--ignore-vuln"]
+    assert pairs == ["PYSEC-1", "GHSA-x"]
+
+
+def test_main_hands_every_layer_to_pip_audit_and_returns_its_status(monkeypatch, tmp_path):
+    """Wiring without network: pip-audit is replaced by a recorder."""
+    audit = _audit_module()
+    seen = []
+
+    class _Done:
+        returncode = 1
+
+    def _fake_run(command, **kwargs):
+        requirements = Path(command[command.index("--requirement") + 1])
+        seen.append(requirements.read_text(encoding="utf-8").split())
+        return _Done()
+
+    monkeypatch.setattr(audit.subprocess, "run", _fake_run)
+    monkeypatch.setattr(audit, "_pip_audit_available", lambda: True)
+    status = audit.main([])
+    assert status == 1
+    assert sorted(pin for layer in seen for pin in layer) == sorted(_raw_lock_pins())
+
+
+def test_main_refuses_an_expired_ignore_entry(tmp_path, monkeypatch):
+    audit = _audit_module()
+    ignore = tmp_path / "ignore.txt"
+    ignore.write_text("PYSEC-2026-1  # was harmless; until 2020-01-01\n", encoding="utf-8")
+    monkeypatch.setattr(audit, "_pip_audit_available", lambda: True)
+    assert audit.main(["--ignore-file", str(ignore)]) == 2
+
+
+def test_main_reports_a_missing_pip_audit(monkeypatch):
+    audit = _audit_module()
+    monkeypatch.setattr(audit, "_pip_audit_available", lambda: False)
+    assert audit.main([]) == 2
+
+
+def test_print_mode_lists_the_pins_without_auditing(capsys):
+    audit = _audit_module()
+    assert audit.main(["--print"]) == 0
+    printed = capsys.readouterr().out.split()
+    assert sorted(printed) == sorted(_raw_lock_pins())
