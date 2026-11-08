@@ -768,9 +768,7 @@ class TransientStudy:
         # a path to the active fault. Without it a source on a galvanically
         # isolated bus injected its full spectrum there *and* subtracted it
         # again at the fault bus, so every bus in the network came out wrong.
-        injecting = self._sources_reaching_fault(
-            list(source_spectra), bus_index, fault_bus
-        )
+        injecting = self._sources_reaching_fault(list(source_spectra), fault_bus)
         source_spectra = {
             name: spectrum
             for name, spectrum in source_spectra.items()
@@ -1023,18 +1021,19 @@ class TransientStudy:
     def _sources_reaching_fault(
         self,
         source_names: Sequence[str],
-        bus_index: Dict[str, int],
         fault_bus: str,
     ) -> List[str]:
         """Return the sources that are galvanically connected to the fault bus.
 
         Mirrors
         :meth:`~groundinsight.electrical_network.ElectricalNetwork._sources_with_path_to_active_fault`,
-        which filters the stationary injections through ``network.paths``.
-        The reachability is recomputed here with a breadth-first search over
-        the *active* branches rather than read off the paths, so a transient
-        study does not depend on a path set having been built first and does
-        not trigger the path enumeration itself.
+        which filters the stationary injections the same way. The answer comes
+        from :meth:`~groundinsight.models.core_models.Network.sources_reaching`
+        -- a breadth-first search over the active sub-graph -- rather than
+        from the paths, so a transient study does not depend on a path set
+        having been built first and does not trigger the path enumeration
+        itself. Until audit pass 19 this method ran a second copy of that
+        search (ARC6).
 
         The search walks every active branch whose two endpoints are both
         active -- exactly the graph :class:`~groundinsight.pathfinder.PathFinder`
@@ -1047,10 +1046,8 @@ class TransientStudy:
         ----------
         source_names : sequence of str
             Candidate source names.
-        bus_index : dict of str to int
-            The active buses of this solve.
         fault_bus : str
-            Bus the active fault sits on.
+            Bus the active fault sits on (named in the warning).
 
         Returns
         -------
@@ -1066,32 +1063,14 @@ class TransientStudy:
             fault bus and therefore injects nothing. A log line until audit
             pass 19 (GUI4).
         """
-        adjacency: Dict[str, List[str]] = {name: [] for name in bus_index}
-        for branch in self.network.branches.values():
-            if not branch.active:
-                continue
-            if branch.from_bus not in bus_index or branch.to_bus not in bus_index:
-                continue
-            adjacency[branch.from_bus].append(branch.to_bus)
-            adjacency[branch.to_bus].append(branch.from_bus)
-
-        reachable = {fault_bus}
-        queue = [fault_bus]
-        while queue:
-            current = queue.pop()
-            for neighbour in adjacency.get(current, ()):
-                if neighbour not in reachable:
-                    reachable.add(neighbour)
-                    queue.append(neighbour)
-
+        reachable = set(self.network.sources_reaching(self.fault_name))
         candidates = set(source_names)
         keeping: List[str] = []
         dropped: List[str] = []
         for name in self.network.sources:
             if name not in candidates:
                 continue
-            bus = self.network.sources[name].bus
-            if bus in reachable:
+            if name in reachable:
                 keeping.append(name)
             else:
                 dropped.append(name)

@@ -38,7 +38,7 @@ import warnings
 import sympy as sp
 import numpy as np
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 from groundinsight.diagnostics import GroundinsightWarning
 from groundinsight.utils.validations import assert_safe_formula
@@ -992,17 +992,16 @@ def check_passive_impedance_array(
 
     Applies exactly the same four rules -- zero above 0 Hz, non-invertibly
     small above 0 Hz, negative real part at any frequency, real part of minus
-    infinity at any frequency -- with NumPy masks instead of a Python loop
-    over a dictionary. On an FFT grid that is the difference between 9 s and
-    a few milliseconds, because the scalar :func:`is_short_circuit` was
-    called once per (element, bin).
+    infinity at any frequency -- to arrays, without a dictionary per element.
+    On an FFT grid that is the difference between 9 s and a few milliseconds,
+    because the scalar :func:`is_short_circuit` was called once per
+    (element, bin).
 
-    The *message* is not duplicated. When something is wrong, the offending
-    bins are collected into a small dictionary and handed to
-    :func:`check_passive_impedance`, which raises with its full explanation.
-    The fast path is therefore vectorised and the slow path is byte-for-byte
-    the message the dictionary-based checker has always produced -- there is
-    only one copy of it to keep correct.
+    Neither the rules nor the message exist twice: both checkers classify
+    with :func:`passivity_classes` and word the error with the same builder
+    (audit pass 19, ARC6). Until then this function had its own copy of the
+    rules and handed the offending bins to the dictionary checker for the
+    message.
 
     Parameters
     ----------
@@ -1023,33 +1022,10 @@ def check_passive_impedance_array(
         As documented for :func:`check_passive_impedance`.
     """
     values = np.asarray(values, dtype=complex)
-    frequencies = np.asarray(frequencies, dtype=float)
-
-    finite = np.isfinite(values.real) & np.isfinite(values.imag)
-    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-        admittance = np.divide(
-            1.0, values, out=np.full_like(values, np.inf), where=values != 0
-        )
-    # Same question as ``is_short_circuit``: can this value be inverted?
-    shorted = finite & ~(
-        np.isfinite(admittance.real) & np.isfinite(admittance.imag)
-    )
-    negative = finite & ~shorted & (values.real < 0)
-    # Not finite, so not caught above, and 1/(-inf) == 0 would read as an
-    # open circuit. See check_passive_impedance.
-    minus_infinite = np.isneginf(values.real)
-
-    offending = (shorted & (frequencies != 0.0)) | negative | minus_infinite
-    if not offending.any():
-        return
-
-    check_passive_impedance(
-        {
-            float(freq): complex(value)
-            for freq, value in zip(
-                frequencies[offending].tolist(), values[offending].tolist()
-            )
-        },
+    _raise_if_not_passive(
+        np.asarray(frequencies, dtype=float),
+        values.real,
+        values.imag,
         element=element,
         formula_str=formula_str,
         params=params,
@@ -1510,31 +1486,150 @@ def check_passive_impedance(
     im = np.fromiter(
         (float(v.imag) for v in z_dict.values()), dtype=float, count=count
     )
+    _raise_if_not_passive(
+        freqs, re, im, element=element, formula_str=formula_str, params=params
+    )
 
-    # A failed computation (NaN) is reported elsewhere; infinity is the
-    # documented open-end sentinel and 1/inf == 0 is the right answer.
+
+class PassivityClasses(NamedTuple):
+    """
+    The four ways an impedance can fail to be a usable admittance.
+
+    Boolean masks of a common (broadcast) shape, as returned by
+    :func:`passivity_classes`. Their union is :func:`non_passive_mask`.
+
+    Attributes
+    ----------
+    zero : numpy.ndarray
+        Exactly zero, above 0 Hz.
+    too_small : numpy.ndarray
+        Not zero, but too small to invert in double precision, above 0 Hz.
+    negative : numpy.ndarray
+        Finite, invertible and with a negative real part, at any frequency.
+    minus_infinite : numpy.ndarray
+        Real part of minus infinity, at any frequency.
+    """
+
+    zero: np.ndarray
+    too_small: np.ndarray
+    negative: np.ndarray
+    minus_infinite: np.ndarray
+
+
+def passivity_classes(
+    re: np.ndarray, im: np.ndarray, frequencies: np.ndarray
+) -> PassivityClasses:
+    """
+    Classify impedances against the four passivity rules (the one copy).
+
+    The rules are explained in :func:`check_passive_impedance`. This is their
+    only implementation: the dictionary checker, the array checker of the
+    transient solver and the vectorised pass/fail of the stationary kernel
+    (:func:`non_passive_mask`) all call it. Until audit pass 19 each of the
+    three carried its own copy of the masks (ARC6).
+
+    Parameters
+    ----------
+    re, im : numpy.ndarray
+        Real and imaginary parts, same shape.
+    frequencies : numpy.ndarray
+        Frequencies in Hz, broadcastable against ``re`` -- one per value, or
+        one per column of an ``(elements, frequencies)`` array.
+
+    Returns
+    -------
+    PassivityClasses
+        One boolean mask per rule. NaN and plus infinity fall in none of
+        them: a failed computation is reported where it happens, and plus
+        infinity is the open-end sentinel.
+    """
+    re = np.asarray(re, dtype=float)
+    im = np.asarray(im, dtype=float)
+    above_dc = np.asarray(frequencies, dtype=float) != 0.0
     finite = np.isfinite(re) & np.isfinite(im)
     short = _short_circuit_mask(re, im)
     exact_zero = (re == 0.0) & (im == 0.0) & finite
-    above_dc = freqs != 0.0
+    return PassivityClasses(
+        zero=exact_zero & above_dc,
+        too_small=short & ~exact_zero & above_dc,
+        negative=finite & ~short & (re < 0.0),
+        # Not finite, hence outside every mask above, and the one non-finite
+        # value that is not an open circuit.
+        minus_infinite=np.isneginf(re),
+    )
 
-    # At DC a short circuit is the physics, not a mistake: the solvers
-    # substitute a small finite value and warn. Above DC it is a mistake.
-    zeros: List[float] = freqs[exact_zero & above_dc].tolist()
-    small_mask = short & ~exact_zero & above_dc
+
+def non_passive_mask(values: np.ndarray, frequencies: np.ndarray) -> np.ndarray:
+    """
+    Where impedances violate a passivity rule (internal API).
+
+    Parameters
+    ----------
+    values : numpy.ndarray
+        Complex impedances, any shape.
+    frequencies : numpy.ndarray
+        Frequencies in Hz, broadcastable against ``values``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean mask, ``True`` where :func:`check_passive_impedance` would
+        reject the value.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> non_passive_mask(np.array([0j, 0j, -1 + 0j, 2 + 1j]),
+    ...                  np.array([0.0, 50.0, 50.0, 50.0])).tolist()
+    [False, True, True, False]
+    """
+    values = np.asarray(values, dtype=complex)
+    classes = passivity_classes(values.real, values.imag, frequencies)
+    return classes.zero | classes.too_small | classes.negative | classes.minus_infinite
+
+
+def _raise_if_not_passive(
+    freqs: np.ndarray,
+    re: np.ndarray,
+    im: np.ndarray,
+    *,
+    element: str,
+    formula_str: Optional[str],
+    params: Optional[Dict[str, float]],
+) -> None:
+    """
+    Raise the passivity error for one element, or return if there is none.
+
+    Parameters
+    ----------
+    freqs, re, im : numpy.ndarray
+        One-dimensional arrays of the same length: frequency, real and
+        imaginary part per value.
+    element : str
+        How to name the element in the message.
+    formula_str : str, optional
+        The formula the values came from.
+    params : dict, optional
+        The substitutions used.
+
+    Raises
+    ------
+    ValueError
+        If any value violates a rule; every offending frequency is listed,
+        grouped by cause.
+    """
+    classes = passivity_classes(re, im, freqs)
+    zeros: List[float] = freqs[classes.zero].tolist()
     too_small: List[Tuple[float, float]] = list(
         zip(
-            freqs[small_mask].tolist(),
-            np.hypot(re[small_mask], im[small_mask]).tolist(),
+            freqs[classes.too_small].tolist(),
+            np.hypot(re[classes.too_small], im[classes.too_small]).tolist(),
         )
     )
-    negative_mask = finite & ~short & (re < 0.0)
     negative: List[Tuple[float, float]] = list(
-        zip(freqs[negative_mask].tolist(), re[negative_mask].tolist())
+        zip(freqs[classes.negative].tolist(), re[classes.negative].tolist())
     )
-    # Not finite, hence outside every mask above, and the one non-finite value
-    # that is not an open circuit.
-    minus_infinite: List[float] = freqs[np.isneginf(re)].tolist()
+    minus_infinite: List[float] = freqs[classes.minus_infinite].tolist()
 
     if not (zeros or too_small or negative or minus_infinite):
         return

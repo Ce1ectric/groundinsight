@@ -17,6 +17,16 @@ thread was solving at that moment -- and the dictionaries were mutated from
 several threads without a lock and kept the branches of dead networks alive.
 Settings and memo now belong to the network; the old switches still work,
 with a ``DeprecationWarning``, as the default of networks without settings.
+
+ARC6: two copies of the reachability search (``PathFinder.reaches`` behind
+``Network.sources_reaching``, and a second breadth-first search in the
+transient solver) and three copies of the passivity classification (the
+dictionary checker, the array checker of the transient solver and the
+kernel's fast path) are reduced to one each. The tests compare the one
+implementation with an independent oracle on random input -- connected
+components from ``scipy.sparse.csgraph``, and the four rules applied value
+by value with the scalar ``is_short_circuit`` -- and spy that every former
+copy now goes through it.
 """
 
 import ast
@@ -28,7 +38,12 @@ import threading
 import warnings
 import weakref
 
+import math
+
+import numpy as np
 import pytest
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 
 import groundinsight as gi
 
@@ -364,3 +379,231 @@ def test_clearing_one_network_leaves_the_other_and_clearing_all_clears_both():
     assert b.path_cache().sizes()["graph"] == 1
     clear_pathfinder_cache()
     assert b.path_cache().sizes() == {"graph": 0, "paths": 0, "reaches": 0}
+
+
+# ---------------------------------------------------------------------------
+# ARC6 -- one reachability search
+# ---------------------------------------------------------------------------
+
+
+def _random_network(seed: int) -> gi.Network:
+    """
+    A random, partly inactive network with several sources and one fault.
+
+    Parameters
+    ----------
+    seed : int
+        Seed of the generator.
+
+    Returns
+    -------
+    groundinsight.Network
+        Buses ``n0..``, random branches (possibly parallel, possibly leaving
+        islands), random ``active`` flags, sources on random buses and the
+        fault ``"F"`` on a random bus.
+    """
+    rng = np.random.default_rng(seed)
+    bus_type = gi.BusType(name="earth", system_type="Substation", voltage_level=20.0,
+                          impedance_formula="rho*0.01 + 1 + I*f*0.002")
+    cable = gi.BranchType(name="cable", grounding_conductor=True,
+                          self_impedance_formula="(0.25 + I*f*0.012)*l",
+                          mutual_impedance_formula="(0.05 + I*f*0.010)*l",
+                          phase_impedance_formula="(0.10 + I*f*0.004)*l")
+    net = gi.create_network(name=f"random{seed}", frequencies=[50.0])
+    count = int(rng.integers(4, 11))
+    names = [f"n{i}" for i in range(count)]
+    for name in names:
+        gi.create_bus(name=name, type=bus_type, network=net)
+    for k in range(int(rng.integers(count - 2, 2 * count))):
+        a, b = rng.choice(count, size=2, replace=False)
+        gi.create_branch(name=f"k{k}", type=cable, from_bus=names[a], to_bus=names[b],
+                         length=0.5, network=net)
+    for s in range(int(rng.integers(1, 4))):
+        gi.create_source(name=f"s{s}", bus=names[int(rng.integers(count))],
+                         values={50.0: 100.0}, network=net)
+    gi.create_fault(name="F", bus=names[int(rng.integers(count))], scalings={50.0: 1.0},
+                    network=net)
+    for bus in net.buses.values():
+        if rng.random() < 0.15:
+            bus.active = False
+    for branch in net.branches.values():
+        if rng.random() < 0.2:
+            branch.active = False
+    return net
+
+
+def _reaching_by_components(net: gi.Network, fault: str) -> list:
+    """
+    Independent oracle: sources in the connected component of the fault bus.
+
+    Built from the active buses and the active branches between them with
+    ``scipy.sparse.csgraph.connected_components`` -- no code of the package.
+
+    Parameters
+    ----------
+    net : groundinsight.Network
+        The network.
+    fault : str
+        The fault.
+
+    Returns
+    -------
+    list of str
+        Source names in network order.
+    """
+    active = [name for name, bus in net.buses.items() if bus.active]
+    index = {name: i for i, name in enumerate(active)}
+    fault_bus = net.faults[fault].bus
+    if fault_bus not in index:
+        return []
+    rows, cols = [], []
+    for branch in net.branches.values():
+        if branch.active and branch.from_bus in index and branch.to_bus in index:
+            rows.append(index[branch.from_bus])
+            cols.append(index[branch.to_bus])
+    graph = csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(len(active),) * 2)
+    _, labels = connected_components(graph, directed=False)
+    target = labels[index[fault_bus]]
+    return [
+        name for name, source in net.sources.items()
+        if source.bus in index and labels[index[source.bus]] == target
+    ]
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_stationary_and_transient_ask_one_reachability_search(seed, monkeypatch):
+    from groundinsight.pathfinder import PathFinder
+
+    net = _random_network(seed)
+    expected = _reaching_by_components(net, "F")
+    assert net.sources_reaching("F") == expected
+
+    calls = []
+    original = PathFinder.reaches
+
+    def spy(self, source_bus, fault_bus):
+        calls.append((source_bus, fault_bus))
+        return original(self, source_bus, fault_bus)
+
+    monkeypatch.setattr(PathFinder, "reaches", spy)
+    net.path_cache().clear()
+    study = gi.TransientStudy(net, "F")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        injecting = study._sources_reaching_fault(list(net.sources), net.faults["F"].bus)
+    assert injecting == expected
+    assert len(calls) == len(net.sources)  # the transient filter used the search
+
+
+# ---------------------------------------------------------------------------
+# ARC6 -- one passivity classification
+# ---------------------------------------------------------------------------
+
+EDGE_VALUES = [
+    0j, complex(-0.0, 0.0), 1e-310 + 0j, -1e-310 + 0j, 1e-310j, 1e-320 + 1e-320j,
+    5e-309 + 0j, 1e-300 + 0j, 1.0 + 0j, 1j, -1j, -1.0 + 0j, -1.0 + 1j, -1e-300 + 0j,
+    complex(math.inf, 0.0), complex(math.inf, 1.0), complex(1.0, -math.inf),
+    complex(-math.inf, 0.0), complex(-math.inf, 1.0), complex(math.nan, 0.0),
+    complex(0.0, math.nan), complex(-math.inf, math.nan),
+]
+
+
+def _rule_by_rule(value: complex, frequency: float) -> bool:
+    """
+    Independent oracle: the four passivity rules for one value, in scalar code.
+
+    Parameters
+    ----------
+    value : complex
+        The impedance.
+    frequency : float
+        Its frequency in Hz.
+
+    Returns
+    -------
+    bool
+        ``True`` if the value violates a rule.
+    """
+    from groundinsight.utils.impedance_calculator import is_short_circuit
+
+    finite = math.isfinite(value.real) and math.isfinite(value.imag)
+    shorted = finite and is_short_circuit(value)
+    if frequency != 0.0 and shorted:
+        return True  # zero, or too small to invert, above 0 Hz
+    if finite and not shorted and value.real < 0.0:
+        return True  # negative resistance
+    return value.real == -math.inf  # the limit of a negative resistance
+
+
+def _sample(seed: int):
+    """Edge values and random ones, each at 0 Hz or above."""
+    rng = np.random.default_rng(seed)
+    magnitudes = 10.0 ** rng.uniform(-320, 3, size=40)
+    signs = rng.choice([-1.0, 1.0], size=(2, 40))
+    random_values = signs[0] * magnitudes + 1j * signs[1] * magnitudes * rng.random(40)
+    values = np.array(EDGE_VALUES + list(random_values), dtype=complex)
+    frequencies = rng.choice([0.0, 50.0, 250.0], size=values.size)
+    return values, frequencies
+
+
+@pytest.mark.parametrize("seed", range(10))
+def test_one_passivity_classification_matches_the_rules(seed):
+    from groundinsight.utils.impedance_calculator import non_passive_mask
+
+    values, frequencies = _sample(seed)
+    expected = [_rule_by_rule(complex(v), float(f)) for v, f in zip(values, frequencies)]
+    assert non_passive_mask(values, frequencies).tolist() == expected
+    # Broadcast form of the kernel: elements x frequencies.
+    grid = non_passive_mask(np.vstack([values, values]), frequencies)
+    assert grid.shape == (2, values.size)
+    assert grid[1].tolist() == expected
+
+
+@pytest.mark.parametrize("value", EDGE_VALUES + [-2.5 + 0j, 3e-311 + 0j])
+@pytest.mark.parametrize("frequency", [0.0, 50.0])
+def test_the_dictionary_and_array_checkers_decide_and_word_alike(value, frequency):
+    from groundinsight.models.core_models import ComplexNumber
+    from groundinsight.utils.impedance_calculator import (
+        check_passive_impedance,
+        check_passive_impedance_array,
+    )
+
+    def outcome(call):
+        try:
+            call()
+            return None
+        except ValueError as exc:
+            return str(exc)
+
+    as_dict = outcome(lambda: check_passive_impedance(
+        {frequency: ComplexNumber(real=value.real, imag=value.imag)},
+        element="bus 'X' (grounding impedance)", formula_str="f(rho)"))
+    as_array = outcome(lambda: check_passive_impedance_array(
+        np.array([value]), np.array([frequency]),
+        element="bus 'X' (grounding impedance)", formula_str="f(rho)"))
+    assert as_dict == as_array
+    assert (as_dict is not None) == _rule_by_rule(value, frequency)
+
+
+def test_every_former_copy_uses_the_one_classification(monkeypatch):
+    from groundinsight.models.core_models import ComplexNumber
+    from groundinsight.utils import impedance_calculator as ic
+
+    calls = []
+    original = ic.passivity_classes
+
+    def spy(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(ic, "passivity_classes", spy)
+
+    ic.check_passive_impedance({50.0: ComplexNumber(real=1.0, imag=0.0)}, element="x")
+    assert len(calls) == 1
+    ic.check_passive_impedance_array(np.array([1.0 + 0j]), np.array([50.0]), element="x")
+    assert len(calls) == 2
+    before = len(calls)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        gi.solve(_grid("passive"), "F")  # the kernel's fast path
+    assert len(calls) > before

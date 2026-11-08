@@ -111,6 +111,7 @@ from groundinsight.models.core_models import (
 from groundinsight.utils.impedance_calculator import (
     _render_frequencies,
     _short_circuit_mask,
+    non_passive_mask,
     check_passive_impedance,
     dc_substitute_impedance,
     is_short_circuit,
@@ -1556,22 +1557,14 @@ class ElectricalNetwork:
         bool
             ``True`` when no checked impedance violates a rule.
         """
-        above_dc = np.asarray(tables.frequencies, dtype=float)[None, :] != 0.0
+        frequencies = np.asarray(tables.frequencies, dtype=float)[None, :]
 
         def passes(values: np.ndarray, present: np.ndarray) -> bool:
+            # The rules themselves live in one place (ARC6):
+            # utils.impedance_calculator.passivity_classes.
             if values.size == 0:
                 return True
-            re, im = values.real, values.imag
-            finite = np.isfinite(re) & np.isfinite(im)
-            short = _short_circuit_mask(re, im)
-            exact_zero = (re == 0.0) & (im == 0.0) & finite
-            bad = (
-                (exact_zero & above_dc)
-                | (short & ~exact_zero & above_dc)
-                | (finite & ~short & (re < 0.0))
-                | np.isneginf(re)
-            )
-            return not np.any(bad & present)
+            return not np.any(non_passive_mask(values, frequencies) & present)
 
         grid = tables.branch_in_net & tables.branch_grounding
         on_bus = tables.vs_bus >= 0
