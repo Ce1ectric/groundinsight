@@ -61,10 +61,12 @@ Examples
 
 import logging
 import math
-from typing import Any, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .._state import NetworkState
 from ..models.core_models import Network
 from ..network_operations import run_fault
+from ..progress import StudyHooks
 from ..utils.compat import renamed_parameters
 from ._bisection import (
     STATUS_BRACKET_FULLY_ADMISSIBLE,
@@ -73,6 +75,7 @@ from ._bisection import (
     classify,
     is_monotone,
     log_grid,
+    planned_steps,
     report,
     validate_c_bounds,
     validate_grid_points,
@@ -201,6 +204,8 @@ def find_max_rho_scaling(
     max_iter: int = 60,
     monotonicity_grid: int = 9,
     run_fault_kwargs: Dict[str, Any] = None,
+    progress: Optional[Callable[[int, int, str], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, Any]:
     """
     Find the largest uniform rho-scaling factor compatible with an EPR limit.
@@ -259,6 +264,14 @@ def find_max_rho_scaling(
         Extra keyword arguments forwarded to :func:`run_fault` at every
         step (e.g. ``{"auto_parallel_coefficients": True}``). Defaults to
         ``None``.
+    progress : callable, optional
+        ``progress(done, total, label)``, called after every solve (scan
+        points and bisection steps alike) with the trial factor as label.
+        ``total`` is the evaluation count the bracket and tolerance require;
+        see :mod:`groundinsight.progress`.
+    should_cancel : callable, optional
+        Asked before every solve; a true answer raises
+        :class:`~groundinsight.progress.StudyCancelled`.
 
     Returns
     -------
@@ -306,6 +319,10 @@ def find_max_rho_scaling(
         ``bus_names`` is empty, any name is not in the network, the EPR at
         the lower bound ``c_bounds[0]`` already exceeds ``u_limit``, or the
         model returns a non-finite EPR at some trial factor.
+    TypeError
+        If ``progress`` or ``should_cancel`` is not callable.
+    StudyCancelled
+        If ``should_cancel()`` returned true.
 
     Notes
     -----
@@ -354,6 +371,19 @@ def find_max_rho_scaling(
 
     rfk: Dict[str, Any] = dict(run_fault_kwargs) if run_fault_kwargs else {}
 
+    # The evaluation count is known before the first solve: the scan, plus the
+    # halvings that close one scan interval (the whole bracket without a scan)
+    # to tol_rel -- a log-bisection needs the same number wherever the
+    # threshold lies.
+    n_scan = len(log_grid(c_lo_init, c_hi_init, monotonicity_grid))
+    interval = (c_hi_init / c_lo_init) ** (1.0 / max(n_scan - 1, 1))
+    hooks = StudyHooks(
+        "find_max_rho_scaling",
+        n_scan + planned_steps(1.0, interval, tol_rel, max_iter),
+        progress,
+        should_cancel,
+    )
+
     fault_bus_name = network.faults[fault].bus
 
     # Snapshot original rhos so the network can be restored at the end.
@@ -378,6 +408,7 @@ def find_max_rho_scaling(
 
     def _epr_rms_at(c: float) -> float:
         """Evaluate the RMS EPR at the fault bus for a given scaling factor."""
+        hooks.checkpoint()
         for b in bus_names:
             bus = network.buses[b]
             bus.specific_earth_resistance = c * rho_0[b]
@@ -404,8 +435,13 @@ def find_max_rho_scaling(
                 "without ever raising. This is a model problem, not a search "
                 "problem: check the bus impedance formula at the scaled rho."
             )
+        hooks.advance(f"c = {c:.6g}")
         return epr
 
+    # Everything above restores the network field by field; this records the
+    # network-level state as a whole, so the restore in ``finally`` is exact
+    # -- result order, path set and private state included (GUI5).
+    state = NetworkState(network)
     iterations = 0
     try:
         c_lo, c_hi = c_lo_init, c_hi_init
@@ -503,6 +539,8 @@ def find_max_rho_scaling(
         # on entry it gets none back -- a stale matrix is worse than no matrix,
         # because the readers above it raise on the second and not on the first.
         network.electrical_network = electrical_backup
+        # And the network-level state exactly as recorded before the search.
+        state.restore()
 
     return {
         "c_max": c_max,

@@ -80,6 +80,7 @@ from .network_operations import (
 )
 from .service import solve
 from .checks import check_network
+from .progress import StudyCancelled
 from .pathfinder import (
     clear_pathfinder_cache,
     get_pathfinder_cache_size,
@@ -186,6 +187,8 @@ __all__ = [
     "solve",
     # Pre-flight check: every problem as a Diagnostic, never an exception.
     "check_network",
+    # Raised by a study whose should_cancel() callback returned true.
+    "StudyCancelled",
     "plot_bus_voltages",
     "plot_branch_currents",
     "plot_bus_currents",

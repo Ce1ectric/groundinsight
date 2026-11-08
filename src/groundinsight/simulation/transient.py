@@ -48,9 +48,11 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, TYPE_CHECKIN
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
+from groundinsight._state import restore_on_cancel
 from groundinsight.diagnostics import ModelAssumptionWarning, emit
 from groundinsight.electrical_network import ElectricalNetwork
 from groundinsight.models.core_models import Network, TransientModelWarning
+from groundinsight.progress import StudyHooks
 from groundinsight.utils.compat import renamed_parameters
 
 if TYPE_CHECKING:
@@ -458,6 +460,9 @@ class TransientStudy:
         # :meth:`_dc_substitute_for` and :meth:`_resolved_z_stack`.
         self._dc_substitute: Optional[float] = None
         self._dc_bin: Optional[int] = None
+        # Progress and cancellation of the solve() call in flight; a silent
+        # instance outside of one. See :mod:`groundinsight.progress`.
+        self._hooks = StudyHooks("TransientStudy.solve", 0)
 
     def set_source_waveform(self, source_name: str, waveform: WaveformFunc):
         """
@@ -537,6 +542,8 @@ class TransientStudy:
         f_eval: Optional[float] = None,
         zero_pad: bool = False,
         fft_block_bytes: Optional[int] = None,
+        progress: Optional[Callable[[int, int, str], None]] = None,
+        should_cancel: Optional[Callable[[], bool]] = None,
     ) -> ResultTransient:
         """
         Run the transient solve and return the resulting time series.
@@ -593,6 +600,17 @@ class TransientStudy:
             against 0.7 s at the default. A single matrix larger than the
             budget is solved one bin at a time and logged. Defaults to
             256 MiB.
+        progress : callable, optional
+            ``progress(done, total, label)``. The FFT solver reports one unit
+            per batch of frequency bins solved together (see
+            ``fft_block_bytes``), the state-space solver the two stages
+            ``"assembled"`` and ``"integrated"``. See
+            :mod:`groundinsight.progress`.
+        should_cancel : callable, optional
+            Asked before the solve and before every unit; a true answer
+            raises :class:`~groundinsight.progress.StudyCancelled`. The
+            integration of the state-space solver is a single library call
+            and cannot be interrupted once it runs.
 
         Returns
         -------
@@ -608,9 +626,12 @@ class TransientStudy:
             missing the lumped RLC fields required by the state-space
             solver.
         TypeError
-            If ``fft_block_bytes`` is not an integer.
+            If ``fft_block_bytes`` is not an integer, or if ``progress`` or
+            ``should_cancel`` is not callable.
         NotImplementedError
             If ``solver`` is not one of the supported identifiers.
+        StudyCancelled
+            If ``should_cancel()`` returned true; the network is as found.
 
         Warns
         -----
@@ -627,16 +648,24 @@ class TransientStudy:
             ``f_eval`` -- differs at the other frequencies in the waveform.
         """
         block_bytes = _validated_block_bytes(fft_block_bytes)
-        if solver == "fft":
-            return self._solve_fft(
-                t_end=t_end, dt=dt, zero_pad=zero_pad, block_bytes=block_bytes
+        if solver not in ("fft", "state_space"):
+            raise NotImplementedError(
+                f"Unknown transient solver: '{solver}'. "
+                "Supported: 'fft', 'state_space'."
             )
-        if solver == "state_space":
-            return self._solve_state_space(t_end=t_end, dt=dt, f_eval=f_eval)
-        raise NotImplementedError(
-            f"Unknown transient solver: '{solver}'. "
-            "Supported: 'fft', 'state_space'."
+        self._hooks = StudyHooks(
+            "TransientStudy.solve", 0, progress, should_cancel
         )
+        try:
+            with restore_on_cancel(self.network):
+                self._hooks.checkpoint()
+                if solver == "fft":
+                    return self._solve_fft(
+                        t_end=t_end, dt=dt, zero_pad=zero_pad, block_bytes=block_bytes
+                    )
+                return self._solve_state_space(t_end=t_end, dt=dt, f_eval=f_eval)
+        finally:
+            self._hooks = StudyHooks("TransientStudy.solve", 0)
 
     # ------------------------------------------------------------------
     # internals
@@ -769,6 +798,7 @@ class TransientStudy:
                 16 * n_buses * n_buses / 2**20,
                 budget / 2**20,
             )
+        self._hooks.plan(-(-n_freqs // block))
         u_spectrum = self._solve_spectrum(
             bus_index, bus_Z, branch_Z, i_spectrum, freqs, block=block
         )
@@ -1245,7 +1275,9 @@ class TransientStudy:
         independent LU solve, so the block size changes the memory and the
         number of calls, not a single digit of the result. A block that
         contains a singular bin is redone bin by bin, so the "skip this bin"
-        rule applies to exactly that bin and not to its neighbours.
+        rule applies to exactly that bin and not to its neighbours. Every
+        block is one unit of the study's progress report: a cancel request
+        is honoured before a block, the progress call follows it (GUI5).
 
         Parameters
         ----------
@@ -1268,6 +1300,7 @@ class TransientStudy:
         n_freqs = freqs.size
         u_spectrum = np.zeros((len(bus_index), n_freqs), dtype=complex)
         for start in range(0, n_freqs, block):
+            self._hooks.checkpoint()
             stop = min(start + block, n_freqs)
             bins = np.arange(start, stop)
             Y_block = self._build_y_stack(bus_index, bus_Z, branch_Z, bins)
@@ -1294,6 +1327,7 @@ class TransientStudy:
                             freqs[k],
                         )
             del Y_block
+            self._hooks.advance(f"bins {start}-{stop - 1} of {n_freqs}")
         return u_spectrum
 
     def _admittance_stack(
@@ -1807,6 +1841,7 @@ class TransientStudy:
             )
         self._reject_reserved_branch_names()
         self._warn_about_fault_scalings()
+        self._hooks.plan(2)
 
         # Frequency at which the lumped RLC values are sampled. The
         # state-space model treats RLC as frequency-independent; see
@@ -2386,6 +2421,8 @@ class TransientStudy:
             signals_t[src_name] = sig
 
         # --- integrate ----------------------------------------------------
+        self._hooks.advance("assembled")
+        self._hooks.checkpoint()
         from scipy.signal import lsim
 
         # Integrate with identity output to recover the full state x(t),
@@ -2399,6 +2436,7 @@ class TransientStudy:
         _, _, x_out = lsim(sys_x, U=u, T=t)
         if x_out.ndim == 1:
             x_out = x_out.reshape(-1, 1)
+        self._hooks.advance("integrated")
 
         # --- pack EPR observations ----------------------------------------
         epr_t: Dict[str, List[float]] = {}

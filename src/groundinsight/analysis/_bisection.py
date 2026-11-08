@@ -271,6 +271,40 @@ def log_grid(c_lo: float, c_hi: float, n_grid: int) -> Tuple[float, ...]:
     )
 
 
+def planned_steps(c_lo: float, c_hi: float, tol_rel: float, max_iter: int) -> int:
+    """Number of log-bisection steps that close ``[c_lo, c_hi]`` to ``tol_rel``.
+
+    Every step replaces one end by the geometric mean, so the ratio
+    ``c_hi / c_lo`` becomes its square root *whichever* end moves: the step
+    count is fixed by the bracket and the tolerance, not by where the
+    threshold lies. That is what lets a search announce its total up front
+    for a progress report (finding GUI5).
+
+    Parameters
+    ----------
+    c_lo, c_hi : float
+        The bracket the bisection starts from, ``0 < c_lo < c_hi``.
+    tol_rel : float
+        Relative width ``(c_hi - c_lo) / c_lo`` at which the search stops.
+    max_iter : int
+        Step cap of the search.
+
+    Returns
+    -------
+    int
+        ``min(max_iter, k)`` for the smallest ``k`` with
+        ``(c_hi/c_lo)**(2**-k) - 1 <= tol_rel``. Floating-point rounding of
+        the actual brackets can differ from this by one step at a boundary
+        case; a progress report has to tolerate that.
+    """
+    ratio = c_hi / c_lo
+    steps = 0
+    while steps < max_iter and ratio - 1.0 > tol_rel:
+        ratio = math.sqrt(ratio)
+        steps += 1
+    return steps
+
+
 def is_monotone(values: Tuple[float, ...], rel_tol: float = 1e-6) -> bool:
     """
     ``True`` when ``values`` never falls by more than ``rel_tol`` relatively.

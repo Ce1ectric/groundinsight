@@ -44,16 +44,19 @@ release on top of the same helper.
 
 import logging
 import math
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
 import polars as pl
 
+from .._state import NetworkState
 from ..models.core_models import ComplexNumber, Fault, Network
 from ..network_operations import run_fault
+from ..progress import StudyHooks
 from ._bisection import (
     STATUS_BRACKET_FULLY_ADMISSIBLE,
     STATUS_MAX_ITER_REACHED,
     classify,
+    planned_steps,
     report,
     validate_c_bounds,
     validate_limit,
@@ -142,6 +145,50 @@ def evaluate_max_epr_under_k(
         If ``bus_names`` is empty, ``k`` does not have length 5, or any
         name is not in the network.
     """
+    return _evaluate_max_epr_under_k(
+        network,
+        bus_names,
+        k,
+        fault_scalings=fault_scalings,
+        run_fault_kwargs=run_fault_kwargs,
+    )
+
+
+def _evaluate_max_epr_under_k(
+    network: Network,
+    bus_names: List[str],
+    k: KVector,
+    *,
+    fault_scalings: Optional[Dict[float, float]] = None,
+    run_fault_kwargs: Optional[Dict[str, Any]] = None,
+    hooks: Optional[StudyHooks] = None,
+    label: str = "",
+) -> Dict[str, float]:
+    """
+    Implementation of :func:`evaluate_max_epr_under_k`, with study hooks.
+
+    Parameters
+    ----------
+    network, bus_names, k, fault_scalings, run_fault_kwargs
+        As in :func:`evaluate_max_epr_under_k`.
+    hooks : StudyHooks, optional
+        Progress and cancellation of the calling search: one unit per bus
+        solve, checked before and reported after each.
+    label : str, optional
+        Prefix of the unit labels, e.g. the trial factor of the search.
+
+    Returns
+    -------
+    dict of str to float
+        As :func:`evaluate_max_epr_under_k`.
+
+    Raises
+    ------
+    ValueError, LookupError
+        As :func:`evaluate_max_epr_under_k`.
+    StudyCancelled
+        If ``hooks`` says so; the network is restored first.
+    """
     if not bus_names:
         raise ValueError("bus_names must not be empty.")
     if len(k) != 5:
@@ -153,6 +200,12 @@ def evaluate_max_epr_under_k(
     rfk: Dict[str, Any] = dict(run_fault_kwargs) if run_fault_kwargs else {}
     if fault_scalings is None:
         fault_scalings = {float(f): 1.0 for f in network.frequencies}
+
+    # Recorded before the first edit below (the path set is cleared in place
+    # further down) and restored last in ``finally``, so the network-level
+    # state is exactly the entry state -- order of results and faults, path
+    # set, private state -- also on cancellation (GUI5).
+    state = NetworkState(network)
 
     # Snapshot current bus impedances so the network can be restored.
     impedance_backup: Dict[str, Dict[float, ComplexNumber]] = {
@@ -227,6 +280,8 @@ def evaluate_max_epr_under_k(
         # Sweep: each fault once. The first call populates ``network.paths``
         # for every (source, fault) pair; subsequent calls reuse the cache.
         for b, fname in zip(bus_names, sweep_fault_names):
+            if hooks is not None:
+                hooks.checkpoint()
             run_fault(network, fault=fname, **rfk)
             try:
                 result_bus = next(
@@ -247,6 +302,8 @@ def evaluate_max_epr_under_k(
                     "make sure every swept bus appears in that list."
                 ) from exc
             epr_per_bus[b] = float(result_bus.uepr)
+            if hooks is not None:
+                hooks.advance(f"{label}bus {b}")
     finally:
         # Restore bus impedances regardless of success/failure.
         for b in bus_names:
@@ -290,6 +347,7 @@ def evaluate_max_epr_under_k(
         # Restore the assembled system last, so it agrees with the impedances,
         # results and active fault put back above.
         network.electrical_network = electrical_backup
+        state.restore()
 
     return epr_per_bus
 
@@ -305,6 +363,8 @@ def find_max_rho_f_scaling(
     max_iter: int = 60,
     fault_scalings: Optional[Dict[float, float]] = None,
     run_fault_kwargs: Optional[Dict[str, Any]] = None,
+    progress: Optional[Callable[[int, int, str], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, Any]:
     """Find the largest scaling factor ``c`` of a reference k-vector.
 
@@ -343,6 +403,15 @@ def find_max_rho_f_scaling(
         See :func:`evaluate_max_epr_under_k`.
     run_fault_kwargs : dict, optional
         Forwarded to :func:`run_fault`.
+    progress : callable, optional
+        ``progress(done, total, label)``, called after every bus solve of
+        every trial factor (label ``"c = <factor>, bus <name>"``). ``total``
+        is ``len(bus_names)`` times the trial factors the bracket and
+        tolerance require; see :mod:`groundinsight.progress`.
+    should_cancel : callable, optional
+        Asked before every bus solve; a true answer raises
+        :class:`~groundinsight.progress.StudyCancelled`, also in the middle
+        of a bus sweep.
 
     Returns
     -------
@@ -381,6 +450,10 @@ def find_max_rho_f_scaling(
         ``c_bounds`` are checked for finiteness as well as range -- or if
         ``c = c_bounds[0]`` already violates the EPR limit, or if the
         model returns a non-finite EPR at some trial factor.
+    TypeError
+        If ``progress`` or ``should_cancel`` is not callable.
+    StudyCancelled
+        If ``should_cancel()`` returned true; the network is as found.
 
     Notes
     -----
@@ -416,15 +489,25 @@ def find_max_rho_f_scaling(
     if all(x == 0 for x in k_ref):
         raise ValueError("k_ref must not be the zero vector.")
     c_lo_init, c_hi_init = validate_c_bounds(c_bounds)
+    # Both bracket ends, then the halvings that close the bracket: a fixed
+    # count (see planned_steps), times one solve per swept bus.
+    hooks = StudyHooks(
+        "find_max_rho_f_scaling",
+        len(bus_names) * (2 + planned_steps(c_lo_init, c_hi_init, tol_rel, max_iter)),
+        progress,
+        should_cancel,
+    )
 
     last_epr_per_bus: Dict[str, Dict[str, float]] = {"value": {}}
 
     def _max_epr_at(c: float) -> float:
-        eprs = evaluate_max_epr_under_k(
+        eprs = _evaluate_max_epr_under_k(
             network, bus_names,
             k=tuple(c * x for x in k_ref),
             fault_scalings=fault_scalings,
             run_fault_kwargs=run_fault_kwargs,
+            hooks=hooks,
+            label=f"c = {c:.6g}, ",
         )
         last_epr_per_bus["value"] = eprs
         epr = max(eprs.values()) if eprs else 0.0

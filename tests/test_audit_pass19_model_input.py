@@ -927,7 +927,9 @@ def test_outage_study_flags_only_the_result_it_replaced():
 def test_sweep_and_rho_search_leave_other_results_as_they_found_them():
     net = _two_fault_ring()
     gi.run_sweep(net, fault="F", points=[gi.SweepPoint(label="p", bus_rho={"b": 500.0})])
-    assert net.stale_results() == ["F"]  # F now holds the result of the point
+    # The sweep leaves the network exactly as found (GUI5), its own fault's
+    # result included -- it no longer holds the result of the last point.
+    assert net.stale_results() == []
     gi.run_fault(net, "F")
     gi.find_max_rho_scaling(net, "F", ["b", "c"], u_max=1e9, c_bounds=(0.5, 2.0))
     assert "G" not in net.stale_results()

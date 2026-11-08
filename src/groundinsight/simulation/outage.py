@@ -38,12 +38,14 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from typing import Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 
 import polars as pl
 from pydantic import BaseModel, Field
 
+from groundinsight._state import restore_on_cancel
 from groundinsight.models.core_models import Network
+from groundinsight.progress import StudyHooks
 
 
 logger = logging.getLogger(__name__)
@@ -491,6 +493,8 @@ def run_outage_study(
     phase_current_mode: str = "auto",
     redefine_paths: bool = True,
     on_error: str = "raise",
+    progress: Optional[Callable[[int, int, str], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> OutageStudyResult:
     """
     Solve ``fault`` for the base case (optional) and a list of outage scenarios.
@@ -542,6 +546,16 @@ def run_outage_study(
         twenty. The base case is *not* covered by ``"record"``: if the
         intact network does not solve, every comparison in the result
         would be against nothing.
+    progress : callable, optional
+        ``progress(done, total, label)``, called after the base case (label
+        ``base_label``) and after every scenario (its name, a failed one
+        included); ``total`` counts both. See :mod:`groundinsight.progress`.
+    should_cancel : callable, optional
+        Asked before the base case and before every scenario; a true answer
+        raises :class:`~groundinsight.progress.StudyCancelled` and restores
+        the network to the state it had when the study was called -- unlike
+        a finished study, which leaves the last scenario's solution in
+        place.
 
     Returns
     -------
@@ -554,6 +568,10 @@ def run_outage_study(
         If ``fault`` is not part of the network, if a scenario label
         collides with ``base_label``, or if ``on_error`` is not one of the
         two accepted values.
+    TypeError
+        If ``progress`` or ``should_cancel`` is not callable.
+    StudyCancelled
+        If ``should_cancel()`` returned true.
 
     Examples
     --------
@@ -590,59 +608,73 @@ def run_outage_study(
     branch_results: Dict[str, pl.DataFrame] = {}
     failures: Dict[str, str] = {}
 
-    if redefine_paths:
-        network.paths = {}
+    hooks = StudyHooks(
+        "run_outage_study",
+        len(scenarios) + (1 if include_base else 0),
+        progress,
+        should_cancel,
+    )
 
-    # Local import to avoid a circular dependency between simulation and
-    # network_operations (network_operations imports core_models, which the
-    # outage module also touches at module load time via Pydantic).
-    from groundinsight.network_operations import run_fault
+    # A cancelled study hands the network back as it was found; a finished
+    # one keeps leaving the last scenario's solution in place, as documented.
+    with restore_on_cancel(network):
+        if redefine_paths:
+            network.paths = {}
 
-    if include_base:
-        logger.info(
-            "Outage study: solving base case for fault '%s' under label '%s'.",
-            fault,
-            base_label,
-        )
-        run_fault(
-            network,
-            fault=fault,
-            auto_parallel_coefficients=auto_parallel_coefficients,
-            phase_current_mode=phase_current_mode,
-        )
-        bus_results[base_label] = network.res_buses(fault=fault)
-        branch_results[base_label] = network.res_branches(fault=fault)
+        # Local import to avoid a circular dependency between simulation and
+        # network_operations (network_operations imports core_models, which the
+        # outage module also touches at module load time via Pydantic).
+        from groundinsight.network_operations import run_fault
 
-    for scenario in scenarios:
-        logger.info(
-            "Outage study: running scenario '%s' (%s buses, %s branches).",
-            scenario.name,
-            len(scenario.disabled_buses),
-            len(scenario.disabled_branches),
-        )
-        try:
-            with outage_context(network, scenario):
-                run_fault(
-                    network,
-                    fault=fault,
-                    auto_parallel_coefficients=auto_parallel_coefficients,
-                    phase_current_mode=phase_current_mode,
-                )
-                bus_results[scenario.name] = network.res_buses(fault=fault)
-                branch_results[scenario.name] = network.res_branches(fault=fault)
-        except Exception as exc:  # noqa: BLE001 -- recorded, then re-raised or not
-            if on_error == "raise":
-                raise
-            # ``outage_context`` has already unwound the scenario at this
-            # point, so the network is intact for the next one.
-            logger.warning(
-                "Outage study: scenario '%s' failed and was skipped: %s",
-                scenario.name,
-                exc,
+        if include_base:
+            hooks.checkpoint()
+            logger.info(
+                "Outage study: solving base case for fault '%s' under label '%s'.",
+                fault,
+                base_label,
             )
-            failures[scenario.name] = str(exc)
-            bus_results.pop(scenario.name, None)
-            branch_results.pop(scenario.name, None)
+            run_fault(
+                network,
+                fault=fault,
+                auto_parallel_coefficients=auto_parallel_coefficients,
+                phase_current_mode=phase_current_mode,
+            )
+            bus_results[base_label] = network.res_buses(fault=fault)
+            branch_results[base_label] = network.res_branches(fault=fault)
+            hooks.advance(base_label)
+
+        for scenario in scenarios:
+            hooks.checkpoint()
+            logger.info(
+                "Outage study: running scenario '%s' (%s buses, %s branches).",
+                scenario.name,
+                len(scenario.disabled_buses),
+                len(scenario.disabled_branches),
+            )
+            try:
+                with outage_context(network, scenario):
+                    run_fault(
+                        network,
+                        fault=fault,
+                        auto_parallel_coefficients=auto_parallel_coefficients,
+                        phase_current_mode=phase_current_mode,
+                    )
+                    bus_results[scenario.name] = network.res_buses(fault=fault)
+                    branch_results[scenario.name] = network.res_branches(fault=fault)
+            except Exception as exc:  # noqa: BLE001 -- recorded, then re-raised or not
+                if on_error == "raise":
+                    raise
+                # ``outage_context`` has already unwound the scenario at this
+                # point, so the network is intact for the next one.
+                logger.warning(
+                    "Outage study: scenario '%s' failed and was skipped: %s",
+                    scenario.name,
+                    exc,
+                )
+                failures[scenario.name] = str(exc)
+                bus_results.pop(scenario.name, None)
+                branch_results.pop(scenario.name, None)
+            hooks.advance(scenario.name)
 
     if failures:
         logger.warning(
