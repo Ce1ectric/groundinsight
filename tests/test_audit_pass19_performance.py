@@ -919,6 +919,39 @@ def test_the_build_fingerprint_reuses_the_assembly_tables(monkeypatch):
     assert en._build_fingerprint == real(en)
 
 
+@pytest.mark.parametrize("how", ["deepcopy", "pickle"])
+def test_the_sparse_matrices_and_their_dense_view_travel_together(how):
+    """P2 with GUI2: a copied solved network keeps a consistent kernel.
+
+    ``Y_matrices`` is a view holding a reference to ``Y_sparse``; in a copy it
+    has to read the *copy's* matrices, and the copy has to answer
+    ``bus_response`` -- which reads the sparse matrices and the stamped bus
+    admittances -- exactly like the original.
+    """
+    import copy
+    import pickle
+
+    net = thevenin_ring(16, F=2)
+    gi.run_fault(net, "F")
+    clone = copy.deepcopy(net) if how == "deepcopy" else pickle.loads(pickle.dumps(net))
+    en, en_c = net.electrical_network, clone.electrical_network
+    assert en_c is not en and en_c.network is clone
+    for freq in net.frequencies:
+        assert en_c.Y_sparse[freq] is not en.Y_sparse[freq]
+        assert np.array_equal(en_c.Y_matrices[freq], en_c.Y_sparse[freq].toarray())
+        assert np.array_equal(en_c.Y_sparse[freq].toarray(), en.Y_sparse[freq].toarray())
+    # a change to the copy's matrix is seen by the copy's view only
+    first = net.frequencies[0]
+    en_c.Y_sparse[first] = en_c.Y_sparse[first] * 2.0
+    assert np.array_equal(en_c.Y_matrices[first], en_c.Y_sparse[first].toarray())
+    assert not np.array_equal(en.Y_matrices[first], en_c.Y_matrices[first])
+    clone = copy.deepcopy(net) if how == "deepcopy" else pickle.loads(pickle.dumps(net))
+    a = gi.bus_response(net, fault="F", bus="B3")
+    b = gi.bus_response(clone, fault="F", bus="B3")
+    for freq in net.frequencies:
+        assert b.z_network[freq] == a.z_network[freq]
+
+
 def test_the_fingerprint_ignores_what_the_assembly_does_not_read():
     """Source values and mutual impedances never enter ``Y``."""
     net = thevenin_ring(12, F=2)
