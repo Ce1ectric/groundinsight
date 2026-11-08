@@ -2,7 +2,7 @@
 """Physics of the stationary solver against an independent oracle (audit pass 19).
 
 Finding IDs: PQ-REF and PQ-INV (permanent regression tests that pin what the
-review verified), PH1 (PQ-PH1b), PH3 (PQ-PH3), PH4 (PQ-PH4) and PH6 (PQ-PH6).
+audit verified), PH1 (PQ-PH1b), PH3 (PQ-PH3), PH4 (PQ-PH4) and PH6 (PQ-PH6).
 
 Every assertion here compares ``gi.run_fault`` with a second, independent
 method: the reference solver in :mod:`tests._reference_mna` (modified nodal
@@ -483,8 +483,8 @@ def test_pq_ph4_u_e_and_z_e_are_the_fault_bus_quantities_on_a_long_chain():
 def test_pq_ph4_the_group_quantities_are_kept_as_diagnostics():
     """The previous U_E / Z_E -- current-weighted mean potential of the earth
     group, and that mean over I_E -- move to u_earthing_group /
-    z_earthing_group. On the long chain they are the 43 % / 45 % lower values
-    the review measured (second way: the reference solver's group)."""
+    z_earthing_group. On the long chain they are 43 % / 45 % below the
+    fault-bus values (second way: the reference solver's group)."""
     net = _uniform_chain(64)
     result = solve(net)
     factor = result.reduction_factor

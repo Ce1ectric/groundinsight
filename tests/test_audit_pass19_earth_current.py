@@ -305,7 +305,7 @@ OVERHEAD = gi.BranchType(
 
 
 def _anchorless_network_with_a_noise_island() -> gi.Network:
-    """The mechanism of the review's random case rnd345, built on purpose.
+    """The mechanism of a random audit network, built on purpose.
 
     ``T`` is an electrode-less tower (formula ``"nan"``) carrying the fault,
     so the split has no anchor. Behind the source bus ``S`` a spur
@@ -420,10 +420,11 @@ def _dead_end_fault_network() -> gi.Network:
 
 
 def _source_behind_dead_end_network() -> gi.Network:
-    """The configuration of rnd389: the source sits on an electrode-less
-    tower whose only connection is one cable to the fault bus. The fault bus
-    potential is zero in exact arithmetic, with and without coupling, so the
-    EPR-based reduction factor is a ratio of two rounding errors."""
+    """A configuration seen in a random audit network: the source sits on
+    an electrode-less tower whose only connection is one cable to the fault
+    bus. The fault bus potential is zero in exact arithmetic, with and
+    without coupling, so the EPR-based reduction factor is a ratio of two
+    rounding errors."""
     station = _bus_type("p9_src_station", "2.0")
     tower = _bus_type("p9_src_tower", "nan")
     net = gi.create_network(name="p9_src_dead_end", frequencies=[FREQ])

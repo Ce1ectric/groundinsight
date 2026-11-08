@@ -2322,11 +2322,13 @@ class ElectricalNetwork:
             # in exact arithmetic -- every source on the fault bus, or a source
             # behind a dead end that returns all its current through one
             # shield -- comes out at ~1e-14 V, and the ratio of two such
-            # numbers was reported as a reduction factor (1.29 in the review's
-            # case). The yardstick is the EPR the fault current would raise
-            # the fault bus to on its own, |I_F| * |Z_FF|: an exact zero sits
-            # at ~1e-16 of it, while a near-ideal fault-bus electrode -- a
-            # small but accurate EPR -- stays at the order of |1 - k| of it.
+            # numbers was reported as a reduction factor (0.449 =
+            # 5.1e-14 V / 1.1e-13 V for a source behind a dead end, next to
+            # 320 V at the source tower). The yardstick is the EPR the fault
+            # current would raise the fault bus to on its own,
+            # |I_F| * |Z_FF|: an exact zero sits at ~1e-16 of it, while a
+            # near-ideal fault-bus electrode -- a small but accurate EPR --
+            # stays at the order of |1 - k| of it.
             # (The largest EPR of the solution is no yardstick: it calls the
             # near-ideal electrode noise.)
             i_fault = complex(self.total_source_currents.get(freq) or 0)
