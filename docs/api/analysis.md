@@ -41,6 +41,7 @@ block, so the network is left untouched even if the bisection fails.
 ## Example
 
 ```python
+# fragment: assumes a network `net` with the fault "fault1" and the buses named below
 import groundinsight as gi
 
 # Assume `net` is a built network with at least one fault and one
@@ -154,6 +155,7 @@ transient solver remains the exact fallback, because it integrates
 the actual waveforms instead of applying a standard factor.
 
 ```python
+# fragment: assumes a solved network `net` with the source "src" and the fault "F"
 import groundinsight as gi
 
 # The characteristics can be set by hand ...
@@ -207,6 +209,8 @@ the material and the cross-section for that element. The two elements are
 independent — declaring one does not imply the other.
 
 ```python
+import groundinsight as gi
+
 bt = gi.BusType(
     name="tower",
     system_type="Tower",
@@ -234,6 +238,7 @@ carry — and a value above 1 is rejected at the model level, because that
 would not be a split but an error.
 
 ```python
+# fragment: assumes a network `net` whose bus types carry the thermal data above, with the fault "F"
 gi.run_fault(net, "F")
 gi.check_node_limits(net, "F", t_k_s=0.5, r_to_x=0.1).select(
     "bus_name", "element", "I_rms_A", "current_split",

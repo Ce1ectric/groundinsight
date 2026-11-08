@@ -55,6 +55,7 @@ The `groundinsight` top-level module re-exports the most commonly used
 symbols so that everyday work only requires `import groundinsight as gi`:
 
 ```python
+# fragment: the arguments are elided
 import groundinsight as gi
 
 net = gi.create_network(name="...", frequencies=[50])

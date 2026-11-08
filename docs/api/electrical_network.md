@@ -53,6 +53,7 @@ NumPy / SciPy working arrays used by the LU solver.
 ## Example
 
 ```python
+# fragment: assumes a network `net` with the fault "f1"
 import groundinsight as gi
 
 # Assume `net` was built via gi.create_* factories with a fault `f1`.

@@ -39,6 +39,7 @@ when the solve raises.
 | `Result.input_digest` | stamped | stamped, identical |
 
 ```python
+# fragment: assumes a network `net` with the fault "F1"
 import groundinsight as gi
 
 result = gi.solve(net, "F1")              # net is left as it was
@@ -71,6 +72,7 @@ the `elements` it is about as `(kind, name)` pairs, and a `severity`:
   a documented default stands in for a missing value.
 
 ```python
+# fragment: assumes a network `net` with the fault "F1"
 issues = gi.check_network(net)
 blocking = [d for d in issues if d.severity == "error"]
 for d in issues:
@@ -133,6 +135,7 @@ take two optional keyword arguments:
   stored results, active fault, paths and assembled system.
 
 ```python
+# fragment: assumes a network `net` with the fault "F1" and sweep points `points`
 import threading
 
 stop = threading.Event()
@@ -168,6 +171,7 @@ the records are collected into `Result.diagnostics`; around any other call
 a program collects them with `groundinsight.diagnostics.collecting()`:
 
 ```python
+# fragment: assumes a pandapower net `pp_net` and import defaults `defaults`
 from groundinsight.diagnostics import collecting
 
 with collecting() as records:
@@ -246,6 +250,7 @@ six months after the release that deprecated it.
 | frequency | `frequency` | `f`, `freq` | `check_conductor_limits`, `check_node_limits`, `iec60909_m`, `read_shortcircuit_results`, `BusResponse.voltages`, `.voltages_no_mutual`, `.driving_point`, `.worst_case_electrode` |
 
 ```python
+# fragment: assumes a network `net` with the fault "F1"
 gi.run_fault(net, fault="F1")             # current spelling
 gi.run_fault(net, "F1")                   # positional: unchanged
 gi.run_fault(net, fault_name="F1")        # works, DeprecationWarning
@@ -359,6 +364,7 @@ builds one from JSON.
 ### Jobs
 
 ```python
+# fragment: assumes an open session whose project has the fault "F1"
 handle = session.submit_solve("F1")              # returns at once
 status = handle.status()                         # JobStatusDTO: state, progress, elapsed
 dto = handle.result(timeout=60)                  # FaultResultDTO, or JobCancelled/JobTimeout/JobFailed

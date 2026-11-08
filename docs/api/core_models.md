@@ -81,6 +81,7 @@ boolean column `is_rms`; that row carries `null` in
 per frequency with
 
 ```python
+# fragment: assumes a solved network `net`
 per_50_hz = net.res_buses().filter(pl.col("frequency_Hz") == 50.0)
 rms       = net.res_buses().filter(pl.col("is_rms"))
 ```
@@ -134,6 +135,7 @@ sum of squares of `I_F`, `I_E` and `U_E` over the frequencies; ratios,
 impedances and angles are null there.
 
 ```python
+# fragment: assumes a network `net` with the fault "F1"
 import polars as pl
 
 gi.run_fault(net, "F1")                     # or keep a result from gi.solve
@@ -166,6 +168,7 @@ populated `network.paths`:
 `Network.invalidate_paths()` is the explicit hook for that case:
 
 ```python
+# fragment: assumes a network `net` with the branch "LN_main"
 # Flip a branch out of service mid-notebook and rebuild paths.
 net.branches["LN_main"].active = False
 net.invalidate_paths()  # drops self.paths + this network's cache
@@ -184,6 +187,7 @@ snapshot `saved = dict(network.paths)` taken before the call keeps
 its entries:
 
 ```python
+# fragment: assumes a network `network`
 saved = dict(network.paths)        # external snapshot
 network.invalidate_paths()
 # saved still holds the previously-enumerated paths.
@@ -217,7 +221,10 @@ import groundinsight as gi
 with warnings.catch_warnings():
     warnings.simplefilter("error", gi.NetworkFrequencyOrderWarning)
     # Raises instead of just warning — use during validation.
-    gi.create_network(name="net", frequencies=[100.0, 50.0])
+    try:
+        gi.create_network(name="net", frequencies=[100.0, 50.0])
+    except gi.NetworkFrequencyOrderWarning as refused:
+        print(f"refused: {refused}")
 ```
 
 ## Top-level `set_active_fault` factory
@@ -226,6 +233,7 @@ The `keep_results=` keyword on `Network.set_active_fault` is also
 reachable via the top-level factory wrapper:
 
 ```python
+# fragment: assumes a solved network `net` with the fault "F1"
 import groundinsight as gi
 
 # Re-plot the previously cached Result without recomputing it.

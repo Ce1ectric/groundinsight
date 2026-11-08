@@ -39,6 +39,7 @@ result would be against nothing.
 ## Example
 
 ```python
+# fragment: assumes a network `net` with the branch "cable_1", the bus "bus_x" and the fault "fault1"
 import groundinsight as gi
 
 # Assume a pre-built network `net` with sources, buses, branches and
@@ -96,6 +97,7 @@ because the marker is `null` and not `NaN`, Polars aggregations
 skip it:
 
 ```python
+# fragment: continues the study above
 tbl = study.compare_buses()
 tbl["delta_pct_vs_base"].mean()   # finite; the null rows are skipped
 tbl.filter(pl.col("delta_pct_vs_base").is_null())   # the zero-baseline rows
@@ -105,6 +107,7 @@ Use `outage_context(network, outage)` directly when a single one-off
 modification is needed:
 
 ```python
+# fragment: continues the example above
 with gi.outage_context(net, scenario_cable_out):
     gi.run_fault(network=net, fault="fault1")
     print(net.res_all_impedances())

@@ -31,6 +31,7 @@ a `ResultTransient` instead.
 ## Example
 
 ```python
+# fragment: assumes a network `net` solved for the fault "fault1" and a transient result `result_t`
 import groundinsight as gi
 
 # Assume `net` has been solved via gi.run_fault(...).
@@ -63,6 +64,7 @@ contains; asking for one that was never computed raises a
 `KeyError` naming both the requested and the available values:
 
 ```python
+# fragment: the network and its solve are elided
 net = gi.create_network(name="net", frequencies=[50.0])
 ...
 gi.plot_bus_voltages(result=result, frequencies=[250.0])
@@ -91,6 +93,7 @@ it is not, and matplotlib warns after the twentieth figure. Pass
 returning:
 
 ```python
+# fragment: the solve per rho is elided
 for rho in (50.0, 100.0, 500.0, 1000.0):
     ...
     fig = gi.plot_bus_voltages(result=result, title=f"rho = {rho}",
@@ -113,6 +116,7 @@ than a new one. This is what makes two scenarios comparable side
 by side:
 
 ```python
+# fragment: assumes two results `base` and `outage`
 import matplotlib.pyplot as plt
 
 fig, axes = plt.subplots(1, 2, figsize=(16, 5), sharey=True)

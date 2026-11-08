@@ -40,6 +40,7 @@ modelled through association tables (`network_buses`,
 ## The database object
 
 ```python
+# fragment: assumes a bus type `bus_type` and a network `net` named "demo"
 import groundinsight as gi
 
 with gi.Database("library.db") as db:
@@ -89,6 +90,7 @@ other. Separate processes on one file rely on SQLite's own locking.
 ### The module-level helpers
 
 ```python
+# fragment: assumes a network `net` named "demo"
 db = gi.start_dbsession("library.db")   # returns the default Database
 gi.save_network_to_db(network=net, overwrite=True)
 recovered_net = gi.load_network_from_db(name="demo")
@@ -136,7 +138,7 @@ packages ``groundfield`` and ``groundmeas``. Intended as the
 ADR-0013-aligned cross-repo convention, so a bug report can include
 the full earthing-platform stack with a single call:
 
-```python
+```pycon
 >>> import groundinsight as gi
 >>> gi.show_versions()
 {'groundinsight': '<installed version>',

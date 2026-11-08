@@ -187,6 +187,7 @@ is an audit trail: it carries `i_k_previous_a` next to `i_k_a`, so a
 review sees exactly what changed.
 
 ```python
+# fragment: assumes the solved pandapower net `net_pp` and a groundinsight network `net_gi` with the fault "fault1"
 import pandapower.shortcircuit as sc
 import groundinsight as gi
 

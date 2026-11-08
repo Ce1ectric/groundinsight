@@ -50,6 +50,7 @@ single-line-to-ground fault current with DC asymmetry) and
 ## Example
 
 ```python
+# fragment: assumes a network `net` with the current source "infeed", the fault "fault1", the bus "bus_fault" and the branch "cable_1"
 import groundinsight as gi
 from groundinsight import waveforms
 
@@ -107,6 +108,7 @@ over all elements — 150 buses and 1001 bins take 0.7 s at the default and
 budget is solved one bin at a time, with a log message.
 
 ```python
+# fragment: continues the study above
 result = study.solve(t_end=0.2, dt=1e-4, solver="fft",
                      fft_block_bytes=64 * 2**20)   # 64 MiB per batch
 ```

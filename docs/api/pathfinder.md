@@ -62,6 +62,7 @@ if you genuinely need the full set on a meshed network.
 ## Example
 
 ```python
+# fragment: assumes a network `net` with the fault "f1" and the buses named below
 import groundinsight as gi
 from groundinsight.pathfinder import PathFinder
 
@@ -99,6 +100,7 @@ a lock, kept the branches of networks long gone alive.
 | `cache_size` | `256` | entries per table of the network's memo (LRU) |
 
 ```python
+# fragment: assumes a network `net` with the fault "F"
 import groundinsight as gi
 
 net.pathfinder_settings = gi.PathfinderSettings(max_paths=1_000_000)
