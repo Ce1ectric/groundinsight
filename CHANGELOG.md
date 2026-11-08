@@ -1465,6 +1465,36 @@ migration checklist.
 - `find_max_rho_scaling` and `find_max_rho_f_scaling` no longer ask for
   "consistent paths": the default phase-current mode needs none, and the
   legacy `"paths"` mode enumerates its own. (DOC3)
+- **Every object of `groundinsight.__all__` has an example that runs, every
+  public model field is documented, and every module says why it exists.**
+  The API pages are generated from the docstrings, and numpydoc found 88
+  places where they lacked what the NumPy convention requires: properties
+  without `Returns`, methods without docstrings, pydantic fields that
+  appeared nowhere. All 99
+  public objects have an `Examples` section run by the doctests (`+SKIP`
+  only where a file, a plot or the pandapower extra is needed), every field
+  of a public model is listed under `Attributes`, and every Python file of
+  the package, the tests, the scripts, the GUI and the how-to scripts starts
+  with its path and a docstring. numpydoc findings: 88 → 0. (STD1, STD2)
+- **Docstrings and comments state the contract and its reason, not the
+  history.** "Until audit pass 19 …", "used to …", "since decision F4 …"
+  next to the code aged and had to be subtracted to find what holds now:
+  167 comment and docstring blocks in 41 files say what holds and why, a
+  former behaviour that motivates a rule became its reason in the
+  conditional. History markers in the shipped code: 115 → 0, kept there by
+  a test. The transient module describes both solvers instead of announcing
+  the state-space solver for "the next release". (D4)
+- **The legacy `"paths"` mode on a ring is stated exactly.** `run_fault` and
+  the `PARALLEL_COEFFICIENT_DEFAULT` warning said a symmetric ring collapses
+  to EPR = 0 at the default coefficient. The coupled injections of a
+  two-route ring add up to `(1 − 2k)·I` instead of `(1 − k)·I`; the EPR
+  is 0 only for `k = 0.5` and, for the cable of the tutorials
+  (`|1 − 2k| = 1`), as if the shields did not couple. The warning no longer
+  claims `Z_G = None` either — `Z_E` does not depend on the mode.
+  `compute_grounding_impedance` cites the explanation page and its value:
+  the group quotient lies 44.5 % below `Z_E`.
+- **CONTRIBUTING.md gives the lint commands, the rule for `# noqa` and the
+  warning policy of the test suite.** (STD8)
 
 ### Internal
 
@@ -1921,6 +1951,41 @@ migration checklist.
   removed, against the documented construction by hand and against the
   reference solver of `tests/_reference_mna.py` (EPR, screen and phase
   currents to 1e-12), and the preview.
+- **ruff and numpydoc gate every push; their 367 and 88 findings were fixed
+  by hand.** The house conventions were written down and checked by no
+  tool. `pyproject.toml` configures ruff (E, W, F, B, N, D, SIM, UP,
+  RUF013, T20, every ignored code with its reason) over `src`, `tests`,
+  `scripts`, `gui` and `docs/snippets`, and numpydoc validation for the
+  package. Lint, never format: no formatter in the configuration, the
+  dependency groups (black is gone from the dev group) or CI; every finding
+  was a deliberate edit — 78 `zip()` calls state `strict=` or became
+  `itertools.pairwise`, 14 unclosed files in the migration tests are
+  closed. ruff 0.17.4, numpydoc 1.11.0 and radon 6.0.1 are exact pins in the
+  dev group, and the new blocking CI job `lint` runs both linters at those
+  versions. ruff 367 → 0, numpydoc 88 → 0. (STD8)
+- **The test suite runs warning-free under strict filters: 1152 warnings
+  per run → 0.** A new warning could not be told from the noise. 351
+  DeprecationWarnings came from tests that still passed `fault_name=`,
+  `u_max=`, `t_k=` or `auto_parallel_coefficients=`; they use the canonical
+  names now, and the alias tests assert their warning. `pytest` turns
+  DeprecationWarnings of the package and the tests, ResourceWarnings,
+  unraisable exceptions and every `GroundinsightWarning` into errors; a test
+  that provokes a package warning asserts it or acknowledges it by name with
+  a reason (`tests/_warning_policy.py`, 35 names), and the one remaining
+  ignore — a pandas FutureWarning inside pandapower — says why. The strict
+  filters found an unclosed database in a test that makes `dispose` fail on
+  purpose. The doctest sweep fails on a module it cannot import instead of
+  passing over it. (STD5)
+- **Code standards are tests.** `tests/test_audit_pass19_standards.py`
+  checks the lint configuration and pins, module headers (203 files), field
+  documentation and examples of the public API, docstrings without history,
+  no `print` in the package, a package or removal category for every
+  `warnings.warn`, the order of the `[Unreleased]` sections, the documented
+  Python floor on every page and in the GUI, the canonical parameter names
+  with an allowlist of 18 deprecated aliases that can only shrink, and a
+  complexity ratchet: the 80 functions above radon complexity 10 are listed
+  in `tests/data/complexity_ratchet.toml` and none may become more complex.
+  (STD1, STD2, STD3, STD5, STD7, STD10, STD11)
 
 ## [0.6.0] — 2026-09-01
 
