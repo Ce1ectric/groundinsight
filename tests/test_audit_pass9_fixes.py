@@ -239,7 +239,10 @@ def test_fault_active_flag_survives_json_roundtrip():
 
 
 def test_clear_pathfinder_cache_does_not_evict_same_named_network():
-    from groundinsight.pathfinder import clear_pathfinder_cache, _GRAPH_CACHE
+    # Since audit pass 19 (ARC2) every network owns its memo
+    # (``path_cache()``); the contract -- a scoped clear of A leaves the
+    # equally named B alone -- is checked on the two memos.
+    from groundinsight.pathfinder import clear_pathfinder_cache
 
     clear_pathfinder_cache()  # start clean
     net_a = _ring_network()
@@ -247,10 +250,10 @@ def test_clear_pathfinder_cache_does_not_evict_same_named_network():
     gi.run_fault(net_a, "F")
     gi.run_fault(net_b, "F")
 
-    assert any(k[0] == id(net_b) for k in _GRAPH_CACHE)
+    assert any(k[0] == id(net_b) for k in net_b.path_cache().keys("graph"))
     net_a.invalidate_paths()  # scoped clear of A only
-    assert not any(k[0] == id(net_a) for k in _GRAPH_CACHE)
-    assert any(k[0] == id(net_b) for k in _GRAPH_CACHE)   # B survives
+    assert net_a.path_cache().keys("graph") == []
+    assert any(k[0] == id(net_b) for k in net_b.path_cache().keys("graph"))  # B survives
 
 
 def test_topology_key_reflects_rewiring():

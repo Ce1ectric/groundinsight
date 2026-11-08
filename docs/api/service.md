@@ -48,9 +48,10 @@ net.stale_results()                       # [] -- current until the next edit
 ```
 
 Do not modify the network while a solve runs, and do not solve the *same*
-`Network` object from several threads at once: the solve shares the
-module-level path caches of `groundinsight.pathfinder`, which are not
-synchronised. Reading the network from another thread meanwhile is safe.
+`Network` object from several threads at once. Different networks can be
+solved in parallel: the path search keeps its settings and memo per network
+(see [Pathfinder](pathfinder.md#settings-and-memo-per-network)). Reading the
+network from another thread meanwhile is safe.
 
 ## Pre-flight check
 

@@ -53,10 +53,10 @@ from groundinsight.models.core_models import (
 )
 from groundinsight.pathfinder import (
     PathFinder,
-    _FIND_PATHS_CACHE,
-    _GRAPH_CACHE,
     clear_pathfinder_cache,
 )
+
+_EMPTY = {"graph": 0, "paths": 0, "reaches": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -131,18 +131,15 @@ def test_invalidate_paths_does_not_drop_other_networks_cache():
     pf_a.find_paths("B1", "B2")
     pf_b.find_paths("B1", "B2")
 
-    # Sanity: both networks have an entry in the graph cache.
-    keys_a = [k for k in _GRAPH_CACHE if k[1] == "alpha"]
-    keys_b_before = [k for k in _GRAPH_CACHE if k[1] == "beta"]
-    assert keys_a, "expected an alpha entry in _GRAPH_CACHE"
-    assert keys_b_before, "expected a beta entry in _GRAPH_CACHE"
+    # Sanity: both networks have a graph in their own memo (audit pass 19,
+    # ARC2: the memo belongs to the network, no longer to the module).
+    assert net_a.path_cache().sizes()["graph"], "expected an alpha graph"
+    assert net_b.path_cache().sizes()["graph"], "expected a beta graph"
 
     net_a.invalidate_paths()
 
-    keys_a_after = [k for k in _GRAPH_CACHE if k[1] == "alpha"]
-    keys_b_after = [k for k in _GRAPH_CACHE if k[1] == "beta"]
-    assert not keys_a_after, "alpha's cache should be cleared"
-    assert keys_b_after, (
+    assert net_a.path_cache().sizes() == _EMPTY, "alpha's cache should be cleared"
+    assert net_b.path_cache().sizes()["graph"], (
         "beta's cache must survive a network-scoped invalidation on alpha"
     )
 
@@ -153,14 +150,17 @@ def test_clear_pathfinder_cache_unscoped_drops_all_entries():
     net_b = _two_bus_network(name="beta")
     PathFinder(net_a).find_paths("B1", "B2")
     PathFinder(net_b).find_paths("B1", "B2")
-    assert _GRAPH_CACHE, "precondition: cache populated"
+    assert net_a.path_cache().sizes()["graph"], "precondition: cache populated"
+    assert net_b.path_cache().sizes()["graph"], "precondition: cache populated"
     clear_pathfinder_cache()
-    assert not _GRAPH_CACHE
-    assert not _FIND_PATHS_CACHE
+    assert net_a.path_cache().sizes() == _EMPTY
+    assert net_b.path_cache().sizes() == _EMPTY
 
 
 # ---------------------------------------------------------------------------
-# Pass-5 finding 2 — ``pathfinder._GRAPH_CACHE`` includes structural fingerprint.
+# Pass-5 finding 2 — the cache key includes a structural fingerprint.
+# Since audit pass 19 (ARC2) every network has its own memo, so an entry of a
+# collected network cannot be found by a new one at all; the fingerprint stays.
 # ---------------------------------------------------------------------------
 
 
@@ -187,7 +187,7 @@ def test_cache_does_not_falsely_hit_after_id_recycle():
     pf_a = PathFinder(net_a)
     pf_a.find_paths("B1", "B2")
     stale_id = id(net_a)
-    stale_keys = [k for k in _GRAPH_CACHE if k[0] == stale_id]
+    stale_keys = [k for k in net_a.path_cache().keys("graph") if k[0] == stale_id]
     assert stale_keys, "precondition: cache contains alpha"
 
     # Force garbage collection of net_a.
@@ -237,6 +237,8 @@ def test_cache_does_not_falsely_hit_after_id_recycle():
     assert key_c[1] == "gamma"
     assert key_c[2] == 3
     assert key_c[3] == 2
+    # And the new network's memo holds its own graph only.
+    assert net_c.path_cache().keys("graph") == [key_c]
 
 
 # ---------------------------------------------------------------------------

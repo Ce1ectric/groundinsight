@@ -90,6 +90,7 @@ from .service import solve
 from .checks import check_network
 from .progress import StudyCancelled
 from .pathfinder import (
+    PathfinderSettings,
     clear_pathfinder_cache,
     get_pathfinder_cache_size,
     set_pathfinder_cache_size,
@@ -209,7 +210,9 @@ __all__ = [
     "create_paths",
     "set_active_fault",
     "set_log_level",
-    # Pathfinder cache management.
+    # Path search: per-network settings (network.pathfinder_settings), the
+    # memo reset, and the deprecated process-wide cache-size switch.
+    "PathfinderSettings",
     "clear_pathfinder_cache",
     "get_pathfinder_cache_size",
     "set_pathfinder_cache_size",

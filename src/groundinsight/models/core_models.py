@@ -52,7 +52,9 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing import Any, ClassVar, Dict, FrozenSet, List, Literal, Optional, Tuple, Union
+from typing import (
+    TYPE_CHECKING, Any, ClassVar, Dict, FrozenSet, List, Literal, Optional, Tuple, Union,
+)
 from groundinsight.diagnostics import (
     Diagnostic,
     GroundinsightWarning,
@@ -73,6 +75,9 @@ from groundinsight.utils.impedance_calculator import (
     compute_real_value,
 )
 import polars as pl
+
+if TYPE_CHECKING:  # the pathfinder imports this module
+    from groundinsight.pathfinder import PathfinderCache, PathfinderSettings
 
 
 logger = logging.getLogger(__name__)
@@ -2927,6 +2932,11 @@ class Network(ValidatedAssignmentModel):
     active_fault: Optional[str] = None  # Name of the active fault
     _electrical_network: Optional["ElectricalNetwork"] = PrivateAttr(default=None)
     _paths_fingerprint: Optional[tuple] = PrivateAttr(default=None)
+    # Runtime configuration and memo of the path search (see
+    # groundinsight.pathfinder): not fields, so never saved; the memo is
+    # rebuilt by every copy and compares equal to any other.
+    _pathfinder_settings: Optional[Any] = PrivateAttr(default=None)
+    _pathfinder_cache: Optional[Any] = PrivateAttr(default=None)
 
     @field_validator("frequencies", mode="after")
     @classmethod
@@ -3169,6 +3179,75 @@ class Network(ValidatedAssignmentModel):
     def electrical_network(self, value):
         self._electrical_network = value
 
+    @property
+    def pathfinder_settings(self) -> "PathfinderSettings":
+        """
+        Settings of the path search on this network.
+
+        Runtime configuration, not part of the saved model: a copy keeps it,
+        a file or a database does not. Without settings of its own the
+        network uses :func:`groundinsight.pathfinder.default_pathfinder_settings`,
+        which only the deprecated module-level switches change. Assign
+        ``None`` to return to the defaults.
+
+        Returns
+        -------
+        PathfinderSettings
+            The network's settings, or the process-wide defaults.
+
+        Raises
+        ------
+        TypeError
+            On assignment of anything but a ``PathfinderSettings`` or ``None``.
+
+        Examples
+        --------
+        >>> import groundinsight as gi
+        >>> net = gi.create_network(name="grid", frequencies=[50.0])
+        >>> net.pathfinder_settings = gi.PathfinderSettings(max_paths=10**6)
+        >>> net.pathfinder_settings.max_paths
+        1000000
+        """
+        from groundinsight.pathfinder import default_pathfinder_settings
+
+        settings = self._pathfinder_settings
+        return settings if settings is not None else default_pathfinder_settings()
+
+    @pathfinder_settings.setter
+    def pathfinder_settings(self, value: Optional["PathfinderSettings"]) -> None:
+        from groundinsight.pathfinder import PathfinderSettings
+
+        if value is not None and not isinstance(value, PathfinderSettings):
+            raise TypeError(
+                "Network.pathfinder_settings takes a "
+                "groundinsight.PathfinderSettings or None, got "
+                f"{type(value).__name__}."
+            )
+        self._pathfinder_settings = value
+
+    def path_cache(self) -> "PathfinderCache":
+        """
+        The path-search memo of this network (internal API).
+
+        Used by :class:`groundinsight.pathfinder.PathFinder`; exposed so that
+        no other module needs this network's private attributes. The memo is
+        created on first use. A shallow copy shares its original's private
+        attributes, so the cache is checked to belong to *this* network and
+        replaced by a fresh one otherwise.
+
+        Returns
+        -------
+        PathfinderCache
+            The memo, owned by this network.
+        """
+        from groundinsight.pathfinder import PathfinderCache
+
+        cache = self._pathfinder_cache
+        if cache is None or not cache.belongs_to(self):
+            cache = PathfinderCache(self)
+            self._pathfinder_cache = cache
+        return cache
+
     @renamed_parameters(fault_name="fault")
     def set_active_fault(self, fault: str, keep_results: bool = False):
         """Set the specified fault as active and deactivate all other faults.
@@ -3210,12 +3289,9 @@ class Network(ValidatedAssignmentModel):
         """Drop the cached pathfinder results *for this network*.
 
         Rebinds ``self.paths`` to a fresh empty dictionary (atomic) and
-        drops the module-level :mod:`groundinsight.pathfinder` cache
-        entries whose key is scoped to this :class:`Network` instance.
-        **Other networks' cache entries are preserved.** This matters
-        as soon as the user runs more than one network in the same
-        Python process (notebooks that compare two scenarios,
-        dashboards iterating over a set of feeders, …).
+        clears this network's path-search memo (:meth:`path_cache`).
+        **Other networks keep theirs** -- every network has its own since
+        audit pass 19 (ARC2).
 
         Earlier revisions called ``self.paths.clear()`` in place.
         Callers that had snapshot the mapping with
@@ -3231,11 +3307,9 @@ class Network(ValidatedAssignmentModel):
         ``Branch.active`` flags or added / removed branches outside of
         a context manager that performs its own rollback.
         """
-        from groundinsight.pathfinder import clear_pathfinder_cache  # local import
-
         # Atomic rebind so external snapshots survive.
         self.paths = {}
-        clear_pathfinder_cache(self)
+        self.path_cache().clear()
 
     def define_paths(self):
         """

@@ -245,18 +245,22 @@ def test_paths_mode_still_enumerates_and_solves():
 
 
 def test_path_enumeration_is_capped_with_an_actionable_error():
-    """A runaway enumeration must be an error message, not a hang."""
-    previous = pf_module.set_pathfinder_max_paths(50)
-    try:
-        net = _grid(5, "p18_cap")
-        with pytest.raises(ValueError, match="exceeded the limit"):
-            gi.create_paths(net)
-    finally:
-        pf_module.set_pathfinder_max_paths(previous)
+    """A runaway enumeration must be an error message, not a hang.
+
+    The limit is set per network since audit pass 19 (ARC2); the message
+    names that setting.
+    """
+    net = _grid(5, "p18_cap")
+    net.pathfinder_settings = gi.PathfinderSettings(max_paths=50)
+    with pytest.raises(ValueError, match="exceeded the limit of 50") as excinfo:
+        gi.create_paths(net)
+    assert "pathfinder_settings" in str(excinfo.value)
 
 
 def test_path_cap_rejects_a_nonsense_limit():
     with pytest.raises(ValueError):
+        gi.PathfinderSettings(max_paths=0)
+    with pytest.deprecated_call(), pytest.raises(ValueError):
         pf_module.set_pathfinder_max_paths(0)
 
 

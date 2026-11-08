@@ -8,10 +8,27 @@ ARC3: the package ``__init__`` carried implementation -- the logging setup,
 persistence moved out in phase 1. It now holds imports, ``__all__``,
 ``__version__`` and the module ``__getattr__`` for deprecations only, and every
 name the package exported before stays importable from it.
+
+ARC2 (rest): the path search kept its limits in module globals
+(``set_pathfinder_max_paths``, ``set_pathfinder_cache_size``) and its memo in
+three module-level dictionaries shared by every network of the process. A
+limit set for one network applied to all of them -- also to a network another
+thread was solving at that moment -- and the dictionaries were mutated from
+several threads without a lock and kept the branches of dead networks alive.
+Settings and memo now belong to the network; the old switches still work,
+with a ``DeprecationWarning``, as the default of networks without settings.
 """
 
 import ast
+import copy
+import gc
 import pathlib
+import pickle
+import threading
+import warnings
+import weakref
+
+import pytest
 
 import groundinsight as gi
 
@@ -120,3 +137,230 @@ def test_library_logging_default_is_a_null_handler():
 
     handlers = logging.getLogger("groundinsight").handlers
     assert any(isinstance(h, logging.NullHandler) for h in handlers)
+
+
+# ---------------------------------------------------------------------------
+# ARC2 (rest) -- no module state in the path search
+# ---------------------------------------------------------------------------
+
+GRID = 4  # a 4x4 grid has 184 simple corner-to-corner paths
+
+
+def _grid(name: str = "grid") -> gi.Network:
+    """
+    A ``GRID`` x ``GRID`` meshed network, source and fault in opposite corners.
+
+    Parameters
+    ----------
+    name : str
+        Network name.
+
+    Returns
+    -------
+    groundinsight.Network
+        An unsolved network with the fault ``"F"``.
+    """
+    bus_type = gi.BusType(
+        name="earth",
+        system_type="Substation",
+        voltage_level=20.0,
+        impedance_formula="rho*0.01 + 1 + I*f*0.002",
+    )
+    cable = gi.BranchType(
+        name="cable",
+        grounding_conductor=True,
+        self_impedance_formula="(0.25 + I*f*0.012)*l",
+        mutual_impedance_formula="(0.05 + I*f*0.010)*l",
+        phase_impedance_formula="(0.10 + I*f*0.004)*l",
+    )
+    net = gi.create_network(name=name, frequencies=[50.0, 250.0])
+    for row in range(GRID):
+        for col in range(GRID):
+            gi.create_bus(name=f"b{row}{col}", type=bus_type, network=net)
+    for row in range(GRID):
+        for col in range(GRID):
+            if col + 1 < GRID:
+                gi.create_branch(name=f"h{row}{col}", type=cable, from_bus=f"b{row}{col}",
+                                 to_bus=f"b{row}{col + 1}", length=0.3, network=net)
+            if row + 1 < GRID:
+                gi.create_branch(name=f"v{row}{col}", type=cable, from_bus=f"b{row}{col}",
+                                 to_bus=f"b{row + 1}{col}", length=0.4, network=net)
+    corner = f"b{GRID - 1}{GRID - 1}"
+    gi.create_source(name="s", bus="b00", values={50.0: 1000.0, 250.0: 100.0}, network=net)
+    gi.create_fault(name="F", bus=corner, scalings={50.0: 1.0, 250.0: 1.0}, network=net)
+    return net
+
+
+def _outcome(net: gi.Network) -> str:
+    """
+    Solve ``net`` in the path-based mode and describe the outcome.
+
+    Parameters
+    ----------
+    net : groundinsight.Network
+        Network to solve (``phase_current_mode="paths"`` enumerates paths).
+
+    Returns
+    -------
+    str
+        The result's JSON, or ``"ValueError: <first line>"``.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            return gi.run_fault(net, "F", phase_current_mode="paths").model_dump_json()
+        except ValueError as exc:
+            return "ValueError: " + str(exc).splitlines()[0]
+
+
+def _limited(name: str, max_paths: int) -> gi.Network:
+    net = _grid(name)
+    net.pathfinder_settings = gi.PathfinderSettings(max_paths=max_paths)
+    return net
+
+
+def test_two_networks_with_different_limits_in_two_threads_match_sequential_runs():
+    """ARC-Q4: concurrent runs with different settings equal sequential ones."""
+    sequential = {
+        "tight": _outcome(_limited("tight", 100)),
+        "loose": _outcome(_limited("loose", 1000)),
+    }
+    assert sequential["tight"].startswith("ValueError") and "100 paths" in sequential["tight"]
+    assert not sequential["loose"].startswith("ValueError")
+
+    rounds = 4
+    observed = {"tight": [], "loose": []}
+    errors = []
+    barrier = threading.Barrier(2)
+
+    def worker(kind: str, max_paths: int) -> None:
+        try:
+            for _ in range(rounds):
+                net = _limited(kind, max_paths)
+                barrier.wait(timeout=120)
+                observed[kind].append(_outcome(net))
+        except BaseException as exc:  # recorded for the main thread
+            errors.append(repr(exc))
+
+    threads = [
+        threading.Thread(target=worker, args=("tight", 100)),
+        threading.Thread(target=worker, args=("loose", 1000)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=600)
+    assert errors == []
+    for kind in ("tight", "loose"):
+        assert observed[kind] == [sequential[kind]] * rounds
+
+
+def test_a_network_without_settings_follows_the_process_default():
+    net = _grid()
+    assert net.pathfinder_settings == gi.PathfinderSettings()
+    assert net.pathfinder_settings.max_paths == 100_000
+    assert net.pathfinder_settings.cache_size == 256
+    # Settings are runtime configuration, not part of the saved model.
+    net.pathfinder_settings = gi.PathfinderSettings(max_paths=7)
+    assert "pathfinder" not in net.model_dump_json()
+    net.pathfinder_settings = None
+    assert net.pathfinder_settings == gi.PathfinderSettings()
+
+
+@pytest.mark.parametrize("bad", [0, -1, 1.5, True, "10"])
+def test_settings_reject_nonsense(bad):
+    with pytest.raises(ValueError):
+        gi.PathfinderSettings(max_paths=bad)
+    with pytest.raises(ValueError):
+        gi.PathfinderSettings(cache_size=bad)
+
+
+def test_network_settings_only_accept_settings_objects():
+    with pytest.raises(TypeError):
+        _grid().pathfinder_settings = 100
+
+
+def test_the_deprecated_switches_warn_and_set_the_default_of_networks_without_settings():
+    from groundinsight import pathfinder
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        previous = pathfinder.get_pathfinder_max_paths()
+        previous_size = gi.get_pathfinder_cache_size()
+    try:
+        with pytest.deprecated_call(match="pathfinder_settings"):
+            assert pathfinder.set_pathfinder_max_paths(100) == previous
+        with pytest.deprecated_call():
+            assert pathfinder.get_pathfinder_max_paths() == 100
+        follows_default = _grid("default")
+        own_settings = _limited("own", 1000)
+        assert _outcome(follows_default).startswith("ValueError")
+        assert not _outcome(own_settings).startswith("ValueError")
+
+        with pytest.deprecated_call(match="pathfinder_settings"):
+            assert gi.set_pathfinder_cache_size(8) == previous_size
+        with pytest.deprecated_call():
+            assert gi.get_pathfinder_cache_size() == 8
+        assert _grid().pathfinder_settings.cache_size == 8
+    finally:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            pathfinder.set_pathfinder_max_paths(previous)
+            gi.set_pathfinder_cache_size(previous_size)
+
+
+def test_path_caches_belong_to_their_network_and_die_with_it():
+    """The module-level caches kept every branch of a dead network alive."""
+    from groundinsight.pathfinder import PathFinder
+
+    net = _grid("transient")
+    PathFinder(net).find_paths("b00", f"b{GRID - 1}{GRID - 1}")
+    branch = weakref.ref(net.branches["h00"])
+    other = _grid("other")
+    assert net.path_cache() is not other.path_cache()
+    del net
+    gc.collect()
+    assert branch() is None
+
+
+def test_copies_get_their_own_cache_and_keep_the_settings():
+    from groundinsight.pathfinder import PathFinder
+
+    net = _limited("original", 1000)
+    PathFinder(net).find_paths("b00", "b33")
+    original_cache = net.path_cache()
+    for copied in (
+        net.model_copy(),
+        copy.copy(net),
+        copy.deepcopy(net),
+        pickle.loads(pickle.dumps(net)),
+    ):
+        assert copied.path_cache() is not original_cache
+        assert copied.pathfinder_settings == net.pathfinder_settings
+        assert copied == net  # the cache takes no part in equality
+    assert net.path_cache() is original_cache
+
+
+def test_the_cache_is_bounded_per_network():
+    from groundinsight.pathfinder import PathFinder
+
+    net = _grid()
+    net.pathfinder_settings = gi.PathfinderSettings(cache_size=2)
+    for name in ("h00", "h01", "h02"):  # three different active topologies
+        net.branches[name].active = False
+        PathFinder(net)
+        net.branches[name].active = True
+    assert net.path_cache().sizes()["graph"] == 2
+
+
+def test_clearing_one_network_leaves_the_other_and_clearing_all_clears_both():
+    from groundinsight.pathfinder import PathFinder, clear_pathfinder_cache
+
+    a, b = _grid("a"), _grid("b")
+    for net in (a, b):
+        PathFinder(net).find_paths("b00", "b33")
+    clear_pathfinder_cache(a)
+    assert a.path_cache().sizes() == {"graph": 0, "paths": 0, "reaches": 0}
+    assert b.path_cache().sizes()["graph"] == 1
+    clear_pathfinder_cache()
+    assert b.path_cache().sizes() == {"graph": 0, "paths": 0, "reaches": 0}

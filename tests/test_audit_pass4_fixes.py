@@ -33,8 +33,6 @@ from groundinsight.models.core_models import (
 )
 from groundinsight.pathfinder import (
     PathFinder,
-    _FIND_PATHS_CACHE,
-    _GRAPH_CACHE,
     clear_pathfinder_cache,
 )
 from groundinsight.simulation import waveforms
@@ -261,6 +259,8 @@ def test_fault_scalings_unparsable_key_rejected():
 
 # ---------------------------------------------------------------------------
 # 6. ``PathFinder`` reuses the adjacency graph on the same topology.
+#    Since audit pass 19 (ARC2) the memo is the network's own
+#    (``network.path_cache()``) instead of module-level dictionaries.
 # ---------------------------------------------------------------------------
 
 
@@ -269,9 +269,9 @@ def test_pathfinder_reuses_graph_cache_across_instances():
     net = _ring_network()
 
     finder_a = PathFinder(net)
-    cache_size_after_first = len(_GRAPH_CACHE)
+    cache_size_after_first = net.path_cache().sizes()["graph"]
     finder_b = PathFinder(net)
-    cache_size_after_second = len(_GRAPH_CACHE)
+    cache_size_after_second = net.path_cache().sizes()["graph"]
 
     # Second instance must hit the cache — no new graph entry.
     assert cache_size_after_second == cache_size_after_first
@@ -292,7 +292,7 @@ def test_pathfinder_find_paths_memoised():
     # by fixed index so the assertion survives further key changes.
     cache_entries = sum(
         1
-        for key in _FIND_PATHS_CACHE
+        for key in net.path_cache().keys("paths")
         if "B1" in key and "B3" in key
     )
     assert cache_entries == 1
@@ -305,10 +305,9 @@ def test_invalidate_paths_clears_cache():
     clear_pathfinder_cache()
     net = _ring_network()
     PathFinder(net).find_paths("B1", "B3")
-    assert _GRAPH_CACHE
+    assert net.path_cache().sizes()["graph"]
     net.invalidate_paths()
-    assert not _GRAPH_CACHE
-    assert not _FIND_PATHS_CACHE
+    assert net.path_cache().sizes() == {"graph": 0, "paths": 0, "reaches": 0}
 
 
 # ---------------------------------------------------------------------------

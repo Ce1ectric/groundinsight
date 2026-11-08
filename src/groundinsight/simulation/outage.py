@@ -399,11 +399,11 @@ def outage_context(network: Network, outage: Outage) -> Iterator[Network]:
 
     Notes
     -----
-    - The module-level pathfinder cache (see
+    - The network's path-search memo (``network.path_cache()``, see
       :mod:`groundinsight.pathfinder`) is cleared **on exit** as well
       as on entry. Without the exit-side eviction, a multi-scenario
       outage sweep was accumulating one cache entry per scenario
-      indefinitely; together with the new LRU cap the cache footprint
+      indefinitely; together with the LRU cap the cache footprint
       now matches the user-visible state of ``network``.
     - The function is **nestable**. Each level snapshots the ``active``
       flag of the elements *it* touches immediately before flipping

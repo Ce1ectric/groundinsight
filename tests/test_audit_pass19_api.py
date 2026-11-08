@@ -27,7 +27,6 @@ import warnings
 import pytest
 
 import groundinsight as gi
-from groundinsight import pathfinder
 from groundinsight.diagnostics import InputWarning, ModelAssumptionWarning
 from groundinsight.models.core_models import ComplexNumber
 
@@ -130,13 +129,14 @@ def _state(net: gi.Network):
     }
 
 
-def _pathfinder_cache_keys():
-    """The module-level path caches, which ``invalidate_paths`` prunes."""
-    return (
-        set(pathfinder._GRAPH_CACHE),
-        set(pathfinder._FIND_PATHS_CACHE),
-        set(pathfinder._REACHES_CACHE),
-    )
+def _pathfinder_cache_keys(net: gi.Network):
+    """The network's path-search memo, which ``invalidate_paths`` prunes.
+
+    The memo belongs to the network since audit pass 19 (ARC2); the solve's
+    overlay gets a memo of its own, so the input's must not change at all.
+    """
+    cache = net.path_cache()
+    return (id(cache), {table: cache.keys(table) for table in ("graph", "paths", "reaches")})
 
 
 # --------------------------------------------------------------------------
@@ -243,13 +243,11 @@ PRESTATES = {
 @pytest.mark.parametrize("mode", ["auto", "paths"])
 @pytest.mark.parametrize("prestate", sorted(PRESTATES))
 def test_solve_leaves_the_network_exactly_as_found(prestate, mode):
-    # Start from empty path caches so their LRU cap (256 entries, shared by
-    # every test of the session) cannot evict anything during the call: what
-    # is compared below is "nothing invalidated, nothing left behind".
-    gi.clear_pathfinder_cache()
+    # What is compared below is "nothing invalidated, nothing left behind" in
+    # the network's own path-search memo.
     net = PRESTATES[prestate](_chain())
+    caches = _pathfinder_cache_keys(net)
     before = _state(net)
-    caches = _pathfinder_cache_keys()
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -257,7 +255,7 @@ def test_solve_leaves_the_network_exactly_as_found(prestate, mode):
 
     assert isinstance(result, gi.Result)
     assert _state(net) == before
-    assert _pathfinder_cache_keys() == caches
+    assert _pathfinder_cache_keys(net) == caches
 
 
 def _open_every_electrode(net):
@@ -283,18 +281,17 @@ def test_solve_that_raises_leaves_the_network_exactly_as_found(failure):
     """The guarantee holds on the error path too -- a raise half-way through
     the pipeline must not leave a half-written network behind."""
     edit, kwargs = FAILURES[failure]
-    gi.clear_pathfinder_cache()
     net = _solved_other_fault(_chain())
     if edit is not None:
         edit(net)
+    caches = _pathfinder_cache_keys(net)
     before = _state(net)
-    caches = _pathfinder_cache_keys()
 
     with pytest.raises(ValueError):
         gi.solve(net, **kwargs)
 
     assert _state(net) == before
-    assert _pathfinder_cache_keys() == caches
+    assert _pathfinder_cache_keys(net) == caches
 
 
 def test_solve_does_not_replace_the_assembled_system_of_an_earlier_run():

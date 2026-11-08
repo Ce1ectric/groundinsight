@@ -159,8 +159,8 @@ populated `network.paths`:
 
 - `network.paths` itself, which mirrors the *previously* active
   topology.
-- The module-level `_GRAPH_CACHE` / `_FIND_PATHS_CACHE` in
-  [`groundinsight.pathfinder`](pathfinder.md), which mirror the
+- The network's path-search memo (`network.path_cache()`, see
+  [`groundinsight.pathfinder`](pathfinder.md)), which is keyed on the
   same topology fingerprint for fast re-use.
 
 `Network.invalidate_paths()` is the explicit hook for that case:

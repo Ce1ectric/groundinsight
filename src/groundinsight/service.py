@@ -42,7 +42,6 @@ import logging
 
 from .models.core_models import Network, Result
 from .network_operations import run_fault
-from .pathfinder import clear_pathfinder_cache
 
 logger = logging.getLogger(__name__)
 
@@ -123,9 +122,10 @@ def solve(
     reduction factors, grounding impedance, diagnostics -- but on an overlay
     of ``network`` (see the module docstring), so nothing of the input is
     written: not its fields, not its stored results, not its active fault, not
-    its path set or assembled system. The module-level path-cache entries keyed
-    on it are not invalidated either (their own LRU limit may evict them, as
-    after any solve), and the overlay's entries are removed again.
+    its path set or assembled system. Its path-search memo is not touched
+    either: the overlay is a different network and gets a memo of its own
+    (see :meth:`~groundinsight.models.core_models.Network.path_cache`), which
+    goes with it.
 
     Parameters
     ----------
@@ -159,10 +159,10 @@ def solve(
     **Threads.** ``solve`` never writes to ``network``, but it reads the
     network's buses, branches and sources while it runs. Do not modify the
     network during a solve, and do not solve the *same* ``Network`` object
-    from several threads at once: the solve also goes through the
-    module-level path caches of :mod:`groundinsight.pathfinder`, which every
-    network in the process shares and which are not synchronised. Reading the
-    network from another thread while a solve runs is safe.
+    from several threads at once -- that is not designed for. Different
+    networks can be solved in parallel: since audit pass 19 the path search
+    keeps its settings and memo per network (ARC2). Reading the network from
+    another thread while a solve runs is safe.
 
     **solve or run_fault.** ``run_fault`` stays the convenient call for
     interactive work: afterwards ``network.res_buses()``,
@@ -200,9 +200,7 @@ def solve(
     try:
         return run_fault(overlay, fault, phase_current_mode=phase_current_mode)
     finally:
-        # The overlay dies with this frame, but its path-cache entries would
-        # not: they are keyed on ``id(overlay)``, and CPython hands that id to
-        # the next object allocated at the same address. Dropping them here
-        # keeps the caches exactly as the caller left them.
-        clear_pathfinder_cache(overlay)
+        # The overlay's path-search memo is its own (``Network.path_cache``
+        # checks the owner, and the overlay shares its private attributes
+        # with the input only until that check) and goes with the overlay.
         overlay.electrical_network = None
