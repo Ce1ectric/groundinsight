@@ -235,6 +235,11 @@ class DCLimitWarning(GroundinsightWarning):
     cases there is a defensible value to continue with, and a DC study that
     stops on the first unusual formula is of no use. Promote it with
     ``warnings.simplefilter("error", DCLimitWarning)`` to make a study strict.
+
+    A real part of minus infinity -- ``log(f)`` at 0 Hz -- is deliberately not
+    a fifth case: it is the limit of a negative resistance, there is no
+    defensible value to continue with, and :func:`check_passive_impedance`
+    refuses it like any negative real part.
     """
 
     default_code = "DC_LIMIT"
@@ -803,8 +808,9 @@ def _impedance_array(
             f"Impedance formula '{formula_str}' evaluated to NaN at {shown} "
             f"with parameters {params}. NaN is not a valid impedance -- it "
             f"propagates into the admittance matrix and surfaces much later as "
-            f"a singular-matrix error. Check for a division by zero, a domain "
-            f"error (e.g. log(0) at f=0 Hz), or a parameter that is itself NaN."
+            f"a singular-matrix error. Check for 0/0, 0*inf or inf-inf at that "
+            f"frequency (e.g. (f-50)*log(f-50) at 50 Hz; at 0 Hz such a term is "
+            f"replaced by its limit), or a parameter that is itself NaN."
         )
 
     return freqs_arr, result_arr
@@ -984,11 +990,12 @@ def check_passive_impedance_array(
 ) -> None:
     """Array counterpart of :func:`check_passive_impedance`.
 
-    Applies exactly the same three rules -- zero above 0 Hz, non-invertibly
-    small above 0 Hz, negative real part at any frequency -- with NumPy masks
-    instead of a Python loop over a dictionary. On an FFT grid that is the
-    difference between 9 s and a few milliseconds, because the scalar
-    :func:`is_short_circuit` was called once per (element, bin).
+    Applies exactly the same four rules -- zero above 0 Hz, non-invertibly
+    small above 0 Hz, negative real part at any frequency, real part of minus
+    infinity at any frequency -- with NumPy masks instead of a Python loop
+    over a dictionary. On an FFT grid that is the difference between 9 s and
+    a few milliseconds, because the scalar :func:`is_short_circuit` was
+    called once per (element, bin).
 
     The *message* is not duplicated. When something is wrong, the offending
     bins are collected into a small dictionary and handed to
@@ -1028,8 +1035,11 @@ def check_passive_impedance_array(
         np.isfinite(admittance.real) & np.isfinite(admittance.imag)
     )
     negative = finite & ~shorted & (values.real < 0)
+    # Not finite, so not caught above, and 1/(-inf) == 0 would read as an
+    # open circuit. See check_passive_impedance.
+    minus_infinite = np.isneginf(values.real)
 
-    offending = (shorted & (frequencies != 0.0)) | negative
+    offending = (shorted & (frequencies != 0.0)) | negative | minus_infinite
     if not offending.any():
         return
 
@@ -1392,7 +1402,7 @@ def check_passive_impedance(
     """Reject impedance values that cannot become an admittance.
 
     Every value checked here is destined for the diagonal or an off-diagonal
-    entry of ``Y`` as its reciprocal ``1/Z``. Three kinds of value have no
+    entry of ``Y`` as its reciprocal ``1/Z``. Four kinds of value have no
     reciprocal the nodal solve can use, and each of them used to be swallowed
     silently:
 
@@ -1436,9 +1446,23 @@ def check_passive_impedance(
         drives the nodal system towards singularity, where the reported earth
         potential rise grows without bound and without warning.
 
-    Infinity is *not* rejected: it is the documented open-end sentinel
-    (formula ``"nan"``) and ``1/inf == 0`` is exactly the right contribution
-    for a tower without an electrode. NaN is not rejected either -- it is a
+    ``Re(Z) == -inf``
+        The same rule at its limit, and the one value it used to miss: only
+        finite values were inspected, and ``1/(-inf) == 0`` made the solver
+        read the element as an open circuit, without a word. It comes from a
+        ``log(f)`` term that no factor of ``f`` cancels -- ``log(0)`` is
+        ``-inf`` -- so in practice it appears at 0 Hz, i.e. in a DC study and
+        in the 0 Hz bin of every transient study. Close to 0 Hz such a
+        formula is negative and refused anyway (``1 + log(f)`` below
+        0.37 Hz); only the 0 Hz bin itself escaped. It is rejected at any
+        frequency; a network that never evaluates the formula at 0 Hz is not
+        affected.
+
+    Positive infinity is *not* rejected, and neither is an infinite
+    reactance. The first is the documented open-end sentinel (formula
+    ``"nan"``), and ``1/inf == 0`` is exactly the right contribution for a
+    tower without an electrode; the second is a series capacitance at DC,
+    ``-j*inf`` with a finite real part. NaN is not rejected either -- it is a
     failed computation rather than an implausible one, and
     :func:`compute_impedance` and
     :meth:`~groundinsight.electrical_network.ElectricalNetwork._assert_finite_system`
@@ -1466,8 +1490,9 @@ def check_passive_impedance(
     ------
     ValueError
         If any frequency above 0 Hz carries a zero or non-invertible
-        impedance, or if any frequency at all carries a negative real part.
-        Every offending frequency is listed, grouped by cause.
+        impedance, or if any frequency at all carries a negative real part or
+        a real part of minus infinity. Every offending frequency is listed,
+        grouped by cause.
     """
     if not z_dict:
         return
@@ -1507,8 +1532,11 @@ def check_passive_impedance(
     negative: List[Tuple[float, float]] = list(
         zip(freqs[negative_mask].tolist(), re[negative_mask].tolist())
     )
+    # Not finite, hence outside every mask above, and the one non-finite value
+    # that is not an open circuit.
+    minus_infinite: List[float] = freqs[np.isneginf(re)].tolist()
 
-    if not (zeros or too_small or negative):
+    if not (zeros or too_small or negative or minus_infinite):
         return
 
     origin = _describe_source(formula_str, params)
@@ -1557,6 +1585,23 @@ def check_passive_impedance(
             "evaluated outside the range it was fitted on -- check the "
             "formula at the lowest rho, the lowest frequency and the shortest "
             "length in the model."
+        )
+
+    if minus_infinite:
+        parts.append(
+            "Its real part is minus infinity at "
+            + _render_frequencies(minus_infinite)
+            + ". That is not an open circuit -- an open circuit is plus "
+            "infinity, e.g. the formula 'nan' -- but the limit of a negative "
+            "resistance, and passing it on would disconnect the element "
+            "without a word, because 1/(-inf) is zero. At 0 Hz it comes from "
+            "a log(f) term that no factor of f cancels (log(0) is -inf); "
+            "Carson's earth-return term is written f*log(...) for that "
+            "reason and tends to zero instead. Give the formula a finite "
+            "value there: let the frequency-dependent part vanish at 0 Hz or "
+            "state the DC resistance as a term without f. A study that does "
+            "not list 0 Hz never evaluates it, but a transient study always "
+            "does -- its FFT grid starts at 0 Hz."
         )
 
     raise ValueError(" ".join(parts) + origin)

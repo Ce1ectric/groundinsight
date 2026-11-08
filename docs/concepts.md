@@ -63,7 +63,7 @@ isolators etc.).
 ### Which values a formula may produce
 
 Every impedance that ends up on the diagonal of $Y(f)$ is inverted, so not
-every number a formula can produce is a physically meaningful model. Three
+every number a formula can produce is a physically meaningful model. Four
 results are rejected with a `ValueError` that names the element, the
 frequency and the formula:
 
@@ -72,6 +72,7 @@ frequency and the formula:
 | $\underline{Z} = 0$ exactly | An element with no impedance has no admittance either. It drops out of the nodal system entirely and therefore reports the *opposite* of the ideal-earth limit: full earth potential rise and no current into the soil, indistinguishable from a bus with no electrode at all. |
 | $0 < \lvert\underline{Z}\rvert \lesssim 5.6\cdot10^{-309}\ \Omega$ | Too small to invert in double precision. $1/\underline{Z}$ overflows, reaches the admittance matrix as infinity, and the bus current comes back as `NaN`. |
 | $\operatorname{Re}(\underline{Z}) < 0$ | An earth electrode, an earthing conductor and a cable screen are passive; a negative resistance generates energy. It also pushes $Y(f)$ towards singularity, where the earth potential rise grows without bound while every intermediate number still looks plausible. |
+| $\operatorname{Re}(\underline{Z}) = -\infty$ | The limit of a negative resistance, typically `log(f)` at 0 Hz. It is not an open circuit, but $1/(-\infty) = 0$ would read as one and disconnect the element without a word. |
 
 A **near-ideal earth** is modelled with a small finite value, not with zero.
 The solution converges smoothly as $\underline{Z}\to 0$, with a relative error
@@ -98,9 +99,9 @@ The rule applies exactly where an impedance is inverted, and nowhere else:
   one was not.)
 - **Inactive** buses and branches, and frequencies outside
   `network.frequencies`, are not checked — they never reach the matrix.
-- Infinity stays legal everywhere: it is the documented open-end sentinel,
-  and $1/\infty = 0$ is the right answer. `NaN` is reported by its own
-  handler.
+- Positive infinity stays legal everywhere: it is the documented open-end
+  sentinel, and $1/\infty = 0$ is the right answer. So does a reactance of
+  $\pm j\infty$, a capacitance at DC. `NaN` is reported by its own handler.
 
 The check runs both where the impedance is computed (`calculate_impedance`)
 and again immediately before the matrix is assembled, because impedances are
@@ -114,7 +115,8 @@ table are inverted: a purely reactive impedance such as `j*2*pi*f*L` really is
 a short circuit at DC, so there the value is accepted and replaced by a small
 finite stand-in instead of being rejected — see
 [Direct current (`f = 0`)](#direct-current-f-0) below. The negative real part
-stays rejected at 0 Hz as well; a passive element is passive at DC too.
+stays rejected at 0 Hz as well, and so does a real part of $-\infty$; a
+passive element is passive at DC too.
 
 ## Direct current (`f = 0`)
 
@@ -186,6 +188,12 @@ mutual impedance: its change per decade is 90 % of its value, but that change
 shrinks ten-fold from one decade to the next. `sqrt(f)` (3.2-fold) and
 `log(f)` (not at all) are reported, and since the ratio does not depend on the
 length, all branches of one type get the same verdict.
+
+A real part that runs to $-\infty$ — a `log(f)` term without a factor $f$ —
+is none of the three. It is the limit of negative resistances, not the open
+circuit $+\infty$ of a pole, and it is refused for every impedance that is
+inverted, like a negative real part; up to this release it passed and was read
+as an open circuit, because $1/(-\infty) = 0$.
 
 ### A finite reactance has no reading at DC
 

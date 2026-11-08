@@ -409,7 +409,9 @@ unchanged at 0 Hz.
   cables and lines (Annex I).
 - Evaluate the formulas at the lowest ρ, the lowest frequency and the shortest
   length of the model: a negative real part or a NaN is refused
-  ([formula syntax](../reference/formula-syntax.md#common-errors)).
+  ([formula syntax](../reference/formula-syntax.md#common-errors)), and so is
+  a real part that runs to −∞ at 0 Hz, which a `log(f)` term without a factor
+  `f` produces.
 
 ## References
 

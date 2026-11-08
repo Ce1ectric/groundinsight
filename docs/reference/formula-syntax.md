@@ -115,7 +115,11 @@ evaluated *at* 0 Hz as written — Carson's `f*log(658*sqrt(rho/f)/r)` is
   least five-fold per decade, which counts as converged however small the
   value is: anything linear in `f` shrinks it ten-fold, Carson's
   `pi**2*1e-4*f` included, while `sqrt(f)` (3.2-fold) and `log(f)` (not at
-  all) are reported.
+  all) are reported;
+- a real part of −∞ — `log(f)` with no factor `f` in front — is refused for a
+  bus, a grounding conductor and a source impedance: it is the limit of a
+  negative resistance, not an open circuit. A study that does not list 0 Hz
+  never evaluates it there; a transient study always does.
 
 The how-to on data sheets shows what this means for the Carson formulas
 ([At 0 Hz](../howto/types-from-datasheets.md#at-0-hz)); the full treatment is
@@ -182,10 +186,12 @@ Values that are refused when an element is evaluated, here as the
 | `0` | `It is exactly zero at 50 Hz` | an ideal earth is a small finite value, e.g. `1e-6` |
 | `0.05*rho - 10` | `Its real part is negative` | the fit is used outside its range; check the lowest ρ |
 
-A formula that evaluates to NaN at some frequency — a division by zero, a
-domain error such as `log(0)` — is refused with a message that names the
-formula, the frequency and the parameters. Check a new formula at the lowest
-ρ, the lowest frequency and the shortest length of the model.
+A formula that evaluates to NaN at some frequency — `0/0`, `0*log(0)` away
+from 0 Hz, a NaN parameter — is refused with a message that names the
+formula, the frequency and the parameters. `log(0)` itself is −∞, and a real
+part of −∞ is refused as well ([at 0 Hz](#direct-current-f-0)). Check a new
+formula at the lowest ρ, the lowest frequency and the shortest length of the
+model.
 
 ## See also
 

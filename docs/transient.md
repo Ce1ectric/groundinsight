@@ -139,10 +139,13 @@ and all of them arrive as `NaN` or `inf` in floating point: a removable
 singularity such as Carson's earth-return term (limit 0, so the conductor
 tends to its DC resistance), a true pole such as a series capacitance
 (infinite, i.e. the open circuit it should be) and a genuine formula error
-(raises). A purely inductive element is an exact *short circuit* at DC; since
-zero has no reciprocal, that one bin uses a small finite stand-in and warns
-with a `DCLimitWarning`. Up to v0.4.0 such an element was dropped from the
-matrix instead, i.e. a short circuit was modelled as a disconnection — see
+(raises). A real part of $-\infty$ — a `log(f)` term without a factor $f$ — is
+refused at this bin, even when the network lists no 0 Hz and its stationary
+study accepts the same formula. A purely inductive element is an exact
+*short circuit* at DC; since zero has no reciprocal, that one bin uses a small
+finite stand-in and warns with a `DCLimitWarning`. Up to v0.4.0 such an
+element was dropped from the matrix instead, i.e. a short circuit was
+modelled as a disconnection — see
 [Direct current (`f = 0`)](concepts.md#direct-current-f-0) in the concepts
 chapter for the measured error and for when to merge the two buses instead.
 If $Y(f_0)$ is still singular after all this (a genuinely floating

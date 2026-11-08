@@ -1,10 +1,11 @@
 # tests/test_audit_pass19_dc_limits.py
 """
-Audit pass 19 -- decisions at 0 Hz that the data-sheet how-to brought up.
+Audit pass 19 -- two decisions at 0 Hz that the data-sheet how-to brought up.
 
 Finding IDs: D7 (found while documenting what the evaluator returns for the
-Carson formulas at 0 Hz). It refines the resolution test of the DC limit of
-pass 16 (D1 there).
+Carson formulas at 0 Hz). Both refine the DC treatment of pass 16: the
+resolution test of the limit (D1 there) and the passivity rule, which holds at
+0 Hz as at every other frequency.
 
 **The resolution warning was not scale-aware.** After the approach to 0 Hz
 (``1e-6, 1e-7, 1e-8 Hz``) the evaluator reported a limit as poorly resolved
@@ -24,6 +25,18 @@ analytic in ``f`` gives 0.1, Carson's ``f*log(1/f)`` 0.12; ``sqrt(f)`` gives
 0.32 and ``log(f)`` 1, and those stay reported -- for every length, because
 ``q`` does not depend on it.
 
+**Minus infinity passed as an open circuit.** A bus formula with a ``log(f)``
+term that no factor of ``f`` cancels is ``-inf`` at 0 Hz (``log(0)``). The
+passivity checks inspected finite values only, so ``-inf`` passed, and the
+solver read ``1/(-inf) = 0`` -- an open circuit, without a word, and only in the
+0 Hz bin: the formula below, ``1 + ln f`` at 100 Ohm*m, is negative under
+0.37 Hz, so a 0.1 Hz bin next to it was refused for its negative real part
+all along. ``-inf`` is the limit of negative resistances, not an open circuit
+(that is ``+inf``), so it is refused like a negative real part, in all three
+places that apply the rules: the element check, the array check of the
+transient FFT grid and the vectorised check of the solver. A network that
+does not solve 0 Hz never evaluates the formula there and is not affected.
+
 Every numerical assertion has a second, independent source: the step ratio is
 recomputed with 50-digit mpmath arithmetic, the limits with ``sympy.limit``,
 and the DC solution with a two-node system built by hand.
@@ -38,7 +51,15 @@ import pytest
 import sympy
 
 import groundinsight as gi
-from groundinsight.utils.impedance_calculator import DCLimitWarning, compute_impedance
+from groundinsight.models.core_models import ComplexNumber
+from groundinsight.simulation import waveforms
+from groundinsight.simulation.transient import TransientStudy
+from groundinsight.utils.impedance_calculator import (
+    DCLimitWarning,
+    check_passive_impedance,
+    check_passive_impedance_array,
+    compute_impedance,
+)
 
 #: Carson's coupling between a cable screen and the earth return, as the
 #: data-sheet how-to writes it (screen radius 16.5 mm). Its real part
@@ -48,6 +69,10 @@ CARSON_MUTUAL = "(pi**2*1e-4*f + j*4*pi*1e-4*f*log(658*sqrt(rho/f)/0.0165))*l"
 CARSON_SELF = (
     "(0.727 + pi**2*1e-4*f + j*4*pi*1e-4*f*log(658*sqrt(rho/f)/0.0165))*l"
 )
+#: A grounding impedance fitted with a logarithm of the frequency. Fine at
+#: 50 Hz (1 + ln 50 = 4.91 Ohm at 100 Ohm*m), minus infinity at 0 Hz.
+LOG_BUS = "rho*0.01 + log(f)"
+
 #: The approach frequencies of the evaluator, restated as strings so that the
 #: independent recomputation below reads them at 50 digits.
 PROBES = ("1e-6", "1e-7", "1e-8")
@@ -230,3 +255,134 @@ def test_a_dc_study_with_carson_cables_is_quiet():
     assert epr["A"] == pytest.approx(abs(u[0]), rel=1e-9)
     assert epr["B"] == pytest.approx(abs(u[1]), rel=1e-9)
 
+
+# ---------------------------------------------------------------------------
+# Minus infinity is not an open circuit
+# ---------------------------------------------------------------------------
+
+
+def test_a_bus_formula_that_runs_to_minus_infinity_at_dc_is_refused():
+    """Refused where the bus is built, naming the cause and the remedy. The
+    second way: ``sympy.limit`` says the same about the formula -- this is
+    the formula's limit, not a rounding artefact of ``log(0.0)``."""
+    assert sympy.limit(_expr(LOG_BUS, {"rho": 100.0}), _F, 0, "+") == -sympy.oo
+    bus_type = gi.BusType(
+        name="bt_p19_log_dc", system_type="Substation", voltage_level=20.0,
+        impedance_formula=LOG_BUS,
+    )
+    net = gi.create_network(name="p19_log_dc", frequencies=[0.0, 50.0])
+    with pytest.raises(ValueError, match="minus infinity") as excinfo:
+        gi.create_bus(name="A", type=bus_type,
+                      specific_earth_resistance=100.0, network=net)
+    message = str(excinfo.value)
+    assert "at 0 Hz" in message
+    assert "log(f)" in message
+    assert "not an open circuit" in message
+    assert "A" not in net.buses
+    # The bins next to 0 Hz agree: below 1/e Hz the formula is a negative
+    # resistance, refused before this pass as well.
+    near = compute_impedance(LOG_BUS, [0.1], {"rho": 100.0})
+    assert near[0.1].real == pytest.approx(1.0 + math.log(0.1), rel=1e-15)
+    with pytest.raises(ValueError, match="negative"):
+        check_passive_impedance(near, element="bus 'X'")
+
+
+def test_the_same_formula_is_untouched_in_a_network_without_0_hz():
+    """No 0 Hz, no evaluation at 0 Hz: the bus is built and the study solves
+    exactly as with the same impedance written as a constant."""
+    net = _network("p19_log_ac", LOG_BUS, [50.0])
+    z = net.buses["A"].impedance[50.0]
+    assert z.real == pytest.approx(1.0 + math.log(50.0), rel=1e-15)
+    gi.run_fault(net, "F")
+    reference = _network("p19_log_ac_ref", f"rho*0 + {1.0 + math.log(50.0)!r}", [50.0])
+    gi.run_fault(reference, "F")
+    got, ref = _epr(net, 50.0), _epr(reference, 50.0)
+    for bus in ("A", "B"):
+        assert got[bus] == pytest.approx(ref[bus], rel=1e-12)
+
+
+@pytest.mark.filterwarnings("ignore::groundinsight.TransientModelWarning")
+def test_a_transient_study_refuses_it_at_its_0_hz_bin():
+    """The same network in a transient study: the FFT grid starts at 0 Hz,
+    so the formula is evaluated there after all, and refused there."""
+    net = _network("p19_log_tr", LOG_BUS, [50.0])
+    study = TransientStudy(net, fault_name="F")
+    study.set_source_waveform("s", waveforms.step(amplitude=1000.0, t_on=0.0))
+    study.set_observation(buses=["A", "B"], branches=["A-B"])
+    with pytest.raises(ValueError, match="minus infinity") as excinfo:
+        study.solve(t_end=0.04, dt=1e-4, solver="fft")
+    assert "transient FFT grid" in str(excinfo.value)
+
+
+def test_the_three_passivity_checks_agree_on_minus_infinity():
+    """Element check, array check and the solver's vectorised check apply
+    one rule. The last one guards values that bypassed the first two, e.g. a
+    value written into ``bus.impedance`` directly."""
+    minus_inf = ComplexNumber(real=-math.inf, imag=0.0)
+    with pytest.raises(ValueError, match="minus infinity"):
+        check_passive_impedance({0.0: minus_inf}, element="bus 'X'")
+    with pytest.raises(ValueError, match="minus infinity"):
+        check_passive_impedance_array(
+            np.array([complex(-math.inf, 0.0), complex(2.0, 0.3)]),
+            np.array([0.0, 50.0]),
+            element="bus 'X'",
+        )
+    net = _network("p19_minus_inf_stored", "rho*0.01 + 1.0 + j*f*1e-4", [0.0, 50.0])
+    net.buses["A"].impedance[0.0] = minus_inf
+    with pytest.raises(ValueError, match="minus infinity"):
+        gi.run_fault(net, "F")
+
+
+def test_minus_infinity_is_refused_at_any_frequency():
+    """The rule is about the value, not about 0 Hz: ``log(f - 50)`` is minus
+    infinity at 50 Hz and would have disconnected the bus there."""
+    with pytest.raises(ValueError, match="minus infinity"):
+        check_passive_impedance(
+            {50.0: ComplexNumber(real=-math.inf, imag=1.0)}, element="bus 'X'"
+        )
+    values = compute_impedance("rho*0.01 + log(f - 50)", [50.0, 60.0], {"rho": 100.0})
+    assert values[50.0].real == -math.inf
+    with pytest.raises(ValueError, match="minus infinity"):
+        check_passive_impedance(values, element="bus 'X'")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(complex(math.inf, 0.0), id="plus-inf-like-1-over-f"),
+        pytest.param(complex(math.inf, math.inf), id="open-end-sentinel"),
+        pytest.param(complex(0.0, -math.inf), id="capacitance-at-dc"),
+        pytest.param(complex(0.0, math.inf), id="plus-j-inf"),
+        pytest.param(complex(2.0, -math.inf), id="r-in-series-with-c-at-dc"),
+    ],
+)
+def test_open_circuits_stay_accepted(value):
+    """Only a real part of minus infinity is refused. Every form an open
+    circuit takes -- including the capacitance, whose reactance runs to
+    ``-j*inf`` -- passes all checks at 0 Hz and above."""
+    check_passive_impedance(
+        {0.0: ComplexNumber(real=value.real, imag=value.imag),
+         50.0: ComplexNumber(real=value.real, imag=value.imag)},
+        element="bus 'X'",
+    )
+    check_passive_impedance_array(
+        np.array([value, value]), np.array([0.0, 50.0]), element="bus 'X'"
+    )
+
+
+def test_a_log_term_behind_a_carson_term_was_already_refused():
+    """The other way the same formula reaches 0 Hz. With a ``f*log`` term
+    beside it the value at 0 Hz is ``NaN``, the evaluator approaches the
+    limit, reports that it does not settle, and the value it reaches is a
+    finite negative resistance -- refused by the existing rule. With the new
+    rule both spellings end in a refusal."""
+    formula = "rho*0.01 + log(f) + j*4*pi*1e-4*f*log(658*sqrt(rho/f))"
+    bus_type = gi.BusType(
+        name="bt_p19_log_carson", system_type="Substation", voltage_level=20.0,
+        impedance_formula=formula,
+    )
+    net = gi.create_network(name="p19_log_carson", frequencies=[0.0, 50.0])
+    with pytest.warns(DCLimitWarning, match="converges only slowly"):
+        with pytest.raises(ValueError, match="negative"):
+            gi.create_bus(name="A", type=bus_type,
+                          specific_earth_resistance=100.0, network=net)

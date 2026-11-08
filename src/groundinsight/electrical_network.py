@@ -211,6 +211,10 @@ def _is_open_circuit(Z_complex: complex) -> bool:
     failed computation, and it must stay visible so that
     :meth:`ElectricalNetwork._assert_finite_system` can report it.
 
+    A real part of *minus* infinity never reaches this function for an
+    impedance that is inverted: it is the limit of a negative resistance, not
+    an open circuit, and the passivity checks refuse it beforehand.
+
     Parameters
     ----------
     Z_complex : complex
@@ -1248,8 +1252,9 @@ class ElectricalNetwork:
         ------
         ValueError
             If any checked impedance is zero, too small to invert in double
-            precision, or has a negative real part. The message names the
-            element and every offending frequency.
+            precision, or has a negative real part or a real part of minus
+            infinity. The message names the element and every offending
+            frequency.
         """
         for bus_name, bus in self.network.buses.items():
             if not bus.active:
@@ -1392,12 +1397,13 @@ class ElectricalNetwork:
     def _passive_impedances_ok(self, tables: _NetworkTables) -> bool:
         """Vectorised pass/fail of :meth:`_validate_passive_impedances`.
 
-        The same three rules as
+        The same four rules as
         :func:`~groundinsight.utils.impedance_calculator.check_passive_impedance`
         -- exactly zero above 0 Hz, too small to invert above 0 Hz, negative
-        real part at any frequency -- over the same elements (active buses,
-        grounding-conductor branches between active buses, voltage sources on
-        an active bus) and the same frequencies, evaluated on whole arrays.
+        real part and real part of minus infinity at any frequency -- over the
+        same elements (active buses, grounding-conductor branches between
+        active buses, voltage sources on an active bus) and the same
+        frequencies, evaluated on whole arrays.
         Calling the element-wise check for every element cost 0.19 s on a
         4000-bus ring (finding P6) although it almost never finds anything;
         when this check does fail, the element-wise one runs and raises with
@@ -1427,6 +1433,7 @@ class ElectricalNetwork:
                 (exact_zero & above_dc)
                 | (short & ~exact_zero & above_dc)
                 | (finite & ~short & (re < 0.0))
+                | np.isneginf(re)
             )
             return not np.any(bad & present)
 
