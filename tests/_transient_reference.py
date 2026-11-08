@@ -98,6 +98,11 @@ class _Layout:
     ``v`` has one entry per bus, ``j`` one per shield branch, ``phi'`` one per
     bus except the fault bus (the reference of the phase network) and ``i_p``
     one per branch.
+
+    Parameters
+    ----------
+    net : RefNetwork
+        The network whose unknowns are laid out.
     """
 
     def __init__(self, net: RefNetwork):
@@ -286,7 +291,21 @@ def time_solve(
 
 
 def phase_split(net: RefNetwork, frequency: float) -> Dict[str, complex]:
-    """Per-unit phase current per branch at one frequency (``from -> to``)."""
+    """Per-unit phase current per branch at one frequency.
+
+    Parameters
+    ----------
+    net : RefNetwork
+        The network.
+    frequency : float
+        Frequency in Hz.
+
+    Returns
+    -------
+    dict of str to complex
+        Phase current of each branch (counted ``from_bus -> to_bus``) per
+        ampere of source current.
+    """
     return phasor_solve(net, frequency, 1.0)["i_phase"]
 
 
