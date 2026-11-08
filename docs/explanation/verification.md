@@ -88,7 +88,7 @@ comparison would test — and that bound what to expect from it — are:
 
 - the coupling acts one way: the phase current is split first, then drives the
   shields; this is exact when all routes of a mesh have the same construction
-  and an approximation otherwise ([Concepts](../concepts.md#path-finding));
+  and an approximation otherwise ([Phase currents](phase-currents.md#one-way-coupling-when-the-split-is-exact));
 - only the faulted phase conductor is modelled, not the healthy phases;
 - electrodes are lumped impedances to remote earth, without resistive coupling
   between neighbouring electrodes;

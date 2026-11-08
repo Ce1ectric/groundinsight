@@ -1,6 +1,6 @@
 # Transient simulation
 
-The stationary solver described in [Concepts](concepts.md) operates in the
+The stationary solver described in [Model and assumptions](explanation/theory.md) operates in the
 phasor domain: one linear system per frequency, RMS / per-frequency
 post-processing. Many fault studies in low- and medium-voltage grounding
 analysis need a *time-domain* answer instead — for example to look at the
@@ -147,8 +147,8 @@ study accepts the same formula. A purely inductive element is an exact
 finite stand-in and warns with a `DCLimitWarning`. Up to v0.4.0 such an
 element was dropped from the matrix instead, i.e. a short circuit was
 modelled as a disconnection — see
-[Direct current (`f = 0`)](concepts.md#direct-current-f-0) in the concepts
-chapter for the measured error and for when to merge the two buses instead.
+[Direct current (`f = 0`)](explanation/dc.md#an-ideal-bond-is-a-short-circuit-and-a-short-circuit-has-no-admittance)
+for the measured error and for when to merge the two buses instead.
 If $Y(f_0)$ is still singular after all this (a genuinely floating
 sub-network) the bin is set to zero, which is equivalent to a DC-removed
 reconstruction.

@@ -186,7 +186,7 @@ at once. The module-level helpers `gi.start_dbsession(...)`,
 `gi.save_network_to_db(...)` and `gi.load_network_from_db(...)` still work and
 use a default database; see [Database](api/database.md).
 
-That is the full workflow. The [Concepts](concepts.md) page explains the model
+That is the full workflow. [Understanding the model](explanation/index.md) explains the model
 behind the scenes; the [Examples](examples/index.md) section contains
 runnable notebooks covering more realistic network topologies.
 

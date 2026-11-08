@@ -87,7 +87,7 @@ conservative way to treat harmonics
 
 ## Model assumptions behind every result
 
-The results rest on the model described in [Concepts](../concepts.md) and
+The results rest on the model described in [Model and assumptions](theory.md) and
 [Verification](verification.md): a quasi-stationary phasor solve per frequency
 (transient solvers aside), lumped electrodes without resistive coupling
 between them, homogeneous soil per element through `rho`, the coupling of the

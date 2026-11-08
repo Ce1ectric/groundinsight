@@ -124,7 +124,7 @@ u<sub>F</sub> = Z<sub>F</sub>·I<sub>E</sub> and u<sub>S</sub> = −Z<sub>S</sub
 | phase current of `L` | +1000 A | 1000 A from S to F | same |
 
 The EPR at the fault bus is therefore reported at about 180° from the source
-phasor when the earthing is mostly resistive. [Concepts](../concepts.md#branch-currents)
+phasor when the earthing is mostly resistive. [Model and assumptions](../explanation/theory.md#branch-currents)
 describes the shield current in the earth-side frame — positive from `to_bus`
 to `from_bus` — which is the same physical current. The transient time series
 follow the earth-side frame of the stationary result: with a source waveform
@@ -158,7 +158,7 @@ source current peaks.
 
 The two coincide only for ideally bonded stations. See
 [Compare results with EN 50522 limits](../howto/en50522-check.md) and
-[Concepts](../concepts.md#reduction-factor-on-a-current-basis).
+[Reduction factors and earthing impedance](../explanation/reduction-factors.md#reduction-factor-on-a-current-basis).
 
 ## See also
 

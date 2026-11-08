@@ -14,7 +14,7 @@ curve, and both are exact limits rather than numerical stand-ins. `Z_network`,
 the driving-point impedance with the local electrode removed, is the
 site-independent number the whole analysis is built around.
 
-See [Concepts](../concepts.md#characterising-a-location-without-its-electrode).
+See [Characterising a location without its electrode](../explanation/decomposition.md#characterising-a-location-without-its-electrode).
 
 ::: groundinsight.analysis.response
     options:

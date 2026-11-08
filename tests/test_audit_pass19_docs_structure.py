@@ -183,3 +183,223 @@ def test_audit_log_is_kept_out_of_search_and_sits_under_project():
     config = _mkdocs_config()
     trails = {page: trail for page, trail in _nav_entries(config["nav"])}
     assert trails["audit-log.md"][:1] == ("Project",)
+
+
+# --------------------------------------------------------------------------
+# DOC9 -- links and anchors, statically
+# --------------------------------------------------------------------------
+
+_LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)\)")
+_FENCE = re.compile(r"^( *)(```|~~~).*?^\1\2", re.M | re.S)
+_EXPLICIT_ID = re.compile(r"\{\s*#([\w-]+)[^}]*\}")
+
+
+def _slugify(text):
+    """
+    The heading id the ``toc`` extension gives a heading text.
+
+    Same algorithm as ``markdown.extensions.toc.slugify`` (NFKD, ASCII, drop
+    everything that is neither a word character, whitespace nor a hyphen,
+    lower case, runs of whitespace and hyphens become one hyphen), applied to
+    the heading text with its inline markup removed.
+
+    Parameters
+    ----------
+    text : str
+        Heading source text.
+
+    Returns
+    -------
+    str
+        The id.
+    """
+    import unicodedata
+
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)  # links -> their text
+    text = text.replace("`", "").replace("*", "").replace("$", "")
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^\w\s-]", "", text).strip().lower()
+    return re.sub(r"[-\s]+", "-", text)
+
+
+def _anchors(relative):
+    """
+    The anchor ids a Markdown page provides, or ``None`` if they cannot be
+    determined statically (mkdocstrings pages, pages that include Markdown).
+
+    Parameters
+    ----------
+    relative : str
+        Page path relative to ``docs/``.
+
+    Returns
+    -------
+    set of str or None
+        Heading ids (with the ``_1`` suffixes of repeated headings) and
+        explicit ``{ #id }`` attributes.
+    """
+    text = (DOCS / relative).read_text(encoding="utf-8")
+    if re.search(r"^:::", text, re.M) or re.search(r'--8<-- "[^"]+\.md"', text):
+        return None
+    body = _FENCE.sub("", text)
+    ids = set(_EXPLICIT_ID.findall(body))
+    seen = {}
+    for match in re.finditer(r"^#{1,6}\s+(.*?)\s*$", body, re.M):
+        heading = match.group(1)
+        explicit = _EXPLICIT_ID.search(heading)
+        if explicit:
+            ids.add(explicit.group(1))
+            continue
+        slug = _slugify(heading)
+        count = seen.get(slug, 0)
+        ids.add(slug if count == 0 else f"{slug}_{count}")
+        seen[slug] = count + 1
+    return ids
+
+
+def _page_links(relative):
+    """
+    Relative links of a Markdown page outside code blocks.
+
+    Parameters
+    ----------
+    relative : str
+        Page path relative to ``docs/``.
+
+    Returns
+    -------
+    list of str
+        Link targets as written.
+    """
+    text = _FENCE.sub("", (DOCS / relative).read_text(encoding="utf-8"))
+    return [
+        target
+        for target in _LINK.findall(text)
+        if not re.match(r"^[a-z][a-z0-9+.-]*:", target)  # http:, mailto: ...
+    ]
+
+
+def test_markdown_links_reach_existing_pages_and_anchors():
+    """Every relative link of every Markdown page points at a file under
+    ``docs/`` and, where it names one, at an anchor that page has. The docs
+    job finds the same with ``validation`` and ``--strict``; this runs with
+    the test suite, which does not build the site."""
+    broken = []
+    for page in sorted(p for p in _documentation_pages() if p.endswith(".md")):
+        for target in _page_links(page):
+            path, _, anchor = target.partition("#")
+            if path:
+                resolved = ((DOCS / page).parent / path).resolve()
+                try:
+                    relative = resolved.relative_to(DOCS.resolve()).as_posix()
+                except ValueError:
+                    broken.append((page, target, "outside docs/"))
+                    continue
+                if not resolved.is_file():
+                    broken.append((page, target, "no such file"))
+                    continue
+            else:
+                relative = page
+            if anchor and relative.endswith(".md"):
+                ids = _anchors(relative)
+                if ids is not None and anchor not in ids:
+                    broken.append((page, target, "no such anchor"))
+    assert broken == []
+
+
+# --------------------------------------------------------------------------
+# D1 -- the Concepts page split into "Understanding the model"
+# --------------------------------------------------------------------------
+
+#: The section ids of the former ``docs/concepts.md``, as the site rendered
+#: them before the split.
+CONCEPTS_ANCHORS = [
+    "problem-statement", "objects", "impedance-formulas",
+    "which-values-a-formula-may-produce", "direct-current-f-0",
+    "three-singularities-told-apart-numerically",
+    "a-finite-reactance-has-no-reading-at-dc",
+    "an-ideal-bond-is-a-short-circuit-and-a-short-circuit-has-no-admittance",
+    "every-transient-study-contains-dc", "what-a-source-and-a-fault-need-at-dc",
+    "nodal-admittance-formulation", "path-finding", "derived-quantities",
+    "earth-potential-rise-epr", "branch-currents", "reduction-factor",
+    "reduction-factor-on-a-current-basis",
+    "characterising-a-location-without-its-electrode",
+    "which-one-is-the-en-50522-reduction-factor",
+    "the-two-factors-are-not-two-computations-of-one-number",
+    "splitting-the-network-at-the-fault",
+    "frequency-dependence-of-the-reduction-factor", "grounding-impedance",
+    "active-flag-and-outage-studies", "inverse-rho-analysis",
+    "transient-simulations", "worked-example",
+    "summary-of-the-calculation-pipeline",
+]
+
+EXPLANATION_PAGES = [
+    "explanation/index.md",
+    "explanation/theory.md",
+    "explanation/formulas.md",
+    "explanation/phase-currents.md",
+    "explanation/reduction-factors.md",
+    "explanation/decomposition.md",
+    "explanation/dc.md",
+    "transient.md",
+    "explanation/verification.md",
+    "explanation/standards.md",
+]
+
+
+def _redirects():
+    """``redirect_maps`` of the ``redirects`` plugin in ``mkdocs.yml``."""
+    for plugin in _mkdocs_config().get("plugins", []):
+        if isinstance(plugin, dict) and "redirects" in plugin:
+            return plugin["redirects"]["redirect_maps"]
+    return {}
+
+
+def test_understanding_the_model_holds_the_explanation_pages_in_order():
+    """D1: the Concepts page is replaced by six explanation pages under an
+    overview; the transient chapter, verification and standards follow."""
+    config = _mkdocs_config()
+    section = [
+        page for page, trail in _nav_entries(config["nav"])
+        if trail[:1] == ("Understanding the model",)
+    ]
+    assert section == EXPLANATION_PAGES
+
+
+def test_moved_pages_forward_from_their_old_address():
+    """Old URLs keep working: a moved page is not a file any more, and its
+    address forwards to a page that exists."""
+    redirects = _redirects()
+    assert redirects.get("concepts.md") == "explanation/index.md"
+    for old, new in redirects.items():
+        assert not (DOCS / old).exists(), old
+        assert (DOCS / new.partition("#")[0]).is_file(), new
+
+
+def test_every_former_concepts_section_link_lands_on_its_new_place():
+    """The forwarding keeps the ``#anchor`` of an old link, so the overview
+    that ``concepts.md`` forwards to carries every former section id -- on a
+    link to the section's new home."""
+    text = (DOCS / "explanation" / "index.md").read_text(encoding="utf-8")
+    rows = dict(
+        (anchor, target)
+        for target, anchor in re.findall(r"\]\(([^)]+)\)\{\s*#([\w-]+)\s*\}", text)
+    )
+    assert sorted(rows) == sorted(CONCEPTS_ANCHORS)
+    for anchor, target in rows.items():
+        path, _, section = target.partition("#")
+        page = f"explanation/{path}"
+        assert (DOCS / page).is_file(), (anchor, target)
+        if section:
+            assert section in _anchors(page), (anchor, target)
+
+
+def test_nothing_links_to_the_removed_concepts_page():
+    """Links go to the new pages directly, not through the forwarding."""
+    hits = [
+        (page, target)
+        for page in sorted(p for p in _documentation_pages() if p.endswith(".md"))
+        for target in _page_links(page)
+        if target.partition("#")[0].endswith("concepts.md")
+    ]
+    assert hits == []

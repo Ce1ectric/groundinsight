@@ -95,7 +95,7 @@ See the [Quickstart](quickstart.md) for the full walkthrough.
   mutual coupling at the fault bus (`value`), and the share of the fault
   current returning through earth (`value_current`) — the EN 50522 quantity,
   and the one that responds to the electrode at the fault bus, see
-  [Concepts](concepts.md)
+  [Reduction factors and earthing impedance](explanation/reduction-factors.md)
 - **Phase currents from a solve on the phase-conductor network**
   (`phase_current_mode="auto"`), so rings, meshes and parallel cables no
   longer collapse onto enumerated paths;
@@ -130,7 +130,8 @@ See the [Quickstart](quickstart.md) for the full walkthrough.
 
 - [Installation](installation.md) — how to get `groundinsight` onto your system.
 - [Quickstart](quickstart.md) — end-to-end walkthrough of a minimal network.
-- [Concepts](concepts.md) — the physical and numerical model behind the code.
+- [Understanding the model](explanation/index.md) — the physical and numerical model
+  behind the code, its assumptions and their limits.
 - [Transient simulation](transient.md) — FFT and state-space solver paths for
   time-domain studies on top of the stationary network.
 - [Examples](examples/index.md) — notebooks covering the minimal case,

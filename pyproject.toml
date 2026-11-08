@@ -70,6 +70,13 @@ mkdocs-material = "^9.5.34"
 mkdocstrings = { extras = ["python"], version = ">=0.26.1,<1.1.0" }
 pymdown-extensions = ">=10.9,<13.0"
 mkdocs-jupyter = ">=0.25,<0.27"
+# Old page addresses forward to the pages that replaced them (audit pass
+# 19, D1: pages that were split up or replaced keep their address).
+# Pinned to 1.2.2: the plugin code of 1.2.3 is the same, but 1.2.3 adds
+# a second documentation tool (properdocs, a fork of MkDocs) as a hard
+# dependency only to print a migration banner. Which successor of MkDocs
+# the site moves to is a decision of its own.
+mkdocs-redirects = "1.2.2"
 
 # One console script only: the package's own command line, named after the
 # package (audit pass 19), so it shadows nothing a user already has. The two

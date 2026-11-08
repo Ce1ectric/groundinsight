@@ -72,6 +72,14 @@ markdown_extensions:
 
 plugins:
   - search
+  # Pages that moved keep their old address (audit pass 19, D1): the plugin
+  # writes a small HTML page at the old path that forwards to the new one,
+  # and the forwarding keeps the #anchor of the old link. The page a moved
+  # page forwards to carries the old anchors where its sections went apart
+  # (explanation/index.md maps every section of the former Concepts page).
+  - redirects:
+      redirect_maps:
+        concepts.md: explanation/index.md
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -149,7 +157,13 @@ nav:
       - Bus and branch types from data sheets: howto/types-from-datasheets.md
       - Compare results with EN 50522 limits: howto/en50522-check.md
   - Understanding the model:
-      - Concepts: concepts.md
+      - explanation/index.md
+      - Model and assumptions: explanation/theory.md
+      - Impedance formulas and where they come from: explanation/formulas.md
+      - Phase currents in rings and meshes: explanation/phase-currents.md
+      - Reduction factors and earthing impedance: explanation/reduction-factors.md
+      - Splitting the network, location response: explanation/decomposition.md
+      - "Direct current (f = 0)": explanation/dc.md
       - Transient simulation: transient.md
       - Verification and validation: explanation/verification.md
       - Standards and scope: explanation/standards.md

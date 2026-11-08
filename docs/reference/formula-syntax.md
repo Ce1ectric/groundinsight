@@ -123,7 +123,7 @@ evaluated *at* 0 Hz as written — Carson's `f*log(658*sqrt(rho/f)/r)` is
 
 The how-to on data sheets shows what this means for the Carson formulas
 ([At 0 Hz](../howto/types-from-datasheets.md#at-0-hz)); the full treatment is
-in [Concepts](../concepts.md#direct-current-f-0).
+in [Direct current (`f = 0`)](../explanation/dc.md).
 
 ## Why the guard exists
 

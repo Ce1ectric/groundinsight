@@ -105,7 +105,7 @@ impedance, a proxy that splits a ring exactly only when all its routes have the
 same construction. In a radial network the split is fixed by the topology and
 the formula does not change the result; declare it anyway, so the type stays
 correct when the network gets a second infeed. How the split and the coupling
-are modelled is explained in [Concepts](../concepts.md#path-finding).
+are modelled is explained in [Phase currents in rings and meshes](../explanation/phase-currents.md#path-finding).
 
 ## Worked example: NA2XS(F)2Y 1×300 RM/25 12/20 kV
 

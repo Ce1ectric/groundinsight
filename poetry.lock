@@ -2420,6 +2420,21 @@ files = [
 ]
 
 [[package]]
+name = "mkdocs-redirects"
+version = "1.2.2"
+description = "A MkDocs plugin for dynamic page redirects to prevent broken links"
+optional = false
+python-versions = ">=3.8"
+groups = ["docs"]
+files = [
+    {file = "mkdocs_redirects-1.2.2-py3-none-any.whl", hash = "sha256:7dbfa5647b79a3589da4401403d69494bd1f4ad03b9c15136720367e1f340ed5"},
+    {file = "mkdocs_redirects-1.2.2.tar.gz", hash = "sha256:3094981b42ffab29313c2c1b8ac3969861109f58b2dd58c45fc81cd44bfa0095"},
+]
+
+[package.dependencies]
+mkdocs = ">=1.1.1"
+
+[[package]]
 name = "mkdocstrings"
 version = "1.0.8"
 description = "Automatic documentation from sources, for MkDocs."
@@ -4716,4 +4731,4 @@ pandapower = ["pandapower"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "aa731a0b8bcba451b0da946c03005856118a9af1ffd25b4dc8f3edb5237d5f77"
+content-hash = "012b51b8d454adbce3b75ecdca005467185df4dc716de7503c878800d414a2ea"
