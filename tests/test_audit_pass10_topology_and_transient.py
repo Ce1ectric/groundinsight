@@ -32,7 +32,9 @@ T3. ``transient._solve_state_space`` derives the Carson mutual-coupling
        straight after ``build_network``, without a preceding ``run_fault`` --
        every factor silently stayed zero and the entire mutual coupling was
        dropped. The measured peak EPR was 71 % off. The solver now rebuilds
-       the paths and says so via ``logger.warning``.
+       the paths and says so via ``logger.warning``. (Superseded in audit
+       pass 19, PH2: the split comes from the phase-network solve and needs
+       no paths; see ``test_audit_pass19_transient.py``.)
     b) The factors were accumulated with ``+=`` behind a merely *per-path*
        ``seen`` set, so a branch shared by two parallel routes of one source
        (the common trunk of a ring) got a factor of 2.0. That contradicts the
@@ -366,6 +368,13 @@ def test_state_space_mutual_coupling_without_a_preceding_run_fault(caplog):
 
     Pre-fix run A (paths empty) reported 107.71 V against 62.82 V for run B,
     a 71 % error, and neither run warned.
+
+    Audit pass 19 (PH2): the coupling no longer reads ``network.paths`` at
+    all -- the phase split comes from the stationary phase-network solve --
+    so there is nothing to rebuild. Until pass 18 this test asserted the
+    rebuild and its log line; it now asserts the stronger property that the
+    paths stay untouched while the numbers are the same with and without a
+    preceding ``run_fault``.
     """
     net = _two_bus_coupled_network("p10_t3a")
     assert not net.paths                      # no run_fault has happened yet
@@ -373,10 +382,8 @@ def test_state_space_mutual_coupling_without_a_preceding_run_fault(caplog):
     with caplog.at_level(logging.WARNING):
         study_a, result_a = _run_transient(net, ["bus1", "bus2"], ["branch1"])
 
-    assert any("paths" in record.message for record in caplog.records), (
-        "the solver must say that it rebuilt the paths"
-    )
-    assert net.paths, "the solver must have rebuilt the paths"
+    assert not net.paths, "the transient must not need (or build) paths"
+    assert not any("paths" in record.message for record in caplog.records)
 
     peak_a = _steady_peak(result_a.time_s, result_a.epr_t["bus2"])
 
@@ -436,7 +443,11 @@ def test_state_space_mutual_factor_is_first_path_wins_not_accumulated():
     study, result = _run_transient(net, ["C", "D"], ["bCD"])
     _, phase_factors, _ = study._TransientStudy__mutual_for_output
 
-    assert phase_factors == {("bCD", "src"): 1.0}
+    # Audit pass 19 (PH2): the factor is the per-unit phase current of the
+    # stationary phase-network solve, a complex number with rounding in the
+    # last digits, no longer the exact path factor 1.0.
+    assert set(phase_factors) == {("bCD", "src")}
+    assert phase_factors[("bCD", "src")] == pytest.approx(1.0, abs=1e-12)
 
     results = net.results["F1"]
     expected_d = _stationary_magnitude(
@@ -475,7 +486,9 @@ def test_state_space_mutual_factor_control_single_path():
 
     study, result = _run_transient(net, ["C", "D"], ["bCD"])
     _, phase_factors, _ = study._TransientStudy__mutual_for_output
-    assert phase_factors == {("bCD", "src"): 1.0}
+    # Audit pass 19 (PH2): per-unit phase current of the phase-network solve.
+    assert set(phase_factors) == {("bCD", "src")}
+    assert phase_factors[("bCD", "src")] == pytest.approx(1.0, abs=1e-12)
 
     expected_d = _stationary_magnitude(
         next(b for b in net.results["F1"].buses if b.name == "D").uepr_freq

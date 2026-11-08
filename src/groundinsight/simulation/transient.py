@@ -46,6 +46,8 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, TYPE_CHECKIN
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
+from groundinsight.diagnostics import ModelAssumptionWarning, emit
+from groundinsight.electrical_network import ElectricalNetwork
 from groundinsight.models.core_models import Network, TransientModelWarning
 
 if TYPE_CHECKING:
@@ -62,6 +64,103 @@ logger = logging.getLogger(__name__)
 
 
 WaveformFunc = Callable[[np.ndarray], np.ndarray]
+
+
+class _ActiveFaultView:
+    """Read-only stand-in for a :class:`Network` with another active fault.
+
+    The phase-network solve of the stationary solver reads the fault bus --
+    the reference node of the phase network -- from ``network.active_fault``.
+    A transient study names its own fault, which need not be the active one.
+    Assigning ``network.active_fault`` for the duration of the solve is not
+    side-effect free: ``Network`` validates assignments, and its
+    after-validator re-synchronises every ``Fault``'s active flag, which a
+    restore to ``None`` does not undo. Handing the stationary assembly this
+    view instead leaves the user's network untouched, also when the solve
+    raises half-way.
+
+    Parameters
+    ----------
+    network : Network
+        The network to read from.
+    fault_name : str
+        The fault to report as active.
+
+    Raises
+    ------
+    AttributeError
+        On any attempt to set an attribute through the view.
+    """
+
+    __slots__ = ("_network", "active_fault")
+
+    def __init__(self, network: Network, fault_name: str):
+        object.__setattr__(self, "_network", network)
+        object.__setattr__(self, "active_fault", fault_name)
+
+    def __getattr__(self, name: str):
+        return getattr(self._network, name)
+
+    def __setattr__(self, name: str, value) -> None:
+        raise AttributeError(
+            f"Cannot set '{name}': the transient phase-split probe reads the "
+            f"network through a read-only view."
+        )
+
+
+class _UnitInjectionProbe(ElectricalNetwork):
+    """The stationary ``"auto"`` phase-network solve with 1 A per source.
+
+    The state-space solver needs the *per-unit* phase split -- the phase
+    current of each branch per ampere of each source -- because the source
+    waveform, not ``Source.values``, is the injection of a transient. The
+    split is a property of the phase network alone, so it is taken from the
+    very method ``run_fault(..., phase_current_mode="auto")`` uses,
+    :meth:`ElectricalNetwork._compute_phase_currents`, with every source
+    injecting exactly 1 A. Dividing the stationary result by the stationary
+    source value would do the same, but fails for a source whose
+    ``values`` miss ``f_eval`` or are zero there -- legitimate for a source
+    that only exists to carry a transient waveform.
+
+    Parameters
+    ----------
+    network : Network
+        The network; it is read through an :class:`_ActiveFaultView` and not
+        modified.
+    fault_name : str
+        The fault whose bus is the reference node of the phase network.
+
+    Notes
+    -----
+    Construction runs the full stationary assembly at every network
+    frequency, so the proxy warning for a meshed phase network without
+    ``phase_impedance_formula`` is raised here exactly as in ``run_fault``
+    -- the transient split rests on the same proxy.
+    """
+
+    def __init__(self, network: Network, fault_name: str):
+        super().__init__(
+            _ActiveFaultView(network, fault_name), auto_phase_currents=True
+        )
+
+    def _source_injection(self, source, freq: float, scaling: float) -> complex:
+        """Inject exactly 1 A regardless of source type, value and scaling.
+
+        Parameters
+        ----------
+        source : Source
+            Ignored.
+        freq : float
+            Ignored.
+        scaling : float
+            Ignored.
+
+        Returns
+        -------
+        complex
+            ``1 + 0j``.
+        """
+        return complex(1.0, 0.0)
 
 
 def _passivity_message(
@@ -274,17 +373,17 @@ class TransientStudy:
     Parameters
     ----------
     network : Network
-        The network model. Buses, branches, sources and the active fault
-        are taken from this object. No impedance, no ``active`` flag and no
-        stored result is written back. The one exception is
-        ``network.paths``: the state-space solver reads the source-to-fault
-        paths to build the mutual-coupling feedforward and rebuilds them
-        (with a warning) when they are missing or stale, because guessing a
-        zero coupling factor cost 71 % of the peak EPR on a two-branch
-        reference case. Run ``gi.run_fault(...)`` or ``gi.create_paths(...)``
-        first and the study touches nothing at all.
+        The network model. Buses, branches, sources and faults are taken
+        from this object. Nothing is written back -- no impedance, no
+        ``active`` flag, no stored result, no ``network.paths`` and not
+        ``network.active_fault``. Up to audit pass 18 the state-space solver
+        read (and, when they were missing, rebuilt) the source-to-fault
+        paths for its mutual coupling; since pass 19 it takes the phase
+        split from the stationary phase-network solve instead, which needs
+        no path set.
     fault_name : str
-        Name of the fault to activate for this study.
+        Name of the fault this study simulates. It does not have to be the
+        network's active fault.
 
     Examples
     --------
@@ -1233,6 +1332,261 @@ class TransientStudy:
             )
         return chosen
 
+    #: Per-unit share of a source current below which a branch's phase
+    #: current is taken as zero. The phase-network solve leaves rounding of
+    #: about 1e-16 on branches that carry nothing, e.g. a stub beyond the fault.
+    _SPLIT_ZERO: float = 1e-12
+
+    #: Per-unit difference above which the phase split counts as
+    #: frequency-dependent: its quadrature part at ``f_eval``, or its change
+    #: between two network frequencies. Far above rounding, far below
+    #: anything an EPR would show.
+    _SPLIT_TOLERANCE: float = 1e-6
+
+    def _phase_split(
+        self,
+        f_eval: float,
+        src_names: Sequence[str],
+        coupled: Sequence[str],
+    ) -> Dict[Tuple[str, str], complex]:
+        """Per-unit phase current of every coupled branch, per current source.
+
+        The state-space solver drives the Carson coupling of a shield with the
+        phase current of its branch. Which share of a source's current a
+        branch carries is decided by the phase-conductor network, and the
+        stationary solver answers exactly that question in its default
+        ``phase_current_mode="auto"``: one nodal solve of the phase network
+        per source, the fault bus as reference. This method asks the same
+        code (:class:`_UnitInjectionProbe`) for 1 A per source at ``f_eval``,
+        so stationary and transient results rest on one split -- including
+        the declared ``phase_impedance_formula``, its proxy, open phase
+        conductors and sources that are isolated in the phase network.
+
+        Up to audit pass 18 the factor was read off the enumerated
+        source-to-fault paths as ``sign * parallel_coefficient`` instead, i.e.
+        the legacy ``"paths"`` mode: every route of a ring carried the full
+        source current, +103 % EPR at the fault of a symmetric four-bus ring
+        (PH2). ``Branch.parallel_coefficient`` is no longer read here, just as
+        the stationary ``"auto"`` mode does not read it.
+
+        Parameters
+        ----------
+        f_eval : float
+            Frequency the lumped values are read at, in Hz.
+        src_names : sequence of str
+            Sources with a waveform in this study.
+        coupled : sequence of str
+            Branches that carry a mutual coupling in the state-space model.
+
+        Returns
+        -------
+        dict of (str, str) to complex
+            ``{(branch, source): alpha}`` with ``alpha`` the phase current of
+            ``branch`` (counted ``from_bus -> to_bus``) per ampere of
+            ``source``. Pairs whose share is zero are omitted, as are voltage
+            sources (the coupling is modelled for current sources only, as
+            before) and sources without a connection to the fault.
+
+        Warns
+        -----
+        ModelAssumptionWarning
+            ``TRANSIENT_PHASE_SPLIT`` when the split depends on frequency;
+            see :meth:`_warn_about_frequency_dependent_split`.
+        """
+        network = self.network
+        reaching = set(network.sources_reaching(self.fault_name))
+        current_sources: List[str] = []
+        voltage_skipped: List[str] = []
+        for name in src_names:
+            if name not in reaching:
+                continue
+            if network.sources[name].source_type == "current":
+                current_sources.append(name)
+            else:
+                voltage_skipped.append(name)
+        if voltage_skipped:
+            logger.warning(
+                "State-space mutual coupling skipped for voltage "
+                "sources: %s. The state-space solver currently models "
+                "the Carson-style coupling only for current-source "
+                "phase currents.",
+                voltage_skipped,
+            )
+        if not current_sources or not coupled:
+            return {}
+
+        probe = _UnitInjectionProbe(network, self.fault_name)
+        split: Dict[Tuple[str, str], complex] = {}
+        for src_name in current_sources:
+            currents = probe._compute_phase_currents(f_eval, [src_name])
+            for br_name in coupled:
+                value = complex(currents.get(br_name, 0.0))
+                if abs(value) > self._SPLIT_ZERO:
+                    split[(br_name, src_name)] = value
+        self._warn_about_frequency_dependent_split(
+            probe, f_eval, current_sources, coupled, split
+        )
+        return split
+
+    def _warn_about_frequency_dependent_split(
+        self,
+        probe: ElectricalNetwork,
+        f_eval: float,
+        sources: Sequence[str],
+        coupled: Sequence[str],
+        split: Dict[Tuple[str, str], complex],
+    ) -> None:
+        """Say so when one fixed phase split cannot describe every frequency.
+
+        The state-space model is one linear ODE with frequency-independent
+        coefficients, and the phase split enters it as one fixed factor per
+        branch and source. That is exact when the split does not depend on
+        frequency -- a chain, a ring of one cable type with any lengths, any
+        symmetric arrangement. Routes of *different* R/L ratio (cable and
+        overhead line in one ring) split a DC offset by their resistances,
+        the 50 Hz component by their impedances and fast edges by their
+        inductances. The folded coupling of :meth:`_folded_coupling` is exact
+        at ``f_eval``; everything else in the waveform is split as at
+        ``f_eval``.
+
+        Two symptoms are checked, each against :attr:`_SPLIT_TOLERANCE`: a
+        quadrature part of the split at ``f_eval`` (a split that does not
+        change with frequency is real, because it is real at DC), and a
+        change of the split between ``f_eval`` and the other positive
+        network frequencies. The second only catches what the network's own
+        frequency list can show.
+
+        Measured on a cable/overhead-line ring (quadrature part 0.044 at
+        50 Hz, split 0.49 at DC and 0.77 at 50 Hz on the cable route) with a
+        fully offset fault current, against a reference that integrates the
+        phase conductors as states: the folded split deviates by at most
+        0.99 % of the peak EPR, a fixed ``Re(alpha)`` by 6.5 %.
+
+        Parameters
+        ----------
+        probe : ElectricalNetwork
+            The unit-injection phase-network solver of :meth:`_phase_split`.
+        f_eval : float
+            Frequency the split was taken at, in Hz.
+        sources : sequence of str
+            Current sources that received a split.
+        coupled : sequence of str
+            Branches with mutual coupling.
+        split : dict of (str, str) to complex
+            The split at ``f_eval``.
+
+        Warns
+        -----
+        ModelAssumptionWarning
+            Code ``TRANSIENT_PHASE_SPLIT``, elements: the coupled branches
+            whose split depends on frequency.
+        """
+        tolerance = self._SPLIT_TOLERANCE
+        quadrature: Dict[str, float] = {}
+        for (br_name, _), alpha in split.items():
+            quadrature[br_name] = max(quadrature.get(br_name, 0.0), abs(alpha.imag))
+
+        drift: Dict[str, Tuple[float, float]] = {}
+        for freq in self.network.frequencies:
+            if freq <= 0.0 or freq == f_eval:
+                continue
+            for src_name in sources:
+                currents = probe._compute_phase_currents(freq, [src_name])
+                for br_name in coupled:
+                    delta = abs(
+                        complex(currents.get(br_name, 0.0))
+                        - split.get((br_name, src_name), 0j)
+                    )
+                    if delta > drift.get(br_name, (0.0, freq))[0]:
+                        drift[br_name] = (delta, float(freq))
+
+        affected = sorted(
+            name
+            for name in coupled
+            if quadrature.get(name, 0.0) > tolerance
+            or drift.get(name, (0.0, 0.0))[0] > tolerance
+        )
+        if not affected:
+            return
+
+        symptoms: List[str] = []
+        worst_quadrature = max(quadrature.get(name, 0.0) for name in affected)
+        if worst_quadrature > tolerance:
+            symptoms.append(
+                f"at {f_eval:g} Hz the phase current carries a part of up to "
+                f"{worst_quadrature:.3g} per unit of the source current in "
+                f"quadrature with it"
+            )
+        drifting = [name for name in affected if drift.get(name, (0.0, 0.0))[0] > tolerance]
+        if drifting:
+            name = max(drifting, key=lambda b: drift[b][0])
+            delta, freq = drift[name]
+            symptoms.append(
+                f"between {f_eval:g} Hz and {freq:g} Hz the share of branch "
+                f"'{name}' changes by {delta:.3g} per unit"
+            )
+        shown = ", ".join(affected[:3])
+        if len(affected) > 3:
+            shown += f", ... ({len(affected)} branches in total)"
+        emit(
+            ModelAssumptionWarning,
+            f"The state-space solver distributes the phase current of this "
+            f"meshed network with the per-unit split of the phase-network "
+            f"solve at f_eval = {f_eval:g} Hz -- the split "
+            f"gi.run_fault(..., phase_current_mode='auto') uses -- folded into "
+            f"the coupling of each branch, which reproduces the {f_eval:g} Hz "
+            f"steady state exactly. Here the split depends on frequency, "
+            f"because the parallel routes have different R/L ratios: "
+            f"{'; '.join(symptoms)} (coupled branches: {shown}). A DC offset "
+            f"and harmonics are therefore distributed as at {f_eval:g} Hz "
+            f"rather than as at their own frequency. On a cable/overhead-line "
+            f"ring with a fully offset fault current that moved the EPR by "
+            f"less than 1 % of its peak; a split that changes more over the "
+            f"spectrum of the waveform moves it more.",
+            code="TRANSIENT_PHASE_SPLIT",
+            elements=[("branch", name) for name in affected],
+            stacklevel=5,
+        )
+
+    @staticmethod
+    def _folded_coupling(
+        R_mut: float, M_mut: float, alpha: complex, omega: float
+    ) -> Tuple[float, float]:
+        """Fold a complex phase split into an effective mutual R and M.
+
+        The state-space model drives the shield of a branch with
+        ``R_mut * I_p + M_mut * dI_p/dt`` and ``I_p = alpha * I_src``. The
+        model is real-valued, so a complex ``alpha`` -- a phase shift between
+        routes of different R/L ratio -- cannot be a factor on the source
+        waveform. Folded into the coupling instead,
+        ``R' + j*omega*M' = (R_mut + j*omega*M_mut) * alpha``, it reproduces
+        the coupling EMF of the stationary solver exactly at ``omega``. For a
+        real ``alpha`` the fold is the plain product
+        ``(alpha * R_mut, alpha * M_mut)``, which is what the solver used
+        before, and is exact at every frequency.
+
+        Parameters
+        ----------
+        R_mut, M_mut : float
+            Lumped mutual resistance (Ohm) and inductance (H) of the branch.
+        alpha : complex
+            Per-unit phase current of the branch for this source.
+        omega : float
+            Angular frequency the split was taken at, rad/s. At ``0`` the
+            split is real anyway (DC divides by resistance) and only its
+            real part is used.
+
+        Returns
+        -------
+        tuple of float
+            ``(R', M')``.
+        """
+        alpha = complex(alpha)
+        if omega > 0.0:
+            z = complex(R_mut, omega * M_mut) * alpha
+            return z.real, z.imag / omega
+        return R_mut * alpha.real, M_mut * alpha.real
+
     def _solve_state_space(
         self, *, t_end: float, dt: float, f_eval: Optional[float] = None
     ) -> ResultTransient:
@@ -1255,6 +1609,12 @@ class TransientStudy:
         conductance matrix and never appear as states. Source waveforms
         are sampled on the regular time grid and integrated with
         ``scipy.signal.lsim``.
+
+        Mutual coupling (``R_mutual`` / ``M_mutual``) is driven by the phase
+        current of each branch, which is the per-unit split of the
+        stationary phase-network solve (``phase_current_mode="auto"``) at
+        ``f_eval`` times the current-source waveform; see
+        :meth:`_phase_split` and :meth:`_folded_coupling`.
         """
         if not self._source_waveforms:
             raise ValueError(
@@ -1648,9 +2008,10 @@ class TransientStudy:
         # --- mutual coupling contribution to B_kcl and B_emf -------------
         # For every inductive grounding branch with non-zero R_mutual or
         # M_mutual we add the Carson-style coupling between phase
-        # conductor and shield. The phase current along each branch is
-        # derived from the source-to-fault path topology (mirror of the
-        # FFT solver's _compute_phase_currents_from_paths).
+        # conductor and shield. The phase current along each branch is the
+        # per-unit split of the stationary phase-network solve
+        # (``phase_current_mode="auto"``) at f_eval times the source
+        # waveform; see :meth:`_phase_split`.
         #
         # Substitution trick: define z = i_shield + (M / L_self) * I_phase.
         # The state we actually integrate is z, which eliminates the
@@ -1661,7 +2022,7 @@ class TransientStudy:
         # Restrictions: only current sources contribute -- voltage
         # sources have a state-dependent loop current that would require
         # a more involved substitution and is left out for now.
-        mutual_branches: Dict[str, Dict[str, float]] = {}
+        mutual_branches: Dict[str, dict] = {}
         for k, (br_name, fi, ti, R_self_val, L_self_val) in enumerate(
             branch_inductive
         ):
@@ -1688,116 +2049,56 @@ class TransientStudy:
                 "state_idx": n_bus_L + k,
                 "from_idx": fi,
                 "to_idx": ti,
+                "folded": {},
             }
 
-        # Path-walking to build the phase factor per (mutual branch,
-        # current source) pair. The factor is ``sign * parallel_coefficient``
-        # where ``sign = +1`` if the path traverses the branch in
-        # ``from_bus -> to_bus`` direction, ``-1`` otherwise. First
-        # appearance of a branch on any path from a given source wins,
-        # matching the legacy FFT-solver semantics.
-        phase_factors: Dict[tuple, float] = {}
+        # Phase split per (coupled branch, current source): the per-unit
+        # phase current of the branch, complex, from the same phase-network
+        # solve as ``run_fault(..., phase_current_mode="auto")``. Up to audit
+        # pass 18 the factor was read off the enumerated source-to-fault
+        # paths as ``sign * parallel_coefficient`` (default 1.0) -- the legacy
+        # ``"paths"`` mode, which in a ring gives *each* route the full source
+        # current: 338.3 V instead of 166.6 V at the fault of a symmetric
+        # four-bus ring (+103 %), against a stationary default that had
+        # moved to ``"auto"`` in 0.6 (PH2).
+        #
+        # The transient solvers treat the source *waveform* as the literal
+        # injection; ``fault.scalings`` (a frequency-domain concept for the
+        # stationary solve) is intentionally NOT applied, so the phase
+        # current stays consistent with the unscaled shield injection. The
+        # FFT solver behaves the same way.
+        phase_factors: Dict[Tuple[str, str], complex] = {}
         if mutual_branches:
-            # The phase factors are read off ``network.paths``. When the paths
-            # are missing or stale every factor silently stays zero and the
-            # entire Carson coupling is dropped -- *without* an error. The
-            # solve still succeeds and returns a peak EPR that was measured
-            # 71 % low on a two-branch reference case. A transient study run
-            # straight after ``build_network`` (i.e. without a preceding
-            # ``run_fault``) hit exactly that. Rebuild rather than guess.
-            if self.network._needs_path_rebuild():
-                logger.warning(
-                    "The transient mutual coupling is derived from the "
-                    "source-to-fault paths, but the network's paths are "
-                    "missing or stale -- rebuilding them now. Call "
-                    "gi.run_fault(...) or gi.create_paths(...) before the "
-                    "transient simulation so the stationary and the "
-                    "transient result rest on the same path set."
-                )
-                self.network.invalidate_paths()
-                self.network.define_paths()
+            phase_factors = self._phase_split(
+                f_eval, src_names, list(mutual_branches)
+            )
 
-            # The transient solvers treat the source *waveform* as the literal
-            # injection; ``fault.scalings`` (a frequency-domain concept for the
-            # stationary solve) is intentionally NOT applied here so the
-            # mutual-coupling phase current stays consistent with the unscaled
-            # shield injection. The FFT solver behaves the same way.
-            voltage_src_skipped: List[str] = []
-            for path in self.network.paths.values():
-                if path.fault != self.fault_name:
-                    continue
-                src_name = path.source
-                if src_name not in self._source_waveforms:
-                    continue
-                src_obj = self.network.sources[src_name]
-                if src_obj.source_type != "current":
-                    if src_name not in voltage_src_skipped:
-                        voltage_src_skipped.append(src_name)
-                    continue
-                source_bus = src_obj.bus
-                current_bus = source_bus
-                for branch in path.segments:
-                    br_name = branch.name
-                    if branch.from_bus == current_bus:
-                        sign = +1
-                        next_bus = branch.to_bus
-                    elif branch.to_bus == current_bus:
-                        sign = -1
-                        next_bus = branch.from_bus
-                    else:
-                        raise RuntimeError(
-                            f"Path '{path.name}' segment '{br_name}' does "
-                            f"not connect to bus '{current_bus}'"
-                        )
-                    if br_name in mutual_branches:
-                        key = (br_name, src_name)
-                        # First appearance wins -- deliberately *not* ``+=``.
-                        # ``key`` carries the source, so the guard spans every
-                        # path of that source, exactly like ``branch_signs`` in
-                        # :meth:`ElectricalNetwork._compute_phase_currents_from_paths`.
-                        # An earlier revision accumulated with a merely
-                        # per-path ``seen`` set, so a branch shared by two
-                        # parallel routes of one source (e.g. the common
-                        # trunk of a ring) received a factor of 2.0 instead
-                        # of 1.0. That double-counted the Carson coupling and
-                        # put the transient EPR 32 % above the stationary
-                        # solver at the fault bus on a five-bus ring; with
-                        # the ring opened, so that only one path remained,
-                        # the two solvers agreed to 1e-6 -- which is what
-                        # made the defect invisible in the existing tests.
-                        if key not in phase_factors:
-                            coeff = branch.parallel_coefficient
-                            if coeff is None:
-                                coeff = 1.0
-                            phase_factors[key] = sign * coeff
-                    current_bus = next_bus
-            if voltage_src_skipped:
-                logger.warning(
-                    "State-space mutual coupling skipped for voltage "
-                    "sources: %s. The state-space solver currently models "
-                    "the Carson-style coupling only for current-source "
-                    "phase currents.",
-                    voltage_src_skipped,
-                )
+        # The split enters as an effective coupling per (branch, source):
+        # ``R' + j w M' = (R_mut + j w M_mut) * alpha`` at ``f_eval``. A complex
+        # split -- routes of different R/L ratio -- is thereby reproduced
+        # exactly in the ``f_eval`` steady state; freezing only ``Re(alpha)``
+        # put the fault EPR of a cable/overhead-line ring 4.4 % low. For a
+        # real split the fold is the plain product ``alpha * (R_mut, M_mut)``.
+        for (br_name, src_name), alpha in phase_factors.items():
+            info = mutual_branches[br_name]
+            src_col = src_names.index(src_name)
+            R_eff, M_eff = self._folded_coupling(
+                info["R_mut"], info["M_mut"], alpha, omega_eval
+            )
+            info["folded"][src_name] = (R_eff, M_eff)
+            M_per_L = M_eff / info["L_self"]
+            K_mut = (
+                info["R_self"] * M_eff - R_eff * info["L_self"]
+            ) / (info["L_self"] ** 2)
 
-            for (br_name, src_name), factor in phase_factors.items():
-                info = mutual_branches[br_name]
-                src_col = src_names.index(src_name)
-                M_per_L = info["M_mut"] / info["L_self"]
-                K_mut = (
-                    info["R_self"] * info["M_mut"]
-                    - info["R_mut"] * info["L_self"]
-                ) / (info["L_self"] ** 2)
-
-                # KCL feedforward: substitution moves -B_L * (M/L_self) * I_p
-                # to the input side. Since the branch state convention is
-                # to->from (+1 at to, -1 at from in B_L), the contribution
-                # at the to-bus is +M_per_L*factor and at the from-bus is
-                # -M_per_L*factor.
-                B_kcl[info["to_idx"], src_col] += M_per_L * factor
-                B_kcl[info["from_idx"], src_col] -= M_per_L * factor
-                # EMF in dz/dt
-                B_emf[info["state_idx"], src_col] += K_mut * factor
+            # KCL feedforward: substitution moves -B_L * (M/L_self) * I_p
+            # to the input side. Since the branch state convention is
+            # to->from (+1 at to, -1 at from in B_L), the contribution
+            # at the to-bus is +M_per_L and at the from-bus is -M_per_L.
+            B_kcl[info["to_idx"], src_col] += M_per_L
+            B_kcl[info["from_idx"], src_col] -= M_per_L
+            # EMF in dz/dt
+            B_emf[info["state_idx"], src_col] += K_mut
 
         # Stored for the observation-time correction below.
         self.__mutual_for_output = (mutual_branches, phase_factors, src_names)
@@ -1962,17 +2263,20 @@ class TransientStudy:
         for branch_name in self._obs_branches:
             if branch_name in ind_state_offset:
                 # Inductive branch state. With the mutual substitution
-                # ``z = i_shield + (M/L_self) * I_phase`` the observable
-                # shield current is ``i_shield = z - (M/L_self) * I_phase``.
+                # ``z = i_shield + (M'/L_self) * I_src`` the observable
+                # shield current is ``i_shield = z - (M'/L_self) * I_src``,
+                # ``M'`` the folded mutual inductance of each source.
                 i_observed = x_out[:, ind_state_offset[branch_name]].copy()
-                mut_branches, phase_facts, _ = self.__mutual_for_output
+                mut_branches, _, _ = self.__mutual_for_output
                 if branch_name in mut_branches:
                     info = mut_branches[branch_name]
-                    M_per_L = info["M_mut"] / info["L_self"]
                     for src_col, src_name in enumerate(src_names):
-                        factor = phase_facts.get((branch_name, src_name), 0.0)
-                        if factor != 0.0:
-                            i_observed -= M_per_L * factor * u[:, src_col]
+                        folded = info["folded"].get(src_name)
+                        if folded is not None:
+                            M_eff = folded[1]
+                            i_observed -= (
+                                M_eff / info["L_self"]
+                            ) * u[:, src_col]
                 i_branch_t[branch_name] = i_observed.tolist()
             elif branch_name in res_branch_lookup:
                 fi, ti, G = res_branch_lookup[branch_name]
