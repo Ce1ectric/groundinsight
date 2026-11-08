@@ -4,7 +4,7 @@
 Inverse determination of the maximum admissible rho-f characteristic at
 selected buses.
 
-Given an existing network with a configured fault, sources and paths, this
+Given an existing network with a configured fault and sources, this
 module computes the largest uniform scaling factor ``c`` of the selected
 buses' specific earth resistance ``rho`` such that the RMS earth potential
 rise (EPR) at the fault bus stays at or below a user-supplied limit
@@ -222,8 +222,11 @@ def find_max_rho_scaling(
     ----------
     network : Network
         The simulation network. Must already contain the named fault, the
-        sources, the buses listed in ``bus_names`` and consistent paths
-        from sources to fault.
+        sources and the buses listed in ``bus_names``. Paths are not
+        needed: the default ``phase_current_mode="auto"`` of
+        :func:`run_fault` solves the phase-conductor network, and the legacy
+        ``"paths"`` mode (through ``run_fault_kwargs``) enumerates the paths
+        it needs itself.
     fault : str
         Name of the fault to evaluate. Used as ``active_fault`` during
         every bisection step. The former keyword ``fault_name`` is accepted

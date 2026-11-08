@@ -125,8 +125,9 @@ def evaluate_max_epr_under_k(
     Parameters
     ----------
     network : Network
-        The simulation network. Sources, branches, paths and the buses to
-        be swept must already be configured.
+        The simulation network. Sources, branches and the buses to be swept
+        must already be configured; paths are not needed (see
+        :func:`~groundinsight.analysis.inverse_rho.find_max_rho_scaling`).
     bus_names : list of str
         Buses whose impedance is rewritten and which are swept as fault
         locations one by one. Must be non-empty and refer to buses in
