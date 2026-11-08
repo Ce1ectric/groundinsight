@@ -434,6 +434,68 @@ migration checklist.
   leaves out a cross term with the decaying DC offset, which can have either
   sign: for 1000 A AC, 700 A DC, R/X = 0.1 and `T_k` = 0.5 s, the numerically
   integrated current gives an `I_th` 3.7 % above or 4.4 % below it. (PH10)
+- **`run_fault` solves the phase-conductor network sparse, once per frequency for all sources.**
+  The automatic phase-current split (`phase_current_mode="auto"`, the default)
+  assembled the phase network as a dense `n x n` array and called
+  `numpy.linalg.solve` once per source and frequency — the dominant cost of a
+  run, growing faster than `n**2` and multiplied by the number of sources. The
+  reduced phase network is now assembled straight into CSC, factorised once
+  per frequency with SciPy's `splu` and solved for one right-hand side with a
+  column per source. Measured interleaved in one process (CPU time, median of
+  three, seven frequencies): phase stage 17.3 s → 0.017 s on a 2000-bus radial
+  feeder with three sources, 3.17 s → 0.015 s on a 2000-bus ring. The proxy
+  rule (including a broken shield, PH3), the `PHASE_PROXY` and
+  `SOURCE_WITHOUT_PHASE_PATH` diagnostics, the errors and `phase_currents` are
+  unchanged. On long radial feeders the sparse factorisation is also the more
+  accurate one: 8e-14 against the exact KCL currents at 300 buses, where the
+  dense solve is 1.9e-12 off. (P1, P13)
+- **The nodal admittance matrices are assembled straight into CSC, and only
+  those are kept.** The positions of all stamps are laid out once per network
+  and each frequency only sums its admittances into them, in the order the
+  former dense loops added them. Peak memory of `run_fault` (tracemalloc, ring,
+  seven frequencies): 146 → 25 MB at 1000 buses, 579 → 51 MB at 2000, 903 →
+  63 MB at 2500; at 4000 buses 101 MB, where the dense kernel needs 2.3 GB
+  (fit of the sizes measured here, exponent 1.99; the audit measured 2.31 GB).
+  The sparse kernel grows linearly (exponent 1.00). The new attribute `ElectricalNetwork.Y_sparse`
+  holds the CSC matrices the solver factorises; `ElectricalNetwork.Y_matrices`
+  is now a read-only view that materialises a dense copy when it is read, and
+  so is `ElectricalNetwork.earthing_admittance_matrix(freq)`: `Z_E` is computed
+  from the sparse earthing matrix (the solved one with the Thevenin loop
+  closures taken out source by source, bit for bit the entries of the dense
+  definition), with the cached factorisation when there is no voltage source.
+  Migration: code that *wrote* into `Y_matrices` to change the solve has to
+  write into `Y_sparse` (nothing in the package did; two pass-18 mutation tests
+  were retargeted). (P2, PH4)
+- **`run_fault` is 4× to 68× faster on networks of 500 to 2500 buses** (P1, P2,
+  P5a, P6 together; CPU time, median of three interleaved runs, seven
+  frequencies): ring 1000 1.06 → 0.12 s, ring 2000 4.04 → 0.22 s, ring 2500
+  7.8 → 0.30 s, radial 2000 with three sources 18.1 → 0.27 s, 40 × 40 mesh
+  with four sources 7.0 → 0.35 s. At 4000 buses: ring 0.53 s, radial with
+  three sources 0.57 s, 50 × 50 mesh with four sources 0.59 s; the dense
+  kernel does not fit into 2 GB there — extrapolated from the sizes measured
+  here it needs about 20 s, 200 s and 20 s (audit pass 19 measured 28 s,
+  143 s and 27 s on another machine). The sparse kernel's time grows almost
+  linearly (exponent 1.12 from 1000 to 8000 buses; ring 8000: 1.16 s, peak
+  203 MB). What remains on large networks is mostly the result objects (P5):
+  0.2–0.3 s of the 0.53 s of the 4000-bus ring.
+- **`bus_response` and `analyze_cuts` factorise the sparse matrix instead of
+  solving a dense copy.** 2000-bus ring at seven frequencies: `bus_response`
+  5.6 → 0.032 s (it solved a second dense system for the earthing columns of
+  `fault_driving_point`; those now come from the same factorisation, or from a
+  sparse one of the earthing matrix when a voltage source is present),
+  `analyze_cuts` 2.8 → 0.031 s (CPU, median of three); `z_network`, the
+  driving-point impedance and `z_fault_open` agree to 4e-16. (P7)
+- **Results move in the last digits, and more on condition-limited systems.**
+  The admittances come from NumPy's instead of Python's complex division
+  (different in the last bit for about a quarter of all values) and the
+  factorisations are sparse. Where the system is badly conditioned by
+  construction — the 0 Hz bin with a short replaced by its stand-in
+  (`sqrt(eps)` times the smallest impedance, condition numbers 1e8 to 1e11) —
+  results stay within the forward-error bound `kappa * eps` (at most 3 % of it
+  in the test battery) but may differ from 0.6.0 by up to about 1e-7 relative:
+  both kernels are up to 6e-8..8e-8 away from the exact solution there. Tests
+  that compare such values bit-exactly or at 1e-9 need a tolerance; two were
+  adjusted. (P13)
 
 ### Deprecated
 
@@ -1125,6 +1187,40 @@ migration checklist.
   the new pages. A build hook, `docs/hooks/reference_cases.py`, writes the
   reference-case table. `mkdocs-jupyter` is limited to `*.ipynb`: its default
   turned every `*.py` file under `docs/` into a notebook page. (DOC13)
+- **One pass over the model per assembly.** Impedances, flags and topology are
+  gathered into `(elements, frequencies)` arrays once (`_NetworkTables`), with
+  the 0 Hz stand-in applied to whole columns; the passivity rules, the Thevenin
+  loop closures (`thevenin_loop_admittances` reads the same table rule the
+  assembly stamps with), the mutual Norton injections, the floating-network
+  guard, the electrode and shield currents and the result rows run on those
+  arrays. The element-wise passivity check (0.18 s on a 4000-bus ring at seven
+  frequencies, against 0.7 ms vectorised) still raises its full message when
+  the vectorised one fails. (P6)
+- **The state fingerprint is a BLAKE2 digest of the gathered arrays** with the
+  same coverage as the former tuple (every bus, branch and voltage source by
+  name, values at all stored frequencies). A build digests the tables the
+  assembly has gathered (about 5 ms on a 4000-bus ring at seven frequencies)
+  instead of a separate pass over the model (about 26 ms);
+  `matches_network_state` reads the model afresh and costs about the same as
+  before (about 25 ms). (P6)
+- **Result rows are built with the cyclic garbage collector paused**
+  (`_gc_paused`: restores a collector that was on, also on error; pauses nest
+  and overlap across threads; a collector the caller switched off stays off).
+  Result-building stage: 0.49 → 0.19 s on a 4000-bus ring at seven
+  frequencies, 0.69 → 0.26 s on a 10 000-bus ring at three. (P5a)
+- **Equivalence harness for the stationary kernel.** `tests/_dense_oracle.py`
+  re-implements the model densely from the public data (no `ElectricalNetwork`
+  code), optionally with iterative refinement in `clongdouble`;
+  `tests/test_audit_pass19_performance.py` compares every physical quantity of
+  150 random and 7 structured networks (n ≤ 300) at 1e-12 — with the earth
+  group oriented as the kernel orients it and `Z_E = Z_dp(F)` at every bin —
+  checks the sparse matrices against the dense assembly (1e-15, and bit for
+  bit with the same division), guards against dense `n x n` allocations (with
+  current and with Thevenin sources, also in `bus_response`/`analyze_cuts`)
+  and checks linear memory, checks large networks against exact (tree KCL,
+  closed-form ring split) and refined references, checks that the sparse
+  matrices and their dense view travel together through `copy.deepcopy` and
+  `pickle`, and holds the `slow`-marked size acceptance. (P1, P2, P6, P7, P13)
 
 ## [0.6.0] — 2026-09-01
 
