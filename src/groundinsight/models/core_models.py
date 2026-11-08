@@ -285,6 +285,128 @@ def _magnitude_angle(
     }
 
 
+class _PhasorColumn:
+    """
+    The phasors of one result quantity, collected row by row for a frame.
+
+    :meth:`Network.res_buses` and :meth:`Network.res_branches` used to build
+    one dict per row and take magnitude and angle of every phasor through
+    :func:`_magnitude_angle`, one NumPy scalar at a time -- on a 4000-bus
+    ring at seven frequencies the frame took half as long as the solve that
+    produced it (finding P11). This collects real and imaginary parts once
+    and computes both columns on whole arrays, with the same arithmetic:
+    ``numpy.hypot`` agrees bit for bit with Python's ``abs`` of a complex
+    number (``numpy.abs`` of a complex array does not), and
+    ``numpy.angle(z) * 180 / numpy.pi`` is the expression the scalar path
+    evaluates.
+
+    A row is one of three kinds: a phasor, a missing phasor (``None``, both
+    columns ``null``), or an RMS row (magnitude given as a number or
+    ``None``, angle ``null``).
+    """
+
+    def __init__(self) -> None:
+        self.real: List[float] = []
+        self.imag: List[float] = []
+        self.missing: List[int] = []
+        self.rms_rows: List[int] = []
+        self.rms_values: List[Optional[float]] = []
+
+    def phasor(self, value: Any) -> None:
+        """
+        Append a phasor row.
+
+        Parameters
+        ----------
+        value : ComplexNumber, complex or None
+            The phasor; ``None`` for a missing entry.
+        """
+        if value is None:
+            self.missing.append(len(self.real))
+            self.real.append(0.0)
+            self.imag.append(0.0)
+        else:
+            self.real.append(value.real)
+            self.imag.append(value.imag)
+
+    def rms(self, value: Optional[float]) -> None:
+        """
+        Append an RMS row.
+
+        Parameters
+        ----------
+        value : float or None
+            The RMS magnitude; the angle of an RMS row is always ``null``.
+        """
+        self.rms_rows.append(len(self.real))
+        self.rms_values.append(value)
+        self.real.append(0.0)
+        self.imag.append(0.0)
+
+    def series(self, magnitude_key: str, angle_key: str) -> Tuple[pl.Series, pl.Series]:
+        """
+        The magnitude and angle columns.
+
+        Parameters
+        ----------
+        magnitude_key, angle_key : str
+            Column names.
+
+        Returns
+        -------
+        tuple of polars.Series
+            ``Float64`` magnitude and angle in degrees, ``null`` where the
+            row kind says so.
+        """
+        real = np.asarray(self.real, dtype=float)
+        imag = np.asarray(self.imag, dtype=float)
+        phasors = np.empty(real.shape, dtype=complex)
+        phasors.real = real
+        phasors.imag = imag
+        magnitude = np.hypot(real, imag)
+        angle = np.angle(phasors) * 180 / np.pi
+        rms_rows = np.asarray(self.rms_rows, dtype=np.int64)
+        rms_null: List[int] = []
+        if rms_rows.size:
+            values = [np.nan if v is None else v for v in self.rms_values]
+            magnitude[rms_rows] = np.asarray(values, dtype=float)
+            rms_null = [
+                row for row, v in zip(self.rms_rows, self.rms_values) if v is None
+            ]
+        magnitude_series = pl.Series(magnitude_key, magnitude, dtype=pl.Float64)
+        angle_series = pl.Series(angle_key, angle, dtype=pl.Float64)
+        null_magnitude = self.missing + rms_null
+        if null_magnitude:
+            magnitude_series.scatter(np.asarray(null_magnitude, dtype=np.int64), None)
+        null_angle = self.missing + self.rms_rows
+        if null_angle:
+            angle_series.scatter(np.asarray(null_angle, dtype=np.int64), None)
+        return magnitude_series, angle_series
+
+
+def _frequency_series(frequencies: List[float], rms_rows: List[int]) -> pl.Series:
+    """
+    The ``frequency_Hz`` column of a result frame: ``null`` on RMS rows.
+
+    Parameters
+    ----------
+    frequencies : list of float
+        One frequency per row (any placeholder on RMS rows).
+    rms_rows : list of int
+        The RMS rows.
+
+    Returns
+    -------
+    polars.Series
+        ``Float64`` column.
+    """
+    series = pl.Series("frequency_Hz", np.asarray(frequencies, dtype=float),
+                       dtype=pl.Float64)
+    if rms_rows:
+        series.scatter(np.asarray(rms_rows, dtype=np.int64), None)
+    return series
+
+
 def _phasor(mapping: Optional[Dict[float, Any]], frequency: float) -> Optional[complex]:
     """
     One entry of a per-frequency result mapping, as a complex number.
@@ -4274,41 +4396,43 @@ class Network(ValidatedAssignmentModel):
         if fault not in self.results:
             raise ValueError(f"No results available for fault '{fault}'.")
 
+        # Column-wise (P11): one pass over the result objects collects the
+        # phasors; magnitudes and angles are then computed on whole arrays
+        # (see _PhasorColumn). Rows, order, schema and values are those of
+        # the former row-by-row construction.
         result = self.results[fault]
-        data = []
+        names: List[str] = []
+        frequencies: List[float] = []
+        rms_rows: List[int] = []
+        epr, current, injection = _PhasorColumn(), _PhasorColumn(), _PhasorColumn()
         for result_bus in result.buses:
-            # Add frequency-specific data
+            ia_freq = result_bus.ia_freq
+            inj_freq = result_bus.i_inj_freq
             for freq, voltage in result_bus.uepr_freq.items():
-                current = result_bus.ia_freq.get(freq)
-                injection = result_bus.i_inj_freq.get(freq)
-                data.append(
-                    {
-                        "bus_name": result_bus.name,
-                        "fault": fault,
-                        "frequency_Hz": float(freq),
-                        "is_rms": False,
-                        **_magnitude_angle(voltage, "EPR_V", "EPR_degree"),
-                        **_magnitude_angle(current, "I_bus_A", "I_bus_degree"),
-                        **_magnitude_angle(injection, "I_inj_A", "I_inj_degree"),
-                    }
-                )
-            # Add RMS values
-            data.append(
-                {
-                    "bus_name": result_bus.name,
-                    "fault": fault,
-                    "frequency_Hz": None,
-                    "is_rms": True,
-                    "EPR_V": result_bus.uepr,
-                    "EPR_degree": None,
-                    "I_bus_A": result_bus.ia,
-                    "I_bus_degree": None,
-                    "I_inj_A": result_bus.i_inj,
-                    "I_inj_degree": None,
-                }
-            )
+                names.append(result_bus.name)
+                frequencies.append(float(freq))
+                epr.phasor(voltage)
+                current.phasor(ia_freq.get(freq))
+                injection.phasor(inj_freq.get(freq))
+            rms_rows.append(len(names))
+            names.append(result_bus.name)
+            frequencies.append(0.0)
+            epr.rms(result_bus.uepr)
+            current.rms(result_bus.ia)
+            injection.rms(result_bus.i_inj)
 
-        return pl.DataFrame(data, schema=RES_BUSES_SCHEMA)
+        is_rms = np.zeros(len(names), dtype=bool)
+        is_rms[rms_rows] = True
+        columns = [
+            pl.Series("bus_name", names, dtype=pl.Utf8),
+            pl.Series("fault", [fault] * len(names), dtype=pl.Utf8),
+            _frequency_series(frequencies, rms_rows),
+            pl.Series("is_rms", is_rms, dtype=pl.Boolean),
+            *epr.series("EPR_V", "EPR_degree"),
+            *current.series("I_bus_A", "I_bus_degree"),
+            *injection.series("I_inj_A", "I_inj_degree"),
+        ]
+        return pl.DataFrame(columns, schema=RES_BUSES_SCHEMA)
 
     def res_branches(self, fault: Optional[str] = None) -> pl.DataFrame:
         """
@@ -4348,36 +4472,34 @@ class Network(ValidatedAssignmentModel):
         if fault not in self.results:
             raise ValueError(f"No results available for fault '{fault}'.")
 
+        # Column-wise (P11), as in res_buses. A falsy entry (``None``, or a
+        # plain complex zero in a hand-built result) has never produced a row.
         result = self.results[fault]
-        data = []
+        names: List[str] = []
+        frequencies: List[float] = []
+        rms_rows: List[int] = []
+        shield = _PhasorColumn()
         for result_branch in result.branches:
-            # Add frequency-specific data
             for freq, current in result_branch.i_s_freq.items():
                 if current:
-                    data.append(
-                        {
-                            "branch_name": result_branch.name,
-                            "fault": fault,
-                            "frequency_Hz": float(freq),
-                            "is_rms": False,
-                            **_magnitude_angle(
-                                current, "I_branch_A", "I_branch_degree"
-                            ),
-                        }
-                    )
-            # Add RMS current
-            data.append(
-                {
-                    "branch_name": result_branch.name,
-                    "fault": fault,
-                    "frequency_Hz": None,
-                    "is_rms": True,
-                    "I_branch_A": result_branch.i_s,
-                    "I_branch_degree": None,
-                }
-            )
+                    names.append(result_branch.name)
+                    frequencies.append(float(freq))
+                    shield.phasor(current)
+            rms_rows.append(len(names))
+            names.append(result_branch.name)
+            frequencies.append(0.0)
+            shield.rms(result_branch.i_s)
 
-        return pl.DataFrame(data, schema=RES_BRANCHES_SCHEMA)
+        is_rms = np.zeros(len(names), dtype=bool)
+        is_rms[rms_rows] = True
+        columns = [
+            pl.Series("branch_name", names, dtype=pl.Utf8),
+            pl.Series("fault", [fault] * len(names), dtype=pl.Utf8),
+            _frequency_series(frequencies, rms_rows),
+            pl.Series("is_rms", is_rms, dtype=pl.Boolean),
+            *shield.series("I_branch_A", "I_branch_degree"),
+        ]
+        return pl.DataFrame(columns, schema=RES_BRANCHES_SCHEMA)
 
     def res_fault(self, fault: str) -> pl.DataFrame:
         """
