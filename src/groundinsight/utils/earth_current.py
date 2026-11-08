@@ -59,14 +59,14 @@ least ``1/pi`` of their summed magnitudes.
 
 Rounding noise
 --------------
-The half-plane is threshold-free, and that is exactly what made it fragile at
-the edges (audit finding P9). A bus whose electrode current is zero in exact
-arithmetic comes out of the solver as ``1e-17`` of the largest one, at an
-arbitrary angle -- and an arbitrary angle lands in an arbitrary group. Two
-solvers that agree to ``1e-15`` then reported different groups, and where the
-group size decided which group was named feeding, a different ``I_E`` sign, a
-different ``U_E`` and an earthing impedance that moved by a factor of 2.2. Three
-rules close that:
+The half-plane is threshold-free, and that alone makes it fragile at the
+edges. A bus whose electrode current is zero in exact arithmetic comes out of
+the solver as ``1e-17`` of the largest one, at an arbitrary angle -- and an
+arbitrary angle lands in an arbitrary group. Two solvers that agree to
+``1e-15`` would then report different groups, and where the group size
+decided which group is named feeding, a different ``I_E`` sign, a different
+``U_E`` and an earthing impedance that moves by a factor of 2.2. Three rules
+close that:
 
 * **Noise threshold.** A current with ``|I_a| <= NOISE_REL * max|I_a|``
   (``NOISE_REL = 1e-9``) counts as zero. Physically it is irrelevant to ``I_E``;
@@ -75,12 +75,12 @@ rules close that:
   the fault bus has no electrode (or only a noise-level current), the caller
   passes the fault-bus potential as ``anchor``: the feeding group is the one
   whose sum is in phase with it -- the group a resistive electrode at the fault
-  bus would join. Only when neither decides do the group sizes, which noise can
-  no longer tip, and the names. On 823 frequency points of a random battery in
-  which the fault bus *does* carry an electrode, the anchor rule picked the
-  same group as the fault-bus electrode in every case (smallest margin
-  ``cos = 0.16``); the size rule it replaces named the source side feeding in 33
-  of 90 electrode-less cases.
+  bus would join. Only when neither decides do the group sizes, which noise
+  cannot tip after the threshold, and the names. On 823 frequency points of a
+  random battery in which the fault bus *does* carry an electrode, the anchor
+  rule picked the same group as the fault-bus electrode in every case
+  (smallest margin ``cos = 0.16``); a size rule alone named the source side
+  feeding in 33 of 90 electrode-less cases.
 * **Vanishing reference.** :func:`earth_current_vanishes` tells the caller when
   every electrode current is noise against the fault current -- the fault
   current then returns entirely through the shields, ``I_E`` is zero to within
@@ -106,7 +106,7 @@ __all__ = [
 #: one), the whole set of electrode currents (against the fault current) or the
 #: fault-bus EPR (against the largest EPR) counts as rounding noise. Chosen far
 #: above double-precision noise (``~1e-16``) and far below any physically
-#: relevant share; see the module docstring and audit finding P9 / F14.
+#: relevant share; see the module docstring.
 NOISE_REL = 1e-9
 
 #: Smallest ``|cos|`` between the group sum and the anchor phasor at which the
@@ -175,11 +175,10 @@ def earthing_voltage(
     passing the most current into the soil counts the most.
 
     It is reported as ``ResultReductionFactor.u_earthing_group``, a
-    diagnostic. Until audit pass 19 it was reported as the earthing voltage
-    ``U_E`` of EN 50522; since decision F4 ``U_E`` is the EPR at the fault
-    bus, because on a long bonded run the group reaches into the decaying
-    tail of the potential profile and its mean lies 43 % below the fault-bus
-    EPR (unconservative for a touch-voltage assessment).
+    diagnostic, and not as the earthing voltage ``U_E`` of EN 50522, which is
+    the EPR at the fault bus: on a long bonded run the group reaches into the
+    decaying tail of the potential profile and its mean lies 43 % below the
+    fault-bus EPR (unconservative for a touch-voltage assessment).
 
     The second return value says whether the lumped picture applies at all:
     the weighted phasor sum over the weighted sum of magnitudes, in ``(0, 1]``.
@@ -225,7 +224,7 @@ def earth_current_vanishes(
     electrode is the typical case -- and ``I_E`` is zero to within rounding.
     The electrode currents that remain are of order ``1e-17 * |I_F|`` at
     arbitrary angles; splitting them would turn noise into a group, an
-    earth-return current and a reduction factor (audit finding P9).
+    earth-return current and a reduction factor.
 
     Parameters
     ----------
@@ -310,9 +309,9 @@ def split_earth_currents(
     Notes
     -----
     Inputs without noise-level currents and with a current at
-    ``reference_bus`` give bit-for-bit the result of the implementation
-    before the noise rules (audit finding P9); the test suite keeps that
-    implementation as an oracle.
+    ``reference_bus`` give bit-for-bit the result of the plain half-plane
+    split without the noise rules; the test suite keeps that split as an
+    oracle.
 
     Examples
     --------
@@ -350,8 +349,8 @@ def split_earth_currents(
     total_magnitude = float(np.abs(values).sum())
 
     # Every membership test below goes against a set built *once*. Building
-    # ``set(chosen)`` inside the comprehensions -- once per bus -- made the
-    # split quadratic: 12 s per frequency at 20 000 buses (P3).
+    # ``set(chosen)`` inside the comprehensions -- once per bus -- would make
+    # the split quadratic: 12 s per frequency at 20 000 buses (P3).
     if feeding_buses is not None:
         pinned = set(feeding_buses)
         chosen = [n for n in names if n in pinned]
@@ -459,17 +458,17 @@ def _best_half_plane(
     -----
     The window end of every start ``i`` is found with one vectorised
     :func:`numpy.searchsorted` instead of a scalar ``while`` loop (P3). It is
-    the *same* index the loop produced: the loop carried ``j`` over from the
-    previous start, clamped it to at least ``i`` and advanced it while
+    the *same* index such a loop finds: the loop carries ``j`` over from the
+    previous start, clamps it to at least ``i`` and advances it while
     ``j < i + n`` and ``doubled_angles[j] < sorted_angles[i] + pi``. Because
     ``doubled_angles`` is sorted and the limits never decrease with ``i``,
     the first index whose angle reaches the limit is
     ``s_i = searchsorted(doubled_angles, limit_i, side="left")``, the carried
     ``j`` never exceeds ``min(max(s_i, i), i + n)``, and the loop therefore
-    stopped exactly there. The candidate sums are the same IEEE subtractions
+    stops exactly there. The candidate sums are the same IEEE subtractions
     of the same prefix sums, and :func:`numpy.argmax` returns the *first*
     maximum, which is the loop's strict ``>`` against a running best. The
-    result is bit-for-bit what the loop returned; the test suite keeps the
+    result is bit-for-bit what the loop returns; the test suite keeps the
     loop as an oracle.
     """
     n = len(values)

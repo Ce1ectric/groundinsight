@@ -7,8 +7,7 @@ A GUI runs a study in a worker thread, draws a progress bar and offers a
 cancel button; a server reports job progress and honours a client's abort.
 Python cannot stop a thread from outside, so cancellation has to be
 *cooperative*: the study asks, between two units of work, whether it should go
-on. Until audit pass 19 none of the long-running entry points had such a hook
-(finding GUI5), and a thread running a sweep could only be waited for.
+on. Without such a hook a thread running a sweep could only be waited for.
 
 The protocol is shared by :func:`~groundinsight.run_sweep`,
 :func:`~groundinsight.run_outage_study`,

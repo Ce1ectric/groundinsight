@@ -226,10 +226,12 @@ def test_the_remote_source_case_is_unchanged():
 def test_grounding_impedance_docstring_names_the_current_definition():
     # Audit pass 19, decision F4: Z_G = Z_E is the driving-point impedance of
     # the earthing network at the fault bus; the group quotient U_E / I_E it
-    # named before is kept as z_earthing_group (see PQ-PH4).
+    # named before is kept as z_earthing_group (see PQ-PH4). The docstring
+    # states the definition and why the group quotient is not it; which
+    # release changed the definition is CHANGELOG material (decision D4).
     doc = ElectricalNetwork.compute_grounding_impedance.__doc__
     assert "Z_G = Z_E = Z_dp(F)" in doc
-    assert "pre-0.6.0" in doc
+    assert "z_earthing_group" in doc and "45 %" in doc
 
 
 def test_the_rms_convention_is_written_down_where_it_is_defined():

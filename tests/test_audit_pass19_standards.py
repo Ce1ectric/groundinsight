@@ -514,3 +514,130 @@ def test_module_headers_name_their_own_file():
         if not any((base / named).resolve() == (ROOT / rel).resolve() for base in bases if named):
             wrong.append(f"{rel}: {first!r}")
     assert not wrong, wrong
+
+
+# ---------------------------------------------------------------------------
+# D4 -- docstrings and comments state contract and reason, not history
+# ---------------------------------------------------------------------------
+
+#: The shipped code the rule applies to. The test suite is left out on
+#: purpose: its files and docstrings are organised by audit pass and finding.
+SHIPPED_TREES = ("src/groundinsight", "gui/groundinsight_gui", "scripts")
+
+#: Phrases that only ever date a change. A finding ID on its own may stay
+#: where it names the rule a test pins ("guards against PH3"); the audit pass,
+#: release or decision that changed something belongs in CHANGELOG.md.
+HISTORY_MARKERS = re.compile(
+    r"\baudit[- ]pass(?:es)?\b"
+    r"|\baudit finding\b"
+    r"|\bdecision [A-Z]{1,3}\d+\b"
+    r"|\b(?:until|up to|since|before|as of)\s+(?:v|version\s+)?\d+\.\d+(?:\.\d+)?\b"
+    r"|\b(?:added|changed|introduced)\s+in\s+v?\d+\.\d+"
+    r"|\bpre-v?\d+\.\d+"
+    r"|\b(?:until|since|before|after|up to)\s+pass\s+\d+\b"
+    r"|\bformerly\b|\bhistorically\b|\bhistorical behaviou?r\b"
+    r"|\bused to be\b",
+    re.IGNORECASE,
+)
+
+
+def _prose_blocks(text: str) -> Iterator[Tuple[int, str]]:
+    """
+    The comments and docstrings of a module, each with whitespace collapsed.
+
+    Consecutive comment lines form one block, so a phrase broken across two
+    lines (``audit`` / ``pass 19``) is still one phrase.
+
+    Parameters
+    ----------
+    text : str
+        Source of a Python module.
+
+    Yields
+    ------
+    tuple of (int, str)
+        First line of the block and its text.
+    """
+    import ast
+    import io
+    import tokenize
+
+    run: List[str] = []
+    start = last = 0
+    for token in tokenize.generate_tokens(io.StringIO(text).readline):
+        if token.type != tokenize.COMMENT:
+            continue
+        line, words = token.start[0], token.string.lstrip("#:").strip()
+        if run and line == last + 1:
+            run.append(words)
+        else:
+            if run:
+                yield start, " ".join(run)
+            run, start = [words], line
+        last = line
+    if run:
+        yield start, " ".join(run)
+    tree = ast.parse(text)
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        first = node.body[0] if node.body else None
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            yield first.value.lineno, " ".join(first.value.value.split())
+
+
+def _history_narration(sources: Dict[str, str]) -> List[str]:
+    """
+    Every history marker in the comments and docstrings of ``sources``.
+
+    Parameters
+    ----------
+    sources : dict of str to str
+        Module path to module source.
+
+    Returns
+    -------
+    list of str
+        ``"path:line: marker"`` per hit.
+    """
+    return [
+        f"{rel}:{line}: {match.group(0)!r}"
+        for rel, text in sources.items()
+        for line, block in _prose_blocks(text)
+        for match in HISTORY_MARKERS.finditer(block)
+    ]
+
+
+def test_shipped_docstrings_and_comments_carry_no_history():
+    """No comment or docstring of the shipped code dates a change (D4)."""
+    sources = {
+        path.relative_to(ROOT).as_posix(): path.read_text(encoding="utf-8")
+        for tree in SHIPPED_TREES
+        for path in sorted((ROOT / tree).rglob("*.py"))
+        if "__pycache__" not in path.parts
+    }
+    assert len(sources) > 50
+    found = _history_narration(sources)
+    assert not found, "history belongs in CHANGELOG.md:\n" + "\n".join(found)
+
+
+def test_the_history_check_finds_a_planted_passage():
+    """Second method: planted passages in both places, one of them broken
+    across two comment lines, are each found; runtime wording is not."""
+    planted = (
+        "# Until 0.6.1 the matrix was dense. It is used to\n"
+        "# build Y; since audit\n"
+        "# pass 19 it is sparse.\n"
+        "def f():\n"
+        '    """Return Y (audit finding P2). Used to anchor the group."""\n'
+    )
+    found = _history_narration({"planted.py": planted})
+    assert found == [
+        "planted.py:1: 'Until 0.6.1'",
+        "planted.py:1: 'audit pass'",
+        "planted.py:5: 'audit finding'",
+    ]

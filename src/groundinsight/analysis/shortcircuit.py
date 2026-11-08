@@ -429,8 +429,8 @@ def sources_feeding(network: Network, fault_name: str) -> List[str]:
 
     Uses the enumerated paths when they are available, because they are what
     the legacy ``phase_current_mode="paths"`` solve actually superposes.
-    Since audit pass 18 the default mode no longer enumerates them, so the
-    next step asks the same question directly:
+    The default mode does not enumerate them, so the next step asks the
+    same question directly:
     :meth:`~groundinsight.models.core_models.Network.sources_reaching` runs a
     breadth-first search over the active sub-graph and returns exactly the
     sources a full enumeration would have found. Without it the empty path

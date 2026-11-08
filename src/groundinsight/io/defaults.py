@@ -46,11 +46,10 @@ class ImportDefaults(BaseModel):
         :class:`BranchType` used for a **closed bus-bus switch**. A closed
         switch bonds two grounding systems; dropping it makes the bus behind
         it look galvanically isolated and report 0 V, which is the one answer
-        a grounding study must never produce by accident. ``None`` (the
-        default) keeps the historical behaviour -- the switch is not imported
-        -- but the importer now says so, and lists it in
-        :func:`~groundinsight.io.preview_pandapower_import` as a skipped
-        ``"switch"`` row.
+        a grounding study must never produce by accident. With ``None`` (the
+        default) the switch is not imported, and the importer says so and
+        lists it in :func:`~groundinsight.io.preview_pandapower_import` as a
+        skipped ``"switch"`` row.
     switch_length_km : float
         Length assigned to a branch created from a closed switch. A switch
         has no length; a small non-zero value is used because a zero-length
@@ -121,9 +120,8 @@ class ImportDefaults(BaseModel):
     def _validate_frequencies(cls, value: List[float]) -> List[float]:
         """Apply the same rules as ``Network.frequencies``, at import time.
 
-        The default used to be an empty list, and the only thing that noticed
-        was ``from_pandapower`` -- after the caller had already assembled the
-        types. ``Network`` rejects an empty, duplicated, negative or
+        Otherwise only ``from_pandapower`` would notice an empty list -- after
+        the caller had already assembled the types. ``Network`` rejects an empty, duplicated, negative or
         non-finite frequency list; an ``ImportDefaults`` that cannot produce a
         valid ``Network`` is not a valid ``ImportDefaults``.
         """

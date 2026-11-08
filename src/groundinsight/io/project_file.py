@@ -15,13 +15,13 @@ A project file is what :func:`save_network_to_json` writes and
     }
 
 Three properties are guaranteed, because a desktop application and a server
-open and save these files on every platform (audit finding GUI1):
+open and save these files on every platform:
 
 Encoding
-    The file is UTF-8 on every platform. Up to 0.6.0 the file was opened
-    without an encoding, so the locale decided: on Windows (cp1252) a name
-    containing ``Ω`` or ``ρ`` raised ``UnicodeEncodeError`` on save, and a
-    file with ``"Süd"`` written on macOS came back as mojibake. Reading
+    The file is UTF-8 on every platform. Without an explicit encoding the
+    locale decides: on Windows (cp1252) a name containing ``Ω`` or ``ρ``
+    raises ``UnicodeEncodeError`` on save, and a file with ``"Süd"`` written
+    on macOS comes back as mojibake. Reading
     accepts a UTF-8 byte-order mark, which Windows editors add when a file is
     edited by hand. A file that is *not* UTF-8 can only have been written by
     0.6.0 or earlier with a non-UTF-8 locale; it is decoded with the
@@ -47,7 +47,8 @@ Schema version
     A reader refuses a ``schema_version`` newer than :data:`SCHEMA_VERSION`
     with a :class:`ValueError` that names both numbers, instead of silently
     dropping whatever the newer release added. Files without the keys --
-    everything written up to 0.6.0 -- load exactly as before.
+    plain ``model_dump_json`` dumps, the format of groundinsight 0.6.0 and
+    earlier -- load as a network without metadata.
 
 Where the metadata lives, and why not in an envelope
 ----------------------------------------------------

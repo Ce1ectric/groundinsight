@@ -173,11 +173,12 @@ def classify(
     -------
     pl.DataFrame
         The input with one column added. Rows whose value is null **or NaN**
-        get a null class rather than being forced into a band. A NaN used to
-        land in the *highest* class, because every ``NaN <= edge`` is false
-        and the chain fell through to the ``otherwise`` branch -- so a failed
-        sweep point was reported as the worst case rather than as unassessed,
-        and a study reading the top band as its violations counted it.
+        get a null class rather than being forced into a band. Banded, a NaN
+        would land in the *highest* class, because every ``NaN <= edge`` is
+        false and the chain would fall through to the ``otherwise`` branch --
+        a failed sweep point would be reported as the worst case rather than
+        as unassessed, and a study reading the top band as its violations
+        would count it.
 
     Raises
     ------

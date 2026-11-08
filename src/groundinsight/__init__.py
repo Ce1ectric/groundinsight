@@ -13,9 +13,10 @@ helpers, the transient study workflow and the matplotlib plotting
 helpers. All symbols re-exported here are available as
 ``groundinsight.<name>`` and are listed in :data:`__all__`.
 
-This module holds no implementation (audit pass 19, ARC3): imports,
-``__all__``, ``__version__`` and the PEP 562 ``__getattr__`` that resolves
-deprecated names. Everything else lives in a module of its own -- the logging
+This module holds no implementation: imports, ``__all__``, ``__version__``
+and the PEP 562 ``__getattr__`` that resolves deprecated names, so importing
+the package binds names and nothing else. Everything else lives in a module
+of its own -- the logging
 default and :func:`set_log_level` in ``_logging``, :func:`show_versions` in
 ``_versions``, the persistence in ``database.store`` and ``io.project_file``.
 """
@@ -169,9 +170,9 @@ __all__ = [
     # and a star import must not raise their DeprecationWarning for code that
     # never touches them. ``from groundinsight import session`` still works.
     # Core models. Every documented example builds a network out of these,
-    # and until 0.6.1 none of them was in ``__all__``: ``gi.BusType`` worked
-    # by attribute access, ``from groundinsight import *`` did not import it,
-    # type checkers flagged it, and the notebooks reached for a third spelling
+    # so they are listed: unlisted, ``gi.BusType`` would work by attribute
+    # access only, ``from groundinsight import *`` would not import it, type
+    # checkers would flag it, and notebooks would reach for a third spelling
     # (``from groundinsight.models.core_models import ...``).
     "Network",
     "Bus",
@@ -275,9 +276,8 @@ __all__ = [
     "FINAL_TEMPERATURES",
     "CABLE_INSULATION_LIMITS",
     "IEC60949_MATERIALS",
-    # Persistence helpers — top-level surface, were previously reachable
-    # only via attribute access so type checkers and ``from groundinsight
-    # import *`` did not see them.
+    # Persistence helpers — top-level surface, listed so that type checkers
+    # and ``from groundinsight import *`` see them, not only attribute access.
     "Database",
     "start_dbsession",
     "close_dbsession",
@@ -300,10 +300,7 @@ __all__ = [
 # ``scripts/release.py`` together with ``pyproject.toml`` and ``CITATION.cff``
 # in one step; the three must never drift, because the release script compares
 # them and aborts on disagreement. Do not bump it by hand -- the [Unreleased]
-# section in CHANGELOG.md is where work for the next cut accumulates (transient
-# state-space solver, capacitance support, pandapower importer hardening,
-# frequency-order warning, pathfinder LRU cache, atomic rebind in
-# invalidate_paths, top-level set_active_fault factory, DC handling).
+# section in CHANGELOG.md is where work for the next cut accumulates.
 __version__ = "0.6.0"
 
 
@@ -311,11 +308,11 @@ def __getattr__(name: str):
     """
     Resolve the deprecated session globals (PEP 562).
 
-    ``session``, ``db_session``, ``engine`` and ``SessionLocal`` were module
-    globals up to 0.6.0. They now belong to the default
-    :class:`~groundinsight.Database` and are looked up on access, with a
-    ``DeprecationWarning`` that names the replacement. They are ``None`` while
-    no session is started, as before.
+    ``session``, ``db_session``, ``engine`` and ``SessionLocal`` are
+    deprecated aliases for the state of the default
+    :class:`~groundinsight.Database`. They are looked up on access, with a
+    ``DeprecationWarning`` that names the replacement, and are ``None`` while
+    no session is started.
 
     Parameters
     ----------

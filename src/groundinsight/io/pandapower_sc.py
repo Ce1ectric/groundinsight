@@ -281,7 +281,7 @@ def _adopt_fault_value(
     -----
     InputWarning
         Code ``SC_VALUE_REPLACED`` (elements: the fault) when a different
-        stored value is replaced. A log line until audit pass 19 (GUI4).
+        stored value is replaced.
     """
     if new_value is None:
         return
@@ -456,7 +456,6 @@ def read_shortcircuit_results(
         ``SC_KAPPA_OUT_OF_RANGE`` (a bus whose ``ip``/``ikss`` imply a
         ``kappa`` outside ``(1, 2]``; the closed form is used) and
         ``SC_KAPPA_MISSING`` (buses for which no ``kappa`` can be derived).
-        Log lines until audit pass 19 (GUI4).
 
     Notes
     -----
@@ -675,8 +674,7 @@ def apply_shortcircuit_characteristics(
         is used), ``SC_SPLIT_EQUAL`` (the sources inject nothing at the
         frequency, so ``I_k''`` is split equally), ``SC_VOLTAGE_SOURCE_SKIPPED``
         (a voltage source keeps its values) and ``SC_VALUE_REPLACED`` (a
-        different ``t_k_s`` or ``n_factor`` on the fault was replaced). Log
-        lines until audit pass 19 (GUI4).
+        different ``t_k_s`` or ``n_factor`` on the fault was replaced).
 
     Notes
     -----

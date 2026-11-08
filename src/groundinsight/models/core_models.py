@@ -292,9 +292,9 @@ def _magnitude_angle(
     -----
     A missing entry yields ``None`` rather than an ``AttributeError``. A
     ``ResultBus`` whose ``ia_freq`` does not cover every frequency of
-    ``uepr_freq`` -- an older stored result, a hand-built one -- used to make
-    :meth:`Network.res_buses` crash on ``None.real`` while reporting nothing
-    about which bus or frequency was at fault.
+    ``uepr_freq`` -- a stored result of an earlier format, a hand-built one --
+    would otherwise make :meth:`Network.res_buses` crash on ``None.real``
+    while reporting nothing about which bus or frequency was at fault.
     """
     if value is None:
         return {magnitude_key: None, angle_key: None}
@@ -309,11 +309,11 @@ class _PhasorColumn:
     """
     The phasors of one result quantity, collected row by row for a frame.
 
-    :meth:`Network.res_buses` and :meth:`Network.res_branches` used to build
-    one dict per row and take magnitude and angle of every phasor through
-    :func:`_magnitude_angle`, one NumPy scalar at a time -- on a 4000-bus
-    ring at seven frequencies the frame took half as long as the solve that
-    produced it (finding P11). This collects real and imaginary parts once
+    Building one dict per row for :meth:`Network.res_buses` and
+    :meth:`Network.res_branches` and taking magnitude and angle of every
+    phasor through :func:`_magnitude_angle`, one NumPy scalar at a time,
+    takes half as long as the solve that produced the result on a 4000-bus
+    ring at seven frequencies. This collects real and imaginary parts once
     and computes both columns on whole arrays, with the same arithmetic:
     ``numpy.hypot`` agrees bit for bit with Python's ``abs`` of a complex
     number (``numpy.abs`` of a complex array does not), and
@@ -958,8 +958,8 @@ class ComplexNumber(BaseModel):
         elif isinstance(value, (np.generic, numbers.Complex)):
             # NumPy scalars reach the models straight from the solver arrays;
             # ``np.complex128`` happens to subclass ``complex`` but
-            # ``np.complex64`` and the integer types do not, so they used to
-            # be rejected with a bare TypeError.
+            # ``np.complex64`` and the integer types do not, and a bare
+            # TypeError for them would name neither the value nor the model.
             try:
                 c = complex(value)
             except (TypeError, ValueError) as exc:
@@ -1084,9 +1084,9 @@ class ComplexNumber(BaseModel):
             The value to convert. NumPy scalars (``np.int64``,
             ``np.float32``, ``np.complex64``, ...) and anything else
             registered as :class:`numbers.Complex` are accepted, because the
-            solver hands NumPy scalars back out of the linear algebra and
-            ``z * np.complex64(2)`` used to fail while ``np.complex64(2) * z``
-            worked -- the asymmetry was invisible until it hit a user.
+            solver hands NumPy scalars back out of the linear algebra, and
+            ``z * np.complex64(2)`` has to work as ``np.complex64(2) * z``
+            does -- an asymmetry there stays invisible until it hits a user.
 
         Returns
         -------
@@ -2065,10 +2065,10 @@ class Branch(_NetworkElement):
 
         Every formula of a branch type scales with ``l``. ``l = 0`` makes the
         branch an ideal short circuit, which the nodal solver cannot invert,
-        and ``l < 0`` gives it a negative resistance. Both used to be accepted
-        here and only surfaced when the impedance was derived -- as "exactly
-        zero impedance" or as a negative real part, neither of which names
-        the length -- and a detached branch was not checked at all.
+        and ``l < 0`` gives it a negative resistance. Accepted here, both would
+        only surface when the impedance is derived -- as "exactly zero
+        impedance" or as a negative real part, neither of which names the
+        length -- and a detached branch would not be checked at all.
 
         Parameters
         ----------
@@ -2160,7 +2160,7 @@ class Fault(_NetworkElement):
         means 1.0 at every frequency. Give ``0.0`` to exclude a frequency
         bin from this fault. A non-empty mapping that leaves out some network
         frequencies is announced once per run with an ``InputWarning``
-        ``SCALINGS_INCOMPLETE`` (decision F7). :meth:`scaling_at` is the one
+        ``SCALINGS_INCOMPLETE``. :meth:`scaling_at` is the one
         place that applies the default.
     t_k_s : float, optional
         Short-circuit duration (clearing time) ``T_k`` in seconds, as
@@ -2267,8 +2267,8 @@ class Fault(_NetworkElement):
         injection, so ``nan`` propagates into every voltage of that frequency
         bin without raising anywhere, ``inf`` turns the whole result into
         ``inf``, and a negative factor reverses the fault current -- which is
-        not a scaling but a different fault. All three used to be accepted and
-        only showed up as an unserialisable network afterwards.
+        not a scaling but a different fault. Accepted, all three would only
+        show up as an unserialisable network afterwards.
 
         ``None`` is stored as ``{}``: both mean factor 1.0 at every frequency.
         """
@@ -2328,7 +2328,7 @@ class Fault(_NetworkElement):
         -------
         float
             ``scalings[frequency]``, or ``1.0`` -- full contribution -- when
-            the frequency has no key (decision F7).
+            the frequency has no key.
 
         Examples
         --------
@@ -2756,7 +2756,7 @@ class ResultReductionFactor(BaseModel):
         The fault current ``I_F = 3*I_0`` the current-based factor divides by:
         ``sum(scaling * I_src)`` over the sources that reach the fault, a
         source on the fault bus included. For a Thevenin source this is its
-        Norton current ``E / Z_src`` (audit finding PH1). ``None`` where no
+        Norton current ``E / Z_src``. ``None`` where no
         source has a value.
     u_earthing : dict of float to complex, optional
         The earthing voltage ``U_E`` of EN 50522: the **EPR at the fault bus**,
@@ -2783,27 +2783,29 @@ class ResultReductionFactor(BaseModel):
         (``EARTHING_IMPEDANCE_UNDEFINED``).
     u_earthing_group : dict of float to complex, optional
         Diagnostic: the current-weighted mean potential of the earth group
-        ``earth_buses`` -- the quantity ``u_earthing`` meant before decision
-        F4. On a long bonded run it lies 43 % below the fault-bus EPR, because
-        the group reaches into the decaying tail of the potential profile.
+        ``earth_buses``. On a long bonded run it lies 43 % below the fault-bus
+        EPR, because the group reaches into the decaying tail of the potential
+        profile.
     z_earthing_group : dict of float to complex, optional
-        Diagnostic: ``u_earthing_group / i_earth``, the former ``z_earthing``
-        (and former grounding impedance). The chain
+        Diagnostic: ``u_earthing_group / i_earth``. The chain
         ``u_earthing_group = I_F * z_earthing_group * value_current`` closes
         on it by construction, which is why it is no check of anything.
 
     Notes
     -----
-    **Changed definition (F4).** Up to the 0.6.0 development line
-    ``u_earthing`` / ``z_earthing`` were the group quantities now in
-    ``u_earthing_group`` / ``z_earthing_group``. In the norm's ideal case
-    they came out 43 % / 45 % below the EPR and the driving-point impedance
-    at the fault -- unconservative when taken as ``U_E`` for a touch-voltage
-    assessment. A result stored before the change (recognised by the absence
-    of the group fields) still loads: its stored values are moved to the
-    ``*_group`` fields and ``u_earthing`` / ``z_earthing`` stay empty until
-    the fault is solved again, so no stored number claims a meaning it was
-    not computed with.
+    **Fault-bus quantities, not group means.** ``u_earthing`` and
+    ``z_earthing`` are taken at the fault bus. The group means come out
+    43 % / 45 % below the EPR and the driving-point impedance at the fault in
+    the norm's ideal case -- unconservative if taken as ``U_E`` for a
+    touch-voltage assessment -- and are kept as the ``*_group`` diagnostics
+    only.
+
+    **Stored results in the group format.** A record without ``i_fault``,
+    ``u_earthing_group`` and ``z_earthing_group`` holds the group means in
+    ``u_earthing`` / ``z_earthing``. It still loads: its values are moved to
+    the ``*_group`` fields and ``u_earthing`` / ``z_earthing`` stay empty
+    until the fault is solved again, so no stored number claims a meaning it
+    was not computed with.
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -2824,20 +2826,22 @@ class ResultReductionFactor(BaseModel):
     @classmethod
     def _relocate_pre_f4_earthing(cls, data):
         """
-        Move the group quantities of a pre-F4 record to the ``*_group`` fields.
+        Move the group quantities of a group-format record to the ``*_group`` fields.
 
         Parameters
         ----------
         data : Any
-            The raw input. Only a mapping without any of the fields added with
-            F4 (``i_fault``, ``u_earthing_group``, ``z_earthing_group``) is
-            touched; a model dump of the current version always carries them.
+            The raw input. Only a mapping without any of ``i_fault``,
+            ``u_earthing_group`` and ``z_earthing_group`` is touched: the group
+            format, in which ``u_earthing`` / ``z_earthing`` held the group
+            mean. A model dump of this version always carries all three.
 
         Returns
         -------
         Any
             The input, with ``u_earthing`` / ``z_earthing`` renamed to
-            ``u_earthing_group`` / ``z_earthing_group`` for a pre-F4 record.
+            ``u_earthing_group`` / ``z_earthing_group`` for a group-format
+            record.
         """
         if isinstance(data, dict) and _is_pre_f4_reduction_factor(data):
             data = dict(data)
@@ -2846,10 +2850,10 @@ class ResultReductionFactor(BaseModel):
         return data
 
     def __str__(self):
-        # The field is called ``value``; the old ``self.reduction_factor``
-        # raised AttributeError. That stayed invisible because pydantic's
-        # __repr__ keeps working and only str() / print() / f-strings go
-        # through __str__ -- so a bare cell in a notebook looked fine.
+        # The field is called ``value``. A wrong attribute name here would
+        # raise AttributeError from str() / print() / f-strings only:
+        # pydantic's __repr__ keeps working, so a bare cell in a notebook
+        # would look fine.
         return (
             f"ResultReductionFactor(name={self.name}, "
             f"fault_bus={self.fault_bus}, value={self.value}, "
@@ -2871,7 +2875,7 @@ class ResultGroundingImpedance(BaseModel):
         Mapping from frequency to the grounding impedance
         ``Z_G(f) = Z_E(f) = Z_dp(F)``: the driving-point impedance of the
         earthing network at the fault bus, identical to
-        ``ResultReductionFactor.z_earthing`` (see there; decision F4).
+        ``ResultReductionFactor.z_earthing`` (see there).
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -2920,8 +2924,8 @@ class Result(BaseModel):
         and the definition of this result's fault. Written by
         :func:`groundinsight.run_fault`; :meth:`Network.stale_results`
         compares it with the network's current inputs. ``None`` for results
-        stored by an older version or assembled by hand, which are never
-        reported stale (their provenance is unknown).
+        without a digest -- stored in an earlier file format, or assembled by
+        hand -- which are never reported stale (their provenance is unknown).
 
     Examples
     --------
@@ -2948,10 +2952,11 @@ class Result(BaseModel):
     @classmethod
     def _flag_pre_f4_result(cls, data):
         """
-        Keep a result stored before decision F4 from claiming the new meaning.
+        Keep a result in the group format from claiming the fault-bus meaning.
 
-        Before F4 the grounding impedance was the group quantity now reported
-        as ``ResultReductionFactor.z_earthing_group``. For such a record --
+        In that format the grounding impedance is the group quantity that
+        :class:`ResultReductionFactor` reports as ``z_earthing_group``. For
+        such a record --
         recognised on its stored reduction factor, see
         :meth:`ResultReductionFactor._relocate_pre_f4_earthing` -- the stored
         grounding impedance is dropped (its value survives in
@@ -2967,7 +2972,7 @@ class Result(BaseModel):
         Returns
         -------
         Any
-            The input, adjusted for a pre-F4 record.
+            The input, adjusted for a group-format record.
         """
         if not isinstance(data, dict):
             return data
@@ -3011,7 +3016,7 @@ class Result(BaseModel):
 
 def _is_pre_f4_reduction_factor(data: dict) -> bool:
     """
-    Recognise a stored reduction-factor record written before decision F4.
+    Recognise a stored reduction-factor record in the group format.
 
     Parameters
     ----------
@@ -3021,8 +3026,9 @@ def _is_pre_f4_reduction_factor(data: dict) -> bool:
     Returns
     -------
     bool
-        ``True`` if none of the fields introduced with F4 is present -- a
-        model dump of the current version always carries all three.
+        ``True`` if none of ``i_fault``, ``u_earthing_group`` and
+        ``z_earthing_group`` is present -- a model dump of this version always
+        carries all three.
     """
     return not any(
         key in data for key in ("i_fault", "u_earthing_group", "z_earthing_group")
@@ -3662,7 +3668,7 @@ class Network(ValidatedAssignmentModel):
             The name of the fault to activate. The former keyword
             ``fault_name`` is accepted as a deprecated alias.
         keep_results : bool, default ``False``
-            If ``False`` (historic behaviour), any previously cached
+            If ``False`` (the default), any cached
             :class:`Result` for ``fault`` is dropped so the next
             solve starts from a clean slate. If ``True``, the cached
             result is preserved — useful when re-using the same
@@ -3694,18 +3700,13 @@ class Network(ValidatedAssignmentModel):
 
         Rebinds ``self.paths`` to a fresh empty dictionary (atomic) and
         clears this network's path-search memo (:meth:`path_cache`).
-        **Other networks keep theirs** -- every network has its own since
-        audit pass 19 (ARC2).
+        **Other networks keep theirs** -- every network has its own memo.
 
-        Earlier revisions called ``self.paths.clear()`` in place.
-        Callers that had snapshot the mapping with
-        ``saved = dict(network.paths)`` before the call observed the
-        snapshot lose its entries because the snapshot dictionary
-        shared its ``Path`` *values* with ``self.paths`` until the
-        snapshot was deep-copied. The current atomic-rebind form
-        — ``self.paths = {}`` — leaves the snapshot mapping intact and
-        mirrors the atomic-rebind pattern in
-        :func:`groundinsight.analysis.inverse_rho_f.evaluate_max_epr_under_k`.
+        The rebind is atomic (``self.paths = {}``, not an in-place
+        ``self.paths.clear()``): a mapping a caller saved with
+        ``saved = dict(network.paths)`` before the call keeps its entries.
+        :func:`groundinsight.analysis.inverse_rho_f.evaluate_max_epr_under_k`
+        follows the same pattern.
 
         Call this whenever the user has flipped ``Bus.active`` /
         ``Branch.active`` flags or added / removed branches outside of
@@ -3831,11 +3832,11 @@ class Network(ValidatedAssignmentModel):
            fault. ``define_paths`` iterates over both mappings, so adding a
            fault or a source after the first solve genuinely invalidates the
            path set even though the wiring did not move. Without this term
-           ``run_fault`` reused the old paths, no path terminated at the new
-           fault bus, and every bus reported **0 V EPR** with no warning.
-           The same omission made
+           ``run_fault`` would reuse the stale paths, no path would terminate
+           at the new fault bus, and every bus would report **0 V EPR** with
+           no warning;
            :func:`groundinsight.analysis.inverse_rho.find_max_rho_scaling`
-           over-estimate the admissible soil resistivity by ~3000x.
+           would over-estimate the admissible soil resistivity by ~3000x.
 
         Two networks (or two states of one network) that differ in any of
         these produce different fingerprints, so :meth:`needs_path_rebuild`
@@ -3908,9 +3909,9 @@ class Network(ValidatedAssignmentModel):
         self._claim(bus)
 
         # Derive first, insert second: a formula that fails to evaluate must
-        # leave the network as it was (ARC9). Inserting before deriving used
-        # to leave a bus without impedances behind, which the next run_fault
-        # then reported as "bus 'x' carries no impedance".
+        # leave the network as it was (ARC9). Inserting before deriving would
+        # leave a bus without impedances behind, which the next run_fault
+        # would report as "bus 'x' carries no impedance".
         derived = bus._derive(self.frequencies)
         bus._apply_derived(derived)
         self.buses[bus.name] = bus
@@ -4022,7 +4023,7 @@ class Network(ValidatedAssignmentModel):
         InputWarning
             ``SOURCE_FREQUENCY_OUTSIDE_NETWORK`` if the source carries values
             at frequencies the network is not solved at; the solve ignores
-            them (USE3, decision F8).
+            them.
         """
         if source.bus not in self.buses:
             raise ValueError(f"bus '{source.bus}' is not in the network '{self.name}'")
@@ -4203,8 +4204,8 @@ class Network(ValidatedAssignmentModel):
         is by content: an edit that is undone -- by hand, or by a study that
         restores the network -- leaves the result current.
 
-        Results stored by an older version or assembled by hand carry no
-        digest and are never reported (their provenance is unknown).
+        Results without a digest -- stored in an earlier file format, or
+        assembled by hand -- are never reported (their provenance is unknown).
         :func:`groundinsight.run_fault` makes the result of its fault current.
 
         Returns
@@ -4605,22 +4606,19 @@ class Network(ValidatedAssignmentModel):
 
         Notes
         -----
-        ``frequency_Hz`` is numeric. Up to 0.6.0 it was a *string* column,
-        because the RMS row carried the literal ``"RMS"`` in it -- which meant
-        that the sibling accessor :meth:`res_all_impedances` typed the same
-        column as ``Float64`` while this one typed it as ``Utf8``, that
-        ``filter(pl.col("frequency_Hz") == 50.0)`` silently matched nothing,
-        and that :func:`groundinsight.summarize` refused the column outright.
-        The marker now lives in its own boolean column, ``is_rms``, and the
-        RMS row carries ``null`` for the frequency, which is what it is: no
-        single frequency.
+        ``frequency_Hz`` is numeric. The RMS row is marked in its own boolean
+        column, ``is_rms``, and carries ``null`` for the frequency, which is
+        what it is: no single frequency. A literal ``"RMS"`` in the frequency
+        column would type it ``Utf8`` here while the sibling accessor
+        :meth:`res_all_impedances` types it ``Float64``, make
+        ``filter(pl.col("frequency_Hz") == 50.0)`` silently match nothing, and
+        make :func:`groundinsight.summarize` refuse the column outright.
 
         ``I_inj_A`` / ``I_inj_degree`` report the *earthing-conductor* current
         ``i_inj`` -- the lumped injection at a source or fault bus, which the
         earthing conductor has to be sized for. It is a different current from
-        ``I_bus_A`` (the share dissipated into the soil through the electrode)
-        and was previously reachable only through ``Result.buses``; see
-        :class:`ResultBus`.
+        ``I_bus_A`` (the share dissipated into the soil through the electrode);
+        see :class:`ResultBus`.
         """
         if fault is None:
             fault = self.active_fault
@@ -4743,10 +4741,9 @@ class Network(ValidatedAssignmentModel):
         the numbers an assessment starts from side by side: the fault current,
         the earth potential rise at the fault bus and the largest one in the
         network, both reduction factors, the earth-return current and the
-        earthing voltage and impedance of EN 50522. They used to be spread
+        earthing voltage and impedance of EN 50522. Without it they are spread
         over ``ResultBus``, ``ResultReductionFactor``,
-        ``ResultGroundingImpedance`` and ``Network.faults`` (findings USE1,
-        GUI6).
+        ``ResultGroundingImpedance`` and ``Network.faults``.
 
         Parameters
         ----------
@@ -4804,9 +4801,10 @@ class Network(ValidatedAssignmentModel):
         after it was computed, :meth:`stale_results` lists the fault; the
         numbers are still those of the result, including the frequencies it
         was computed at (a network frequency the result does not cover gives
-        a row of nulls). A result stored before decision F4 carries no
-        EN 50522 earthing quantities and no fault current, and those columns
-        stay null rather than being filled from the former group values.
+        a row of nulls). A result in the group format (see
+        :class:`ResultReductionFactor`) carries no EN 50522 earthing
+        quantities and no fault current; those columns stay null rather than
+        being filled from its group values.
 
         Examples
         --------
@@ -4867,7 +4865,7 @@ class Network(ValidatedAssignmentModel):
             - Faults without results are skipped.
             - Missing grounding impedance or reduction factor results are noted.
             - The schema is pinned so an empty result is an empty frame with
-              the documented columns rather than a 0x0 one, which used to make
+              the documented columns rather than a 0x0 one, which would make
               every downstream ``filter``/``join`` fail with a missing-column
               error instead of returning nothing.
         """

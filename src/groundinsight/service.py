@@ -11,8 +11,9 @@ is what a notebook wants -- ``net.res_buses()`` right after the call -- and it
 is the wrong default for every caller that holds on to the network while
 something else computes on it: a GUI that redraws its tables while a worker
 thread solves, a server that answers several requests from one project, a
-study that has to hand the network back unchanged. The audit history of the
-studies is a list of exactly those restores going wrong (finding ARC1).
+study that has to hand the network back unchanged. Each of them would have
+to restore the network after every solve, and every such restore is one more
+place for a mistake.
 
 :func:`solve` is the side-effect-free twin. It runs the unchanged
 ``run_fault`` pipeline on an *overlay*: a second :class:`Network` object that
@@ -160,8 +161,8 @@ def solve(
     network's buses, branches and sources while it runs. Do not modify the
     network during a solve, and do not solve the *same* ``Network`` object
     from several threads at once -- that is not designed for. Different
-    networks can be solved in parallel: since audit pass 19 the path search
-    keeps its settings and memo per network (ARC2). Reading the network from
+    networks can be solved in parallel: the path search keeps its settings
+    and memo per network. Reading the network from
     another thread while a solve runs is safe.
 
     **solve or run_fault.** ``run_fault`` stays the convenient call for

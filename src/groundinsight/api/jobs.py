@@ -17,14 +17,14 @@ process: no start-up cost, the right choice for a fault solve that takes
 milliseconds to seconds and spends its time in NumPy/SciPy. ``backend="process"``
 pickles the request and the network copy into a freshly spawned process: it
 costs the interpreter start (about a second) and needs inputs that pickle (a
-network does, finding GUI2), and in return the job can be stopped *hard* and
+network does), and in return the job can be stopped *hard* and
 cannot take the caller's process down. Both run the same task function of
 :mod:`groundinsight.api.tasks` on equal inputs, and the tests compare their
 DTOs field by field.
 
 Progress, cancel, runtime limit
 -------------------------------
-Progress and cancellation use the library's study hooks (finding GUI5):
+Progress and cancellation use the library's study hooks:
 ``progress(done, total, label)`` is forwarded into the handle (from a child
 process through a pipe), and ``should_cancel()`` answers true once
 :meth:`JobHandle.cancel` was called or the runtime limit has passed. The study

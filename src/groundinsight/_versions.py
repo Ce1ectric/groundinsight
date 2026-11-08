@@ -9,8 +9,8 @@ platform, and the sister packages ``groundfield`` and ``groundmeas`` when they
 are installed. :func:`show_versions` collects them in one call, following the
 cross-repository convention the three packages share.
 
-The function lived in the package ``__init__`` until audit pass 19 (ARC3). It
-reads ``groundinsight.__version__`` at call time instead of keeping a copy,
+The function reads ``groundinsight.__version__`` at call time instead of
+keeping a copy,
 because the release script rewrites that one literal and nothing else.
 """
 

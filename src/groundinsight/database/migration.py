@@ -4,13 +4,14 @@
 """
 Schema migration for existing SQLite databases.
 
-groundinsight up to v0.4.0 keyed ``buses``, ``branches``, ``faults``,
-``sources`` and ``paths`` by element *name alone* and linked them to their
-network through the association tables ``network_buses``, ``network_branches``,
-``network_faults``, ``network_sources`` and ``network_paths``. Two networks
-that contained an element of the same name therefore shared one physical row,
-so saving one network silently rewrote the other. The element tables are now
-keyed by ``(network_name, name)``.
+The legacy schema -- files written by groundinsight 0.4.0 and earlier -- keys
+``buses``, ``branches``, ``faults``, ``sources`` and ``paths`` by element
+*name alone* and links them to their network through the association tables
+``network_buses``, ``network_branches``, ``network_faults``,
+``network_sources`` and ``network_paths``. Two networks that contain an
+element of the same name therefore share one physical row, so saving one
+network silently rewrites the other. The current schema keys the element
+tables by ``(network_name, name)``.
 
 ``Base.metadata.create_all`` only ever creates *missing* tables — it never adds
 a column to an existing one — so an old database file opens without complaint
@@ -46,11 +47,12 @@ Path segment order
     :func:`groundinsight.create_paths`.
 
 Pickled frequency lists
-    ``networks.frequencies`` used to be a SQLAlchemy ``PickleType``. Loading
-    such a file *executed* it: ``pickle.loads`` runs before any Pydantic
-    validator sees the value, so a ``.db`` received from someone else was
-    arbitrary code execution. The column is a JSON list now, and the legacy
-    blobs are converted here with a restrictive unpickler that only ever
+    In a legacy file ``networks.frequencies`` is a SQLAlchemy ``PickleType``.
+    Loading such a file through the ORM would *execute* it: ``pickle.loads``
+    runs before any Pydantic validator sees the value, so a ``.db`` received
+    from someone else would be arbitrary code execution. The current column
+    is a JSON list, and the legacy blobs are converted here with a
+    restrictive unpickler that only ever
     resolves ``builtins.list`` / ``float`` / ``int``. Anything else aborts the
     migration with a :class:`ValueError` and leaves the file untouched; the
     payload is then a hostile file, not a frequency list.

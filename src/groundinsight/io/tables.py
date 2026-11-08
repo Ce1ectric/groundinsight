@@ -4,8 +4,8 @@
 Networks as tables: build one from spreadsheet-style tables, export one.
 
 The people who use groundinsight keep their networks in spreadsheets and in
-exports of network-planning tools, and until audit pass 19 the only way in
-was one ``create_*`` call per element (finding USE6). This module maps a
+exports of network-planning tools; one ``create_*`` call per element is no
+way to bring such a network in. This module maps a
 network onto ten tables with a pinned schema each -- :data:`TABLE_SCHEMAS`,
 the same schema a GUI table editor works on -- and back:
 

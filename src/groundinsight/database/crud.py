@@ -68,12 +68,12 @@ def ensure_current_schema(session: Session):
     """
     Reject databases written by the pre-network-scoped schema.
 
-    Up to and including the association-table schema, ``buses``, ``branches``,
-    ``faults``, ``sources`` and ``paths`` were keyed by element name alone and
-    linked to their network through ``network_buses`` & co. Two networks
-    containing an element of the same name therefore shared one row, so saving
-    one network silently rewrote the other. Those tables are now keyed by
-    ``(network_name, name)``.
+    ``buses``, ``branches``, ``faults``, ``sources`` and ``paths`` are keyed
+    by ``(network_name, name)``. A file of the association-table schema keys
+    them by element name alone and links them to their network through
+    ``network_buses`` & co.; two networks containing an element of the same
+    name share one row there, so saving one network would silently rewrite
+    the other.
 
     ``Base.metadata.create_all`` only ever creates *missing* tables -- it never
     adds a column to an existing one -- so an old database file opens without
@@ -133,9 +133,9 @@ def _validate_path_segments(network: Network):
 
     ``Network.paths`` holds ``Branch`` objects, not names, so a user who prunes
     ``network.branches`` after :func:`groundinsight.create_paths` leaves paths
-    pointing at branches that are no longer part of the network. Persisting
-    such a path used to fail with ``AttributeError: 'NoneType' object has no
-    attribute '_sa_instance_state'`` deep inside SQLAlchemy.
+    pointing at branches that are no longer part of the network. Persisted
+    unchecked, such a path fails with ``AttributeError: 'NoneType' object has
+    no attribute '_sa_instance_state'`` deep inside SQLAlchemy.
 
     Parameters
     ----------

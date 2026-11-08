@@ -5,8 +5,9 @@ Study sessions: re-solve a solved fault after its bus impedances changed (P4).
 Why this module exists
 ----------------------
 The inverse searches evaluate the same fault for twenty or more trial values
-of the bus grounding impedances, and every trial used to be a complete
-:func:`~groundinsight.network_operations.run_fault`: path check, model tables,
+of the bus grounding impedances, and a complete
+:func:`~groundinsight.network_operations.run_fault` per trial would repeat all
+of it: path check, model tables,
 phase-conductor network, injection vectors, assembly, factorisation and the
 result objects of every bus and branch -- although a trial changes nothing
 but the grounding impedances of the selected buses.

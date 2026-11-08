@@ -18,7 +18,7 @@ same function, runs the same code on an unpickled copy of the same network
 and returns the same DTO: the thread and the process backend cannot differ in
 what they compute, only in where.
 
-A study's own ``progress``/``should_cancel`` hooks (finding GUI5) are passed
+A study's own ``progress``/``should_cancel`` hooks are passed
 straight through. A single solve has no hook inside; it is checked for
 cancellation before it starts, and a fault sweep between faults.
 """

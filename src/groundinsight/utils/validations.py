@@ -13,8 +13,9 @@ SymPy computes any of them (see :func:`_assert_no_runaway_power`).
 On top of the security guard sits a usability check,
 :func:`check_formula_symbols`: a formula of a bus or branch type may only use
 the symbols the evaluator binds for that kind of element. Anything else
-(``L`` for ``l``, ``Rho`` for ``rho``) used to pass here and fail much later,
-at ``create_branch``, with "Cannot convert expression to float".
+(``L`` for ``l``, ``Rho`` for ``rho``) is refused here, at the type; it would
+otherwise pass and fail much later, at ``create_branch``, with "Cannot convert
+expression to float".
 """
 
 from decimal import Decimal
@@ -673,8 +674,8 @@ def validate_impedance_formula_value(value: str) -> str:
 
     The result is memoised per formula string (see
     :func:`_validate_impedance_formula_str`): loading a network validates the
-    same handful of formulas hundreds of times, and every one of those calls
-    used to run a full ``sympify``.
+    same handful of formulas hundreds of times, and without the cache every
+    one of those calls would run a full ``sympify``.
 
     Parameters
     ----------

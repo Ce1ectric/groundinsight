@@ -9,7 +9,7 @@ and every step ends in a ``run_fault`` that replaces the stored result, the
 active fault, possibly the path set, and the assembled electrical network.
 Each study already undoes its *element* edits in its own ``finally`` block.
 What this module adds is the other half, for the two cases that promise an
-untouched network: a cancelled study (finding GUI5), and the studies that
+untouched network: a cancelled study, and the studies that
 document "the network is left exactly as found".
 
 :class:`NetworkState` records the network-level state *generically* rather

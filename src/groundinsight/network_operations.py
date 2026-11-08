@@ -593,9 +593,9 @@ def _assert_network_is_excited(network: Network) -> None:
     Every downstream step succeeds on an unexcited system and reports 0 V
     at every bus -- a plausible-looking result rather than an error
     message. The check lives in its own helper because both
-    :func:`create_paths` and :func:`run_fault` need it: since ``run_fault``
-    no longer enumerates paths in the default ``phase_current_mode="auto"``,
-    it can no longer inherit the guard from ``create_paths``.
+    :func:`create_paths` and :func:`run_fault` need it: ``run_fault`` does
+    not enumerate paths in the default ``phase_current_mode="auto"``, so it
+    cannot rely on the guard of ``create_paths``.
 
     Parameters
     ----------
@@ -657,7 +657,7 @@ def build_electrical_network(network: Network, auto_phase_currents: bool = False
         If the :class:`ElectricalNetwork` class cannot be imported.
     ValueError
         If a source that reaches the active fault has a value at none of the
-        network frequencies (USE3, decision F8). The checks of the input that
+        network frequencies. The checks of the input that
         :func:`run_fault` makes run here, while the vectors are assembled.
 
     Warns
@@ -747,9 +747,9 @@ def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
 
     The check is scoped to the **active fault** and to a **single source**: only
     when one source reaches the active fault over two or more paths does the
-    path-based scheme multiply the source current instead of splitting it. The
-    earlier version counted paths across all faults, which raised a false alarm
-    on a strictly radial network that merely carried two fault definitions.
+    path-based scheme multiply the source current instead of splitting it.
+    Counting paths across all faults would raise a false alarm on a strictly
+    radial network that merely carries two fault definitions.
 
     Parameters
     ----------
@@ -764,9 +764,9 @@ def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
     ModelAssumptionWarning
         Code ``PARALLEL_COEFFICIENT_DEFAULT``, ``elements`` the sources that
         reach the active fault over more than one path. Collected into
-        ``Result.diagnostics`` by :func:`run_fault`; until audit pass 19 it was
-        a log line, which the library's default ``NullHandler`` swallowed
-        (finding GUI4).
+        ``Result.diagnostics`` by :func:`run_fault`; a warning rather than a
+        log line, because the library's default ``NullHandler`` would swallow
+        a log line.
 
     Examples
     --------
@@ -853,13 +853,13 @@ def run_fault(
         source current correctly over rings, meshes and parallel
         branches, and it ignores ``Branch.parallel_coefficient``.
 
-        ``"paths"`` is the pre-0.6 behaviour: every branch on any
-        enumerated source-to-fault path receives the *full* source
-        current scaled by its ``parallel_coefficient``. In a meshed
-        network that multiplies the current instead of splitting it --
-        with the default coefficient of 1.0 a symmetric ring collapses to
-        ``EPR = 0``. Kept for reproducing older studies and for networks
-        where the split is known from measurement and set by hand.
+        ``"paths"``: every branch on any enumerated source-to-fault path
+        receives the *full* source current scaled by its
+        ``parallel_coefficient``. In a meshed network that multiplies the
+        current instead of splitting it -- with the default coefficient of
+        1.0 a symmetric ring collapses to ``EPR = 0``. Kept for reproducing
+        studies made with this scheme and for networks where the split is
+        known from measurement and set by hand.
 
     Returns
     -------
@@ -896,9 +896,9 @@ def run_fault(
     :meth:`~groundinsight.models.core_models.Network.sources_reaching`
     answers with a breadth-first search over the active sub-graph. The
     enumeration is exponential in the number of independent loops -- a
-    6x6 grid has 1 262 816 simple paths and used to cost about a minute
-    per ``run_fault`` while the solver itself needs milliseconds -- so it
-    now runs only in ``"paths"`` mode or when the user asks for it with
+    6x6 grid has 1 262 816 simple paths, about a minute of enumeration per
+    ``run_fault`` while the solver itself needs milliseconds -- so it runs
+    only in ``"paths"`` mode or when the user asks for it with
     :func:`create_paths`. ``network.paths`` is therefore normally empty
     after a default ``run_fault``; a path set that no longer matches the
     active topology is dropped so no later reader picks it up.
@@ -936,7 +936,7 @@ def run_fault(
     # ``Network.sources_reaching`` answers with a breadth-first search. The
     # enumeration is exponential in the number of loops (1.26 million paths
     # and roughly a minute on a 6x6 grid, against milliseconds in the
-    # solver), so it is no longer triggered in the default mode. Stale
+    # solver), so it is not triggered in the default mode. Stale
     # paths are still dropped so that no later reader -- persistence, the
     # transient state-space solver, the short-circuit aggregation -- picks
     # up a path set that no longer matches the topology. Users who want the
@@ -1042,11 +1042,11 @@ def create_network_assistant(
     -----
     A line of ``n`` buses has ``n - 1`` branches, so ``branch_length``
     has one entry *fewer* than ``number_buses``. Passing ``n`` lengths --
-    ``[1.0] * 30`` for ``number_buses=30``, read as "a 30 km line" -- used
-    to be accepted silently: the surplus entry was dropped and the
-    returned network was one span shorter than the one asked for, with no
-    warning anywhere. Too few entries raised a bare ``IndexError`` from
-    inside the loop.
+    ``[1.0] * 30`` for ``number_buses=30``, read as "a 30 km line" -- is
+    refused rather than truncated: dropping the surplus entry would return a
+    network one span shorter than the one asked for, with no warning
+    anywhere. Too few entries are refused the same way instead of failing
+    with a bare ``IndexError`` from inside the loop.
 
     Examples
     --------

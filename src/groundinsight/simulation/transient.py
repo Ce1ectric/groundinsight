@@ -4,30 +4,31 @@
 Transient Simulation Layer.
 
 This module hosts the high-level :class:`TransientStudy` workflow and the
-matching :class:`ResultTransient` Pydantic model. The first solver path
-implemented here is FFT-based: a user-defined source waveform is sampled
-on a regular time grid, transformed to a frequency spectrum via NumPy's
-real-valued FFT, fed into the existing per-frequency network solve, and
-transformed back via IFFT. The state-space solver path is reserved for
-the next release; it will reuse the same study object and observation
-contract.
+matching :class:`ResultTransient` Pydantic model. One study object and one
+observation contract serve two solvers:
 
-Design choices recorded in the Phase 3 discussion:
+* ``solver="fft"`` samples a user-defined source waveform on a regular time
+  grid, transforms it to a frequency spectrum via NumPy's real-valued FFT,
+  feeds it into the per-frequency network solve and transforms the result
+  back via IFFT.
+* ``solver="state_space"`` integrates one linear ODE built from the lumped
+  ``R`` / ``L`` / ``C`` fields of the bus and branch types.
 
-* Default and currently only supported source mode for the FFT solver is
-  the legacy current source (``Source.source_type='current'``). A current
-  source's frequency-dependent ``values`` are *replaced* by the FFT
-  spectrum of the user-supplied waveform; the rest of the network remains
-  untouched. Voltage-mode sources will be supported by the state-space
-  solver in Phase 4 (where the loop closure is naturally part of the ODE
-  system).
+Design choices:
+
+* The FFT solver takes current sources only
+  (``Source.source_type='current'``). A current source's
+  frequency-dependent ``values`` are *replaced* by the FFT spectrum of the
+  user-supplied waveform; the rest of the network remains untouched. A
+  Thevenin (voltage) source needs the state-space solver, where the loop
+  closure is naturally part of the ODE system.
 * Observation points (buses for EPR, branches for shield current) are
   passed *explicitly* to ``set_observation`` -- there is no "all" default,
   to keep memory and post-processing tractable on large networks.
-* Mutual coupling is not yet evaluated by the FFT solver; the phase
-  current along each path would itself be time-dependent and is more
-  natural to handle in the state-space formulation. The FFT solver
-  ignores mutual impedance and says so: meeting a coupled branch it
+* The FFT solver does not evaluate mutual coupling: the phase current
+  along each path would itself be time-dependent and is more natural to
+  handle in the state-space formulation. It ignores mutual impedance and
+  says so: meeting a coupled branch it
   raises a :class:`~groundinsight.models.core_models.TransientModelWarning`,
   because the same network solved stationarily or with the state-space
   solver returns a lower EPR at the fault (49.2 V against 77.6 V on a
@@ -175,10 +176,9 @@ def _passivity_message(
 
     The state-space solver inverts or integrates every one of these values.
     A negative resistance generates energy, a negative inductance or
-    capacitance has no physical realisation at all, and the pre-0.6.0 code
-    silently *dropped* such an element via its ``> 0`` guards -- so a sign
-    error in a fitted formula came back as a lossless network rather than
-    as a message.
+    capacitance has no physical realisation at all, and a ``> 0`` guard that
+    silently *drops* such an element turns a sign error in a fitted formula
+    into a lossless network instead of a message.
 
     Parameters
     ----------
@@ -211,16 +211,16 @@ def _passivity_message(
 def _time_grid(t_end: float, dt: float) -> Tuple[np.ndarray, int]:
     """Build the time grid both transient solvers run on.
 
-    Until 0.6.0 the two solvers derived their own grid: the FFT solver used
-    ``round(t_end/dt)`` samples rounded *up* to an even count, the state-space
-    solver ``round(t_end/dt) + 1``. The two therefore differed in length by one
-    or two samples for the same ``(t_end, dt)``, so the cheapest cross-check
-    the package has -- comparing the two results element-wise -- failed on the
-    array shape, and the extra state-space sample sat one ``dt`` beyond the
-    window the FFT had solved.
+    Both solvers use this one grid. Two grids derived separately -- say
+    ``round(t_end/dt)`` samples rounded *up* to an even count for the FFT and
+    ``round(t_end/dt) + 1`` for the state space -- differ in length by one or
+    two samples for the same ``(t_end, dt)``: the cheapest cross-check the
+    package has, comparing the two results element-wise, would fail on the
+    array shape, and the extra state-space sample would sit one ``dt``
+    beyond the window the FFT had solved.
 
-    One grid for both removes that. ``N = round(t_end/dt)``, rounded *up* to an
-    even count, over ``t = 0 ... (N-1)*dt``. Two properties are deliberate:
+    The grid: ``N = round(t_end/dt)``, rounded *up* to an even count, over
+    ``t = 0 ... (N-1)*dt``. Two properties are deliberate:
 
     * ``N*dt >= t_end``: the requested duration is the *period* of the grid,
       never less than asked for. It is the period rather than the last sample
@@ -440,11 +440,9 @@ class TransientStudy:
         The network model. Buses, branches, sources and faults are taken
         from this object. Nothing is written back -- no impedance, no
         ``active`` flag, no stored result, no ``network.paths`` and not
-        ``network.active_fault``. Up to audit pass 18 the state-space solver
-        read (and, when they were missing, rebuilt) the source-to-fault
-        paths for its mutual coupling; since pass 19 it takes the phase
-        split from the stationary phase-network solve instead, which needs
-        no path set.
+        ``network.active_fault``. The state-space solver takes the phase split
+        for its mutual coupling from the stationary phase-network solve,
+        which needs no path set.
     fault : str
         Name of the fault this study simulates. It does not have to be the
         network's active fault. It is kept as the attribute ``fault_name``.
@@ -609,9 +607,9 @@ class TransientStudy:
             **smallest strictly positive** entry of ``network.frequencies``
             rather than to its first element: with ``[0, 50]`` the first
             element is 0 Hz, where ``L_src = Im(Z_src)/omega`` is not
-            defined and used to silently come out as zero -- a factor of
-            680 on the EPR of the reference case, decided by nothing but
-            the order of the frequency list.
+            defined -- reading it there as zero changes the EPR of the
+            reference case by a factor of 680, decided by nothing but the
+            order of the frequency list.
         zero_pad : bool, optional
             *FFT solver only.* Solve on a window twice as long and return
             only its first half. The DFT is periodic, so a response that
@@ -625,8 +623,8 @@ class TransientStudy:
             bin for ``n`` active buses). The solver assembles and solves at
             most 512 bins per batch; above about 181 buses this budget
             decides instead, so memory stays bounded for any network size --
-            the fixed 512-bin batch took 1.3 GB at 400 buses and 8.2 GB at
-            1000. The result does not depend on it (every bin is solved on
+            a fixed 512-bin batch would take 1.3 GB at 400 buses and 8.2 GB
+            at 1000. The result does not depend on it (every bin is solved on
             its own). A very small budget costs time on mid-size networks,
             because every batch is one pass of the element-wise assembly:
             150 buses and 1001 bins took 4.5 s at 1 MiB (two bins per batch)
@@ -799,8 +797,9 @@ class TransientStudy:
         # --- sources that can reach the fault ------------------------------
         # Same rule as the stationary solver, which injects only sources with
         # a path to the active fault. Without it a source on a galvanically
-        # isolated bus injected its full spectrum there *and* subtracted it
-        # again at the fault bus, so every bus in the network came out wrong.
+        # isolated bus would inject its full spectrum there *and* subtract it
+        # again at the fault bus, and every bus in the network would come out
+        # wrong.
         injecting = self._sources_reaching_fault(list(source_spectra), fault_bus)
         source_spectra = {
             name: spectrum
@@ -812,8 +811,8 @@ class TransientStudy:
         # Assembled and solved in blocks of bins: LAPACK is called once per
         # block on a stacked ``(K, n, n)`` array instead of once per bin. K is
         # bounded by the bin cap and by the byte budget (P8): a fixed 512-bin
-        # block grew as 512 * n**2 * 16 B -- 1.3 GB at 400 buses, 8.2 GB at
-        # 1000 -- and ran out of memory before it ran out of time.
+        # block would grow as 512 * n**2 * 16 B -- 1.3 GB at 400 buses, 8.2 GB
+        # at 1000 -- and run out of memory before it ran out of time.
         i_spectrum = self._build_i_stack(
             bus_index, source_spectra, fault_bus_idx, n_freqs
         )
@@ -962,8 +961,8 @@ class TransientStudy:
         fault current in four networks (two-bus link, chain, two rings);
         higher at the fault bus and as network maximum in all of 600 random
         chains and meshes with Carson-like parameters, while 6 % of the other
-        buses came out lower. Up to audit pass 18 the message said "lower"
-        and was not tied to any element (PH-L1).
+        buses came out lower. The message states that direction and names
+        every coupled branch.
 
         Warns
         -----
@@ -1065,8 +1064,7 @@ class TransientStudy:
         -- a breadth-first search over the active sub-graph -- rather than
         from the paths, so a transient study does not depend on a path set
         having been built first and does not trigger the path enumeration
-        itself. Until audit pass 19 this method ran a second copy of that
-        search (ARC6).
+        itself.
 
         The search walks every active branch whose two endpoints are both
         active -- exactly the graph :class:`~groundinsight.pathfinder.PathFinder`
@@ -1093,8 +1091,9 @@ class TransientStudy:
         InputWarning
             Code ``TRANSIENT_SOURCE_NOT_CONNECTED`` (elements: the sources)
             when a source with a waveform has no galvanic connection to the
-            fault bus and therefore injects nothing. A log line until audit
-            pass 19 (GUI4).
+            fault bus and therefore injects nothing. A warning, not a log
+            line: the result lacks that source, and the reader has to know
+            (GUI4).
         """
         reachable = set(self.network.sources_reaching(self.fault_name))
         candidates = set(source_names)
@@ -1134,9 +1133,9 @@ class TransientStudy:
         non-zero at DC, but a purely inductive one is exactly zero there, and
         that value is correct rather than mistaken.
 
-        Up to v0.4.0 such an element was skipped, i.e. modelled as an open
-        circuit -- the exact opposite of a short. Now it is modelled with a
-        small finite impedance scaled to the network; see
+        Skipping such an element would model it as an open circuit -- the
+        exact opposite of a short. It is modelled with a small finite
+        impedance scaled to the network instead; see
         :func:`~groundinsight.utils.impedance_calculator.dc_substitute_impedance`.
 
         Parameters
@@ -1182,7 +1181,7 @@ class TransientStudy:
 
         Uses the raw array entry points of the impedance calculator rather
         than the ``{frequency: ComplexNumber}`` dictionary. The values go
-        straight into ``Y``, so the dictionary was built and taken apart
+        straight into ``Y``, so a dictionary would be built and taken apart
         again one bin later: 490 050 model instances and 2.9 s of a 9.2 s
         solve on a 25-bus, 20 000-sample run.
         """
@@ -1369,11 +1368,11 @@ class TransientStudy:
         At 0 Hz it is legitimate physics -- an ideal inductance really is a
         short at DC -- and :meth:`_resolved_z_stack` substitutes the small
         finite stand-in of :meth:`_dc_substitute_for` for it, which reproduces
-        the ideal bond to roughly five significant digits. Up to v0.4.0 such
-        an element was skipped instead, i.e. a short modelled as an open
-        circuit, which made the DC component of such a transient useless. An
-        exact treatment requires merging the two buses into one, which is a
-        modelling decision and is left to the user.
+        the ideal bond to roughly five significant digits. Skipping the element
+        instead would model a short as an open circuit and make the DC
+        component of such a transient useless. An exact treatment requires
+        merging the two buses into one, which is a modelling decision and is
+        left to the user.
 
         Parameters
         ----------
@@ -1525,12 +1524,11 @@ class TransientStudy:
 
         The state-space model has one set of ``R`` / ``L`` / ``C`` values, so
         one frequency of ``network.frequencies`` has to be chosen as the
-        operating point. Until 0.6.0 that was ``frequencies[0]`` --
-        the *list position*, not a physical choice. With ``[0, 50]`` the
-        chosen frequency is 0 Hz, where ``L_src = Im(Z_src) / omega`` divides
-        by zero and came out as a plain 0.0; the reference case's EPR moved
-        from 0.24 V to 161 V purely by prepending a DC bin to the frequency
-        list.
+        operating point. ``frequencies[0]`` would be the *list position*, not
+        a physical choice: with ``[0, 50]`` it is 0 Hz, where
+        ``L_src = Im(Z_src) / omega`` divides by zero, and read as a plain 0.0
+        it moves the reference case's EPR from 0.24 V to 161 V purely by
+        prepending a DC bin to the frequency list.
 
         The default is therefore the smallest strictly positive frequency,
         which is the lowest AC operating point the model was parameterised
@@ -1603,12 +1601,12 @@ class TransientStudy:
         the declared ``phase_impedance_formula``, its proxy, open phase
         conductors and sources that are isolated in the phase network.
 
-        Up to audit pass 18 the factor was read off the enumerated
-        source-to-fault paths as ``sign * parallel_coefficient`` instead, i.e.
-        the legacy ``"paths"`` mode: every route of a ring carried the full
-        source current, +103 % EPR at the fault of a symmetric four-bus ring
-        (PH2). ``Branch.parallel_coefficient`` is no longer read here, just as
-        the stationary ``"auto"`` mode does not read it.
+        Reading the factor off the enumerated source-to-fault paths as
+        ``sign * parallel_coefficient`` -- the ``"paths"`` mode -- would let
+        every route of a ring carry the full source current: +103 % EPR at the
+        fault of a symmetric four-bus ring. ``Branch.parallel_coefficient`` is
+        therefore not read here, just as the stationary ``"auto"`` mode does
+        not read it.
 
         Parameters
         ----------
@@ -1873,7 +1871,7 @@ class TransientStudy:
             ``TRANSIENT_RESISTIVE_COUPLING_IGNORED`` for purely resistive
             branches that carry mutual data, and
             ``TRANSIENT_COUPLING_SKIPPED`` (from :meth:`_phase_split`) for
-            voltage sources. Log lines until audit pass 19 (GUI4).
+            voltage sources.
         """
         if not self._source_waveforms:
             raise ValueError(
@@ -1976,11 +1974,11 @@ class TransientStudy:
                 if branch.L_self and f_eval in branch.L_self
                 else None
             )
-            # Passivity of the lumped fields. A negative R_self used to be
-            # dropped silently by the ``> 0`` tests below, which turned a
-            # sign error into a lossless branch: the ring-down of a
-            # reference case went from 21.9 V to exactly 0 V at t_end with
-            # no message at all. Reject it where the value is read.
+            # Passivity of the lumped fields. The ``> 0`` tests below would
+            # drop a negative R_self silently and turn a sign error into a
+            # lossless branch -- the ring-down of a reference case goes from
+            # 21.9 V to exactly 0 V at t_end with no message at all. Reject it
+            # where the value is read.
             if R_val is not None and R_val < 0:
                 raise ValueError(
                     _passivity_message(
@@ -2289,7 +2287,7 @@ class TransientStudy:
         #
         # Restrictions: only current sources contribute -- voltage
         # sources have a state-dependent loop current that would require
-        # a more involved substitution and is left out for now.
+        # a more involved substitution, which this model does not make.
         mutual_branches: Dict[str, dict] = {}
         for k, (br_name, fi, ti, R_self_val, L_self_val) in enumerate(
             branch_inductive
@@ -2322,13 +2320,13 @@ class TransientStudy:
 
         # Phase split per (coupled branch, current source): the per-unit
         # phase current of the branch, complex, from the same phase-network
-        # solve as ``run_fault(..., phase_current_mode="auto")``. Up to audit
-        # pass 18 the factor was read off the enumerated source-to-fault
-        # paths as ``sign * parallel_coefficient`` (default 1.0) -- the legacy
-        # ``"paths"`` mode, which in a ring gives *each* route the full source
-        # current: 338.3 V instead of 166.6 V at the fault of a symmetric
-        # four-bus ring (+103 %), against a stationary default that had
-        # moved to ``"auto"`` in 0.6 (PH2).
+        # solve as ``run_fault(..., phase_current_mode="auto")``, so that the
+        # transient and the stationary default agree (PH2). The factor is not
+        # read off the enumerated source-to-fault paths as
+        # ``sign * parallel_coefficient`` -- the legacy ``"paths"`` mode, which
+        # in a ring gives *each* route the full source current: 338.3 V
+        # instead of 166.6 V at the fault of a symmetric four-bus ring
+        # (+103 %).
         #
         # The transient solvers treat the source *waveform* as the literal
         # injection; ``fault.scalings`` (a frequency-domain concept for the

@@ -14,7 +14,7 @@ public API unchanged:
 
 1.  **Compilation cache.** ``sympy.sympify`` and ``sympy.lambdify`` are
     expensive (each call typically costs a few milliseconds plus an ``exec``
-    of the generated source). They are now memoised in
+    of the generated source). They are memoised in
     :func:`_compile_formula` with an ``lru_cache`` keyed on the formula
     string and the tuple of parameter names. All buses sharing a
     :class:`BusType` and all branches sharing a :class:`BranchType` therefore
@@ -68,12 +68,12 @@ _OPEN_END_SENTINEL = "nan"
 #: argument of the compiled callable; ``I`` and ``j`` are both spellings of the
 #: imaginary unit and are substituted before evaluation.
 #:
-#: Passing one of them used to lose the caller's value without a word --
-#: ``params={"I": 5.0}`` evaluated ``I`` as ``1j`` and dropped the 5.0, and
-#: ``params={"f": 7.0}`` failed with ``duplicate argument 'f' in function
-#: definition``, a leaked Python error from generated code. ``I`` for current
-#: is about as natural a name as exists in power engineering, which is exactly
-#: why the collision has to be loud rather than resolved by a coin toss.
+#: Unchecked, passing one of them would lose the caller's value without a
+#: word -- ``params={"I": 5.0}`` would evaluate ``I`` as ``1j`` and drop the
+#: 5.0, and ``params={"f": 7.0}`` would fail with ``duplicate argument 'f' in
+#: function definition``, a leaked Python error from generated code. ``I`` for
+#: current is about as natural a name as exists in power engineering, which is
+#: exactly why the collision has to be loud rather than resolved by a coin toss.
 _RESERVED_PARAM_NAMES: Tuple[str, ...] = ("f", "I", "j")
 
 
@@ -147,7 +147,7 @@ _DC_RESOLUTION_ATOL: float = 1e-12
 #: The relative test above cannot judge a limit of zero. The earth-return
 #: resistance ``pi**2*1e-4*f`` of every Carson mutual impedance moves by 90 %
 #: of its value per decade however small it is, and against the absolute
-#: floor it was reported from a length of 11.3 m on although its value at
+#: floor it would be reported from a length of 11.3 m on although its value at
 #: 0 Hz is ``pi**2*1e-12*l`` Ohm. What resolves a limit is the trend of the
 #: step, not its size: a step that shrinks by a factor ``q`` per decade leaves
 #: at most ``q/(1-q)`` of itself between the last probe and the limit -- a
@@ -296,8 +296,8 @@ def _evaluate(compiled_func, freqs_arr: np.ndarray, param_values: Tuple[Any, ...
 
     Constant-in-frequency formulas (e.g. ``"5 + 0j"``) return a scalar from
     lambdify regardless of the input shape; broadcast to the requested
-    frequency grid so the output has one entry per frequency, matching the
-    legacy behaviour. A formula with an unbound symbol (e.g. ``rho`` not
+    frequency grid so the output has one entry per frequency, as for any
+    other formula. A formula with an unbound symbol (e.g. ``rho`` not
     present in ``params``) makes lambdify return a SymPy expression that
     ``np.asarray(..., dtype=complex)`` rejects; that is the path which turns
     "missing parameter" into a ``ValueError`` in the caller.
@@ -1069,10 +1069,9 @@ def check_passive_impedance_array(
     (element, bin).
 
     Neither the rules nor the message exist twice: both checkers classify
-    with :func:`passivity_classes` and word the error with the same builder
-    (audit pass 19, ARC6). Until then this function had its own copy of the
-    rules and handed the offending bins to the dictionary checker for the
-    message.
+    with :func:`passivity_classes` and word the error with the same builder,
+    so a value one checker refuses is refused by the other, in the same
+    words.
 
     Parameters
     ----------
@@ -1193,8 +1192,8 @@ def compute_real_value(
         # on NaN, so this branch is unreachable through the public path today
         # -- it is kept deliberately, because the ``np.isfinite`` test on the
         # next line cannot tell NaN from inf. Drop this guard and a NaN would
-        # not raise but be *stored* as the field value, which is exactly the
-        # bug this pass fixed. It is a second lock on the same door, not a
+        # not raise but be *stored* as the field value -- the silent failure
+        # described above. It is a second lock on the same door, not a
         # duplicate of it.
         if np.isnan(cn.real) or np.isnan(cn.imag):
             raise ValueError(
@@ -1453,21 +1452,22 @@ def check_passive_impedance(
 
     Every value checked here is destined for the diagonal or an off-diagonal
     entry of ``Y`` as its reciprocal ``1/Z``. Four kinds of value have no
-    reciprocal the nodal solve can use, and each of them used to be swallowed
-    silently:
+    reciprocal the nodal solve can use, and each of them would otherwise be
+    swallowed silently:
 
     ``Z == 0`` **above 0 Hz**
         Exactly zero. Read as a *limit*, zero is the ideal case -- a perfect
         earth electrode, a perfect bond -- and a sweep towards it converges
         there. The nodal formulation cannot express it: an infinite admittance
-        is not a number, so a zero-impedance element used to be dropped from
-        the matrix instead, which is the *opposite* of the limit. A bus whose
-        grounding impedance is zero then reported the full earth potential
-        rise and no current into the soil -- exactly what a bus with *no*
-        electrode reports. The two were indistinguishable. Model a near-ideal
-        electrode with a small finite value instead: the solution converges
-        smoothly as ``Z`` goes to zero, with a relative error of the order of
-        the ratio between that value and the other impedances in the network.
+        is not a number, and dropping a zero-impedance element from the
+        matrix instead would be the *opposite* of the limit. A bus whose
+        grounding impedance is zero would then report the full earth
+        potential rise and no current into the soil -- exactly what a bus with
+        *no* electrode reports, and the two would be indistinguishable. Model
+        a near-ideal electrode with a small finite value instead: the solution
+        converges smoothly as ``Z`` goes to zero, with a relative error of the
+        order of the ratio between that value and the other impedances in the
+        network.
         In a network whose impedances are of the order of 1 Ohm, ``1e-6`` Ohm
         reproduces the ideal-earth limit to about seven digits, and every
         further decade buys another digit.
@@ -1497,9 +1497,9 @@ def check_passive_impedance(
         potential rise grows without bound and without warning.
 
     ``Re(Z) == -inf``
-        The same rule at its limit, and the one value it used to miss: only
-        finite values were inspected, and ``1/(-inf) == 0`` made the solver
-        read the element as an open circuit, without a word. It comes from a
+        The same rule at its limit, and the one value an inspection of finite
+        values alone would miss: ``1/(-inf) == 0`` makes the solver read the
+        element as an open circuit, without a word. It comes from a
         ``log(f)`` term that no factor of ``f`` cancels -- ``log(0)`` is
         ``-inf`` -- so in practice it appears at 0 Hz, i.e. in a DC study and
         in the 0 Hz bin of every transient study. Close to 0 Hz such a
@@ -1605,8 +1605,8 @@ def passivity_classes(
     The rules are explained in :func:`check_passive_impedance`. This is their
     only implementation: the dictionary checker, the array checker of the
     transient solver and the vectorised pass/fail of the stationary kernel
-    (:func:`non_passive_mask`) all call it. Until audit pass 19 each of the
-    three carried its own copy of the masks (ARC6).
+    (:func:`non_passive_mask`) all call it, so the three cannot disagree on
+    a value.
 
     Parameters
     ----------

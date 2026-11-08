@@ -237,10 +237,10 @@ class CutAnalysis(BaseModel):
         residual grows as soon as the decomposition misses a current path out
         of the fault bus -- a Thevenin loop closure, say, which is worth 2.5 to
         23 % of the fault current on the review's cases. It cannot show that
-        the *model* is right; that is what the reference cases are for. Before
-        0.6.1 both sides came from one locally assembled matrix, and the
-        residual was then zero by construction: it followed from the KCL of the
-        unit-injection solve and could not disagree with anything.
+        the *model* is right; that is what the reference cases are for. The
+        two sides do not come from one locally assembled matrix: the residual
+        would then be zero by construction -- it would follow from the KCL of
+        the unit-injection solve and could not disagree with anything.
     i_shield : dict of str to dict of float to complex
         Shield current leaving the fault bus in each direction. Empty when no
         solved result was available.
@@ -542,10 +542,9 @@ def _unit_injection(
         return None
     i_vector = np.zeros(len(ordered), dtype=complex)
     i_vector[index[fault_bus]] = 1.0
-    # A sparse LU of the matrix (audit pass 19, P7): the dense solve on a copy
-    # of a dense ``Y`` was cubic in the number of buses -- 2.8 s on a
-    # 2000-bus ring at seven frequencies -- for a system with a handful of
-    # entries per row.
+    # A sparse LU of the matrix: a dense solve on a copy of a dense ``Y`` is
+    # cubic in the number of buses -- 2.8 s on a 2000-bus ring at seven
+    # frequencies -- for a system with a handful of entries per row.
     try:
         u = splu(csc_matrix(Y)).solve(i_vector)
     except (np.linalg.LinAlgError, RuntimeError):
@@ -894,10 +893,10 @@ def analyze_cuts(
         branch_results = {b.name: b for b in result.branches}
         bus_results = {b.name: b for b in result.buses}
 
-        # A result that does not cover the whole network used to surface as a
-        # bare ``KeyError: 'K9'`` out of the loops below. The thermal checks
-        # already explain that situation; the guard is now shared rather than
-        # reimplemented, so both name the cause and the remedy the same way.
+        # A result that does not cover the whole network would otherwise
+        # surface as a bare ``KeyError: 'K9'`` out of the loops below. The
+        # guard is the one the thermal checks use, so both name the cause and
+        # the remedy the same way.
         needed_buses = sorted(
             {fault_bus}
             | {b for side in directions.values() for b in side}

@@ -28,15 +28,13 @@ The cases
     first case is its ``Z_E -> 0`` limit, which is why the two must converge.
 ``en50522_chain``
     The earth-return current ``I_E`` of a six-station chain, re-derived from a
-    nodal system assembled here from the model's own impedances. It replaces
-    the ``U_E = 3*I_0 * Z_E * r`` check of 0.6.0, which was a tautology: the
-    implementation *defined* ``Z_E = U_E / I_E`` and ``r = |I_E| / |I_F|``, so
-    the product returned ``U_E`` algebraically and the case agreed to 1e-16
-    whatever the model did. Since audit pass 19 ``Z_E`` is the driving-point
-    impedance at the fault bus and the chain is a physical statement (pinned
-    on a long chain by the test suite); the old pair is kept as
-    ``u_earthing_group`` / ``z_earthing_group``, on which it is still closed
-    by construction.
+    nodal system assembled here from the model's own impedances. The case
+    does not check ``U_E = 3*I_0 * Z_E * r`` with all factors read out of one
+    result: with ``Z_E`` the driving-point impedance at the fault bus that
+    relation is a physical statement (pinned on a long chain by the test
+    suite), but for the group pair ``u_earthing_group`` /
+    ``z_earthing_group`` it is closed by construction, and a case built on it
+    would agree to 1e-16 whatever the model did.
 ``ladder_input_impedance``
     A chain of bonded stations is a ladder network, and a long one presents
     ``Z_in = -Z'/2 + sqrt(Z'^2/4 + Z_e*Z')`` at its end.
@@ -292,8 +290,7 @@ def _line_finite_earthing() -> Tuple[float, float]:
     z_electrode = complex(10.0, 0.0)
     # Two sections between the two earthed ends would put a third electrode in
     # parallel with the loop, and the closed form is taken over the two end
-    # electrodes -- so the case runs on the two-bus line. (Until 0.6.1 a
-    # three-bus chain was built and solved here as well, and then never read.)
+    # electrodes -- so the case runs on the two-bus line.
     net2, _ = _chain(2, z_electrode, z_self, z_mutual)
     z_loop = z_self * 1.0  # one section of 1 km
     closed_form = abs((z_loop - z_mutual) / (z_loop + 2 * z_electrode))
@@ -312,16 +309,15 @@ def _en50522_chain() -> Tuple[float, float]:
     solved fault -- so the matrix, the solve, the electrode currents and the
     group sum are all done a second way.
 
-    What this case does *not* do, and used to. Until 0.6.1 it checked
-    ``U_E = 3*I_0 * Z_E * r`` with all three factors read out of one result.
-    That identity was closed by construction in the implementation -- ``Z_E``
-    was defined as ``U_E / I_E`` and ``r`` as ``|I_E| / |I_F|``, so
-    ``Z_E * r * I_F`` reduced to ``U_E`` algebraically (as it still does for
-    ``z_earthing_group``) -- and the case therefore agreed to
-    machine precision whatever the model did. Multiplying every electrode
-    current by three made the reported deviation *smaller*. A tautology that
-    reports 1e-16 is worse than no case at all, because the row it writes says
-    "agrees".
+    What this case does *not* do: check ``U_E = 3*I_0 * Z_E * r`` with all
+    three factors read out of one result. For the group pair that identity is
+    closed by construction -- ``z_earthing_group`` is
+    ``u_earthing_group / I_E`` and ``r`` is ``|I_E| / |I_F|``, so the product
+    reduces to ``u_earthing_group`` algebraically -- and such a case would
+    agree to machine precision whatever the model did; multiplying every
+    electrode current by three would make the reported deviation *smaller*.
+    A tautology that reports 1e-16 is worse than no case at all, because the
+    row it writes says "agrees".
 
     The mutual injection vector is taken from the solved fault rather than
     rebuilt: ``line_ideal_bonding`` and ``line_finite_earthing`` are the cases
@@ -386,11 +382,10 @@ def _ladder_potential_decay() -> Tuple[float, float]:
 
     The nodal matrix is assembled from ``bus.impedance`` and
     ``branch.self_impedance``, i.e. from what the *model* evaluated out of the
-    two type formulas. Until 0.6.1 it was built from the two local constants
-    below instead, which made the case blind to the model entirely: an
-    electrode impedance a hundred times too large left both sides of the
-    comparison untouched, while ``ladder_input_impedance`` -- which does read
-    the model -- caught it at once.
+    two type formulas, not from the two local constants below: built from
+    those, the case would be blind to the model entirely -- an electrode
+    impedance a hundred times too large would leave both sides of the
+    comparison untouched.
     """
     z_series, z_electrode = complex(0.1, 0.2), complex(10.0, 0.0)
     gamma = cmath.acosh(1.0 + z_series / (2.0 * z_electrode))

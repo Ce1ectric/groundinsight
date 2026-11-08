@@ -318,7 +318,7 @@ class OutageStudyResult(BaseModel):
         relative deltas are computed for every other scenario. ``frequency_Hz``
         is rendered as ``Utf8`` -- ``"RMS"`` for the RMS row, the frequency
         otherwise -- because it is a *join key* here: the RMS row carries
-        ``null`` in the numeric column since 0.6.1, and joining on a null key
+        ``null`` in the numeric column, and joining on a null key
         would drop exactly the row an outage study is usually read from. See
         :func:`_frequency_label`.
 

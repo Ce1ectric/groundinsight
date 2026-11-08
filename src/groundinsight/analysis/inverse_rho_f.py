@@ -664,15 +664,14 @@ def find_max_rho_f_scaling(
                 max_iter, c_lo, c_hi, (c_hi - c_lo) / c_lo, tol_rel, c_lo,
             )
 
-    # The invariant this used to re-measure: the maximum of the per-bus EPRs
-    # at c_max is the reported ``max_epr_rms_at_c_max``. It was locked in by
-    # evaluating ``c_max`` once more -- a full bus sweep, ``N`` run_fault calls
-    # -- which is the one thing the snapshot makes unnecessary:
+    # The invariant: the maximum of the per-bus EPRs at c_max is the reported
+    # ``max_epr_rms_at_c_max``. It holds without evaluating ``c_max`` once
+    # more -- a full bus sweep, ``N`` run_fault calls -- because
     # ``eprs_lo_snapshot`` is the per-bus dict of exactly the evaluation that
     # set ``epr_lo``, at exactly this ``c``. Taking the headline figure *from*
     # the snapshot rather than beside it makes the two agree by construction
-    # instead of by repetition, and the sweep count drops from (iter + 3)*N to
-    # (iter + 2)*N.
+    # instead of by repetition, at (iter + 2)*N run_fault calls instead of
+    # (iter + 3)*N.
     epr_at = max(epr_per_bus_at.values()) if epr_per_bus_at else epr_at
 
     return {

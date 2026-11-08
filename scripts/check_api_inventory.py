@@ -6,8 +6,8 @@ Check that every public name of ``groundinsight`` is rendered on the API pages.
 Why the built inventory
     A name in ``groundinsight.__all__`` that no API page renders is invisible
     on the site: a user who meets a ``DCLimitWarning`` or wants to call
-    ``gi.migrate_database`` finds nothing; audit pass 19 found such names
-    (DOC4). Parsing the ``:::`` directives of the Markdown pages
+    ``gi.migrate_database`` would find nothing (the check guards against
+    DOC4). Parsing the ``:::`` directives of the Markdown pages
     cannot settle the question on its own, because mkdocstrings leaves out
     members it considers undocumented (a constant without a docstring) or
     private. The inventory the build writes, ``site/objects.inv``, lists what

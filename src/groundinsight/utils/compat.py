@@ -3,15 +3,12 @@
 """
 Keyword aliases for renamed public parameters.
 
-Audit pass 19 gave every concept of the public API one parameter name
-(finding USE8/STD3). The fault is ``fault`` -- ``run_sweep``,
-``run_outage_study``, ``bus_response`` and ``analyze_cuts`` already called it
-that, ``run_fault`` and half of the analysis layer said ``fault_name``. An
-EPR limit is ``u_limit``, a fault duration ``t_k_s``, the IEC 60909 AC heat
-factor ``n_factor`` and a frequency ``frequency``: the names the model fields
-(``Fault.t_k_s``, ``Fault.n_factor``) and the newer functions were already
-using. A user who learned one call could guess the next one; the mixed names
-made every call a lookup.
+Every concept of the public API has one parameter name. The fault is
+``fault``; an EPR limit is ``u_limit``, a fault duration ``t_k_s``, the
+IEC 60909 AC heat factor ``n_factor`` and a frequency ``frequency`` -- the
+names of the model fields (``Fault.t_k_s``, ``Fault.n_factor``). A user who
+learned one call can guess the next one; mixed names would make every call a
+lookup.
 
 Renaming a public parameter breaks every call site that passes it by keyword,
 so the old names keep working for a while. :func:`renamed_parameters` maps an

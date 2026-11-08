@@ -14,15 +14,14 @@ The primary use cases include:
 
 Settings and memo belong to the network
 ---------------------------------------
-Up to audit pass 19 the search kept its limits in module globals
-(``set_pathfinder_max_paths``, ``set_pathfinder_cache_size``) and its memo in
-three module-level dictionaries keyed by ``id(network)``. A limit set for one
-network applied to every network of the process -- also to one that another
-thread was solving at that moment -- the dictionaries were mutated from
-several threads without a lock, and they kept the branches of networks long
-gone alive until the LRU evicted them (finding ARC2).
+The search keeps its limits and its memo per network, not per process. A
+limit in a module global would apply to every network of the process -- also
+to one that another thread is solving at that moment -- and a memo in
+module-level dictionaries keyed by ``id(network)`` would be mutated from
+several threads without a lock and keep the branches of networks long gone
+alive until an LRU evicted them.
 
-Both now belong to the network:
+Both belong to the network:
 
 * :class:`PathfinderSettings` (``max_paths``, ``cache_size``) is runtime
   configuration of one network, set with ``network.pathfinder_settings =

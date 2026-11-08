@@ -567,7 +567,7 @@ def _check_sources(report: _Report) -> None:
     A current source injects ``values[f]``, a Thevenin source ``voltage[f]``
     over ``source_impedance[f]``; a frequency without a value contributes
     nothing at that frequency, and a source covering none of them contributes
-    nothing at all (finding USE3). The codes ``SOURCE_FREQUENCY_GAP`` and
+    nothing at all. The codes ``SOURCE_FREQUENCY_GAP`` and
     ``SOURCE_FREQUENCY_OUTSIDE_NETWORK`` are the ones the solve raises for the
     same conditions.
     """

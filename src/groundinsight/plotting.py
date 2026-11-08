@@ -25,12 +25,12 @@ drawn and *who owns* the resulting figure:
     parameter sweep needs in order not to accumulate figures until
     matplotlib warns at twenty.
 
-Omitting both reproduces the historical behaviour exactly: a new figure of
-the helper's default size, registered with ``pyplot`` and left open.
+Omitting both gives a new figure of the helper's default size, registered
+with ``pyplot`` and left open.
 
 ``matplotlib.pyplot`` is imported on the first call of a helper, not when the
-package is imported (audit finding GUI8). The module-level import used to cost
-every ``import groundinsight`` about a third of its time (0.36 s of 1.1 s) and
+package is imported. A module-level import would cost every
+``import groundinsight`` about a third of its time (0.36 s of 1.1 s) and
 put pyplot's global state -- backend selection, the figure registry -- into
 every process, including a multi-threaded GUI or server that never draws with
 matplotlib. The annotations below name ``plt.Axes`` / ``plt.Figure`` as

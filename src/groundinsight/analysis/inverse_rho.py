@@ -427,7 +427,7 @@ def find_max_rho_scaling(
     # it stands. Every ``run_fault`` below replaces it with the matrices of a
     # trial rho, so without this backup the network would be left carrying the
     # Y of the last bisection step next to the restored rho. That combination
-    # is not merely stale, it is inconsistent: it produced a *negative*
+    # is not merely stale, it is inconsistent: it gives a *negative*
     # driving-point impedance in the review case. The pre-search object was
     # built from exactly the state restored below, so putting it back is
     # correct rather than merely conservative.

@@ -241,9 +241,9 @@ class BusResponse(BaseModel):
         -----
         The electrode is a value, not a frequency-dependent model: the
         frequency dependence lives in :attr:`z_network` and in whatever the
-        caller passes per frequency. The method used to take a ``freq``
-        argument that it never read; it was removed in 0.6.1 rather than left
-        as a parameter that promises an influence it does not have.
+        caller passes per frequency. The method therefore takes no frequency:
+        a parameter it never read would promise an influence it does not
+        have.
         """
         if z_bus is None:
             return 0.0 + 0.0j
@@ -396,7 +396,7 @@ class BusResponse(BaseModel):
 
         with both endpoints as exact limits. It is the quantity
         ``run_fault`` reports as ``ResultReductionFactor.z_earthing`` and as
-        the grounding impedance (decision F4); for ``bus == fault_bus`` it
+        the grounding impedance; for ``bus == fault_bus`` it
         reduces to :meth:`driving_point` of a network without voltage source.
 
         Where the electrode at ``bus`` is the only one of the fault side
@@ -548,9 +548,8 @@ class BusResponse(BaseModel):
 
         ``r_I = |I_E| / |I_F|`` with ``I_E`` summed over every bus that feeds the
         soil, matching ``ResultReductionFactor.value_current``, under the same
-        noise rules (P9). The earthing impedance is no longer derived from the
-        group: it is the fault-bus driving point,
-        :meth:`fault_driving_point` (decision F4).
+        noise rules. The earthing impedance is not derived from the group: it
+        is the fault-bus driving point, :meth:`fault_driving_point`.
 
         The bus being varied is included like any other -- its electrode is part
         of the earthing system, and leaving it out would reduce the whole sum to
@@ -634,8 +633,8 @@ class BusResponse(BaseModel):
         the fault bus. ``Z_G_Ohm`` is the EN 50522 earthing impedance
         ``|Z_E|``: the driving-point impedance of the earthing network at the
         **fault** bus for this electrode (:meth:`fault_driving_point`), the same
-        definition :func:`~groundinsight.network_operations.run_fault` reports
-        (decision F4). For ``bus == fault_bus`` it equals
+        definition :func:`~groundinsight.network_operations.run_fault` reports.
+        For ``bus == fault_bus`` it equals
         ``Z_driving_point_Ohm`` when the network has no voltage source.
         """
         return _frame(self._rows(z_bus, label, self.frequencies))
@@ -736,9 +735,9 @@ class BusResponse(BaseModel):
         ------
         ValueError
             If ``z_values`` is empty, or if ``labels`` has a different length.
-            An empty sweep used to reach ``pl.concat([])`` and come back as a
-            polars error about an empty iterable, which names neither the
-            argument nor the caller's mistake.
+            An empty sweep would otherwise reach ``pl.concat([])`` and come
+            back as a polars error about an empty iterable, which names
+            neither the argument nor the caller's mistake.
         """
         if not len(z_values):
             raise ValueError(
@@ -1001,9 +1000,9 @@ def bus_response(
         # same fault injection without the mutual Norton equivalents. The third
         # is what makes ``r_epr`` evaluable per electrode (it is the denominator
         # of the reduction factor). The factorisation is a sparse LU of the
-        # assembled matrix (audit pass 19, P7): the dense solve on a copy of a
-        # dense ``Y`` was cubic in the number of buses -- 5.6 s on a 2000-bus
-        # ring at seven frequencies, the dense earthing columns included.
+        # assembled matrix: a dense solve on a copy of a dense ``Y`` is cubic in
+        # the number of buses -- 5.6 s on a 2000-bus ring at seven frequencies,
+        # the dense earthing columns included.
         i_no_mutual = electrical.i_vectors_no_mutual.get(freq)
         rhs = [np.asarray(i_vector, dtype=complex), unit]
         if i_no_mutual is not None:
@@ -1090,7 +1089,7 @@ def _earthing_columns(electrical, Y0: csc_matrix, factor, bus_idx: int,
     ``Y0`` is the solved matrix with the shunt at ``bus_idx`` taken out; the
     Thevenin loop closures of voltage sources are taken out as well, because
     they belong to the fault loop and not to the earthing network whose
-    driving point ``Z_E`` is (decision F4). Whether that network still earths
+    driving point ``Z_E`` is. Whether that network still earths
     the fault side is decided by structure, not by the solver: the group of
     buses connected to the fault bus through shields
     (:func:`~groundinsight.electrical_network.component_labels`) has to hold

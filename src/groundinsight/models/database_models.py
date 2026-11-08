@@ -547,10 +547,9 @@ class BranchDB(Base):
 
     type = relationship("BranchTypeDB", backref="branches")
     network = relationship("NetworkDB", back_populates="branches")
-    # ``from_bus`` / ``to_bus`` object relationships were dropped together
-    # with the single-column bus key: ``to_pydantic`` only ever needed the
-    # plain names, and mapping them over the composite key would overlap
-    # with ``network`` on the shared ``network_name`` column.
+    # No ``from_bus`` / ``to_bus`` object relationships: ``to_pydantic``
+    # needs only the plain names, and mapping them over the composite bus key
+    # would overlap with ``network`` on the shared ``network_name`` column.
 
     def to_pydantic(self):
         """Convert the row back into a Pydantic :class:`Branch`.
@@ -798,8 +797,8 @@ class SourceDB(Base):
     """
     SourceDB Model.
 
-    Represents a Source in the database. Both the legacy current-source mode
-    and the Thevenin (voltage-source) mode are persisted in the same row.
+    Represents a Source in the database. Both the current-source mode and
+    the Thevenin (voltage-source) mode are persisted in the same row.
     The ``source_type`` column selects which of ``values`` and the pair
     ``(voltage, source_impedance)`` carries the actual data; the other
     fields are stored as ``NULL``.
@@ -937,12 +936,12 @@ class PathSegmentDB(Base):
     PathSegmentDB Model.
 
     One ordered segment of a :class:`PathDB`, pointing at a branch of the same
-    network. This used to be a plain association table without an ordering
-    column, so a round-trip returned ``Path.segments`` in an unspecified order.
-    Segment order is semantically meaningful -- the solver walks the segments
-    from the source bus onwards and raises if a segment does not connect to the
-    current bus -- hence the explicit ``position`` column, which is part of the
-    primary key and drives ``PathDB.segments``' ``order_by``.
+    network. Segment order is semantically meaningful -- the solver walks the
+    segments from the source bus onwards and raises if a segment does not
+    connect to the current bus -- hence the explicit ``position`` column,
+    which is part of the primary key and drives ``PathDB.segments``'
+    ``order_by``. A plain association table would return ``Path.segments`` in
+    an unspecified order.
     """
 
     __tablename__ = "path_segments"
@@ -1103,10 +1102,10 @@ class NetworkDB(Base):
 
     name = Column(String, primary_key=True)
     description = Column(Text, nullable=True)
-    # Plain JSON list of floats. This column used to be a ``PickleType``,
-    # which made loading a database an *execution* of whatever the file
-    # contained: ``pickle.loads`` runs before any Pydantic validator ever sees
-    # the value, so a ``.db`` handed over by someone else was arbitrary code
+    # Plain JSON list of floats, not a ``PickleType``: a pickle column makes
+    # loading a database an *execution* of whatever the file contains.
+    # ``pickle.loads`` runs before any Pydantic validator ever sees the value,
+    # so a ``.db`` handed over by someone else would be arbitrary code
     # execution -- the very thing ``utils.validations.assert_safe_formula``
     # exists to prevent on the formula side. A frequency list is a list of
     # numbers and needs no object graph, so JSON is both sufficient and inert.

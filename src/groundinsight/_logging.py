@@ -10,11 +10,11 @@ logs (``logging.getLogger(__name__)``); applications and notebooks opt in to
 log output by configuring :mod:`logging` themselves or by calling
 :func:`set_log_level`.
 
-This code lived in the package ``__init__`` until audit pass 19 (ARC3). The
-``__init__`` now only imports and re-exports; it imports this module first,
-so the handler is in place before any other module of the package can log.
-Unlike the old in-``__init__`` setup, re-importing the package (for example
-with :func:`importlib.reload`) does not stack a second ``NullHandler``.
+The package ``__init__`` only imports and re-exports; it imports this module
+first, so the handler is in place before any other module of the package can
+log. Re-importing the package (for example with :func:`importlib.reload`)
+does not stack a second ``NullHandler``: the handler is attached only to a
+package logger that has none.
 """
 
 import logging
@@ -91,9 +91,9 @@ def set_log_level(level: Union[int, str] = "INFO") -> logging.Logger:
     pkg_logger = logging.getLogger(PACKAGE_LOGGER)
     pkg_logger.setLevel(level)
 
-    # Collect every console-style handler installed previously, keep the
-    # marked one, drop any stragglers that may have been attached by an
-    # earlier (pre-0.5) version of this helper or by user code.
+    # Keep the marked handler of an earlier call and remove every other
+    # StreamHandler of the package logger (one attached by user code, for
+    # instance), so that a record is not printed twice.
     marked = [
         h for h in pkg_logger.handlers if getattr(h, _GI_HANDLER_MARK, False)
     ]
@@ -109,9 +109,8 @@ def set_log_level(level: Union[int, str] = "INFO") -> logging.Logger:
         # Re-use the existing marked handler — just align its level so
         # filtering happens at both the logger and the handler level.
         handler = marked[0]
-        # Defensive: if for some reason multiple marked handlers are
-        # present (e.g. from a previous buggy release running in the same
-        # interpreter), keep only the first.
+        # Defensive: if more than one marked handler is attached, keep only
+        # the first.
         for extra in marked[1:]:
             pkg_logger.removeHandler(extra)
         handler.setLevel(level)

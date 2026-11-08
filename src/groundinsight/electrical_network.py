@@ -25,20 +25,22 @@ injected as +i_mut out of the from bus (nodal: i_vector[from] -= i_mut) and
 +i_mut into the to bus (nodal: i_vector[to] += i_mut).
 
 Two strategies are available to determine the phase current I_p per branch:
-1) Path-based (default). For every simple path from source to fault, the
-   branch direction is derived from the actual path traversal (no index
-   heuristic). The user may scale the contribution per branch via
-   Branch.parallel_coefficient, which is the legacy knob for splitting
-   current between parallel paths.
-2) Automatic distribution (auto_phase_currents=True). A reduced phase-only
-   network is solved with +I at each source bus and the fault bus as
-   reference. The resulting branch currents are used directly. In this
-   mode parallel_coefficient is ignored. This mode is topology-agnostic and
-   is the intended integration point for an external phase-current source
-   (e.g. pandapower single-phase short-circuit results).
+1) Path-based (``auto_phase_currents=False``, the default of this class;
+   ``run_fault(phase_current_mode="paths")``). For every simple path from
+   source to fault, the branch direction is derived from the actual path
+   traversal (no index heuristic). The user may scale the contribution per
+   branch via Branch.parallel_coefficient, the knob for splitting current
+   between parallel paths in this mode.
+2) Automatic distribution (``auto_phase_currents=True``; the default of
+   :func:`~groundinsight.run_fault`, ``phase_current_mode="auto"``). A
+   reduced phase-only network is solved with +I at each source bus and the
+   fault bus as reference. The resulting branch currents are used directly.
+   In this mode parallel_coefficient is ignored. This mode is
+   topology-agnostic and is the intended integration point for an external
+   phase-current source (e.g. pandapower single-phase short-circuit results).
 
-Sparse kernel (audit pass 19)
------------------------------
+Sparse kernel
+-------------
 Both linear systems of a frequency are sparse -- a grounding network has a
 few entries per row -- and the kernel treats them that way end to end.
 
@@ -54,33 +56,32 @@ closure -- depends on the topology only. The positions are laid out once
 per network (:class:`_StampPattern`: CSC ``indices``/``indptr`` and the
 entry of every stamp); a frequency then costs one vector of admittances and
 one summation per entry, straight into the CSC matrix the LU factorises
-(:attr:`ElectricalNetwork.Y_sparse`). Until pass 18 every frequency built a
-dense ``n x n`` matrix and kept it, and each was scanned in full to become
-CSC: memory grew as ``n**2 * F`` (finding P2). ``Y_matrices`` survives as a
-dense view that materialises a matrix only when someone reads it.
+(:attr:`ElectricalNetwork.Y_sparse`). A dense ``n x n`` matrix kept per
+frequency would make the memory grow as ``n**2 * F``; ``Y_matrices`` is
+therefore only a dense view that materialises a matrix when someone reads
+it.
 
 *One factorisation, many right-hand sides.* The phase-conductor network is
 the same matrix for every source, so it is factorised once per frequency
 (:func:`scipy.sparse.linalg.splu`) and solved for all sources as the columns
-of one right-hand side (finding P1). It used to be a dense ``n x n`` solve
-per source and frequency -- the dominant cost of a run, growing faster than
-``n**2``.
+of one right-hand side. A dense ``n x n`` solve per source and frequency
+would be the dominant cost of a run, growing faster than ``n**2``.
 
 *Result objects with the collector paused.* A solve creates one
 :class:`ComplexNumber` per element, quantity and frequency. Those objects
 form no reference cycles, but their sheer number keeps triggering the cyclic
 garbage collector, which then walks the whole network model each time. The
-result rows are therefore built inside :func:`_gc_paused` (finding P5a),
-which restores the collector afterwards.
+result rows are therefore built inside :func:`_gc_paused`, which restores
+the collector afterwards.
 
 *Program order, kept on purpose.* Matrices are assembled from stamps whose
-contributions are summed entry by entry in the order the former dense loops
-added them (:func:`_assemble_csc`). What remains different is rounding: the
-admittances come from NumPy's complex division, which differs from Python's
-in the last bit for about a quarter of all values, and the factorisation is a
-sparse LU instead of LAPACK's dense one. On the badly conditioned phase
-network of a long radial feeder the sparse LU is the *more* accurate of the
-two (finding P13).
+contributions are summed entry by entry in the order an element-by-element
+dense assembly adds them (:func:`_assemble_csc`), so the sums are those of
+that reference. What differs from it is rounding: the admittances come from
+NumPy's complex division, which differs from Python's in the last bit for
+about a quarter of all values, and the factorisation is a sparse LU instead
+of LAPACK's dense one. On the badly conditioned phase network of a long
+radial feeder the sparse LU is the *more* accurate of the two.
 """
 
 import gc
@@ -194,11 +195,11 @@ def _is_open_circuit(Z_complex: complex) -> bool:
     "no path to reference earth" message even when every other bus is
     properly earthed.
 
-    ``Z == 0`` is deliberately *not* treated as open any more. Up to v0.4.0 it
-    was, which made a perfect earth electrode indistinguishable from a missing
-    one: sweeping a grounding impedance towards zero converges to EPR = 0, but
-    the value *at* zero returned the no-electrode EPR. Above 0 Hz zero is now
-    rejected where it is computed
+    ``Z == 0`` is deliberately *not* treated as open: that would make a perfect
+    earth electrode indistinguishable from a missing one -- sweeping a
+    grounding impedance towards zero converges to EPR = 0, while the value
+    *at* zero would return the no-electrode EPR. Above 0 Hz zero is rejected
+    where it is computed
     (:func:`utils.impedance_calculator.check_passive_impedance`) and again in
     :meth:`ElectricalNetwork._validate_passive_impedances` for values that
     never passed through a formula. At 0 Hz it is legitimate -- an inductance
@@ -251,8 +252,8 @@ def _gc_paused() -> Iterator[None]:
     that traverses the *whole* object graph, the network model included.
     None of these objects forms a reference cycle: they are freed by
     reference counting the moment they are dropped, so the traversals find
-    nothing and only cost time (finding P5: half of the result-building time
-    on large networks).
+    nothing and only cost time -- measured at half of the result-building
+    time on large networks.
 
     The collector is disabled only if it was enabled when the first pause
     began, and enabled again when the last pause ends -- also when the
@@ -482,11 +483,11 @@ def assemble_nodal_matrices(
 
     The bus admittances are the first ``n`` stamps of the pattern; the four
     stamps of every grounding branch and of every Thevenin loop closure
-    follow, in the order the former dense loops added them, and every entry
-    is summed in that order (:meth:`_StampPattern.matrix`). The assembly and
-    the study sessions that re-assemble ``Y`` for changed bus impedances
-    (P4) both go through here, so the same admittances give bit for bit the
-    same matrices.
+    follow, in the order an element-by-element dense assembly adds them, and
+    every entry is summed in that order (:meth:`_StampPattern.matrix`). The
+    assembly and the study sessions that re-assemble ``Y`` for changed bus
+    impedances both go through here, so the same admittances give bit for
+    bit the same matrices.
 
     Parameters
     ----------
@@ -608,10 +609,10 @@ class _StampPattern:
     depend on the frequency; only its value does. The structure (CSC
     ``indices``/``indptr`` and the map from each stamp to its entry) is
     therefore computed once per network and reused for every frequency, which
-    then costs one :func:`numpy.bincount` per real and imaginary part (finding
-    P2: the dense assembly allocated and filled one ``n x n`` matrix per
-    frequency in a Python loop, and converted each to CSC by scanning all
-    ``n**2`` entries).
+    then costs one :func:`numpy.bincount` per real and imaginary part (P2: a
+    dense assembly would allocate and fill one ``n x n`` matrix per frequency
+    in a Python loop, and convert each to CSC by scanning all ``n**2``
+    entries).
 
     :func:`numpy.bincount` adds the contributions of each entry starting from
     zero in the order they were stamped -- the same additions in the same
@@ -736,10 +737,10 @@ class NodalParts(NamedTuple):
 
 
 class _DenseYView(Mapping):
-    """``Y_matrices`` as it used to be: frequency to dense ``numpy`` array.
+    """``Y_matrices``: frequency to dense ``numpy`` array, materialised on access.
 
     The solver works on :attr:`ElectricalNetwork.Y_sparse`. This read-only
-    mapping keeps the historic attribute usable for code that reads a dense
+    mapping keeps the attribute usable for code that reads a dense
     matrix -- each access materialises a fresh dense copy of the sparse
     matrix, so the ``n x n`` cost is paid only by whoever asks for it, and
     writing into the returned array does not reach the solve.
@@ -812,13 +813,13 @@ def _extra_entries(
 class _NetworkTables:
     """Everything one assembly reads from the model, gathered into arrays.
 
-    A ``run_fault`` used to touch every bus and branch once per frequency and
-    stage -- assembly, phase network, coupling terms, result rows -- each time
-    through a Python-level dictionary lookup and :meth:`ElectricalNetwork.resolved_impedance`.
-    On a 4000-bus ring at seven frequencies that was several hundred thousand
-    calls before any linear algebra happened (finding P6). The tables are
-    filled once per :class:`ElectricalNetwork` and every later stage indexes
-    into them; the state fingerprint is a digest of the same arrays.
+    Touching every bus and branch once per frequency and stage -- assembly,
+    phase network, coupling terms, result rows -- through a Python-level
+    dictionary lookup and :meth:`ElectricalNetwork.resolved_impedance` would
+    cost several hundred thousand calls on a 4000-bus ring at seven
+    frequencies before any linear algebra happens. The tables are filled
+    once per :class:`ElectricalNetwork` and every later stage indexes into
+    them; the state fingerprint is a digest of the same arrays.
 
     Rows follow the model: ``bus_*`` arrays have one row per *active* bus in
     :attr:`ElectricalNetwork.bus_indices` order (``all_bus_*`` one per bus,
@@ -1077,10 +1078,9 @@ class _NetworkTables:
         a BLAKE2 digest as raw bytes instead of a tuple of Python floats with
         one entry per element and frequency. Built from tables the assembly
         has gathered anyway, the digest costs about 5 ms on a 4000-bus ring at
-        seven frequencies, where the separate pass over the model that built
-        the tuple took about 26 ms on every build (finding P6). Negative zeros are
-        folded into zeros first, so that ``0.0`` and ``-0.0`` compare equal as
-        they did in the tuple.
+        seven frequencies, where a separate pass over the model building a
+        tuple of floats takes about 26 ms on every build. Negative zeros are
+        folded into zeros first, so that ``0.0`` and ``-0.0`` compare equal.
 
         Parameters
         ----------
@@ -1320,14 +1320,11 @@ class ElectricalNetwork:
         Notes
         -----
         The model is read afresh into arrays (:class:`_NetworkTables`) and
-        digested with BLAKE2 (:meth:`_NetworkTables.fingerprint`). Up to pass
-        18 this was a nested tuple with one Python float triple per element
-        and frequency, built in a separate pass over the model on every
-        assembly (finding P6). The coverage is the same, including values
-        stored at frequencies the network is not solved at. A call here reads
-        the model afresh and costs about what the tuple did (both about 25 ms
-        on a 4000-bus ring at seven frequencies); the fingerprint of a build
-        reuses the tables of the assembly and costs about 5 ms.
+        digested with BLAKE2 (:meth:`_NetworkTables.fingerprint`); the
+        digest covers every stored value, including values at frequencies the
+        network is not solved at. A call here reads the model afresh (about
+        25 ms on a 4000-bus ring at seven frequencies); the fingerprint of a
+        build reuses the tables of the assembly and costs about 5 ms.
         """
         return _NetworkTables(self, fingerprint_only=True).fingerprint(
             self.network.active_fault
@@ -1415,9 +1412,10 @@ class ElectricalNetwork:
 
         The way into that state is ordinary too. Extending
         ``network.frequencies`` in place and recomputing only the buses --
-        or loading a network written before a frequency was added -- was
-        measured to report 1000 V instead of 4.95 V at 250 Hz, with a
-        reduction factor of 1.0, and nothing in the output said why.
+        or loading a network written before a frequency was added -- would,
+        unchecked, report 1000 V instead of 4.95 V at 250 Hz in a measured
+        case, with a reduction factor of 1.0, and nothing in the output
+        saying why.
 
         Only the elements that actually enter the nodal system are checked:
         active buses, active grounding-conductor branches between two active
@@ -1508,7 +1506,7 @@ class ElectricalNetwork:
         :meth:`Branch._calculate_self_impedance` already apply this rule when
         they evaluate a formula, but impedances are *not* recomputed at solve
         time. A value assigned directly to ``bus.impedance[freq]``, or restored
-        from a database or a JSON file written by an older version, therefore
+        from a database or a JSON file that was never re-evaluated, therefore
         reaches the solver untouched. This is the pass that catches those.
 
         Only the impedances that are actually inverted are checked: active
@@ -1519,8 +1517,9 @@ class ElectricalNetwork:
         Mutual impedances are never inverted and are deliberately left alone --
         zero mutual coupling is the normal case. A phase impedance that is zero
         *at 0 Hz* is accepted like any other element's and replaced by the DC
-        stand-in (:meth:`_dc_substitute_at`); above 0 Hz the phase-network
-        solve used to invert it and raise a bare ``ZeroDivisionError``.
+        stand-in (:meth:`_dc_substitute_at`); above 0 Hz it is refused here,
+        before the phase-network solve would invert it and fail with a bare
+        ``ZeroDivisionError``.
 
         Raises
         ------
@@ -1735,8 +1734,8 @@ class ElectricalNetwork:
         active buses, voltage sources on an active bus, and the declared phase
         impedances the phase-network solve inverts) and the same frequencies,
         evaluated on whole arrays.
-        Calling the element-wise check for every element cost 0.19 s on a
-        4000-bus ring (finding P6) although it almost never finds anything;
+        Calling the element-wise check for every element costs 0.19 s on a
+        4000-bus ring although it almost never finds anything;
         when this check does fail, the element-wise one runs and raises with
         its full message, so there is still only one copy of that message.
 
@@ -1794,21 +1793,20 @@ class ElectricalNetwork:
 
         Notes
         -----
-        **Index tables instead of dense matrices** (audit pass 19, P2/P6). The
-        matrices are kept as CSC in :attr:`Y_sparse`. The position of every
-        stamp -- bus diagonal, the four entries of a grounding branch, the four
-        entries of a Thevenin loop closure -- is fixed by the topology, so
-        those positions are laid out once (:class:`_StampPattern`) and each
-        frequency only computes the admittances and sums them per entry,
-        in the order the former dense loops added them. Until pass 18 every
-        frequency allocated a dense ``n x n`` matrix and *all* of them were
-        kept: 2.3 GB on a 4000-bus ring at seven frequencies, with a hard limit
+        **Index tables instead of dense matrices.** The matrices are kept as
+        CSC in :attr:`Y_sparse`. The position of every stamp -- bus diagonal,
+        the four entries of a grounding branch, the four entries of a Thevenin
+        loop closure -- is fixed by the topology, so those positions are laid
+        out once (:class:`_StampPattern`) and each frequency only computes the
+        admittances and sums them per entry, in the order an element-by-element
+        dense assembly adds them. Dense matrices kept for every frequency would
+        take 2.3 GB on a 4000-bus ring at seven frequencies, with a hard limit
         near 5000 buses on an 8 GB machine, plus a scan of all ``n**2`` entries
-        to convert each one to CSC. :attr:`Y_matrices` remains as a dense view
-        that materialises a matrix only when it is read.
+        to convert each one to CSC. :attr:`Y_matrices` is a dense view that
+        materialises a matrix only when it is read.
 
-        Validation is unchanged in effect: the passivity rules run on the
-        gathered arrays (:meth:`_passive_impedances_ok`), and only when they
+        Validation follows the same rules as the element-wise check: the
+        passivity rules run on the gathered arrays (:meth:`_passive_impedances_ok`), and only when they
         find something does the element-wise
         :meth:`_validate_passive_impedances` run to raise its message.
         """
@@ -1839,8 +1837,8 @@ class ElectricalNetwork:
                 self._dc_substitutes[freq] = substitute
         tables.resolve(self._dc_substitutes)
 
-        # Stamp positions, in the order of the former dense loops: bus
-        # diagonals (active buses), then per grounding branch (from, to),
+        # Stamp positions, in the order of an element-by-element dense
+        # assembly: bus diagonals (active buses), then per grounding branch (from, to),
         # (to, from), (from, from), (to, to), then per Thevenin source
         # (src, src), (fault, fault), (src, fault), (fault, src). Inactive
         # branches and branches with an inactive end are not stamped at all;
@@ -2199,12 +2197,12 @@ class ElectricalNetwork:
 
         A source contributes at a frequency only if it carries a value there
         (``values`` for a current source, ``voltage`` for a Thevenin source).
-        One whose keys match *none* of the network frequencies therefore
-        contributed 0 A everywhere, and the run came back with 0 V at every
-        bus -- a plausible-looking result rather than an error (USE3). Partial
-        coverage is legitimate (a harmonic present only in some sources) but
-        changes the result at the uncovered frequencies, so it is said once
-        per source and run (decision F8).
+        One whose keys match *none* of the network frequencies would therefore
+        contribute 0 A everywhere, and the run would come back with 0 V at every
+        bus -- a plausible-looking result rather than an error -- so it raises.
+        Partial coverage is legitimate (a harmonic present only in some
+        sources) but changes the result at the uncovered frequencies, so it is
+        said once per source and run.
 
         Only sources that matter for this fault are checked: they reach the
         fault and sit on an active bus.
@@ -2263,8 +2261,8 @@ class ElectricalNetwork:
         :meth:`~groundinsight.models.core_models.Fault.scaling_at`. An empty
         mapping says exactly that for every frequency and stays silent; a
         mapping that names *some* frequencies but not others is more likely a
-        forgotten entry (the documentation used to promise that a missing key
-        meant zero), so it is said once per run (decision F7).
+        forgotten entry -- or written in the belief that a missing key means
+        zero -- so it is said once per run.
 
         Parameters
         ----------
@@ -2389,8 +2387,8 @@ class ElectricalNetwork:
         A branch counts when it is active between two active buses, has a
         grounding conductor, and at some network frequency carries a non-zero
         mutual impedance next to a stored, not open self impedance (0 Hz
-        stand-in applied). Evaluated on the gathered arrays (P6) -- it used
-        to be one lookup and resolution per branch and frequency.
+        stand-in applied). Evaluated on the gathered arrays (P6), not by one
+        lookup and resolution per branch and frequency.
 
         Returns
         -------
@@ -2413,7 +2411,7 @@ class ElectricalNetwork:
         """
         Return the (Norton-equivalent) current injection of a source at a frequency.
 
-        For ``source_type="current"`` this is the legacy ``scaling * I_src``.
+        For ``source_type="current"`` this is ``scaling * I_src``.
         For ``source_type="voltage"`` it is the Norton equivalent
         ``scaling * U_emf / Z_src`` -- the corresponding ``Y_src`` admittance is
         contributed to the Y-matrix in :meth:`_construct_Y_matrices`. Together
@@ -2528,8 +2526,8 @@ class ElectricalNetwork:
         if self.auto_phase_currents:
             return self.network.sources_reaching(fault_name)
 
-        # Legacy mode: the enumerated paths are the data, not just an
-        # existence proof. ``run_fault`` no longer builds them in the
+        # Path mode: the enumerated paths are the data, not just an
+        # existence proof. ``run_fault`` does not build them in the
         # default mode, so a caller that switches to ``"paths"`` may find
         # them missing or stale. Silently reading an empty path set would
         # inject nothing at all and report 0 V at every bus, so rebuild --
@@ -2565,8 +2563,8 @@ class ElectricalNetwork:
         accumulated from each source's paths to the active fault. Direction comes from
         the actual path traversal (from-bus vs to-bus ordering) and the magnitude is
         scaled by ``Branch.parallel_coefficient``. A branch that lies on any path
-        receives exactly one contribution per source (not one per path) to match the
-        semantics of the legacy implementation that used a set of path branches.
+        receives exactly one contribution per source (not one per path): the paths
+        of a source are taken as one set of branches.
 
         In the automatic mode (``auto_phase_currents=True``) a reduced phase-only
         network is solved per source using the branch self-impedance as the phase
@@ -2850,32 +2848,30 @@ class ElectricalNetwork:
 
         Notes
         -----
-        **One factorisation, all sources at once** (audit pass 19, P1). The
-        reduced phase network is a complex Laplacian with the fault bus as
-        reference: sparse, with about ``2m + n`` entries, and the *same*
-        matrix for every source. It used to be assembled as a dense ``n x n``
-        array and solved with :func:`numpy.linalg.solve` once per source and
-        frequency, which made it the dominant cost of a run and the one that
-        grew fastest with the network: measured on a 1000-bus ring at seven
-        frequencies it took 0.60 s of 1.06 s, on a 1000-bus radial feeder with
-        three sources 1.29 s of 1.66 s (now 0.011 s and 0.010 s). It is now assembled
-        straight into CSC, factorised once per frequency with
-        :func:`scipy.sparse.linalg.splu` and solved for a right-hand side with
-        one column per source; the branch currents are one vectorised gather.
-        Superposition is kept in the original order (sources in turn), and
-        the stamps are accumulated in the original program order, so the
-        reduced matrix differs from the one the dense loop built only by the
-        last-bit rounding of NumPy's complex division.
+        **One factorisation, all sources at once.** The reduced phase network
+        is a complex Laplacian with the fault bus as reference: sparse, with
+        about ``2m + n`` entries, and the *same* matrix for every source. A
+        dense ``n x n`` array solved with :func:`numpy.linalg.solve` once per
+        source and frequency would be the dominant cost of a run and the one
+        that grows fastest with the network (measured: 0.60 s of 1.06 s on a
+        1000-bus ring at seven frequencies, 1.29 s of 1.66 s on a 1000-bus
+        radial feeder with three sources, against 0.011 s and 0.010 s for the
+        sparse form). It is therefore assembled straight into CSC, factorised
+        once per frequency with :func:`scipy.sparse.linalg.splu` and solved
+        for a right-hand side with one column per source; the branch currents
+        are one vectorised gather. Superposition runs source by source, and
+        the stamps are accumulated in the program order of an
+        element-by-element dense assembly, so the reduced matrix differs from
+        the dense one only by the last-bit rounding of NumPy's complex
+        division.
 
         The galvanic component of the fault bus is found with
-        :func:`scipy.sparse.csgraph.connected_components` instead of a Python
-        depth-first search. Everything observable is unchanged: the proxy
-        warning, the record of a source without phase-conductor connection
-        (reported once per run, PH9), the :class:`RuntimeError` for a
-        singular phase network, and :attr:`phase_currents` as a dictionary
-        over all branches. A phase network with a non-finite admittance is
-        solved densely as before, so a NaN propagates instead of being
-        reported as a singular factor.
+        :func:`scipy.sparse.csgraph.connected_components`. A source without a
+        phase-conductor connection is recorded and reported once per run, a
+        singular phase network raises :class:`RuntimeError`, and
+        :attr:`phase_currents` is a dictionary over all branches. A phase
+        network with a non-finite admittance is solved densely, so a NaN
+        propagates instead of being reported as a singular factor.
         """
         fault_name = self.network.active_fault
         fault = self.network.faults[fault_name]
@@ -2893,8 +2889,8 @@ class ElectricalNetwork:
         # Restrict the solve to the galvanic component of the phase network that
         # contains the fault bus. Pinning the fault bus to zero over the *whole*
         # index range leaves any other island without a reference node, which
-        # makes the reduced matrix singular -- previously that raised
-        # LinAlgError and the entire source contribution was dropped in silence.
+        # makes the reduced matrix singular: the solve would raise and the
+        # entire source contribution would be lost.
         connected = y != 0
         graph = csr_matrix(
             (
@@ -2946,17 +2942,17 @@ class ElectricalNetwork:
             if position[src_idx] < 0:
                 # The source bus is not galvanically connected to the fault bus
                 # through the phase network, so no phase current can flow between
-                # them. That is a legitimate result -- but it is also the exact
-                # situation that used to be swallowed, so it is named out loud,
-                # once per source and run (PH9, see _construct_vectors).
+                # them. That is a legitimate result -- but it is easily mistaken
+                # for a solved contribution, so it is named out loud, once per
+                # source and run (see _construct_vectors).
                 self._sources_without_phase_path.setdefault(source_name, []).append(
                     freq
                 )
                 continue
 
             if factor is None:
-                # Factorised when the first source needs it -- the point where
-                # the per-source dense solve used to raise for a singular network.
+                # Factorised when the first source needs it, so a singular
+                # network raises at the first source that would use it.
                 factor = self._factorise_phase_network(
                     position, from_idx, to_idx, y, keep.size, fault.bus, freq
                 )
@@ -3000,8 +2996,8 @@ class ElectricalNetwork:
         two off-diagonals -- are accumulated in branch order and mapped
         through ``position``; rows and columns of buses outside the reduced
         system (the fault bus, other islands) are dropped -- the sparse
-        counterpart of ``Y_phase[np.ix_(keep, keep)]`` of the former dense
-        assembly, with the same additions in the same order.
+        counterpart of ``Y_phase[np.ix_(keep, keep)]`` of a dense assembly,
+        with the same additions in the same order.
 
         Parameters
         ----------
@@ -3091,8 +3087,8 @@ class ElectricalNetwork:
         elements, so a program can find it in ``Result.diagnostics``.
 
         The cycle test counts every branch with a non-zero phase admittance.
-        Since the proxy no longer opens the phase conductor of a broken shield
-        (PH3), only a *declared* open phase conductor (``phase_impedance_formula
+        The proxy does not open the phase conductor of a broken shield, so
+        only a *declared* open phase conductor (``phase_impedance_formula
         = "nan"``) has zero admittance -- and that one genuinely breaks the
         cycle.
 
@@ -3166,7 +3162,7 @@ class ElectricalNetwork:
         ``i_mut = (Z_mutual / Z_self) * I_p`` flowing from ``from_bus`` to ``to_bus``.
         In nodal form this appears as ``-i_mut`` at ``from_bus`` and ``+i_mut`` at
         ``to_bus``. For the downstream ``compute_branch_currents`` we store the
-        *negated* value so that it combines with the legacy branch-current formula
+        *negated* value so that it combines with the branch-current formula
         ``current = (u_to - u_from) * Y_self + i_mutual_stored``.
 
         Parameters
@@ -3180,12 +3176,12 @@ class ElectricalNetwork:
 
         Notes
         -----
-        Evaluated on the gathered arrays (finding P6): the coupled branches --
-        active, grounding conductor, both ends active, self and mutual
-        impedance stored at this frequency, shield not open -- are selected
-        with one mask, and the injections are added with
-        :func:`numpy.add.at` in branch order, which performs the same
-        additions in the same order as the former loop.
+        Evaluated on the gathered arrays: the coupled branches -- active,
+        grounding conductor, both ends active, self and mutual impedance
+        stored at this frequency, shield not open -- are selected with one
+        mask, and the injections are added with :func:`numpy.add.at` in
+        branch order, which performs the same additions in the same order as
+        an element-by-element loop.
         """
         tables = self._network_tables()
         column = tables.column[float(freq)]
@@ -3923,7 +3919,7 @@ class ElectricalNetwork:
             # in exact arithmetic -- every source on the fault bus, or a source
             # behind a dead end that returns all its current through one
             # shield -- comes out at ~1e-14 V, and the ratio of two such
-            # numbers was reported as a reduction factor (0.449 =
+            # numbers would be reported as a reduction factor (0.449 =
             # 5.1e-14 V / 1.1e-13 V for a source behind a dead end, next to
             # 320 V at the source tower). The yardstick is the EPR the fault
             # current would raise the fault bus to on its own,
@@ -4085,7 +4081,7 @@ class ElectricalNetwork:
         factorised, so a floating group elsewhere -- the bus of a voltage
         source without electrode, say -- does not make the value undefined.
         If it does not, the value is ``None``: the matrix of such a group is
-        singular only up to rounding, and the solver used to return about
+        singular only up to rounding, and a direct solve returns about
         4.5e15 Ohm for it.
 
         Parameters
@@ -4138,9 +4134,8 @@ class ElectricalNetwork:
         """
         Say once per run where a reduction quantity was reported as ``None``.
 
-        The first two conditions are a vanishing reference (audit finding
-        P9): the quotient or the group would otherwise be built from rounding
-        noise. The third is a fault bus whose group in the earthing network --
+        The first two conditions are a vanishing reference (P9): the quotient
+        or the group would otherwise be built from rounding noise. The third is a fault bus whose group in the earthing network --
         the buses connected to it through shields -- holds no electrode, so it
         reaches remote earth only through the loop closure of a voltage source
         and the earthing network alone presents an infinite impedance there
@@ -4277,7 +4272,7 @@ class ElectricalNetwork:
         alongside it: that one keeps the closed form ``r = |1 - Z_m/Z_s|`` for a
         single shielded line.
 
-        Rounding noise (audit finding P9, decision F14): electrode currents at
+        Rounding noise: electrode currents at
         or below ``1e-9`` of the largest one join no group; the group is
         oriented by the fault bus, or -- when the fault bus has no electrode --
         by the fault-bus potential; and when no electrode carries more than
@@ -4301,7 +4296,7 @@ class ElectricalNetwork:
             angle (separation below 0.9 -- see
             :func:`~groundinsight.utils.earth_current.split_earth_currents`):
             ``I_E`` and ``value_current`` then describe the dominant direction
-            of the earth current only. A log line until audit pass 19 (GUI4).
+            of the earth current only.
         """
         factors: Dict[float, Optional[float]] = {}
         earth_currents: Dict[float, Optional[complex]] = {}
@@ -4334,7 +4329,7 @@ class ElectricalNetwork:
             # the entry is then ``I_src,F - Sum(I_src)``. With S1 = 100 A at a
             # remote bus and S2 = 50 A on the fault bus, the net entry is
             # -100 A instead of 150 A and the current-based reduction factor
-            # came out 100x too small.
+            # would come out 100x too small.
             total = self.total_source_currents.get(freq)
             if total is None:
                 continue
@@ -4345,9 +4340,9 @@ class ElectricalNetwork:
             # The electrode currents exactly as ResultBus.ia reports them --
             # computed once in solve_network, for every bus with an electrode
             # (a stored, not open impedance) -- so that I_E is the sum of the
-            # reported currents of its group (P6). They used to be recomputed
-            # here bus by bus with Python's complex division, which differs
-            # from the array division in the last bit.
+            # reported currents of its group. Recomputing them here bus by bus
+            # with Python's complex division would differ from the array
+            # division in the last bit.
             column = tables.column[float(freq)]
             currents, usable = self._electrode_arrays()
             rows = np.flatnonzero(usable[:, column])
@@ -4389,10 +4384,9 @@ class ElectricalNetwork:
             feeding[freq] = split.feeding_buses
 
             # Diagnostics of the group (u_earthing_group / z_earthing_group):
-            # its current-weighted mean potential and that mean over I_E. They
-            # were reported as U_E / Z_E before decision F4; the EN 50522
-            # quantities are now the fault-bus EPR and the driving-point
-            # impedance (see compute_reduction_factors). The chain
+            # its current-weighted mean potential and that mean over I_E. The
+            # EN 50522 quantities U_E / Z_E are the fault-bus EPR and the
+            # driving-point impedance (see compute_reduction_factors). The chain
             # mean = I_F * (mean / I_E) * |I_E| / |I_F| closes on these by
             # construction, which is why it checks nothing.
             potentials = {
@@ -4536,12 +4530,11 @@ class ElectricalNetwork:
         on a long bonded run), as a physical statement rather than by
         construction.
 
-        This is decision F4 of audit pass 19. It replaced ``Z_E = U_E / I_E``
-        over the earth group (kept as ``z_earthing_group``), which on a long
-        homogeneous chain came out 45 % below the driving-point impedance, and
-        which in turn had replaced the pre-0.6.0 ``u_EPR / (r * I_fault)``.
-        ``docs/concepts.md`` and ``docs/api/electrical_network.md`` name the
-        current definition.
+        The quotient ``U_E / I_E`` over the earth group is not used for
+        ``Z_E`` (it is kept as ``z_earthing_group``): on a long homogeneous
+        chain it comes out 45 % below the driving-point impedance.
+        ``docs/concepts.md`` and ``docs/api/electrical_network.md`` state the
+        same definition.
 
         The results are stored in the network's results object.
         """

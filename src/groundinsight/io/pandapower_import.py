@@ -423,8 +423,7 @@ def _classify_lines(
     -----
     InputWarning
         ``IMPORT_LINE_SKIPPED`` (elements: the line) for a self-loop and for
-        a line whose length cannot be imported. Log lines until audit pass 19
-        (GUI4).
+        a line whose length cannot be imported.
     """
     kept: List[int] = []
     skipped: List[Dict[str, Any]] = []
@@ -550,8 +549,8 @@ def _classify_switches(
     grounding systems. Dropping it is not a conservative simplification: the
     bus behind the switch then has no galvanic connection at all and the
     solver reports 0 V for it, which reads as "this station is safe" -- the
-    one answer a grounding study must never produce by accident. It was
-    dropped without a word up to 0.6.0.
+    one answer a grounding study must never produce by accident -- which is
+    why it is reported rather than dropped without a word.
 
     An *open* switch is genuinely no connection and is reported as skipped.
     A switch at a line end (``et == "l"``) is the switching state of that
@@ -644,9 +643,9 @@ def _classify_line_switches(
     imported with an open phase conductor and its screen
     (:func:`_phase_open_type`); a closed line switch changes nothing.
 
-    Up to audit pass 19 line switches were not evaluated, so a ring operated
-    open at a line switch arrived closed and the fault current divided over a
-    route that does not exist in operation.
+    Without this evaluation a ring operated open at a line switch would
+    arrive closed, and the fault current would divide over a route that does
+    not exist in operation.
 
     Parameters
     ----------
@@ -828,7 +827,7 @@ def _warn_about_unimported(
     InputWarning
         ``IMPORT_SWITCH_NOT_IMPORTED`` (elements: the buses the closed
         switches would bond) and ``IMPORT_ELEMENT_NOT_IMPORTED`` (transformer
-        and impedance elements). Log lines until audit pass 19 (GUI4).
+        and impedance elements).
     """
     bonds = [e for e in switch_skips
              if e["reason"] == _PREVIEW_SWITCH_REASON_NOT_IMPORTED]
@@ -949,10 +948,11 @@ def _check_voltage_level_consistency(defaults, voltage_level_kV: float) -> None:
 
     ``voltage_level_kV`` selects which pandapower buses are imported;
     ``defaults.default_bus_type.voltage_level`` states which level the type
-    was written for. Nothing connected the two, so importing the 0.4 kV level
-    with a 20 kV bus type went through silently and produced a network whose
-    every bus claims the wrong nominal voltage -- which then shows up in a
-    touch-voltage assessment, several steps away from the import.
+    was written for. Nothing else connects the two: unchecked, importing the
+    0.4 kV level with a 20 kV bus type would go through silently and produce a
+    network whose every bus claims the wrong nominal voltage -- which would
+    then show up in a touch-voltage assessment, several steps away from the
+    import.
 
     A warning, not an error: the two are genuinely independent, and a user may
     have a good reason (a type shared across levels). But it must be visible.
@@ -968,7 +968,6 @@ def _check_voltage_level_consistency(defaults, voltage_level_kV: float) -> None:
     -----
     InputWarning
         ``IMPORT_VOLTAGE_LEVEL_MISMATCH`` (elements: the default bus type).
-        A log line until audit pass 19 (GUI4).
     """
     declared = getattr(defaults.default_bus_type, "voltage_level", None)
     if declared is None:
@@ -1066,7 +1065,7 @@ def from_pandapower(
       the earth-return formulas stay as the caller set them.
     - **Closed bus-to-bus switches** become short branches when
       ``defaults.switch_branch_type`` is set. Without it they are not
-      imported -- as before -- but the omission is now logged and listed by
+      imported, and the omission is logged and listed by
       :func:`preview_pandapower_import`, because a bus reachable only
       through a switch otherwise appears galvanically isolated and reports
       0 V.
@@ -1081,8 +1080,8 @@ def from_pandapower(
       are not imported.
     - ext_grids, sgens, loads etc. are ignored. Trafos, three-winding
       trafos and ``net.impedance`` elements are skipped (and reported);
-      ``include_trafos=True`` is reserved for a future release and raises
-      ``NotImplementedError`` for now.
+      ``include_trafos=True`` is reserved and raises
+      ``NotImplementedError``.
 
     No fault, source or path is created — those are left to the caller.
 
@@ -1144,8 +1143,8 @@ def from_pandapower(
         ``IMPORT_ELEMENT_NOT_IMPORTED`` (transformers and impedance
         elements), ``IMPORT_VOLTAGE_LEVEL_MISMATCH`` (the default bus type
         declares another voltage level) and ``IMPORT_EMPTY`` (no bus or no
-        branch was imported). Log lines until audit pass 19 (GUI4); a GUI
-        collects them with :func:`groundinsight.diagnostics.collecting`.
+        branch was imported). A GUI collects them with
+        :func:`groundinsight.diagnostics.collecting`.
 
     Examples
     --------

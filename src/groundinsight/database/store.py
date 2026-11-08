@@ -3,14 +3,13 @@
 """
 The SQLite store as an object: :class:`Database`.
 
-Up to 0.6.0 the SQLite persistence lived in four module globals of the
-package -- ``engine``, ``SessionLocal`` and the scoped session ``session``
-with its alias ``db_session`` -- set by :func:`start_dbsession`. That allowed
-exactly one database per process (a second ``start_dbsession`` for another
-file raised), and every caller shared one thread-local session registry. A
-desktop application with two open projects, a server that serves two users,
-or a study that writes results while the GUI reads the type catalogue cannot
-work like that (audit finding ARC2).
+Persistence through module globals -- an ``engine``, a ``SessionLocal`` and
+one scoped ``session`` -- would allow exactly one database per process, and
+every caller would share one thread-local session registry. A desktop
+application with two open projects, a server that serves two users, or a
+study that writes results while the GUI reads the type catalogue cannot work
+like that. The module-level names survive only as deprecated aliases of the
+default instance (``groundinsight.session``, ``groundinsight.engine``, ...).
 
 :class:`Database` owns its engine and its session factory. Every method opens
 a *short-lived* session, does one operation and closes it again, so no
@@ -31,17 +30,16 @@ object. Operations on different files never wait for each other. Separate
 
 The default instance
 --------------------
-The module-level functions of 0.6.0 -- :func:`start_dbsession`,
+The module-level functions -- :func:`start_dbsession`,
 :func:`close_dbsession`, :func:`save_bustype_to_db`,
 :func:`load_bustypes_from_db`, :func:`save_branchtype_to_db`,
 :func:`load_branchtypes_from_db`, :func:`save_network_to_db`,
-:func:`load_network_from_db` -- keep their names, signatures, messages and
-errors. They delegate to a *default* ``Database`` that
-:func:`start_dbsession` creates for the configured path (and now returns);
-without one they raise ``RuntimeError`` exactly as before, rather than
-silently creating ``grounding.db`` in the working directory.
+:func:`load_network_from_db` -- delegate to a *default* ``Database`` that
+:func:`start_dbsession` creates for the configured path and returns; without
+one they raise ``RuntimeError`` rather than silently creating
+``grounding.db`` in the working directory.
 
-The old globals ``groundinsight.session``, ``db_session``, ``engine`` and
+The globals ``groundinsight.session``, ``db_session``, ``engine`` and
 ``SessionLocal`` are deprecated aliases resolved through the package's
 module-level ``__getattr__`` (PEP 562); see :func:`deprecated_attribute`.
 """
@@ -174,7 +172,7 @@ class Database:
                 )
             else:
                 if migrate:
-                    # Convert a file written by an earlier release *before*
+                    # Convert a file with an earlier schema *before*
                     # binding to it: ``create_all`` only ever creates missing
                     # tables and would leave a legacy file looking fine until
                     # the first query hit a missing column.

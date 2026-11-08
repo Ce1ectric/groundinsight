@@ -279,7 +279,7 @@ def planned_steps(c_lo: float, c_hi: float, tol_rel: float, max_iter: int) -> in
     ``c_hi / c_lo`` becomes its square root *whichever* end moves: the step
     count is fixed by the bracket and the tolerance, not by where the
     threshold lies. That is what lets a search announce its total up front
-    for a progress report (finding GUI5).
+    for a progress report.
 
     Parameters
     ----------

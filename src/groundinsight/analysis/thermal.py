@@ -95,12 +95,11 @@ logger = logging.getLogger(__name__)
 #
 # ``theta_final_default_C`` is 300 C for every material, which is the value
 # EN 50522 Table 2 gives for a bare or galvanised earthing conductor or earth
-# electrode. Earlier releases defaulted ``Steel`` to 400 C; that was *higher*,
-# i.e. more permissive -- the unsafe direction for a limit check -- than both
-# EN 50522 and the National Grid Earthing Technical Specification (Table 5a:
-# steel 300 C), and was lowered to 300 C. Studies that relied on the old
-# default get a smaller ``k`` and therefore a smaller admissible current; pass
-# ``theta_final_C=400.0`` explicitly to reproduce them.
+# electrode. A default of 400 C for ``Steel`` would be *higher*, i.e. more
+# permissive -- the unsafe direction for a limit check -- than both EN 50522
+# and the National Grid Earthing Technical Specification (Table 5a: steel
+# 300 C). A study that has a reason for 400 C passes ``theta_final_C=400.0``
+# explicitly.
 IEC60949_MATERIALS: Dict[str, Dict[str, float]] = {
     "Cu": {"K": 226.0, "beta": 234.5, "theta_final_default_C": 300.0},
     "Al": {"K": 148.0, "beta": 228.0, "theta_final_default_C": 300.0},
@@ -155,10 +154,7 @@ CABLE_INSULATION_LIMITS: Dict[str, float] = {
 # ------
 # EN 50522 Table 2 for the uninsulated rows, as printed in the edition held by
 # the author of this package; IEC 60364-5-54 Table 54.2 for the insulated ones
-# (see :data:`CABLE_INSULATION_LIMITS`). Earlier releases of groundinsight
-# carried placeholder values taken from the National Grid Earthing Technical
-# Specification, Table 5a (bare Cu 405 C, bare Al 325 C, bare steel 300 C);
-# those have been replaced.
+# (see :data:`CABLE_INSULATION_LIMITS`).
 FINAL_TEMPERATURES: Dict[str, Dict[str, float]] = {
     "Cu": {
         "bare": 300.0,              # EN 50522 Table 2
@@ -333,9 +329,8 @@ def _warn_half_declared(
     -----
     InputWarning
         Code ``THERMAL_DATA_INCOMPLETE``, elements the half-declared branches
-        or buses and the fault. A log line until audit pass 19 (GUI4): an
-        unassessed row reads like a passed one, so the reader of the table
-        has to know.
+        or buses and the fault. A warning, not a log line: an unassessed row
+        reads like a passed one, so the reader of the table has to know.
     """
     if not incomplete:
         return
