@@ -161,3 +161,44 @@ def test_add_source_on_the_network_checks_as_well():
     source = gi.Source(name="Q", bus="S", values={50.0: 1.0, 60.0: 1.0})
     with pytest.warns(InputWarning, match="60 Hz"):
         net.add_source(source)
+
+
+# ---------------------------------------------------------------------------
+# PH6 / USE4 / F7 -- scalings are optional, a missing key means 1.0
+# ---------------------------------------------------------------------------
+
+
+def test_scalings_can_be_left_out():
+    """``create_fault(..., scalings=None)``, ``scalings={}`` and a fault built
+    without the argument all mean factor 1.0 at every frequency -- silently,
+    because nothing is incomplete about them. Second way: the result equals
+    that of the explicit all-ones mapping with ``==``."""
+    explicit = _network("ph6_explicit")
+    _quiet_source(explicit, "Q", "S", {50.0: 1000.0, 150.0: 100.0})
+    gi.create_fault(name="F1", bus="F", scalings={50.0: 1.0, 150.0: 1.0}, network=explicit)
+    reference = gi.run_fault(explicit, "F1")
+    for variant in ("none", "empty", "absent", "model"):
+        net = _network(f"ph6_{variant}")
+        _quiet_source(net, "Q", "S", {50.0: 1000.0, 150.0: 100.0})
+        if variant == "none":
+            gi.create_fault(name="F1", bus="F", scalings=None, network=net)
+        elif variant == "empty":
+            gi.create_fault(name="F1", bus="F", scalings={}, network=net)
+        elif variant == "absent":
+            gi.create_fault(name="F1", bus="F", network=net)
+        else:
+            net.add_fault(gi.Fault(name="F1", bus="F", scalings=None))
+        assert net.faults["F1"].scalings == {}
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", InputWarning)
+            result = gi.run_fault(net, "F1")
+        for f in FREQS:
+            assert _epr(result, "F", f) == _epr(reference, "F", f), (variant, f)
+
+
+def test_scaling_at_is_the_single_place_that_defines_the_default():
+    fault = gi.Fault(name="F1", bus="F", scalings={50: 0.5})
+    assert fault.scaling_at(50.0) == 0.5
+    assert fault.scaling_at(50) == 0.5
+    assert fault.scaling_at(150.0) == 1.0
+    assert gi.Fault(name="F2", bus="F").scaling_at(0.0) == 1.0

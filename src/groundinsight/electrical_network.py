@@ -868,6 +868,7 @@ class ElectricalNetwork:
         # fault; sources without a path do not contribute to the injection.
         sources_with_path = self._sources_with_path_to_active_fault()
         self._check_source_coverage(sources_with_path, fault)
+        self._warn_incomplete_scalings(fault)
         self._warn_thevenin_coupling(sources_with_path, fault)
 
         for freq in frequencies:
@@ -888,7 +889,7 @@ class ElectricalNetwork:
                 if source.bus not in self.bus_indices:
                     continue
                 bus_idx = self.bus_indices[source.bus]
-                scaling = fault.scalings.get(freq, 1)
+                scaling = fault.scaling_at(freq)
                 injection = self._source_injection(source, freq, scaling)
                 if injection is None:
                     continue
@@ -976,6 +977,41 @@ class ElectricalNetwork:
                     elements=[("source", name)],
                     stacklevel=5,
                 )
+
+    def _warn_incomplete_scalings(self, fault: Fault) -> None:
+        """
+        Announce a scalings mapping that leaves out some network frequencies.
+
+        A missing frequency is scaled with 1.0 -- full contribution, see
+        :meth:`~groundinsight.models.core_models.Fault.scaling_at`. An empty
+        mapping says exactly that for every frequency and stays silent; a
+        mapping that names *some* frequencies but not others is more likely a
+        forgotten entry (the documentation used to promise that a missing key
+        meant zero), so it is said once per run (decision F7).
+
+        Parameters
+        ----------
+        fault : Fault
+            The active fault.
+        """
+        if not fault.scalings:
+            return
+        missing = [
+            float(f) for f in self.network.frequencies
+            if float(f) not in fault.scalings
+        ]
+        if not missing:
+            return
+        emit(
+            InputWarning,
+            f"Fault '{fault.name}' gives no scaling at "
+            f"{_render_frequencies(missing)}; those frequencies are scaled with "
+            f"1.0 (full contribution). Add the key with 0.0 to exclude a "
+            f"frequency from this fault, or with 1.0 to make the choice explicit.",
+            code="SCALINGS_INCOMPLETE",
+            elements=[("fault", fault.name)],
+            stacklevel=5,
+        )
 
     def _warn_thevenin_coupling(self, sources_with_path, fault: Fault) -> None:
         """
@@ -1071,7 +1107,8 @@ class ElectricalNetwork:
         freq : float
             Frequency in Hz at which to evaluate the injection.
         scaling : float
-            ``Fault.scalings[freq]`` for the active fault.
+            ``Fault.scaling_at(freq)`` for the active fault (1.0 for a
+            frequency without a key).
 
         Returns
         -------
@@ -1133,7 +1170,7 @@ class ElectricalNetwork:
                 if source.bus not in self.bus_indices:
                     continue
                 bus_idx = self.bus_indices[source.bus]
-                scaling = fault.scalings.get(freq, 1)
+                scaling = fault.scaling_at(freq)
                 injection = self._source_injection(source, freq, scaling)
                 if injection is None:
                     continue
@@ -1269,7 +1306,7 @@ class ElectricalNetwork:
 
         for source_name in sources_with_path:
             source = self.network.sources[source_name]
-            scaling = fault.scalings.get(freq, 1)
+            scaling = fault.scaling_at(freq)
             i_src_complex = self._source_injection(source, freq, scaling)
             if i_src_complex is None:
                 continue
@@ -1426,7 +1463,7 @@ class ElectricalNetwork:
         # below and gets told why, instead of the function returning zeros.
         Y_red = Y_phase[np.ix_(keep, keep)] if keep else None
 
-        scaling = fault.scalings.get(freq, 1)
+        scaling = fault.scaling_at(freq)
 
         for source_name in sources_with_path:
             source = self.network.sources[source_name]

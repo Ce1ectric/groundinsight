@@ -1707,8 +1707,15 @@ class Fault(_NetworkElement):
         A brief description of the fault.
     bus : str
         The name of the bus where the fault occurs.
-    scalings : dict of float to float
-        Scaling factors for sources at different frequencies.
+    scalings : dict of float to float, optional
+        Factor applied to every source current, per frequency. **A frequency
+        without a key is scaled with 1.0** -- full contribution -- and an
+        empty or omitted mapping (``None`` is accepted and stored as ``{}``)
+        means 1.0 at every frequency. Give ``0.0`` to exclude a frequency
+        bin from this fault. A non-empty mapping that leaves out some network
+        frequencies is announced once per run with an ``InputWarning``
+        ``SCALINGS_INCOMPLETE`` (decision F7). :meth:`scaling_at` is the one
+        place that applies the default.
     t_k_s : float, optional
         Short-circuit duration (clearing time) ``T_k`` in seconds, as
         defined in IEC 60909-0. Drives both the DC heat factor ``m`` of
@@ -1809,9 +1816,11 @@ class Fault(_NetworkElement):
         ``inf``, and a negative factor reverses the fault current -- which is
         not a scaling but a different fault. All three used to be accepted and
         only showed up as an unserialisable network afterwards.
+
+        ``None`` is stored as ``{}``: both mean factor 1.0 at every frequency.
         """
         if value is None:
-            return value
+            return {}
         if not isinstance(value, dict):
             return value
         normalised: Dict[float, float] = {}
@@ -1851,6 +1860,31 @@ class Fault(_NetworkElement):
                 )
             normalised[f_key] = f_scaling
         return normalised
+
+    def scaling_at(self, frequency: float) -> float:
+        """
+        The factor this fault applies to the source currents at a frequency.
+
+        Parameters
+        ----------
+        frequency : float
+            Frequency in Hz (an ``int`` key is looked up as ``float``, the way
+            the validator stores it).
+
+        Returns
+        -------
+        float
+            ``scalings[frequency]``, or ``1.0`` -- full contribution -- when
+            the frequency has no key (decision F7).
+
+        Examples
+        --------
+        >>> import groundinsight as gi
+        >>> fault = gi.Fault(name="F1", bus="B", scalings={50.0: 0.5})
+        >>> fault.scaling_at(50.0), fault.scaling_at(250.0)
+        (0.5, 1.0)
+        """
+        return float(self.scalings.get(float(frequency), 1.0))
 
     @computed_field()
     @property

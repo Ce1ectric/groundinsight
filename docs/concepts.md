@@ -35,8 +35,9 @@ quantities of interest.
   (coupling between faulted phase and grounding conductor).
 - `Source` — a current source anchored at a bus. Holds a dictionary that maps
   each frequency to the injected phasor current.
-- `Fault` — a marker at a bus. Holds a dictionary of frequency-dependent
-  scaling factors that reduce the source current for each harmonic.
+- `Fault` — a marker at a bus. Holds an optional dictionary of
+  frequency-dependent scaling factors applied to the source currents; a
+  frequency without an entry is scaled with 1.0.
 
 Bus and branch properties are derived from reusable *types* (`BusType`,
 `BranchType`) whose impedances are parameterised by formula strings. The
@@ -254,8 +255,12 @@ inversion problem and serves as the independent cross-check.
   and the source impedance must have a real part: the Thevenin loop is closed
   by inverting it, and a purely inductive internal impedance would be zero at
   DC. A zero `source_impedance` is rejected when the source is constructed.
-- **Fault.** `scalings` needs a `0.0` key; a fault that does not scale 0 Hz
-  contributes nothing at DC.
+- **Fault.** `scalings` does not need a `0.0` key: a frequency without a key
+  is scaled with 1.0, i.e. the sources contribute in full at DC. Give
+  `0.0: 0.0` to exclude the DC bin from a fault. A mapping that names some
+  network frequencies but not others is announced once per run
+  (`InputWarning`, code `SCALINGS_INCOMPLETE`); `scalings` may also be left
+  out entirely, which means 1.0 everywhere.
 - **IEC 60909 characteristics.** `i_k_a`, `r_to_x` and `kappa` describe the
   DC offset and thermal equivalent of an *alternating* short-circuit current.
   They do not enter the solve (see [Objects](#objects)) and have no meaning in

@@ -543,7 +543,7 @@ def resolve_fault_sc_characteristics(
     if frequency is None:
         frequency = next((float(x) for x in network.frequencies if x > 0), 50.0)
     frequency = float(frequency)
-    scaling = fault.scalings.get(frequency, 1)
+    scaling = fault.scaling_at(frequency)
 
     weights: Dict[str, float] = {}
     kappas: Dict[str, float] = {}

@@ -226,7 +226,7 @@ def create_branch(
 def create_fault(
     name: str,
     bus: str,
-    scalings: Dict,
+    scalings: Optional[Dict] = None,
     active: bool = False,
     description: str = None,
     network: Optional[Network] = None,
@@ -246,8 +246,13 @@ def create_fault(
         The name of the fault.
     bus : str
         The name of the bus where the fault occurs.
-    scalings : dict of float to float
-        Scaling factors applied to the source currents at each frequency.
+    scalings : dict of float to float, optional
+        Factor applied to the source currents, per frequency. ``None`` (the
+        default) or ``{}`` means 1.0 at every frequency. A frequency missing
+        from a non-empty mapping is scaled with 1.0 as well -- full
+        contribution, not zero -- and ``run_fault`` announces the incomplete
+        mapping once per run (``InputWarning`` ``SCALINGS_INCOMPLETE``). Give
+        ``0.0`` to exclude a frequency from this fault.
     active : bool, optional
         Whether to activate the fault immediately upon creation. Defaults
         to ``False``.

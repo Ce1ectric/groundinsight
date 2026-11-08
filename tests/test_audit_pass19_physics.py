@@ -809,3 +809,55 @@ def test_pq_ph1b_stays_silent_where_ph1_cannot_act(variant):
                            "q": dict(kind="current", bus="S", I=at50(1000.0))}
     result = solve(build(spec, "ph1b_silent"))
     assert "THEVENIN_COUPLING" not in [d.code for d in result.diagnostics]
+
+
+# ---------------------------------------------------------------------------
+# PQ-PH6 -- a missing scaling means full contribution (decision F7)
+# ---------------------------------------------------------------------------
+
+from groundinsight.diagnostics import InputWarning  # noqa: E402
+
+
+def _dc_chain() -> dict:
+    return dict(
+        freqs=[0.0, 50.0],
+        buses={"S": ("0.3", 100.0), "F": ("2.0", 100.0)},
+        branches={"L": dict(a="S", b="F", l=2.0, zs="(0.29+0.625*j*f/50)*l",
+                            zm="(0.049+0.625*j*f/50)*l")},
+        sources={"s": dict(kind="current", bus="S", I={0.0: 100.0, 50.0: 1000.0})},
+        faults={"F_missing": ("F", {50.0: 1.0}),
+                "F_full": ("F", {0.0: 1.0, 50.0: 1.0}),
+                "F_zero": ("F", {0.0: 0.0, 50.0: 1.0})},
+    )
+
+
+def test_pq_ph6_a_missing_scaling_key_means_full_contribution():
+    """PQ-PH6: a fault without a 0 Hz key scales the DC bin with 1.0 -- the
+    documentation used to say it "contributes nothing at DC". Second way:
+    the reference solver with the scaling written out as 1.0. A 0.0 key
+    excludes the bin."""
+    net = build(_dc_chain(), "ph6")
+    missing = solve(net, "F_missing")
+    full = solve(net, "F_full")
+    zero = solve(net, "F_zero")
+    for f in (0.0, 50.0):
+        assert package_vectors(missing, f)["u"] == package_vectors(full, f)["u"]
+    rd = ref.reference_network(net, 0.0, "F_missing")
+    assert rd["scaling"] == 1.0
+    mapped = ref.to_package_frame(ref.solve_oneway(rd, thevenin_phase="norton"))
+    assert ref.max_relative_deviation(package_vectors(missing, 0.0)["u"], mapped["u"]) <= TOL
+    assert abs(package_vectors(missing, 0.0)["u"]["F"]) == pytest.approx(33.4722, rel=1e-5)
+    assert package_vectors(zero, 0.0)["u"]["F"] == 0
+
+
+def test_pq_ph6_an_incomplete_mapping_is_announced_once_per_run():
+    net = build(_dc_chain(), "ph6_warn")
+    with pytest.warns(InputWarning, match="0 Hz") as record:
+        result = gi.run_fault(net, "F_missing")
+    incomplete = [w.message for w in record if getattr(w.message, "code", None) == "SCALINGS_INCOMPLETE"]
+    assert len(incomplete) == 1
+    assert incomplete[0].elements == (("fault", "F_missing"),)
+    assert [d.code for d in result.diagnostics].count("SCALINGS_INCOMPLETE") == 1
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", InputWarning)
+        gi.run_fault(net, "F_full")
