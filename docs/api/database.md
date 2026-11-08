@@ -60,7 +60,7 @@ with gi.Database("library.db") as db:
 |---|---|
 | `save_bustype(t, overwrite=False)`, `load_bustypes()`, `delete_bustype(name)` | bus-type catalogue |
 | `save_branchtype(t, overwrite=False)`, `load_branchtypes()`, `delete_branchtype(name)` | branch-type catalogue |
-| `save_network(net, overwrite=False, overwrite_types=False)`, `load_network(name)` | networks with all elements (results are not stored) |
+| `save_network(net, overwrite=False, overwrite_types=False)`, `load_network(name)` | networks with all elements and their stored results |
 | `list_networks()`, `delete_network(name)` | stored network names; delete a network and its elements |
 | `needs_migration()`, `migrate(backup=True)` | schema check / conversion of a file opened with `migrate=False` |
 | `session()` | context manager yielding a short-lived SQLAlchemy `Session` for direct ORM work |

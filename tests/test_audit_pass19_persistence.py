@@ -975,3 +975,20 @@ def test_a_star_import_does_not_trigger_the_deprecation():
         namespace = {}
         exec("from groundinsight import *", namespace)
     assert "Database" in namespace and "session" not in namespace
+
+
+def test_a_database_round_trip_keeps_the_stored_results(tmp_path):
+    """The network row stores ``results`` as JSON (since pass 9)."""
+    net = _solved_network()
+    with gi.Database(tmp_path / "ergebnisse.db") as db:
+        db.save_network(net)
+        loaded = db.load_network(net.name)
+    assert list(loaded.results) == [FAULT]
+    assert loaded.results[FAULT].model_dump_json() == net.results[FAULT].model_dump_json()
+    # Second route: the stored result is what the reloaded inputs solve to.
+    stored = {
+        (bus.name, freq): complex(value.real, value.imag)
+        for bus in loaded.results[FAULT].buses
+        for freq, value in bus.uepr_freq.items()
+    }
+    assert _epr(loaded, FAULT) == pytest.approx(stored, rel=1e-12)

@@ -419,13 +419,13 @@ class Database:
         overwrite_types: bool = False,
     ) -> None:
         """
-        Save a network with all of its elements, in one transaction.
+        Save a network with all of its elements and results, in one transaction.
 
         Parameters
         ----------
         network : Network
-            The network to save. Stored results are not part of the database
-            schema; use a JSON project file to keep them.
+            The network to save. Its stored results (``network.results``) are
+            saved with it, as a JSON column of the network row.
         overwrite : bool, optional
             Replace a stored network of the same name. Defaults to ``False``.
         overwrite_types : bool, optional
@@ -467,7 +467,7 @@ class Database:
         Returns
         -------
         Network
-            The network, without results.
+            The network, with the results stored with it.
 
         Raises
         ------
