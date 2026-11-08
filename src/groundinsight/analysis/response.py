@@ -316,17 +316,17 @@ class BusResponse(BaseModel):
         the grounding impedance (decision F4); for ``bus == fault_bus`` it
         reduces to :meth:`driving_point` of a network without voltage source.
 
+        Where the electrode at ``bus`` is the only one of the fault side
+        (:attr:`z_fault_ideal`), every ampere leaves through it and
+        ``Z_FF = Z_B + z_fault_ideal``: finite for every electrode, undefined
+        without one.
+
         Parameters
         ----------
         z_bus : complex, float or None
             The electrode at ``bus``, as for :meth:`evaluate`.
         freq : float
             Frequency in Hz.
-
-        Where the electrode at ``bus`` is the only one of the fault side
-        (:attr:`z_fault_ideal`), every ampere leaves through it and
-        ``Z_FF = Z_B + z_fault_ideal``: finite for every electrode, undefined
-        without one.
 
         Returns
         -------
