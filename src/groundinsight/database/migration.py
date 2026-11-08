@@ -146,7 +146,7 @@ class _FrequencyUnpickler(pickle.Unpickler):
 
 
 class MigrationReport(BaseModel):
-    """
+    r"""
     What :func:`migrate_database` did, and what a user has to check afterwards.
 
     Attributes
@@ -181,7 +181,7 @@ class MigrationReport(BaseModel):
         ``"network:path"`` for paths whose reconstructed segment order does
         not form a connected chain.
     defaulted_cells : Dict[str, int]
-        ``"table.column"`` -> how many ``NULL``\\ s were replaced by the
+        ``"table.column"`` -> how many ``NULL``\ s were replaced by the
         column's own declared default (see :func:`_declared_defaults`). A
         non-empty dict means values were filled in, so it counts towards
         :attr:`needs_attention`.

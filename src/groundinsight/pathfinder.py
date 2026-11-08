@@ -596,7 +596,6 @@ class PathFinder:
         settings : PathfinderSettings, optional
             Settings for this search; defaults to the network's.
         """
-
         self.network = network
         self.settings = settings if settings is not None else network.pathfinder_settings
         self._cache = network.path_cache()

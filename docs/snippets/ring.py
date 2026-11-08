@@ -88,6 +88,7 @@ current = 1000.0
 
 
 def parallel(a, b):
+    """The parallel connection of two impedances."""
     return a * b / (a + b)
 
 

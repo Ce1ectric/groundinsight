@@ -1,7 +1,8 @@
 # models/core_models.py
 """
-Pydantic models of a grounding network: types, elements, faults, sources,
-results and the :class:`Network` container.
+Pydantic models of a grounding network and the :class:`Network` container.
+
+Types, elements, faults, sources and results are models of their own.
 
 Types (:class:`BusType`, :class:`BranchType`) carry formula strings; elements
 (:class:`Bus`, :class:`Branch`) carry the impedance dictionaries *derived*
@@ -1420,8 +1421,10 @@ class Bus(_NetworkElement):
 
     def calculate_impedance(self, frequencies: List[float]):
         """
-        Calculates impedance and -- if specified by the type -- the lumped
-        RLC parameters for each frequency.
+        Calculate the impedance and, where the type asks for them, R, L and C.
+
+        Both are evaluated at each frequency; R, L and C are the lumped
+        parameters of the type's optional formulas.
 
         ``impedance`` is always recomputed from ``type.impedance_formula``.
         Each of ``R``, ``L`` and ``C`` is computed from the matching formula
@@ -1759,8 +1762,10 @@ class Branch(_NetworkElement):
 
     def calculate_impedance(self, frequencies: List[float]):
         """
-        Calculate self/mutual impedance and -- if specified by the type --
-        the phase impedance and the lumped RLCM parameters for each frequency.
+        Calculate the self and mutual impedance and the optional quantities.
+
+        The phase impedance and the lumped RLCM parameters are evaluated at
+        each frequency where the type specifies them.
 
         ``self_impedance`` and ``mutual_impedance`` are always recomputed.
         Each of ``phase_impedance``, ``R_self``, ``L_self``, ``C_self``,
@@ -2261,7 +2266,7 @@ class Fault(_NetworkElement):
 
 
 class Source(_NetworkElement):
-    """
+    r"""
     Represents a current or Thevenin (voltage) source within the network.
 
     For stationary grounding analyses the default is a current source
@@ -2341,7 +2346,7 @@ class Source(_NetworkElement):
 
     .. math::
 
-        X_{\\mathrm{RMS}} = \\sqrt{\\sum_f |X(f)|^2}
+        X_{\mathrm{RMS}} = \sqrt{\sum_f |X(f)|^2}
 
     with the 0 Hz term entering as ``|X_dc|`` -- a DC component
     contributes its own magnitude, not ``|X_dc|/sqrt(2)``. Peak-valued
@@ -2431,8 +2436,7 @@ class Source(_NetworkElement):
     @model_validator(mode="after")
     def _validate_source_mode(self):
         """
-        Validate that the fields populated on the source match the declared
-        ``source_type``.
+        Validate that the populated fields match the declared ``source_type``.
 
         Returns
         -------
@@ -4644,10 +4648,10 @@ class Network(ValidatedAssignmentModel):
 
     def res_all_impedances(self) -> pl.DataFrame:
         """
-        Returns a Polars DataFrame containing the grounding impedance and reduction factor
-        for each fault, bus, and frequency.
+        Return the grounding impedance and the reduction factor of every fault.
 
-        The DataFrame includes grounding impedance magnitude and angle, as well as the reduction factor.
+        One row per fault, bus and frequency, with the magnitude and angle of
+        the grounding impedance and the reduction factor.
 
         Returns
         -------

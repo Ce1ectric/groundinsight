@@ -164,11 +164,12 @@ def _switch_label(row_name: Any, idx: int) -> str:
 
 def bus_index_to_name(net) -> Dict[int, str]:
     """
-    Build the ``pp.bus.index -> stable name`` map used to resolve
-    ``pp.line.from_bus`` / ``to_bus`` references.
+    Build the ``pp.bus.index -> stable name`` map.
 
     Internal API: also used by :mod:`groundinsight.io.pandapower_sc`; not
     exported from ``groundinsight`` and free to change in any release.
+
+    The map resolves the ``pp.line.from_bus`` / ``to_bus`` references.
 
     Parameters
     ----------
@@ -195,10 +196,11 @@ def bus_index_to_name(net) -> Dict[int, str]:
 
 def _line_index_to_name(net) -> Dict[int, str]:
     """
-    Build the ``pp.line.index -> stable name`` map. pandapower does not enforce
-    unique line names (CIM/CSV/DGS imports routinely carry blank or repeated
-    names), so duplicates are disambiguated by appending the index -- mirroring
-    :func:`bus_index_to_name`. Without this, two equally-named lines collide on
+    Build the ``pp.line.index -> stable name`` map.
+
+    pandapower does not enforce unique line names (CIM/CSV/DGS imports
+    routinely carry blank or repeated names), so duplicates are disambiguated
+    by appending the index -- mirroring :func:`bus_index_to_name`. Without this, two equally-named lines collide on
     :meth:`Network.add_branch` and abort the whole import while the preview
     still reports both as ``keep``.
     """
@@ -226,8 +228,7 @@ def _bus_in_service(row) -> bool:
 
 def _parse_length_km(value: Any) -> Optional[float]:
     """
-    Return ``length_km`` as ``float`` or ``None`` if it carries no usable
-    number.
+    Return ``length_km`` as ``float``, or ``None`` without a usable number.
 
     This is the side-effect-free counterpart of :func:`_length_km`,
     mirroring :func:`_parse_vn_kv`: it distinguishes "no value" (missing
@@ -398,9 +399,11 @@ def _classify_lines(
     line_name_by_index: Dict[int, str],
 ) -> Tuple[List[int], List[Dict[str, Any]]]:
     """
-    Split ``net.line`` into kept indices and skipped rows. A line is kept
-    iff both endpoints are on the target voltage level (i.e. their pp
-    indices are in ``kept_bus_indices``) and it carries a usable length.
+    Split ``net.line`` into kept indices and skipped rows.
+
+    A line is kept iff both endpoints are on the target voltage level (i.e.
+    their pp indices are in ``kept_bus_indices``) and it carries a usable
+    length.
 
     The ``length_km`` checks come **last**, after every topological check,
     so that a zero-length line on an off-target voltage level is reported
@@ -987,8 +990,7 @@ def _check_voltage_level_consistency(defaults, voltage_level_kV: float) -> None:
 
 def _reject_unusable_lengths(skipped_lines: List[Dict[str, Any]]) -> None:
     """
-    Abort the import if a line that is otherwise importable carries a
-    non-positive ``length_km``.
+    Abort the import on an importable line with a non-positive ``length_km``.
 
     Rejecting is the deliberate choice over silently importing the value.
     A zero-length line is a jumper or bus coupler and is perfectly normal
@@ -1042,8 +1044,10 @@ def from_pandapower(
     include_trafos: bool = False,
 ) -> Network:
     """
-    Build a :class:`~groundinsight.models.core_models.Network` from a
-    pandapower ``net``, restricted to a single voltage level.
+    Build a :class:`~groundinsight.models.core_models.Network` from pandapower.
+
+    The import is restricted to a single voltage level of the pandapower
+    ``net``.
 
     The mapping is intentionally narrow:
 
@@ -1285,9 +1289,10 @@ def preview_pandapower_import(
     defaults: Optional[ImportDefaults] = None,
 ) -> pl.DataFrame:
     """
-    Return a Polars DataFrame describing what :func:`from_pandapower`
-    would do on this ``net`` at this voltage level, without building a
-    Network.
+    Describe what :func:`from_pandapower` would import, without importing.
+
+    The Polars DataFrame describes the import of this ``net`` at this voltage
+    level; no Network is built.
 
     The frame has the following columns:
 

@@ -1,7 +1,6 @@
 # docs/snippets/sweeps.py
 """
-Parameter sweeps and statistics: the example of the how-to "Parameter sweeps
-and statistics".
+The example of the how-to "Parameter sweeps and statistics".
 
 The 20 kV feeder of the EN 50522 how-to -- substation ``UW`` and five stations
 bonded through the screens of a three-phase cable system, earth fault at

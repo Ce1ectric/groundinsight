@@ -1,7 +1,6 @@
 # docs/snippets/thermal.py
 """
-Thermal limits of earthing conductors: the example of the how-to "Thermal
-limits of earthing conductors".
+The example of the how-to "Thermal limits of earthing conductors".
 
 The 20 kV feeder of the EN 50522 how-to (earth fault at ``S3``) with thermal
 data on its types: the cable screens (copper, 69.7 mm2 for the three screens of

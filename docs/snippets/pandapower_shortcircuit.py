@@ -1,7 +1,8 @@
 # docs/snippets/pandapower_shortcircuit.py
 """
-Short-circuit characteristics from pandapower: the second example of the how-to
-"Import from pandapower" and of the I/O page.
+The second example of the how-to "Import from pandapower" and the I/O page.
+
+It reads short-circuit characteristics from pandapower.
 
 A 20 kV feeder -- infeed ``UW`` and three stations on 1.2 km cable sections --
 is built in pandapower with the minimum data an earth-fault calculation

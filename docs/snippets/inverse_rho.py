@@ -1,7 +1,6 @@
 # docs/snippets/inverse_rho.py
 """
-Admissible soil resistivity: the example of the how-to "Admissible soil
-resistivity (inverse rho / rho-f)".
+The example of the how-to "Admissible soil resistivity (inverse rho / rho-f)".
 
 The 20 kV feeder of the EN 50522 how-to (substation ``UW``, stations ``S1`` to
 ``S5``, earth fault at ``S3``, 1000 A at 50 Hz and 50 A at 250 Hz). Two

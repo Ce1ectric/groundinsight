@@ -1,8 +1,7 @@
 # analysis/inverse_rho.py
 
 """
-Inverse determination of the maximum admissible rho-f characteristic at
-selected buses.
+The maximum admissible soil resistivity at selected buses, found inversely.
 
 Given an existing network with a configured fault and sources, this
 module computes the largest uniform scaling factor ``c`` of the selected

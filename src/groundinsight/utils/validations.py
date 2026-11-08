@@ -436,7 +436,7 @@ def _combine(node: ast.expr, operands: List[Tuple[_Bound, bool]], source: str) -
 
 
 def _assert_no_runaway_power(value: str) -> None:
-    """
+    r"""
     Reject formulas whose evaluation by SymPy would blow up.
 
     ``sympy.sympify`` evaluates arithmetic on numbers exactly and eagerly, so
@@ -454,7 +454,7 @@ def _assert_no_runaway_power(value: str) -> None:
     refused although SymPy would have kept the dangerous part symbolic, but
     never the other way round.
 
-    The string is parsed in parentheses (``"(\\n" + value + "\\n)"``), which
+    The string is parsed in parentheses (``"(\n" + value + "\n)"``), which
     accepts exactly the whitespace and line breaks SymPy's own parser
     accepts. A string that still does not parse is rejected here instead of
     relying on SymPy to reject it (fail-closed, SEC5).

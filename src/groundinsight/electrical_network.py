@@ -1,8 +1,9 @@
 # electrical_network.py
 
 """
-module for creating an electrical network based on the core models
-The network is used to perform calculations based on the matrix form of the network:
+The numerical kernel of the fault solve, built from the core models.
+
+:class:`ElectricalNetwork` computes with the matrix form of the network:
 
 Y * u = i
 u = Y^-1 * i
@@ -2002,8 +2003,10 @@ class ElectricalNetwork:
 
     def _earthing_admittance_sparse(self, freq: float) -> csc_matrix:
         """
-        :meth:`earthing_admittance_matrix` in CSC: ``Y_sparse[freq]`` minus
-        the Thevenin loop closures (see :meth:`remove_loop_closures`).
+        :meth:`earthing_admittance_matrix` as a CSC matrix.
+
+        ``Y_sparse[freq]`` minus the Thevenin loop closures (see
+        :meth:`remove_loop_closures`).
 
         Parameters
         ----------
@@ -3744,7 +3747,7 @@ class ElectricalNetwork:
     def _calculate_rms(
         self, freq_values: Dict[float, Optional[ComplexNumber]]
     ) -> float:
-        """
+        r"""
         Calculate the RMS value from a dictionary of frequency to ComplexNumber.
 
         This method computes the root mean square (RMS) of the magnitudes of complex numbers
@@ -3771,7 +3774,7 @@ class ElectricalNetwork:
 
         .. math::
 
-            X_{\\mathrm{RMS}} = \\sqrt{\\sum_f |X(f)|^2}
+            X_{\mathrm{RMS}} = \sqrt{\sum_f |X(f)|^2}
 
         which is exactly what this method computes, with the 0 Hz term
         entering as ``|X_dc|``: a DC component contributes its own
@@ -4237,7 +4240,7 @@ class ElectricalNetwork:
         Dict[float, Optional[complex]],
         List[Tuple[float, float, float]],
     ]:
-        """
+        r"""
         Reduction factor on a current basis: earth-return current over fault current.
 
         The reduction factor describes the effect of the inductive coupling
@@ -4246,7 +4249,7 @@ class ElectricalNetwork:
 
         .. math::
 
-            r = \\frac{|\\underline{I}_E|}{|\\underline{I}_F|}
+            r = \frac{|\underline{I}_E|}{|\underline{I}_F|}
 
         with ``I_E`` the **sum of the electrode currents of every bus that feeds
         the soil** -- not the electrode current at the faulted station. Where the
@@ -4441,7 +4444,7 @@ class ElectricalNetwork:
         coupling: Dict[float, Optional[float]],
         current: Dict[float, Optional[float]],
     ) -> None:
-        """
+        r"""
         Point out where the two reduction factors part company, and why.
 
         They are not two computations of one number. For a route with shield
@@ -4450,9 +4453,9 @@ class ElectricalNetwork:
 
         .. math::
 
-            r_\\text{coupling} = \\frac{Z_s - Z_m}{Z_s}
-            \\qquad
-            r_I = \\frac{Z_s - Z_m}{Z_s + Z_E}
+            r_\text{coupling} = \frac{Z_s - Z_m}{Z_s}
+            \qquad
+            r_I = \frac{Z_s - Z_m}{Z_s + Z_E}
 
         so their ratio is the current divider ``Z_s / (Z_s + Z_E)`` and nothing
         else. ``value`` is the **ideally bonded** limit -- the tabulated property

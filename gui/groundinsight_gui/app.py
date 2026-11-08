@@ -1,7 +1,9 @@
 # groundinsight_gui/app.py
 """
-The NiceGUI app: start page, network tables, fault jobs, key figures,
-diagnostics, pre-flight check (GUI phase 0 skeleton).
+The NiceGUI app of groundinsight-gui (phase 0 skeleton).
+
+Start page, network tables, fault jobs, key figures, diagnostics and the
+pre-flight check.
 
 Everything that touches the network goes through ``groundinsight.api``:
 

@@ -1,7 +1,6 @@
 # docs/snippets/dc_chain.py
 """
-A direct-current study: the reference chain of the explanation page
-"Direct current (f = 0)".
+A direct-current study: the reference chain of "Direct current (f = 0)".
 
 Three earthing systems in a chain, ``A - B - C`` (0.8, 12 and 3.5 Ohm), joined
 by two 10 km spans of an earthing conductor of 0.25 Ohm/km. A direct current of

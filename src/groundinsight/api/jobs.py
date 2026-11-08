@@ -84,8 +84,11 @@ class JobTimeout(JobCancelled):
 
 
 class JobFailed(RuntimeError):  # noqa: N818 -- published name (groundinsight.api)
-    """The job raised; the original exception is the ``__cause__`` where it
-    is available (thread backend).
+    """
+    The job raised an exception.
+
+    The original exception is the ``__cause__`` where it is available
+    (thread backend).
 
     Attributes
     ----------

@@ -1,6 +1,6 @@
 # analysis/thermal.py
 
-"""
+r"""
 Thermal short-circuit rating of grounding conductors (IEC 60949 / IEC 60909-0).
 
 This module adds a conductor-integrity check on top of the stationary
@@ -15,7 +15,7 @@ Two standards are combined:
 
   .. math::
 
-      I_{th} = I_k \\cdot \\sqrt{m + n}
+      I_{th} = I_k \cdot \sqrt{m + n}
 
   where :math:`I_k` is the RMS short-circuit current (here the RMS shield
   current from :func:`groundinsight.run_fault`), ``m`` accounts for the
@@ -24,10 +24,10 @@ Two standards are combined:
 
   .. math::
 
-      m = \\frac{1}{2 f T_k \\ln(\\kappa - 1)}
-          \\left(e^{4 f T_k \\ln(\\kappa - 1)} - 1\\right)
+      m = \frac{1}{2 f T_k \ln(\kappa - 1)}
+          \left(e^{4 f T_k \ln(\kappa - 1)} - 1\right)
 
-  with the peak factor :math:`\\kappa` (from the network ``R/X`` ratio),
+  with the peak factor :math:`\kappa` (from the network ``R/X`` ratio),
   the system frequency ``f`` and the fault duration ``T_k``. ``n = 1`` for
   the far-from-generator faults typical of distribution grounding studies.
 
@@ -37,10 +37,10 @@ Two standards are combined:
 
   .. math::
 
-      I_{adm} = \\frac{k \\, S}{\\sqrt{T_k}}, \\qquad
-      k = K \\, \\sqrt{\\ln\\!\\frac{\\theta_f + \\beta}{\\theta_i + \\beta}}
+      I_{adm} = \frac{k \, S}{\sqrt{T_k}}, \qquad
+      k = K \, \sqrt{\ln\!\frac{\theta_f + \beta}{\theta_i + \beta}}
 
-  with the material base constant :math:`K = \\sqrt{Q_c(\\beta+20)/\\rho_{20}}`,
+  with the material base constant :math:`K = \sqrt{Q_c(\beta+20)/\rho_{20}}`,
   the reciprocal temperature coefficient ``β``, and the initial / final
   conductor temperatures ``θ_i`` / ``θ_f``. The tabulated ``K`` and ``β``
   below reproduce the standard ``k`` tables (e.g. copper XLPE

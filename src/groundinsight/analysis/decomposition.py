@@ -1,6 +1,6 @@
 # analysis/decomposition.py
 
-"""
+r"""
 Split a grounding network at the fault location into parallel sides.
 
 The question this module answers is the one a cable-network study starts from:
@@ -25,8 +25,8 @@ closes by construction:
 
 .. math::
 
-    \\frac{1}{Z_\\text{driving point}} = \\frac{1}{Z_\\text{local}}
-        + \\sum_\\text{sides} \\frac{1}{Z_\\text{side}}
+    \frac{1}{Z_\text{driving point}} = \frac{1}{Z_\text{local}}
+        + \sum_\text{sides} \frac{1}{Z_\text{side}}
 
 and the residual of that identity is reported next to the values, so a study
 never has to take it on trust. The matrix the ampere is injected into is the
@@ -54,8 +54,8 @@ through the soil:
 
 .. math::
 
-    \\underline{I}_\\text{total} = \\underline{I}_\\text{shield}
-                                  + \\underline{I}_\\text{earth}
+    \underline{I}_\text{total} = \underline{I}_\text{shield}
+                                  + \underline{I}_\text{earth}
 
 where ``I_earth`` is the sum of the electrode currents of every bus on the far
 side and ``I_total`` is the sum of the source injections there. The reduction
@@ -286,8 +286,9 @@ class CutAnalysis(BaseModel):
 
     def to_polars(self) -> pl.DataFrame:
         """
-        Return the analysis as one long-format frame, one row per direction and
-        frequency.
+        Return the analysis as one long-format frame.
+
+        One row per direction and frequency.
 
         Columns
         -------
@@ -370,8 +371,11 @@ class CutAnalysis(BaseModel):
 
 
 def _finite_impedance(value) -> Optional[complex]:
-    """Return the impedance as ``complex``, or ``None`` if it carries no
-    admittance (missing, open circuit, or not finite)."""
+    """
+    Return the impedance as ``complex``, or ``None`` without an admittance.
+
+    ``None`` stands for a missing, open-circuit or non-finite impedance.
+    """
     if value is None:
         return None
     z = complex(value)
@@ -536,8 +540,12 @@ def _branch_current_out(
     freq: float,
     electrical=None,
 ) -> complex:
-    """Current leaving ``fault_bus`` through one incident branch, given nodal
-    voltages ``u``. Zero for an open-circuited or unresolvable branch."""
+    """
+    Current leaving ``fault_bus`` through one incident branch.
+
+    Computed from the nodal voltages ``u``; zero for an open-circuited or
+    unresolvable branch.
+    """
     branch = network.branches[branch_name]
     z = _resolve(electrical, branch.self_impedance.get(freq), freq)
     if z is None:

@@ -564,10 +564,12 @@ class ProjectSession:
 
     @property
     def network(self) -> gi.Network:
-        """The session's network, for reading (notebooks, tests).
+        """
+        The session's network, for reading (notebooks, tests).
 
         Front ends use the DTO methods; every change goes through
-        :meth:`apply`."""
+        :meth:`apply`.
+        """
         return self._network
 
     @property

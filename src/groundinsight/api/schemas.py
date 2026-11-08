@@ -1,7 +1,8 @@
 # api/schemas.py
 """
-Data transfer objects (DTOs): the only data shape between the service layer
-and a front end.
+Data transfer objects (DTOs) between the service layer and a front end.
+
+They are the only data shape that crosses that boundary.
 
 A front end -- the NiceGUI app, the command-line interface, a later REST
 server and its web client -- must not reach into :class:`~groundinsight.Network`
@@ -354,8 +355,10 @@ class TableDTO(BaseDTO):
 
 class NetworkTablesDTO(BaseDTO):
     """
-    The input of a network as the ten tables of
-    :meth:`Network.to_tables <groundinsight.Network.to_tables>`.
+    The input of a network as ten tables.
+
+    The tables are those of :meth:`Network.to_tables
+    <groundinsight.Network.to_tables>`.
 
     Attributes
     ----------

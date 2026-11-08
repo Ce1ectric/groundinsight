@@ -1,7 +1,6 @@
 # docs/snippets/performance.py
 """
-Large and meshed networks: the example of the how-to "Large and meshed
-networks".
+The example of the how-to "Large and meshed networks".
 
 Three experiments with deterministic outcomes (the times are on the page,
 taken from the change log, because they depend on the machine):

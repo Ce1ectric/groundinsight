@@ -1251,7 +1251,7 @@ _INVERTIBLE_FLOOR = 1e-290
 
 
 def is_short_circuit(z: complex) -> bool:
-    """Is ``z`` a zero impedance that ``1/z`` cannot express?
+    """Whether ``z`` is a zero impedance that ``1/z`` cannot express.
 
     Two values answer yes: exact zero, and a magnitude so small that ``1/z``
     overflows to infinity in double precision (below about 5.6e-309 Ohm). They

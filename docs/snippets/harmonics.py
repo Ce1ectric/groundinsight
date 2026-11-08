@@ -1,7 +1,6 @@
 # docs/snippets/harmonics.py
 """
-Harmonics, fault scalings and DC: the example of the how-to "Harmonics, fault
-scalings and DC".
+The example of the how-to "Harmonics, fault scalings and DC".
 
 A substation ``UW`` (0.5 Ohm) feeds an earth fault at station ``S`` over 3 km
 of the three-phase cable system of the data-sheet how-to (screens bonded at

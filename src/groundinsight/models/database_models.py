@@ -194,8 +194,11 @@ class BusTypeDB(Base):
 
 
 def _real_dict_to_json(values):
-    """Serialise a ``Dict[float, float]`` to JSON-compatible form (string
-    keys), or ``None`` if the input is ``None``/empty."""
+    """
+    Serialise a ``Dict[float, float]`` to JSON-compatible form.
+
+    The keys become strings; ``None`` or an empty mapping gives ``None``.
+    """
     if not values:
         return None
     # ``json_safe_float`` keeps the stored document RFC 8259 valid; a bare
@@ -205,18 +208,24 @@ def _real_dict_to_json(values):
 
 
 def _real_dict_from_json(stored):
-    """Deserialise a JSON ``{str(freq): float}`` back into
-    ``Dict[float, float]``, or ``None`` if missing."""
+    """
+    Deserialise a JSON ``{str(freq): float}`` back into ``Dict[float, float]``.
+
+    A missing value gives ``None``.
+    """
     if not stored:
         return None
     return {float(freq): float(val) for freq, val in stored.items()}
 
 
 def _results_to_json(results):
-    """Serialise ``Dict[str, Result]`` to a JSON-compatible mapping, or
-    ``None`` when there are no results to store. Previously the SQLite backend
-    dropped ``Network.results`` entirely while the JSON backend kept them; this
-    restores parity so a solved network survives a database round-trip."""
+    """
+    Serialise ``Dict[str, Result]`` to a JSON-compatible mapping.
+
+    ``None`` when there are no results to store. The database keeps
+    ``Network.results`` like the JSON file does, so a solved network survives
+    either round-trip.
+    """
     if not results:
         return None
     return {name: res.model_dump(mode="json") for name, res in results.items()}
@@ -757,9 +766,12 @@ class SourceDB(Base):
 
     @staticmethod
     def _freq_dict_to_pydantic(stored):
-        """Convert a JSON-serialised ``{str(freq): {real, imag}}`` mapping
-        back into ``Dict[float, ComplexNumber]``. Returns ``None`` if the
-        stored value is missing."""
+        """
+        Convert a stored ``{str(freq): {real, imag}}`` mapping back.
+
+        The result is a ``Dict[float, ComplexNumber]``; a missing stored value
+        gives ``None``.
+        """
         if stored is None:
             return None
         result = {}
@@ -773,9 +785,11 @@ class SourceDB(Base):
 
     @staticmethod
     def _freq_dict_to_json(values):
-        """Convert ``Dict[float, ComplexNumber]`` (or scalars) into a JSON-
-        serialisable mapping with string keys, or ``None`` if the input is
-        ``None``."""
+        """
+        Convert ``Dict[float, ComplexNumber]`` (or scalars) for JSON storage.
+
+        The mapping gets string keys; ``None`` gives ``None``.
+        """
         if values is None:
             return None
         out = {}

@@ -1,7 +1,8 @@
 # docs/snippets/pandapower_topology.py
 """
-Topology import from pandapower: the first example of the how-to "Import from
-pandapower" and of the I/O page.
+The first example of the how-to "Import from pandapower" and the I/O page.
+
+It imports a topology from pandapower.
 
 ``pandapower.networks.example_simple()`` has a 110 kV and a 20 kV level joined
 by a transformer. The import keeps the 20 kV buses and lines, bonds the

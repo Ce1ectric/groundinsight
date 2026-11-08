@@ -1,15 +1,15 @@
 # analysis/shortcircuit.py
 
-"""
+r"""
 IEC 60909-0 short-circuit characteristic quantities and their superposition.
 
 ``groundinsight`` solves the *linear* grounding problem: at every frequency
 the nodal system ``Y(f) u(f) = i(f)`` is solved and the contributions of all
 sources add up by superposition. The IEC 60909-0 characteristic quantities
 
-* the **peak short-circuit current** :math:`i_p = \\kappa \\sqrt{2} I_k''`, and
+* the **peak short-circuit current** :math:`i_p = \kappa \sqrt{2} I_k''`, and
 * the **thermally equivalent short-time current**
-  :math:`I_{th} = I_k'' \\sqrt{m + n}`
+  :math:`I_{th} = I_k'' \sqrt{m + n}`
 
 are however *non-linear* functions of the fault-loop ``R/X`` ratio, so they
 must **not** be superposed. This module implements the project rule agreed
@@ -30,14 +30,14 @@ the total current is the sum of the individual peaks,
 
 .. math::
 
-    i_{p,\\Sigma} = \\sqrt{2} \\sum_i \\kappa_i I_i .
+    i_{p,\Sigma} = \sqrt{2} \sum_i \kappa_i I_i .
 
 Writing that as one factor applied to the aggregated current
-:math:`\\sum_i I_i` gives
+:math:`\sum_i I_i` gives
 
 .. math::
 
-    \\kappa_{eff} = \\frac{\\sum_i \\kappa_i I_i}{\\sum_i I_i},
+    \kappa_{eff} = \frac{\sum_i \kappa_i I_i}{\sum_i I_i},
 
 i.e. exactly the current-weighted mean -- it reproduces the sum of the
 individual peaks identically, and degenerates to the common ``kappa`` when
@@ -365,8 +365,10 @@ class FaultShortCircuitData(BaseModel):
 
 def _source_kappa(source) -> Optional[float]:
     """
-    Return the peak factor of a source: explicit ``kappa`` wins over
-    ``r_to_x``; ``None`` when the source carries neither.
+    Return the peak factor of a source.
+
+    An explicit ``kappa`` wins over ``r_to_x``; ``None`` when the source
+    carries neither.
     """
     kappa = getattr(source, "kappa", None)
     if kappa is not None:
@@ -379,10 +381,10 @@ def _source_kappa(source) -> Optional[float]:
 
 def _source_injection_magnitude(source, freq: float, scaling: float) -> float:
     """
-    Magnitude of the source injection at ``freq``, scaled by the fault
-    scaling -- the same quantity the solver injects, used here as the
-    aggregation weight. Returns ``0.0`` when the source has no value at
-    that frequency.
+    Magnitude of the source injection at ``freq``, scaled by the fault scaling.
+
+    The same quantity the solver injects, used here as the aggregation
+    weight. Returns ``0.0`` when the source has no value at that frequency.
     """
     if source.source_type == "current":
         values = source.values or {}
@@ -468,8 +470,9 @@ def resolve_fault_sc_characteristics(
     aggregation: str = "weighted",
 ) -> FaultShortCircuitData:
     """
-    Aggregate the IEC 60909 data of a fault and its sources into one set of
-    characteristics.
+    Aggregate the IEC 60909 data of a fault and its sources.
+
+    The result is one set of characteristics for the fault.
 
     This is the executable form of the project's superposition rule (see the
     module docstring): the *linear* RMS currents stay superposed by the

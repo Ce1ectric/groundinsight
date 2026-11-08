@@ -1,7 +1,6 @@
 # docs/snippets/diagnostics.py
 """
-Diagnostics, logging and warnings: the example of the how-to "Diagnostics,
-logging and warnings".
+The example of the how-to "Diagnostics, logging and warnings".
 
 A ring of four stations whose cable type declares no phase impedance: the
 solve has to split the phase current with a proxy and says so in the result.

@@ -119,7 +119,7 @@ def bus_impedance_at(bus: Bus, rho: float, frequencies: List[float]) -> np.ndarr
 
 
 def _usable_electrodes(values: np.ndarray) -> np.ndarray:
-    """Per bus: is every value a finite, invertible, passive impedance?
+    """Per bus: whether every value is a finite, invertible, passive impedance.
 
     Such values pass every rule of the solver's passivity check and keep the
     bus an electrode at every frequency.

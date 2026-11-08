@@ -1,6 +1,6 @@
 # analysis/inverse_rho_f.py
 
-"""
+r"""
 Inverse determination of the standard rho-f bus model parameters.
 
 The bus grounding impedance is parameterised in the canonical linear
@@ -8,8 +8,8 @@ rho-f form
 
 .. math::
 
-    Z(\\rho, f) = k_1 \\, \\rho + (k_2 + j k_3) \\, f + (k_4 + j k_5)
-                  \\, \\rho \\, f
+    Z(\rho, f) = k_1 \, \rho + (k_2 + j k_3) \, f + (k_4 + j k_5)
+                  \, \rho \, f
 
 with five real parameters ``k = (k1, k2, k3, k4, k5)`` -- a common
 form fitted to measured rho-f impedance points. This module solves
@@ -44,7 +44,7 @@ This module ships the foundation layer plus a 1-D scaling variant:
   points; this function answers *"how much head-room does the network
   have around this characteristic?"*.
 
-A full Pareto front in :math:`\\mathbb{R}^5` is *not* part of this
+A full Pareto front in :math:`\mathbb{R}^5` is *not* part of this
 layer and will land as ``find_max_rho_f_pareto_front`` in a follow-up
 release on top of the same helper.
 """

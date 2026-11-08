@@ -1,7 +1,8 @@
 # docs/snippets/en50522_check.py
 """
-The EN 50522 quantities of one solved fault: the worked example of the how-to
-"Compare results with EN 50522 limits".
+The worked example of the how-to "Compare results with EN 50522 limits".
+
+It computes the EN 50522 quantities of one solved fault.
 
 A 20 kV cable feeder -- substation ``UW`` and five stations bonded through the
 screens of a three-phase NA2XS(F)2Y 1x300 RM/25 system in trefoil (the type of

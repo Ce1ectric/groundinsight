@@ -1,6 +1,6 @@
 # io/pandapower_sc.py
 
-"""
+r"""
 IEC 60909 short-circuit characteristics from a pandapower ``calc_sc`` run.
 
 This module is the bridge between the *fault-current* world (pandapower's
@@ -39,7 +39,7 @@ layer; both are pinned by ``tests/test_shortcircuit_60909.py``.
 
    .. math::
 
-       m = \\frac{e^{4 f T_k \\ln(\\kappa-1)} - 1}{2 f T_k \\ln(\\kappa-1)}
+       m = \frac{e^{4 f T_k \ln(\kappa-1)} - 1}{2 f T_k \ln(\kappa-1)}
 
    as ``kappa -> 2`` is ``m -> 2`` (a non-decaying DC component carries the
    *maximum* additional heat, not none). Copying ``ith_ka`` would therefore
@@ -64,7 +64,7 @@ governs the DC decay is
 
 .. math::
 
-    \\frac{R}{X} = \\frac{2 R_1 + R_0}{2 X_1 + X_0}
+    \frac{R}{X} = \frac{2 R_1 + R_0}{2 X_1 + X_0}
 
 and **not** the positive-sequence ratio ``R_1/X_1``. That this is the loop
 pandapower itself uses is verified numerically (``I_k1'' = sqrt(3)*c*U_n /
@@ -201,8 +201,9 @@ def _finite(value: Any) -> Optional[float]:
 
 def _tk_s_from_options(options: Dict[str, Any]) -> Optional[float]:
     """
-    Return the clearing time of a ``calc_sc`` run, or ``None`` if the run
-    never asked for one.
+    Return the clearing time of a ``calc_sc`` run, or ``None`` if it had none.
+
+    ``None`` means the run never asked for one.
 
     ``calc_sc`` has the signature default ``tk_s=1.0`` and copies it into
     ``net._options`` unconditionally, so a solved net *always* reports a

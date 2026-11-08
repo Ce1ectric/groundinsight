@@ -1,7 +1,6 @@
 # docs/snippets/installation_check.py
 """
-Self-test of an installation: the step "Verify the installation" of the
-installation page.
+The self-test of the step "Verify the installation" of the installation page.
 
 ``gi.run_reference_cases()`` solves six networks whose answers are known in
 closed form and compares; every row has to say ``agrees = True``. It takes

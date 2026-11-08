@@ -329,9 +329,9 @@ overhead_line = gi.BranchType(
 
 def carson_earth_impedance(h_i, h_j, x, d, rho, f):
     """
-    Carson's loop or mutual impedance of overhead conductors with earth return,
-    without the internal impedance, in Ohm/km.
+    Carson's loop or mutual impedance of overhead conductors, in Ohm/km.
 
+    With earth return, without the internal impedance:
     ``jωμ0/(2π)·ln(D/d) + jωμ0/π·∫ exp(−(h_i+h_j)λ)·cos(xλ)/(λ+√(λ²+m²)) dλ``,
     ``D`` the distance to the image conductor.
     """

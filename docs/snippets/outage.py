@@ -1,7 +1,6 @@
 # docs/snippets/outage.py
 """
-Outage and what-if studies: the example of the how-to "Outage and what-if
-studies".
+The example of the how-to "Outage and what-if studies".
 
 A 20 kV ring -- substation ``UW`` and three stations ``S1`` to ``S3``, bonded
 through the screens of a three-phase cable system -- with an earth fault at

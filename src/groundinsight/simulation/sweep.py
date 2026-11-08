@@ -156,8 +156,11 @@ class SweepResult(BaseModel):
         return _or_empty(self._impedances)
 
     def cuts(self) -> pl.DataFrame:
-        """Side impedances and side reduction factors, stacked. Empty when the
-        sweep was run without cuts."""
+        """
+        Side impedances and side reduction factors, stacked.
+
+        Empty when the sweep was run without cuts.
+        """
         return _or_empty(self._cuts)
 
     def __str__(self):
@@ -349,8 +352,11 @@ def _apply(network: Network, point: SweepPoint, saved: Dict[str, Any]) -> None:
 
 
 def _restore(network: Network, saved: Dict[str, Any]) -> None:
-    """Undo :func:`_apply`. Never raises on a missing element -- a restore that
-    fails would leave the network in a state no later point can trust.
+    """
+    Undo :func:`_apply`.
+
+    Never raises on a missing element -- a restore that fails would leave the
+    network in a state no later point can trust.
 
     Buses are restored in reverse order of application, which is the order
     that makes a restore correct when two overrides of one point interact

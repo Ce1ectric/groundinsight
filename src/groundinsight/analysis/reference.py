@@ -220,8 +220,11 @@ def _assemble_from_model(net, freq: float = _FREQ):
 
 
 def _driving_point(net, bus_name: str, freq: float = _FREQ) -> complex:
-    """Source-free driving-point impedance, assembled independently of the
-    solver so the comparison is not a solver checking itself."""
+    """
+    Source-free driving-point impedance, assembled independently of the solver.
+
+    The comparison would otherwise be a solver checking itself.
+    """
     Y, index, names = _assemble_from_model(net, freq)
     injection = np.zeros(len(names), dtype=complex)
     injection[index[bus_name]] = 1.0
