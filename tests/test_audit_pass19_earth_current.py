@@ -499,10 +499,10 @@ def test_noise_free_networks_split_bit_for_bit_as_before():
     fault bus give the previous result exactly: the oracle split applied to
     the electrode currents reproduces ``I_E`` and the group with ``==``.
 
-    The currents are rebuilt as ``complex(u) / Z`` -- Python's complex
-    division, which is what the split is fed with. ``ResultBus.ia_freq`` is
-    the same quotient taken with NumPy's complex division and may differ
-    from it in the last bit.
+    The split is fed with exactly the electrode currents ``ResultBus.ia_freq``
+    reports (P6: the kernel no longer recomputes them for the split with
+    Python's complex division, which differed in the last bit), so those are
+    the currents rebuilt here; buses without electrode are left out.
     """
     from tests.test_audit_pass19_physics import STRUCTURAL_CASES, build, solve
 
@@ -518,7 +518,7 @@ def test_noise_free_networks_split_bit_for_bit_as_before():
                 z = complex(z.real, z.imag)
                 if np.isinf(z.real) or np.isinf(z.imag):
                     continue
-                currents[b.name] = complex(b.uepr_freq[f]) / z
+                currents[b.name] = complex(b.ia_freq[f])
             old = _old_split_earth_currents(currents, reference_bus=fault_bus)
             assert complex(factor.i_earth[f]) == old.i_earth, (case, f)
             assert factor.earth_buses[f] == old.feeding_buses, (case, f)

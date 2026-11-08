@@ -1285,6 +1285,11 @@ class ElectricalNetwork:
         self._stamp_pattern: Optional[_StampPattern] = None
         self._grid_admittance: Optional[np.ndarray] = None
         self._loop_admittance: Optional[np.ndarray] = None
+        # The electrode currents ``u / Z`` per active bus and frequency as
+        # ``solve_network`` reports them in ``ResultBus.ia``, and where a bus
+        # has an electrode at all; the earth-return split reads these (P6).
+        self._electrode_currents: Optional[np.ndarray] = None
+        self._electrode_usable: Optional[np.ndarray] = None
 
         self._initialize()
         # The tables were gathered from this very state a moment ago; digest
@@ -2313,24 +2318,7 @@ class ElectricalNetwork:
         ]
         if not voltage_sources:
             return
-        coupled: List[str] = []
-        for branch in self.network.branches.values():
-            if not branch.active or not branch.type.grounding_conductor:
-                continue
-            if branch.from_bus not in self.bus_indices:
-                continue
-            if branch.to_bus not in self.bus_indices:
-                continue
-            for freq in self.network.frequencies:
-                z_mutual = (branch.mutual_impedance or {}).get(freq)
-                z_self = self.resolved_impedance(
-                    (branch.self_impedance or {}).get(freq), freq
-                )
-                if z_mutual is None or z_self is None or _is_open_circuit(z_self):
-                    continue
-                if complex(z_mutual.real, z_mutual.imag) != 0:
-                    coupled.append(branch.name)
-                    break
+        coupled = self._coupled_grounding_branches()
         if not coupled:
             return
         emit(
@@ -2351,6 +2339,65 @@ class ElectricalNetwork:
             elements=[("source", name) for name in voltage_sources],
             stacklevel=5,
         )
+
+    def _electrode_arrays(
+        self, potentials: Optional[np.ndarray] = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        The electrode currents ``u / Z`` per active bus and frequency.
+
+        Computed once per solve and kept: ``ResultBus.ia`` reports them and
+        the earth-return split reads the very same values (P6).
+
+        Parameters
+        ----------
+        potentials : numpy.ndarray, optional
+            The bus potentials ``(n, F)``; stacked from :attr:`u_vectors`
+            when not given.
+
+        Returns
+        -------
+        currents : numpy.ndarray
+            Complex ``(n, F)``; zero where a bus has no electrode.
+        usable : numpy.ndarray
+            Boolean ``(n, F)``: a stored, not open impedance (an electrode).
+        """
+        if self._electrode_currents is None:
+            tables = self._network_tables()
+            if potentials is None:
+                potentials = self._stacked(self.u_vectors)
+            usable = tables.bus_present & ~_open_mask(tables.bus_z)
+            currents = np.zeros(potentials.shape, dtype=complex)
+            with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                np.divide(potentials, tables.bus_z, out=currents, where=usable)
+            self._electrode_currents = currents
+            self._electrode_usable = usable
+        return self._electrode_currents, self._electrode_usable
+
+    def _coupled_grounding_branches(self) -> List[str]:
+        """
+        The grounding-conductor branches that couple to their phase conductor.
+
+        A branch counts when it is active between two active buses, has a
+        grounding conductor, and at some network frequency carries a non-zero
+        mutual impedance next to a stored, not open self impedance (0 Hz
+        stand-in applied). Evaluated on the gathered arrays (P6) -- it used
+        to be one lookup and resolution per branch and frequency.
+
+        Returns
+        -------
+        list of str
+            Branch names, in network order.
+        """
+        tables = self._network_tables()
+        in_grid = tables.branch_in_net & tables.branch_grounding
+        if tables.mutual.shape[0] == 0 or not in_grid.any():
+            return []
+        self_usable = tables.self_present & ~_open_mask(tables.self_z)
+        coupled = (
+            tables.mutual_present & self_usable & (tables.mutual != 0)
+        ).any(axis=1) & in_grid
+        return [tables.branch_names[row] for row in np.flatnonzero(coupled).tolist()]
 
     def _source_injection(
         self, source: Source, freq: float, scaling: float
@@ -3549,10 +3596,8 @@ class ElectricalNetwork:
         # electrode; the injection is the source-only vector.
         frequencies = self.network.frequencies
         potentials = self._stacked(self.u_vectors)
-        usable = tables.bus_present & ~_open_mask(tables.bus_z)
-        electrode = np.zeros(potentials.shape, dtype=complex)
-        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-            np.divide(potentials, tables.bus_z, out=electrode, where=usable)
+        self._electrode_currents = None
+        electrode, usable = self._electrode_arrays(potentials)
         injection = self._stacked(self.source_injections)
         result.buses.extend(
             self._result_rows(
@@ -4259,6 +4304,8 @@ class ElectricalNetwork:
         spread: List[str] = []
         fault_name = self.network.active_fault
         fault_bus = self.network.faults[fault_name].bus
+        tables = self._network_tables()
+        names = sorted(self.bus_indices, key=self.bus_indices.__getitem__)
 
         for freq in self.network.frequencies:
             factors[freq] = None
@@ -4287,14 +4334,21 @@ class ElectricalNetwork:
             if i_fault == 0:
                 continue
 
-            electrode_currents: Dict[str, complex] = {}
-            for bus_name, idx in self.bus_indices.items():
-                Z_complex = self.resolved_impedance(
-                    self.network.buses[bus_name].impedance.get(freq), freq
+            # The electrode currents exactly as ResultBus.ia reports them --
+            # computed once in solve_network, for every bus with an electrode
+            # (a stored, not open impedance) -- so that I_E is the sum of the
+            # reported currents of its group (P6). They used to be recomputed
+            # here bus by bus with Python's complex division, which differs
+            # from the array division in the last bit.
+            column = tables.column[float(freq)]
+            currents, usable = self._electrode_arrays()
+            rows = np.flatnonzero(usable[:, column])
+            electrode_currents: Dict[str, complex] = dict(
+                zip(
+                    [names[row] for row in rows.tolist()],
+                    currents[rows, column].tolist(),
                 )
-                if Z_complex is None or _is_open_circuit(Z_complex):
-                    continue
-                electrode_currents[bus_name] = complex(u_vector[idx]) / Z_complex
+            )
 
             # No group exists when every electrode current is rounding noise
             # against the fault current: the current returns through the
