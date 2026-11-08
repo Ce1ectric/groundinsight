@@ -82,30 +82,93 @@ migration checklist.
 - **Release tooling.** The console command `poetry run release` is gone;
   run `poetry run python scripts/release.py`.
 
-### Security
+### Added
 
-- **The impedance formula guard is a whitelist and normalises Unicode
-  (`utils/validations.py`).** It compared raw token strings against an ASCII
-  denylist, but CPython NFKC-normalises identifiers when it compiles the
-  source `sympy.lambdify` generates: a fullwidth `ｅval` passed the guard and
-  reached the builtin `eval` through `create_bus`, i.e. through every JSON and
-  database load. Names must now be ASCII and NFKC-stable, only a fixed set of
-  SymPy functions may be *called* (free symbols stay unrestricted — a user
-  may name a parameter whatever they like, and a bare name can never become
-  a call), only `+ - * / ** ( ) ,` are accepted as operators, and a power
-  whose exponent is itself a power or a literal above 1000 is refused (the
-  `10**10**9` denial of service). Formulas longer than 4096 characters are
-  rejected up front. Nothing in the repository's docs, tests or notebooks is
-  affected; a formula calling a function outside the list (`factorial`,
-  `besselj`, …) now fails with a message that names the allowed set.
-- **`NetworkDB.frequencies` is a JSON column, no longer a `PickleType`.**
-  Loading a database ran `pickle.loads` on the stored blob before any
-  Pydantic validator saw a field, so a `.db` file from another hand was
-  code execution — the very thing the formula guard exists to prevent. Files
-  written before this release are converted by `gi.migrate_database(...)`
-  (`start_dbsession` does it automatically) through a restrictive unpickler
-  that resolves nothing but `builtins.list/float/int` and aborts before the
-  first write when the blob names anything else.
+- `run_outage_study(..., on_error="raise"|"record")` and
+  `OutageStudyResult.failures`, matching `run_sweep`.
+- `ImportDefaults.switch_branch_type`, `switch_length_km` and
+  `derive_phase_impedance` (a `phase_impedance_formula` from
+  `r_ohm_per_km + I*x_ohm_per_km`, deduplicated by formula) for the
+  pandapower importer; `preview_pandapower_import(..., defaults=...)`.
+- `utils.impedance_calculator.compute_impedance_array` and
+  `check_passive_impedance_array` — the array path the transient solver
+  uses; same results, same messages, without a `ComplexNumber` per bin.
+- `Network.sources_reaching(fault_name)`, `PathFinder.reaches`,
+  `set_/get_pathfinder_max_paths`, `ElectricalNetwork.state_fingerprint()`.
+- A shared `simple_network` fixture in `tests/conftest.py`.
+- CI: the release workflow runs the test suite before it builds; pull
+  requests run `mkdocs build --strict` and execute `docs/examples/*.ipynb`.
+
+### Changed
+
+- **Calendar versioning (`YYYY.M.MICRO`) instead of SemVer.**
+  `scripts/release.py` computes the next version from the release date —
+  the first release in a month gets the counter 0, every further one counts
+  up — and `set` accepts only a well-formed calendar version for the month of
+  the release date that is newer than the current one. The SemVer bump kinds
+  `major`/`minor`/`patch` stop with an explanation instead of guessing, and
+  `CITATION.cff` gains a `date-released` field on every release. The month
+  carries no leading zero because PEP 440 strips it (`2026.01.0` is published
+  as `2026.1.0`), so a padded tag would never match PyPI. The head of this
+  file states the scheme and the deprecation policy that replaces the
+  compatibility promise SemVer used to carry.
+- **Two reference cases were replaced by ones that can fail.**
+  `en50522_chain` checked `U_E = 3*I_0 * Z_E * r` with all three factors read
+  out of one result — an identity the implementation closes by construction,
+  so the case agreed to 1e-16 whatever the model did, and tripling every
+  electrode current made the deviation *smaller*. It now re-derives `I_E` from
+  an independently assembled nodal system (quantity and tolerance changed).
+  `ladder_potential_decay` built its matrix from local constants rather than
+  from the model and is now assembled from `bus.impedance` /
+  `branch.self_impedance`.
+- **`summarize` gains an `n_nan` column** and `check_conductor_limits` /
+  `check_node_limits` gain `I_dc_A` and `I_ac_rms_A`. Code that asserts an
+  exact column set has to be updated.
+- **`BusResponse.admittance` lost its `freq` argument**, which it never read.
+
+- **`res_buses()` / `res_branches()` report `frequency_Hz` as `Float64`**
+  with the RMS row marked by a new `is_rms` column, instead of a string
+  column mixing `"50"` and `"RMS"` that could not be compared with a number
+  and disagreed with `res_all_impedances()`. Filter with
+  `pl.col("is_rms")` and `pl.col("frequency_Hz") == 50.0`; both frames also
+  gain `I_inj_A` / `I_inj_degree`, the earthing-conductor current the
+  `ResultBus` docstring warns not to confuse with the electrode current.
+  All three `res_*` frames carry a pinned schema, so an empty result keeps
+  its columns.
+- **`net.paths` is empty after a default `run_fault`** (see *Fixed*); paths
+  that were persisted with the network are adopted on load and survive the
+  next solve as long as the topology still matches.
+- **The FFT transient solver warns** (`TransientModelWarning`, exported)
+  when the network carries mutual coupling it does not model, when the
+  active fault has `scalings` other than 1 (both solvers ignore them), and
+  when the window ends while the response is still ringing — the periodic
+  DFT then wraps the tail into the start of the trace (measured −37 % on the
+  peak with a 0.4 s window). `solve(..., zero_pad=True)` computes on a window
+  twice as long and reports the first half. `|M_mutual| > L_self` warns as the
+  usual mH/H slip. Both solvers share one time grid; the state-space series
+  is one sample shorter than before (`[0, t_end)`), a real branch named
+  `__vsrc__…` is refused.
+- **Non-finite floats are written as the strings `"inf"`, `"-inf"`, `"nan"`**
+  in JSON and in the SQLite JSON columns, because the open-end sentinel of
+  the `"nan"` formula used to be emitted as the literal `Infinity`, which is
+  not RFC 8259 JSON (SQLite `json_valid()` = 0, `JSON.parse` throws). Old
+  files still load.
+- **`gi.Path` is the domain model**, not `pathlib.Path`; `Network`, `Bus`,
+  `BusType`, `Branch`, `BranchType`, `Fault`, `Source`, `Result`,
+  `ResultBus`, `ResultBranch`, `ComplexNumber` are exported and in
+  `__all__`; the ORM classes `BusTypeDB` / `BranchTypeDB` / `NetworkDB` are
+  no longer reachable from the top-level package.
+- **`run_fault(auto_parallel_coefficients=…)` emits a `DeprecationWarning`**
+  in addition to the log line, which without a logging setup nobody saw.
+- **`scripts/` is not packaged and the `release` /
+  `generate-third-party-licenses` entry points are gone**: they installed a
+  top-level module `scripts` and an executable called `release` into every
+  user's environment. Run `poetry run python scripts/release.py …` instead.
+- **`python = "^3.13"`** (was `^3.14`); the suite passes unchanged on 3.13 and
+  CI runs both.
+- **`ImportDefaults` validates `rho`, `frequencies` and `switch_length_km`**
+  on construction, so an empty frequency list fails at the defaults rather
+  than deep in the importer.
 
 ### Fixed
 
@@ -241,93 +304,30 @@ migration checklist.
   `simulation/outage.py` module example); the suite now runs the doctests
   (`--doctest-modules`) so they cannot rot again.
 
-### Changed
+### Security
 
-- **Calendar versioning (`YYYY.M.MICRO`) instead of SemVer.**
-  `scripts/release.py` computes the next version from the release date —
-  the first release in a month gets the counter 0, every further one counts
-  up — and `set` accepts only a well-formed calendar version for the month of
-  the release date that is newer than the current one. The SemVer bump kinds
-  `major`/`minor`/`patch` stop with an explanation instead of guessing, and
-  `CITATION.cff` gains a `date-released` field on every release. The month
-  carries no leading zero because PEP 440 strips it (`2026.01.0` is published
-  as `2026.1.0`), so a padded tag would never match PyPI. The head of this
-  file states the scheme and the deprecation policy that replaces the
-  compatibility promise SemVer used to carry.
-- **Two reference cases were replaced by ones that can fail.**
-  `en50522_chain` checked `U_E = 3*I_0 * Z_E * r` with all three factors read
-  out of one result — an identity the implementation closes by construction,
-  so the case agreed to 1e-16 whatever the model did, and tripling every
-  electrode current made the deviation *smaller*. It now re-derives `I_E` from
-  an independently assembled nodal system (quantity and tolerance changed).
-  `ladder_potential_decay` built its matrix from local constants rather than
-  from the model and is now assembled from `bus.impedance` /
-  `branch.self_impedance`.
-- **`summarize` gains an `n_nan` column** and `check_conductor_limits` /
-  `check_node_limits` gain `I_dc_A` and `I_ac_rms_A`. Code that asserts an
-  exact column set has to be updated.
-- **`BusResponse.admittance` lost its `freq` argument**, which it never read.
-
-- **`res_buses()` / `res_branches()` report `frequency_Hz` as `Float64`**
-  with the RMS row marked by a new `is_rms` column, instead of a string
-  column mixing `"50"` and `"RMS"` that could not be compared with a number
-  and disagreed with `res_all_impedances()`. Filter with
-  `pl.col("is_rms")` and `pl.col("frequency_Hz") == 50.0`; both frames also
-  gain `I_inj_A` / `I_inj_degree`, the earthing-conductor current the
-  `ResultBus` docstring warns not to confuse with the electrode current.
-  All three `res_*` frames carry a pinned schema, so an empty result keeps
-  its columns.
-- **`net.paths` is empty after a default `run_fault`** (see *Fixed*); paths
-  that were persisted with the network are adopted on load and survive the
-  next solve as long as the topology still matches.
-- **The FFT transient solver warns** (`TransientModelWarning`, exported)
-  when the network carries mutual coupling it does not model, when the
-  active fault has `scalings` other than 1 (both solvers ignore them), and
-  when the window ends while the response is still ringing — the periodic
-  DFT then wraps the tail into the start of the trace (measured −37 % on the
-  peak with a 0.4 s window). `solve(..., zero_pad=True)` computes on a window
-  twice as long and reports the first half. `|M_mutual| > L_self` warns as the
-  usual mH/H slip. Both solvers share one time grid; the state-space series
-  is one sample shorter than before (`[0, t_end)`), a real branch named
-  `__vsrc__…` is refused.
-- **Non-finite floats are written as the strings `"inf"`, `"-inf"`, `"nan"`**
-  in JSON and in the SQLite JSON columns, because the open-end sentinel of
-  the `"nan"` formula used to be emitted as the literal `Infinity`, which is
-  not RFC 8259 JSON (SQLite `json_valid()` = 0, `JSON.parse` throws). Old
-  files still load.
-- **`gi.Path` is the domain model**, not `pathlib.Path`; `Network`, `Bus`,
-  `BusType`, `Branch`, `BranchType`, `Fault`, `Source`, `Result`,
-  `ResultBus`, `ResultBranch`, `ComplexNumber` are exported and in
-  `__all__`; the ORM classes `BusTypeDB` / `BranchTypeDB` / `NetworkDB` are
-  no longer reachable from the top-level package.
-- **`run_fault(auto_parallel_coefficients=…)` emits a `DeprecationWarning`**
-  in addition to the log line, which without a logging setup nobody saw.
-- **`scripts/` is not packaged and the `release` /
-  `generate-third-party-licenses` entry points are gone**: they installed a
-  top-level module `scripts` and an executable called `release` into every
-  user's environment. Run `poetry run python scripts/release.py …` instead.
-- **`python = "^3.13"`** (was `^3.14`); the suite passes unchanged on 3.13 and
-  CI runs both.
-- **`ImportDefaults` validates `rho`, `frequencies` and `switch_length_km`**
-  on construction, so an empty frequency list fails at the defaults rather
-  than deep in the importer.
-
-### Added
-
-- `run_outage_study(..., on_error="raise"|"record")` and
-  `OutageStudyResult.failures`, matching `run_sweep`.
-- `ImportDefaults.switch_branch_type`, `switch_length_km` and
-  `derive_phase_impedance` (a `phase_impedance_formula` from
-  `r_ohm_per_km + I*x_ohm_per_km`, deduplicated by formula) for the
-  pandapower importer; `preview_pandapower_import(..., defaults=...)`.
-- `utils.impedance_calculator.compute_impedance_array` and
-  `check_passive_impedance_array` — the array path the transient solver
-  uses; same results, same messages, without a `ComplexNumber` per bin.
-- `Network.sources_reaching(fault_name)`, `PathFinder.reaches`,
-  `set_/get_pathfinder_max_paths`, `ElectricalNetwork.state_fingerprint()`.
-- A shared `simple_network` fixture in `tests/conftest.py`.
-- CI: the release workflow runs the test suite before it builds; pull
-  requests run `mkdocs build --strict` and execute `docs/examples/*.ipynb`.
+- **The impedance formula guard is a whitelist and normalises Unicode
+  (`utils/validations.py`).** It compared raw token strings against an ASCII
+  denylist, but CPython NFKC-normalises identifiers when it compiles the
+  source `sympy.lambdify` generates: a fullwidth `ｅval` passed the guard and
+  reached the builtin `eval` through `create_bus`, i.e. through every JSON and
+  database load. Names must now be ASCII and NFKC-stable, only a fixed set of
+  SymPy functions may be *called* (free symbols stay unrestricted — a user
+  may name a parameter whatever they like, and a bare name can never become
+  a call), only `+ - * / ** ( ) ,` are accepted as operators, and a power
+  whose exponent is itself a power or a literal above 1000 is refused (the
+  `10**10**9` denial of service). Formulas longer than 4096 characters are
+  rejected up front. Nothing in the repository's docs, tests or notebooks is
+  affected; a formula calling a function outside the list (`factorial`,
+  `besselj`, …) now fails with a message that names the allowed set.
+- **`NetworkDB.frequencies` is a JSON column, no longer a `PickleType`.**
+  Loading a database ran `pickle.loads` on the stored blob before any
+  Pydantic validator saw a field, so a `.db` file from another hand was
+  code execution — the very thing the formula guard exists to prevent. Files
+  written before this release are converted by `gi.migrate_database(...)`
+  (`start_dbsession` does it automatically) through a restrictive unpickler
+  that resolves nothing but `builtins.list/float/int` and aborts before the
+  first write when the blob names anything else.
 
 ### Docs
 
