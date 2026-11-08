@@ -1376,6 +1376,63 @@ migration checklist.
   table names the column for each quantity (`I_F_A` = 3I₀, `r_current` = r,
   `I_E_A`, `Z_E_Ohm`, `U_E_V`) and the worked example reads all five in one
   call, recomputed in the tests with the independent reference solver.
+- **The documentation follows the Diátaxis structure: Getting started, How-to
+  guides, Understanding the model, Examples, Reference, Project.** The flat
+  navigation mixed tutorials, explanations and the API, and the audit log made
+  up a fifth of the search index; it now sits under Project and out of the
+  search, like the changelog. `mkdocs build --strict` validates links and
+  anchors (`validation`: omitted files, unrecognised links, anchors). (D1,
+  DOC12, DOC9)
+- **The Concepts page is split into six explanation pages, and its old address
+  still works.** `explanation/theory.md` (model, assumptions and their limits:
+  one-way coupling exact if and only if `k = Z_m/Z_s` is constant per mesh,
+  one phase conductor, inverse rho scales only bus rho, the local source in
+  the current-based reduction factor, the sign frame), `formulas.md`,
+  `phase-currents.md` (`phase_impedance_formula` = `Z_red = Z_pp − Z_m²/Z_s`,
+  the proxy, the legacy `"paths"` mode, which gives `(1 − 2k)·I` in a
+  two-route ring instead of `(1 − k)·I`), `reduction-factors.md` (EPR ratio
+  against the EN 50522 `r`, `U_E`/`Z_E`/`I_E` with the chain example: on a
+  64-section run the group mean lies 43 % and 44.5 % below the fault-bus EPR
+  and the driving-point impedance), `decomposition.md` and `dc.md`. The
+  plugin `mkdocs-redirects` (pinned to 1.2.2; 1.2.3 adds a second
+  documentation tool as a dependency only for a banner) forwards
+  `concepts.md`, `quickstart.md` and `installation.md`; every former section
+  anchor lands on its new place. Every number on the new pages is checked a
+  second way in the test suite. (D1, PH5, PH8, PH11, PH12, PH14)
+- **Getting started: installation with a self-test, and two tutorials whose
+  numbers the reader can compute by hand.** *Your first fault calculation*
+  (two stations, a 5 km cable, 1000 A at 50 Hz: `U_E` = 275.43 V,
+  `Z_E` = 0.8440 Ω, `r` = 0.274064, EPR ratio 0.384615) and *From a line to a
+  ring* (the split, the phase impedance, the legacy mode 2.6 times too high,
+  a harmonic) — each number from the code included on the page and from the
+  closed forms, both checked by the test suite against an independent
+  nodal solve. (DOC5)
+- **The example notebooks are executed when the site is built.** They are
+  stored without outputs, and a cell that raises stops the build: a stored
+  output had shown a reduction factor of 0.904 next to code that gives 0.310.
+  The six notebooks were corrected where narrative and code disagreed and use
+  site links; five notebooks join them — thermal limits, direct current,
+  phase currents in meshes (against a fully coupled multi-conductor solve),
+  the electrode at the fault location (cuts, a rho-f catalogue) and the
+  location response bracket — each checking its numbers a second way. Strict
+  build with all eleven executed: about a minute, 23 s from the cache.
+  (D2, D3, DOC1, DOC2, DOC9, DOC14)
+- **Project pages: changelog, contributing, citation, license.** The new
+  `CONTRIBUTING.md` states the conventions a pull request is reviewed against
+  (module header, NumPy docstrings, typing style, logging, error classes,
+  diagnostics through `groundinsight.diagnostics.emit`, internal API, tests
+  first with two independent methods, changelog categories with **Breaking**,
+  deprecation over two releases and six months, calendar versioning, lint
+  instead of reformat). The citation page writes BibTeX and APA from
+  `CITATION.cff` at build time; the license page carries the scope note. (D1,
+  D10)
+- **README rewritten**: a quickstart that shows its output (checked by a
+  test), the current features with the measured numbers of the sparse kernel,
+  the model overview with the definitions of `U_E`, `Z_E`, `I_E` and both
+  reduction factors, links to the new structure and the scope note. The
+  advice to run a formatter over the code base is gone. (DOC5, D10)
+- `transient.md` and the DC page describe the current behaviour without
+  release history; the history stays in this changelog. (D4)
 
 ### Internal
 
@@ -1809,6 +1866,24 @@ migration checklist.
   `<!-- result-table: <key> -->` markers with tables generated from the code;
   a column without a description stops the build. It is called from the
   registered `docs/hooks/reference_cases.py` until `mkdocs.yml` lists it.
+- **Build hooks for the documentation.** `docs/hooks/notebooks.py` points the
+  notebook kernel at `src/`, limits a cell to 600 s and names the notebook
+  cache after a digest of the package source, so a local build never shows
+  outputs of older code; it also fails a strict build when a notebook page
+  shows a path of the build machine (an unhandled warning).
+  `docs/hooks/project_pages.py` shows `CHANGELOG.md` and `CONTRIBUTING.md`
+  with their links rewritten for the site and writes the citation.
+  `docs/hooks/result_tables.py` is registered. A theme override adds a
+  download button to the notebook pages.
+- **CI runs the notebooks in one place, the strict docs build**, which now
+  installs the pandapower extra and has a 30-minute limit; the separate
+  nbconvert job is removed. The deploy workflow installs the same.
+- **Structure gates** in `tests/test_audit_pass19_docs_structure.py`: every
+  page in the navigation and the sections in order, redirects and every former
+  anchor, the documented Python floor, the tutorial snippets against their
+  pages and the closed forms, notebooks stored clean, executed at build,
+  listed and linked with site addresses, the hooks, the project pages,
+  `CONTRIBUTING.md` linked from README and docs, the README quickstart.
 
 ## [0.6.0] — 2026-09-01
 
