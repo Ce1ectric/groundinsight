@@ -58,4 +58,5 @@ reports it. The symbols follow EN 50522 where the standard has one.
 ## See also
 
 - [Conventions and units](conventions.md)
+- [Compare results with EN 50522 limits](../howto/en50522-check.md)
 - [Bus and branch types from data sheets](../howto/types-from-datasheets.md)

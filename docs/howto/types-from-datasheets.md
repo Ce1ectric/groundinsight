@@ -80,7 +80,7 @@ $$
 
 which is what `ResultReductionFactor.value` reproduces for a single branch.
 The reduction factor of EN 50522 in a network, `value_current`, depends on the
-electrodes as well.
+electrodes as well; see [Compare results with EN 50522 limits](en50522-check.md).
 
 ## Phase impedance for rings and meshes
 

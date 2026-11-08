@@ -12,6 +12,14 @@ line, ring and mesh networks.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/pypi/pyversions/groundinsight.svg)](https://pypi.org/project/groundinsight/)
 
+!!! warning "Scope of the results"
+
+    groundinsight is a research and engineering tool. Its results support, but
+    do not replace, an assessment according to EN 50522 / IEC 61936-1 by a
+    qualified person, including the measurements the standards require. The
+    software is provided under the MIT License, without warranty of any kind.
+    See [Standards and scope](explanation/standards.md).
+
 ## What groundinsight does
 
 Modern medium-voltage distribution networks are meshed through shared grounding

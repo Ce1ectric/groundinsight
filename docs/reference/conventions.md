@@ -157,6 +157,7 @@ source current peaks.
 | `ResultReductionFactor.value_current` | `reduction_factor_current` | $\lvert I_E \rvert / \lvert 3I_0 \rvert$, earth current over fault current | the reduction factor `r` of EN 50522 |
 
 The two coincide only for ideally bonded stations. See
+[Compare results with EN 50522 limits](../howto/en50522-check.md) and
 [Concepts](../concepts.md#reduction-factor-on-a-current-basis).
 
 ## See also

@@ -99,6 +99,16 @@ plugins:
       # example code that is included into pages and published as files.
       include: ["*.ipynb"]
 
+# Build hooks. reference_cases.py writes the table of the closed-form
+# reference cases into explanation/verification.md from REFERENCE_CASES and
+# one run of gi.run_reference_cases(), so the table cannot go stale.
+hooks:
+  - docs/hooks/reference_cases.py
+
+# The hooks are build code, not pages or downloads.
+exclude_docs: |
+  hooks/
+
 extra_javascript:
   - javascripts/mathjax.js
   # polyfill.io was removed in 2026-05 (domain was sold and later served
@@ -120,6 +130,10 @@ nav:
   - Audit log: audit-log.md
   - How-to guides:
       - Bus and branch types from data sheets: howto/types-from-datasheets.md
+      - Compare results with EN 50522 limits: howto/en50522-check.md
+  - Understanding the model:
+      - Verification and validation: explanation/verification.md
+      - Standards and scope: explanation/standards.md
   - Examples:
       - Overview: examples/index.md
       - Minimal example: examples/minimal.ipynb

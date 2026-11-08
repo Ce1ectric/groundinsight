@@ -5,7 +5,7 @@ Audit pass 19 -- the worked examples of the documentation are computed, not type
 Finding IDs: D7 (bus and branch types from data sheets, with the cable example
 NA2XS(F)2Y 1x300 RM/25 computed two and more ways), DOC13 (example code lives in
 ``docs/snippets/`` and runs in the suite), PH5 (what ``phase_impedance_formula``
-represents).
+represents), PH4 (the EN 50522 quantities on the how-to page).
 
 ``docs/snippets/types_from_datasheets.py`` computes the shield-earth loop
 impedance ``Z_s'``, the phase-shield mutual impedance ``Z_m'`` and the reduction
@@ -17,6 +17,10 @@ tolerance the page states, and check (b) itself twice more: against an
 independent quadrature (mpmath, tanh-sinh) and against the analytic
 low-frequency limit of the integral, Carson's closed form with the exact
 constant ``2*exp(1/2 - gamma)/sqrt(omega*mu0/rho)``.
+
+``docs/snippets/en50522_check.py`` reads the EN 50522 quantities of a solved
+feeder; its numbers are checked against the fault-bus EPR of ``res_buses`` and
+a driving-point impedance assembled here from the model's own impedances.
 """
 
 import cmath
@@ -35,6 +39,8 @@ from groundinsight.utils.impedance_calculator import DCLimitWarning, compute_imp
 ROOT = Path(__file__).resolve().parent.parent
 SNIPPETS = ROOT / "docs" / "snippets"
 TYPES_SNIPPET = SNIPPETS / "types_from_datasheets.py"
+EN50522_SNIPPET = SNIPPETS / "en50522_check.py"
+
 #: Tolerances the how-to page states for the closed form against the integral
 #: (worked example, 50 Hz and 250 Hz, 100 Ohm*m, cable at 0.7 m).
 TOL_R_EXAMPLE = 5e-5
@@ -49,6 +55,12 @@ GRID_RHO = (10.0, 100.0, 1000.0, 10000.0)
 def types_ns():
     """Namespace of the data-sheet snippet, run once per module."""
     return runpy.run_path(str(TYPES_SNIPPET), run_name="docs_snippet")
+
+
+@pytest.fixture(scope="module")
+def en50522_ns():
+    """Namespace of the EN 50522 snippet, run once per module."""
+    return runpy.run_path(str(EN50522_SNIPPET), run_name="docs_snippet")
 
 
 def _pollaczek_mpmath(radius, depth, rho, f):
@@ -85,6 +97,46 @@ def _pollaczek_mpmath(radius, depth, rho, f):
     integral = mpmath.quad(integrand, [0, abs(m), 10 * abs(m), 1 / (2 * depth), mpmath.inf])
     bracket = mpmath.besselk(0, m * radius) - mpmath.besselk(0, m * 2 * depth) + 2 * integral
     return complex(1j * omega * mu0 / (2 * mpmath.pi) * bracket * 1000)
+
+
+def _driving_point(net, bus, f):
+    """
+    Driving-point impedance of the earthing network at ``bus``.
+
+    Assembled here from ``bus.impedance`` and ``branch.self_impedance`` (no
+    coupling, no Thevenin loops) and solved with a dense solver -- shares no
+    code with the package's solver.
+
+    Parameters
+    ----------
+    net : Network
+        A network whose impedances are evaluated.
+    bus : str
+        The bus to inject one ampere at.
+    f : float
+        Frequency in Hz.
+
+    Returns
+    -------
+    complex
+        ``(Y^-1)[bus, bus]`` in Ohm.
+    """
+    order = sorted(net.buses)
+    index = {name: i for i, name in enumerate(order)}
+    y = np.zeros((len(order), len(order)), dtype=complex)
+    for name, b in net.buses.items():
+        y[index[name], index[name]] += 1 / complex(b.impedance[f].real, b.impedance[f].imag)
+    for branch in net.branches.values():
+        z = branch.self_impedance[f]
+        adm = 1 / complex(z.real, z.imag)
+        i, k = index[branch.from_bus], index[branch.to_bus]
+        y[i, i] += adm
+        y[k, k] += adm
+        y[i, k] -= adm
+        y[k, i] -= adm
+    rhs = np.zeros(len(order), dtype=complex)
+    rhs[index[bus]] = 1.0
+    return complex(np.linalg.solve(y, rhs)[index[bus]])
 
 
 # --- (a) = (c): the closed form and the model ---------------------------------
@@ -311,3 +363,44 @@ def test_carson_mutual_dc_warning_depends_on_length(types_ns):
         compute_impedance(formula, [0.0], {"rho": 100.0, "l": 0.01})
     with pytest.warns(DCLimitWarning):
         compute_impedance(formula, [0.0], {"rho": 100.0, "l": 0.012})
+
+
+# --- the EN 50522 how-to ------------------------------------------------------
+
+
+def test_en50522_snippet_quantities(en50522_ns):
+    """U_E is the fault-bus EPR, Z_E the driving point at the fault bus.
+
+    Second ways: ``res_buses`` for the EPR, a dense nodal solve assembled here
+    for the driving point, the source values for ``i_fault``.
+    """
+    net, rows = en50522_ns["net"], en50522_ns["ROWS"]
+    fault_bus = en50522_ns["FAULT_BUS"]
+    epr = {
+        row["frequency_Hz"]: row["EPR_V"]
+        for row in net.res_buses().iter_rows(named=True)
+        if row["bus_name"] == fault_bus and not row["is_rms"]
+    }
+    for row in rows:
+        f = row["f"]
+        assert row["U_E"] == pytest.approx(epr[f], rel=1e-12)
+        assert row["Z_E"] == pytest.approx(abs(_driving_point(net, fault_bus, f)), rel=1e-12)
+        assert row["I_F"] == pytest.approx(abs(en50522_ns["SOURCE_VALUES"][f]), rel=1e-12)
+        assert row["I_E"] == pytest.approx(row["r"] * row["I_F"], rel=1e-12)
+    rms = [
+        row["EPR_V"] for row in net.res_buses().iter_rows(named=True)
+        if row["bus_name"] == fault_bus and row["is_rms"]
+    ]
+    assert en50522_ns["U_E_RMS"] == pytest.approx(rms[0], rel=1e-12)
+
+
+def test_en50522_snippet_numbers_on_the_page(en50522_ns):
+    """The table on the how-to page is the snippet's output, rounded."""
+    by_f = {row["f"]: row for row in en50522_ns["ROWS"]}
+    assert by_f[50.0]["U_E"] == pytest.approx(384.4, abs=0.05)
+    assert by_f[50.0]["Z_E"] == pytest.approx(1.189, abs=5e-4)
+    assert by_f[50.0]["r"] == pytest.approx(0.2165, abs=5e-5)
+    assert by_f[50.0]["chain"] == pytest.approx(257.3, abs=0.05)
+    assert by_f[250.0]["U_E"] == pytest.approx(9.10, abs=0.005)
+    assert by_f[250.0]["chain"] == pytest.approx(8.56, abs=0.005)
+    assert en50522_ns["U_E_RMS"] == pytest.approx(384.6, abs=0.05)
