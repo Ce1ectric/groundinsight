@@ -54,6 +54,38 @@ sum of all magnitudes. It is ``1.0`` when every phasor in a group is in phase
 with the others, and falls below that when the electrode currents are spread in
 angle, which is the case where the notion of "one" earth-return current starts to
 lose its sharpness. On the three verification feeders it is ``0.998`` or better.
+It cannot fall below ``2/pi``: for any set of phasors some half-plane collects at
+least ``1/pi`` of their summed magnitudes.
+
+Rounding noise
+--------------
+The half-plane is threshold-free, and that is exactly what made it fragile at
+the edges (audit finding P9). A bus whose electrode current is zero in exact
+arithmetic comes out of the solver as ``1e-17`` of the largest one, at an
+arbitrary angle -- and an arbitrary angle lands in an arbitrary group. Two
+solvers that agree to ``1e-15`` then reported different groups, and where the
+group size decided which group was named feeding, a different ``I_E`` sign, a
+different ``U_E`` and an earthing impedance that moved by a factor of 2.2. Three
+rules close that:
+
+* **Noise threshold.** A current with ``|I_a| <= NOISE_REL * max|I_a|``
+  (``NOISE_REL = 1e-9``) counts as zero. Physically it is irrelevant to ``I_E``;
+  numerically it is the only part of the input whose angle is not determined.
+* **Anchor rule.** The group containing the fault bus is the feeding one. When
+  the fault bus has no electrode (or only a noise-level current), the caller
+  passes the fault-bus potential as ``anchor``: the feeding group is the one
+  whose sum is in phase with it -- the group a resistive electrode at the fault
+  bus would join. Only when neither decides do the group sizes, which noise can
+  no longer tip, and the names. On 823 frequency points of a random battery in
+  which the fault bus *does* carry an electrode, the anchor rule picked the
+  same group as the fault-bus electrode in every case (smallest margin
+  ``cos = 0.16``); the size rule it replaces named the source side feeding in 33
+  of 90 electrode-less cases.
+* **Vanishing reference.** :func:`earth_current_vanishes` tells the caller when
+  every electrode current is noise against the fault current -- the fault
+  current then returns entirely through the shields, ``I_E`` is zero to within
+  rounding and no group can be formed. The caller reports ``None`` and says so
+  rather than a group of noise.
 """
 
 from __future__ import annotations
@@ -64,9 +96,23 @@ import numpy as np
 
 __all__ = [
     "EarthCurrentSplit",
+    "NOISE_REL",
+    "earth_current_vanishes",
     "earthing_voltage",
     "split_earth_currents",
 ]
+
+#: Relative magnitude below which an electrode current (against the largest
+#: one), the whole set of electrode currents (against the fault current) or the
+#: fault-bus EPR (against the largest EPR) counts as rounding noise. Chosen far
+#: above double-precision noise (``~1e-16``) and far below any physically
+#: relevant share; see the module docstring and audit finding P9 / F14.
+NOISE_REL = 1e-9
+
+#: Smallest ``|cos|`` between the group sum and the anchor phasor at which the
+#: anchor is trusted to orient the split. Below it the two are perpendicular to
+#: within rounding and the size/name rule decides.
+_ANCHOR_COS = 1e-9
 
 
 class EarthCurrentSplit:
@@ -156,11 +202,54 @@ def earthing_voltage(
     return complex(u_e), equipotential
 
 
+def earth_current_vanishes(
+    electrode_currents: Dict[str, complex],
+    i_fault: complex,
+    noise_rel: float = NOISE_REL,
+) -> bool:
+    """
+    ``True`` when no electrode carries more than rounding noise of ``I_F``.
+
+    The fault current then returns entirely through the shields and the other
+    metallic conductors -- a fault at the far end of a cable whose end has no
+    electrode is the typical case -- and ``I_E`` is zero to within rounding.
+    The electrode currents that remain are of order ``1e-17 * |I_F|`` at
+    arbitrary angles; splitting them would turn noise into a group, an
+    earth-return current and a reduction factor (audit finding P9).
+
+    Parameters
+    ----------
+    electrode_currents : dict of str to complex
+        ``I_a`` per bus.
+    i_fault : complex
+        The fault current the group would be compared against.
+    noise_rel : float, optional
+        Relative threshold, :data:`NOISE_REL` by default.
+
+    Returns
+    -------
+    bool
+        ``True`` if ``max|I_a| <= noise_rel * |i_fault|`` (including the case
+        of no electrode current at all).
+
+    Examples
+    --------
+    >>> earth_current_vanishes({"A": 1e-14 + 0j, "B": -1e-14 + 0j}, 1000.0)
+    True
+    >>> earth_current_vanishes({"A": 10 + 0j, "B": -10 + 0j}, 1000.0)
+    False
+    """
+    largest = max((abs(complex(v)) for v in electrode_currents.values()), default=0.0)
+    return largest <= noise_rel * abs(complex(i_fault))
+
+
 def split_earth_currents(
     electrode_currents: Dict[str, complex],
     *,
     reference_bus: Optional[str] = None,
     feeding_buses: Optional[List[str]] = None,
+    anchor: Optional[complex] = None,
+    noise_rel: float = NOISE_REL,
 ) -> Optional[EarthCurrentSplit]:
     """
     Sum the electrode currents that flow one way through the soil.
@@ -179,20 +268,41 @@ def split_earth_currents(
         is the one named ``feeding``: pass the fault bus and the report is the
         set of stations from the fault outwards, in every direction, up to where
         the potential profile turns -- which is how the earthing current is read
-        off a network. Without it the smaller group is named ``feeding`` and ties
-        are broken by name, so the output stays reproducible either way.
+        off a network.
     feeding_buses : list of str, optional
         Pin the group instead of deriving it. Use this when the split is known
         from the study design -- for instance when only the stations of one
         feeder are to be counted -- and the automatic choice would take a
         different set. Names that carry no current are ignored.
+    anchor : complex, optional
+        Orientation used when ``reference_bus`` is in neither group -- it has
+        no electrode, or only a noise-level current. The group whose sum has a
+        positive projection on ``anchor`` is named ``feeding``; pass the
+        fault-bus potential and that is the group a resistive electrode at the
+        fault bus would join. Ignored when it is (to within ``1e-9``)
+        perpendicular to the group sum. Without a deciding reference or anchor
+        the smaller group is named ``feeding`` and ties are broken by name, so
+        the output stays reproducible either way.
+    noise_rel : float, optional
+        Currents with ``|I_a| <= noise_rel * max|I_a|`` count as zero and join
+        neither group. Defaults to :data:`NOISE_REL` (``1e-9``); ``0`` keeps
+        every non-zero current.
 
     Returns
     -------
     EarthCurrentSplit or None
         ``None`` when no bus carries any electrode current at all, which is the
         case of a network with no earthed bus rather than an earth-return
-        current of zero.
+        current of zero. Whether the currents that *are* there amount to more
+        than rounding noise against the fault current is a separate question,
+        answered by :func:`earth_current_vanishes`.
+
+    Notes
+    -----
+    Inputs without noise-level currents and with a current at
+    ``reference_bus`` give bit-for-bit the result of the implementation
+    before the noise rules (audit finding P9); the test suite keeps that
+    implementation as an oracle.
 
     Examples
     --------
@@ -204,12 +314,29 @@ def split_earth_currents(
     ['C']
     >>> split.returning_buses
     ['A', 'B']
+
+    A bus with a rounding-noise current joins neither group:
+
+    >>> noisy = dict(currents, N=1e-14 + 1e-14j)
+    >>> split_earth_currents(noisy, reference_bus="C").returning_buses
+    ['A', 'B']
     """
     names = [name for name, value in electrode_currents.items() if value != 0]
     if not names:
         return None
 
     values = np.array([complex(electrode_currents[n]) for n in names], dtype=complex)
+    if noise_rel > 0:
+        # Noise threshold (P9): only the currents above it have a determined
+        # angle. Applied before anything else so that the noise neither joins
+        # a group nor shifts the group sizes the fallback rule looks at. When
+        # nothing is dropped, ``names``/``values`` are untouched and the
+        # result is bit-for-bit the unfiltered one.
+        magnitudes = np.abs(values)
+        keep = magnitudes > noise_rel * float(magnitudes.max())
+        if not keep.all():
+            names = [n for n, kept in zip(names, keep) if kept]
+            values = values[keep]
     total_magnitude = float(np.abs(values).sum())
 
     # Every membership test below goes against a set built *once*. Building
@@ -225,7 +352,7 @@ def split_earth_currents(
         chosen, i_earth = _best_half_plane(names, values)
         chosen_set = set(chosen)
         rest_names = [n for n in names if n not in chosen_set]
-        if _should_swap(chosen, rest_names, reference_bus):
+        if _should_swap(chosen, rest_names, reference_bus, i_earth, anchor):
             chosen, rest_names = rest_names, chosen
             i_earth = -i_earth
 
@@ -243,14 +370,39 @@ def split_earth_currents(
 
 
 def _should_swap(
-    chosen: List[str], rest: List[str], reference_bus: Optional[str]
+    chosen: List[str],
+    rest: List[str],
+    reference_bus: Optional[str],
+    i_earth: complex = 0.0 + 0.0j,
+    anchor: Optional[complex] = None,
 ) -> bool:
     """
     Decide whether the two groups have to be exchanged.
 
     Both carry the same sum with opposite signs, so the half-plane maximum is
     indifferent between them -- which would make the reported membership depend
-    on the order the buses happen to be stored in. This pins it.
+    on the order the buses happen to be stored in. This pins it, in this
+    order: the group containing ``reference_bus`` feeds; else the group whose
+    sum is in phase with ``anchor`` feeds; else the smaller group, ties broken
+    by name.
+
+    Parameters
+    ----------
+    chosen : list of str
+        Members of the half-plane found by :func:`_best_half_plane`.
+    rest : list of str
+        The other (non-noise) buses.
+    reference_bus : str or None
+        Bus whose group is named feeding when it carries a current.
+    i_earth : complex
+        Sum over ``chosen``.
+    anchor : complex or None
+        Orientation phasor for the case without a deciding reference bus.
+
+    Returns
+    -------
+    bool
+        ``True`` if ``rest`` is the feeding group.
     """
     if not rest:
         return False
@@ -259,6 +411,11 @@ def _should_swap(
             return False
         if reference_bus in rest:
             return True
+    if anchor is not None and anchor != 0 and i_earth != 0:
+        anchor = complex(anchor)
+        projection = (complex(i_earth) * anchor.conjugate()).real
+        if abs(projection) > _ANCHOR_COS * abs(i_earth) * abs(anchor):
+            return projection < 0
     if len(rest) != len(chosen):
         return len(rest) < len(chosen)
     return sorted(rest) < sorted(chosen)

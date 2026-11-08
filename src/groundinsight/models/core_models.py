@@ -2187,7 +2187,10 @@ class ResultReductionFactor(BaseModel):
         the quantity that reproduces the familiar closed form
         ``r = |1 - Z_mutual / Z_self|`` for a single shielded line, and it is
         what ``ResultGroundingImpedance`` divides by. It is structurally
-        independent of the impedance *at* the fault bus.
+        independent of the impedance *at* the fault bus. ``None`` where the
+        denominator is rounding noise -- below ``1e-9`` of the EPR the fault
+        current alone would cause at the fault bus, ``|I_F| * |Z_FF|`` -- with a
+        ``ModelAssumptionWarning`` ``REDUCTION_FACTOR_UNDEFINED`` (P9).
     value_current : dict of float to float, optional
         Mapping from frequency to the **current-based** reduction factor
         ``r_I(f) = |I_E| / |I_F|`` -- the measured definition. ``I_E`` is the
@@ -2199,10 +2202,16 @@ class ResultReductionFactor(BaseModel):
         feeder, depending on where the fault sits. Unlike ``value`` this factor
         responds to the fault-bus characteristic, which is what makes it usable
         as the ordinate of a rho-f sensitivity study. ``None`` per frequency
-        where the fault bus carries no injection or no bus is earthed.
+        where the frequency carries no fault current, and where no electrode
+        carries more than ``1e-9`` of the fault current -- the current then
+        returns through the shields and ``I_E`` is zero to within rounding;
+        the latter comes with a ``ModelAssumptionWarning``
+        ``EARTH_GROUP_UNDEFINED`` (P9).
     i_earth : dict of float to complex, optional
         The earth-return current ``I_E`` itself, per frequency, so a study can
-        read the ampere value rather than only the ratio.
+        read the ampere value rather than only the ratio. Electrode currents
+        at or below ``1e-9`` of the largest one are rounding noise and join
+        neither group; ``None`` where ``value_current`` is ``None``.
     earth_buses : dict of float to list of str, optional
         The buses counted as feeding the soil at each frequency -- from the
         fault outwards, in every direction, up to where the potential profile

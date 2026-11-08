@@ -87,7 +87,12 @@ import polars as pl
 from pydantic import BaseModel, Field
 
 from groundinsight.models.core_models import Network
-from groundinsight.utils.earth_current import earthing_voltage, split_earth_currents
+from groundinsight.utils.earth_current import (
+    NOISE_REL,
+    earth_current_vanishes,
+    earthing_voltage,
+    split_earth_currents,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -379,13 +384,21 @@ class BusResponse(BaseModel):
         own = self._electrode_current(z_bus, freq, u)
         if own != 0 and np.isfinite(own):
             electrode_currents[self.bus] = own
+        i_fault = self.i_fault.get(freq)
+        # The noise rules of run_fault (P9): no group when every electrode
+        # current is rounding noise against the fault current, and the
+        # fault-bus potential orients a split without a fault-bus electrode.
+        if i_fault is not None and earth_current_vanishes(electrode_currents, i_fault):
+            return empty
+        u_fault = u.get(self.fault_bus, 0j)
+        u_scale = max((abs(v) for v in u.values()), default=0.0)
+        anchor = u_fault if abs(u_fault) > NOISE_REL * u_scale else None
         split = split_earth_currents(
-            electrode_currents, reference_bus=self.fault_bus
+            electrode_currents, reference_bus=self.fault_bus, anchor=anchor
         )
         if split is None:
             return empty
 
-        i_fault = self.i_fault.get(freq)
         r_current = (
             abs(split.i_earth) / abs(i_fault)
             if i_fault is not None and i_fault != 0
