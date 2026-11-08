@@ -47,12 +47,30 @@ and voltage sources are read once per assembly into ``(elements, F)`` arrays
 whole. Every later stage indexes into those arrays instead of resolving one
 impedance per element and frequency in Python.
 
+*Index tables instead of dense matrices.* Where a stamp lands -- a bus
+diagonal, the four entries of a grounding branch or of a Thevenin loop
+closure -- depends on the topology only. The positions are laid out once
+per network (:class:`_StampPattern`: CSC ``indices``/``indptr`` and the
+entry of every stamp); a frequency then costs one vector of admittances and
+one summation per entry, straight into the CSC matrix the LU factorises
+(:attr:`ElectricalNetwork.Y_sparse`). Until pass 18 every frequency built a
+dense ``n x n`` matrix and kept it, and each was scanned in full to become
+CSC: memory grew as ``n**2 * F`` (finding P2). ``Y_matrices`` survives as a
+dense view that materialises a matrix only when someone reads it.
+
 *One factorisation, many right-hand sides.* The phase-conductor network is
 the same matrix for every source, so it is factorised once per frequency
 (:func:`scipy.sparse.linalg.splu`) and solved for all sources as the columns
 of one right-hand side (finding P1). It used to be a dense ``n x n`` solve
 per source and frequency -- the dominant cost of a run, growing faster than
 ``n**2``.
+
+*Result objects with the collector paused.* A solve creates one
+:class:`ComplexNumber` per element, quantity and frequency. Those objects
+form no reference cycles, but their sheer number keeps triggering the cyclic
+garbage collector, which then walks the whole network model each time. The
+result rows are therefore built inside :func:`_gc_paused` (finding P5a),
+which restores the collector afterwards.
 
 *Program order, kept on purpose.* Matrices are assembled from stamps whose
 contributions are summed entry by entry in the order the former dense loops
