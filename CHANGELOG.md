@@ -291,6 +291,103 @@ migration checklist.
   `z_bus + z_fault_ideal`, where `z_fault_ideal` is the driving point at the
   fault bus with an ideal electrode at the studied bus. With no electrode, it
   returns `None`. (PH4 follow-up)
+- **`gi.solve(network, fault)` — a fault solve that writes nothing into its
+  input.** `run_fault` stores the result, activates the fault, may drop or
+  rebuild the path set and attaches the assembled admittance system: right
+  for a notebook, wrong for a GUI whose worker thread solves while the user
+  interface reads the network, for an undo history, or for a study that
+  promises to hand its input back. `solve` runs the unchanged `run_fault`
+  pipeline on an overlay that shares the bus, branch and source objects
+  (read only) and owns everything a solve writes, so its result is
+  bit-identical to `run_fault`'s — serialised comparison on a chain, a ring
+  and a Thevenin network in both phase-current modes, and the closed form
+  `r = |(Z_s - Z_m)/(Z_s + Z_A + Z_B)|` of a two-bus line to 4.4e-16 — and the
+  network is unchanged afterwards: serialised form, stored results, active
+  fault, path set, assembled system and private state, also when the solve
+  raises. The overlay is a copy, not a construction, so the input's elements
+  stay attached to the input and keep re-deriving on edits. The result
+  carries the input digest `run_fault` would stamp: kept with
+  `network.results[fault] = result`, it counts as current for
+  `stale_results()` until the next edit. Not for two threads solving the
+  same network object at once — the path caches are module-level. (ARC1)
+- **`gi.check_network(network, *, fault=None)` — every problem of a network
+  as data.** Returns a list of `Diagnostic` records (code, severity, message,
+  elements) and never raises; `[]` for a sound network. 25 codes, listed with
+  their severity in `groundinsight.checks.CHECK_CODES`: invalid elements and
+  frequencies, missing excitation, references to buses that do not exist,
+  impedances the solver cannot invert (missing, NaN, not passive, formula
+  errors), source frequency coverage, faults on unknown or inactive buses,
+  partial scalings, faults no source reaches, isolated buses and earthing
+  islands without a reference to earth. A branch end or a source on a bus
+  that does not exist is something the solver drops without a word — on a
+  four-bus ring with one branch pointing at a missing bus the maximum EPR
+  became 239 V instead of 73 V; the editing API refuses such a reference,
+  but a hand-edited project file or a script-filled network can carry one.
+  The check is structural — no assembly, no solve — so a GUI can run it
+  after every edit, and every severity is cross-checked against the solver:
+  in 20 malformed networks each `error` is one on which `run_fault` raises
+  or returns 0 V for a network that is not the one described. The codes
+  `SCALINGS_INCOMPLETE`, `SOURCE_FREQUENCY_GAP` and
+  `SOURCE_FREQUENCY_OUTSIDE_NETWORK` mean what they mean in
+  `Result.diagnostics`. (GUI9)
+- **Progress reports and cooperative cancellation in the five long-running
+  studies.** `run_sweep`, `run_outage_study`, `find_max_rho_scaling`,
+  `find_max_rho_f_scaling` and `TransientStudy.solve` take
+  `progress(done, total, label)`, called after every unit of work — a sweep
+  point, an outage scenario, one solve of a search, a batch of FFT bins (at
+  most 512, fewer under a tight `fft_block_bytes`), a stage of the
+  state-space solver — and `should_cancel()`, asked before every unit. A true
+  answer raises the new `gi.StudyCancelled` (a `RuntimeError` with `done`
+  and `total`) and puts the network back exactly as it was when the study
+  was called: serialised form, stored results and their order, active fault,
+  paths, assembled system. Python cannot stop a thread from outside, so until
+  now a GUI or a server could only wait for a running study. The searches
+  announce their total before the first solve — a log-bisection needs the
+  same number of halvings wherever the threshold lies — and match it: 20
+  progress calls for 20 solves at the default settings, and the announced
+  total equals `n_scan + k` for every tolerance and grid tried. Results with
+  and without hooks are identical. (GUI5)
+- **Networks as tables: `gi.network_from_tables(...)` and
+  `Network.to_tables()`.** Ten tables with a pinned schema
+  (`groundinsight.io.TABLE_SCHEMAS`: column order and dtype; only
+  `frequencies`, `bus_types` and `buses` are required), as Polars frames,
+  CSV files or a directory of `<table>.csv` files; for a workbook,
+  `pl.read_excel(path, sheet_id=0)` returns the dict of sheets
+  `network_from_tables` takes (Polars needs its optional `fastexcel` for
+  that). The tables hold input only: the network is built through the same
+  `Network.add_*` path as `create_bus` & co., so every formula passes the
+  formula guard and every impedance is evaluated from its type; results and
+  paths are not exported. Network → tables → network is identical
+  (`model_dump_json` without results) for four example networks and the
+  shared test fixture, through frames and through CSV, and the rebuilt
+  networks solve to identical results. Malformed tables raise one
+  `ValueError` that lists every problem with table, row and column — missing
+  or unknown columns (a typo such as `lenght` is not dropped silently),
+  decimal commas, duplicate names, references to buses, types, sources or
+  faults that do not exist, validation errors. Also
+  `groundinsight.io.network_to_tables`. (USE6)
+- **`Network.res_fault(fault)` — the key figures of a fault in one table.**
+  Fault current, EPR at the fault and the largest EPR with its bus, the
+  EPR-based and the current-based reduction factor, the earth-return
+  current `I_E`, the EN 50522 earthing voltage `U_E` and earthing impedance
+  `Z_E` were spread over `Network.faults`, `ResultBus`,
+  `ResultReductionFactor` and `ResultGroundingImpedance`, and every GUI
+  tile, report template or script picked them out itself. `res_fault`
+  returns one Polars frame with the pinned schema `gi.RES_FAULT_SCHEMA`: one
+  row per network frequency and one RMS row (`is_rms`, `frequency_Hz`
+  null), magnitudes and angles, and `n_diagnostics`, the number of records
+  in `Result.diagnostics`, on every row. A value the result marks as
+  undefined is null — `r_current` and `I_E_A` at a frequency without fault
+  current, `U_E`/`Z_E`/`I_F` of a result stored before these fields
+  existed; ratios, impedances and angles are null on the RMS row, which
+  carries the stored RMS EPR and root sums of squares of `I_F`, `I_E` and
+  `U_E`. It reads the stored result only and changes nothing: an unknown
+  fault is a `ValueError`, a fault without stored result a `RuntimeError`
+  that names `run_fault` and `solve`, and a stale result is reported as
+  stored (`stale_results()` says so). Every column agrees with the result
+  field it names and with an independent nodal solver to 1e-12 on a radial
+  chain, a meshed cable/overhead-line ring and a network with two infeeds of
+  different angle. (USE1, GUI6)
 
 ### Changed
 
@@ -531,6 +628,50 @@ migration checklist.
   naming the branch when it is zero or too small to invert above 0 Hz, or has
   a negative real part at any frequency. Before, an exact zero above 0 Hz
   raised a bare `ZeroDivisionError`, and a negative real part was accepted.
+- **One name per concept in the public API.** `fault` (was `fault_name`),
+  `u_limit` (was `u_max`), `t_k_s` (was `t_k`, like the field `Fault.t_k_s`),
+  `n_factor` (was `n`, like `Fault.n_factor`) and `frequency` (was `f` or
+  `freq`): 26 parameters of 18 public functions and methods, and a signature
+  walk over `__all__` and the public methods finds none of the old names
+  left. Positional calls are unaffected and the old keywords keep working
+  (see Deprecated). Error messages and hints name the new keywords, for
+  example `u_limit must be a finite positive number`,
+  `n_factor must lie in (0, 1]`, `t_k_s must be strictly positive` and
+  `Pass t_k_s=...`. Field and column names of results are unchanged
+  (`FaultShortCircuitData.fault_name`, the `fault_name` report column,
+  `TransientStudy.fault_name`). The new `BusResponse.fault_driving_point`
+  takes `frequency` from the start. (USE8, STD3)
+- **Result-relevant log lines are structured warnings.** The package logs
+  through a `NullHandler`, so a `logger.warning` reached nobody who had not
+  configured logging, and a GUI could neither attach it to an element nor
+  tell a hint from a warning. All 62 `logger.warning`/`logger.error` calls
+  were classified; the 24 that a user needs to read a result now raise an
+  `InputWarning`, `ModelAssumptionWarning` or `TransientModelWarning` with a
+  stable code and the elements concerned, and inside `run_fault` they are
+  collected into `Result.diagnostics`, also when logging is off and
+  warnings are ignored: the pandapower importer's fallbacks and skips
+  (`IMPORT_LENGTH_DEFAULT`, `IMPORT_BUS_SKIPPED`, `IMPORT_LINE_SKIPPED`,
+  `IMPORT_SWITCH_NOT_IMPORTED`, `IMPORT_ELEMENT_NOT_IMPORTED`,
+  `IMPORT_VOLTAGE_LEVEL_MISMATCH`, `IMPORT_EMPTY`), the short-circuit
+  reader and applier (`SC_VALUE_REPLACED`, `SC_KAPPA_OUT_OF_RANGE`,
+  `SC_KAPPA_MISSING`, `SC_ROW_AMBIGUOUS`, `SC_SPLIT_EQUAL`,
+  `SC_VOLTAGE_SOURCE_SKIPPED`), the IEC 60909 aggregation (`SC_KAPPA_MIXED`,
+  and `SC_DATA_INCOMPLETE` for the current share without IEC data), the
+  thermal checks (`THERMAL_DATA_INCOMPLETE`), the stationary solver
+  (`PARALLEL_COEFFICIENT_DEFAULT`, `EARTH_GROUP_SPREAD` — now once per run
+  for all frequencies —, and `REDUCTION_FACTOR_UNDEFINED` when the solve
+  without coupling fails) and the transient solvers
+  (`TRANSIENT_SOURCE_NOT_CONNECTED`, `TRANSIENT_COUPLING_SKIPPED`,
+  `TRANSIENT_BRANCH_SKIPPED`, `TRANSIENT_RESISTIVE_COUPLING_IGNORED`). Each
+  code is documented in the docstring of the function that raises it. These
+  messages no longer go to the `groundinsight` logger; a setup that reads
+  them from the log can route warnings there with
+  `logging.captureWarnings(True)` (logger `py.warnings`, as text — code and
+  elements stay with the records). The other 38 stay log lines: persistence,
+  migration and session bookkeeping, cost notices, an explicit overwrite,
+  and summaries of what the returned object already carries (status of the
+  ρ searches, failures of sweeps and outage studies, the `within_limit`
+  column of the thermal checks). (GUI4, STD5)
 
 ### Deprecated
 
@@ -541,6 +682,12 @@ migration checklist.
   earlier than two releases and six months after this release. Replacement:
   the methods of `gi.Database` (or of the object `gi.start_dbsession`
   returns), `with db.session() as s:` for a raw session, `db.engine`. (ARC2)
+- **The keywords `fault_name`, `u_max`, `t_k`, `n`, `f` and `freq`** of the
+  18 callables renamed above. They work as before and emit a
+  `DeprecationWarning` that names the replacement and the policy: an old
+  name keeps working for at least two releases and six months after the
+  release that deprecated it. A value under both names is a `TypeError`. The
+  full table is on the service API page. (USE8)
 
 ### Fixed
 
@@ -806,6 +953,20 @@ migration checklist.
   the phase network is an ideal short at DC, the routes split as if all
   conductors had one and the same impedance; declare the DC resistance where
   that split matters.
+- **`run_sweep` leaves the network exactly as found, as it always
+  promised.** It put the bus and branch parameters back but left the result
+  and the assembled system of its *last point* in the network: on a four-bus
+  ring, `network.results["F"]` read 52.2 V at the source bus after a sweep —
+  the last point's value — instead of the 70.1 V of the restored network,
+  and `bus_response` would have read the last point's matrices. Stored
+  results and their order, active fault, path set and assembled system are
+  now those of the moment the sweep was called, so the sweep's own fault is
+  no longer reported by `stale_results()` afterwards. (GUI5)
+- **`find_max_rho_scaling` and `find_max_rho_f_scaling` restore the network
+  exactly.** They put back the active fault, the stored result and the
+  assembled system one by one, but re-inserted the result at the end of
+  `network.results`: with results for `F` and `F1` stored, the order became
+  `F1, F` and the serialised network changed. (GUI5)
 
 ### Security
 
@@ -993,6 +1154,24 @@ migration checklist.
 - **`docs/concepts.md` covers both rules.** The grounding-impedance section
   states when `Z_E` is `None` and how `z_fault_ideal` is used. The 0 Hz
   section covers phase conductors.
+- **New page "Service functions"** (`docs/api/service.md`): which function
+  answers which question, `solve` next to `run_fault`, the full
+  `check_network` code table (kept in sync with `CHECK_CODES` by a test), the
+  progress and cancellation protocol, the table of canonical names, and the
+  API reference of `service`, `checks`, `progress`, `diagnostics` and
+  `utils.compat`. (ARC1, GUI9, GUI5, USE8)
+- **I/O page: "Networks as tables"** — the schema with its required columns
+  (kept in sync with `TABLE_SCHEMAS` by a test), a CSV example, the error
+  semantics and the Excel route. (USE6)
+- README, concepts, quickstart, the transient guide, the API pages and the
+  example notebooks use the canonical keywords. (USE8)
+- **Result tables page: "Key figures of a fault"** — the columns of
+  `res_fault` with type and meaning (kept in sync with `RES_FAULT_SCHEMA` by
+  a test), the null rules and an example. (USE1, GUI6)
+- **Service page: "Diagnostic codes"** — every code the package raises, with
+  its category and the function that raises it (kept complete by a test),
+  how to collect the records around any call, and the route into logging.
+  (GUI4)
 
 ### Internal
 
@@ -1318,6 +1497,35 @@ migration checklist.
   `driving_point_system` and `FloatingEarthError`. The driving point is now
   solved on the bus's earthing group only, and a group without an electrode
   is refused.
+- `groundinsight._state.NetworkState`: exact snapshot and restore of the
+  network-level state — every field with the content of its containers, the
+  private attributes of the network and its faults, the fields-set
+  bookkeeping — used by the cancellation and by the searches.
+  `groundinsight.utils.compat.renamed_parameters`: the alias decorator; it
+  checks its renames when the function is decorated and records them in
+  `__deprecated_parameters__`. `analysis._bisection.planned_steps`.
+- The outage study and the frequency-dependent search call `run_fault` with
+  the canonical keyword, so no study triggers the deprecation warning itself.
+- `groundinsight.utils.compat.warn_stacklevel`: the `stacklevel` for a
+  warning raised under the alias decorator, counted without its wrapper
+  frame, so the warnings of functions with a renamed parameter — the
+  diagnostics and the `DeprecationWarning` of `auto_parallel_coefficients` —
+  name the caller's line on Python 3.12 as on 3.14
+  (`warnings.warn(skip_file_prefixes=...)` matches no complete file name on
+  3.12).
+- Tests: `tests/test_audit_pass19_api.py` (126),
+  `tests/test_audit_pass19_studies_progress.py` (27),
+  `tests/test_audit_pass19_tables_io.py` (33),
+  `tests/test_audit_pass19_res_fault.py` (21: every column against the
+  result objects and the reference solver of `tests/_reference_mna.py`),
+  `tests/test_audit_pass19_diagnostics_inventory.py` (42: the remaining log
+  sites pinned with the reason each is operational, so a new
+  `logger.warning` fails until it is classified; every converted code raised
+  in its module and documented there; a triggering network or table per
+  code), eight doctests. Three older tests match the new message wording,
+  one test of the edit invariants expects the sweep to leave no stale
+  result, and 21 older tests in six files read the structured records
+  instead of `caplog`.
 
 ## [0.6.0] — 2026-09-01
 
