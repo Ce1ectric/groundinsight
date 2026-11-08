@@ -892,13 +892,17 @@ def compare(
     the dimensionless reduction factors absolutely, impedances against their
     own maximum. RMS columns are checked as well.
 
-    The earth-group quantities (``I_E``, ``r_current``, ``Z_G``, feeding
-    buses) are compared only where they are numerically defined (finding P9):
-    buses whose electrode current is rounding noise (``|I_a| <= 1e-9 max``)
-    or lies on the half-plane boundary are excluded from the membership
-    check, and a fault bus without electrode current lets the split come out
-    as the complementary partition (then ``|I_E|`` is compared and ``Z_G`` is
-    skipped). ``value`` is compared where ``|u_F,no mutual| > 1e-9 max|U|``.
+    The earth-group quantities (``I_E``, ``r_current``, feeding buses) are
+    compared only where they are numerically defined (finding P9), with the
+    group oriented as the kernel orients it -- by the fault bus, or by the
+    fault-bus potential when the fault bus carries no electrode current of
+    its own; buses whose electrode current is rounding noise
+    (``|I_a| <= 1e-9 max``) or lies on the half-plane boundary are excluded
+    from the membership check. ``Z_G`` is the driving point ``Z_dp(F)`` of
+    the earthing network (decision F4) and compared at every bin where the
+    oracle has a finite one; before F4 it was the group impedance
+    ``U_E / I_E`` and was compared with the group. ``value`` is compared
+    where ``|u_F,no mutual| > 1e-9 max|U|``.
 
     Parameters
     ----------
@@ -984,7 +988,15 @@ def compare(
         i_f = abs(oracle.i_fault[j])
         if not (mx > 1e-9 * max(i_scale, 1e-300)) or i_f == 0:
             continue
-        split = split_earth_currents(currents, reference_bus=network.faults[fault].bus)
+        # Orientation as in the kernel (P9): the fault-bus potential decides
+        # when the fault bus has no electrode current of its own, unless it
+        # is itself rounding noise.
+        u_fault = complex(oracle.u[k_fault, j])
+        u_max = float(np.abs(oracle.u[:, j]).max())
+        anchor = u_fault if abs(u_fault) > 1e-9 * u_max else None
+        split = split_earth_currents(
+            currents, reference_bus=network.faults[fault].bus, anchor=anchor
+        )
         if split is None:
             continue
         half = 0.5 * float(np.abs(values).sum())
@@ -1003,37 +1015,34 @@ def compare(
             if abs(v) <= 1e-9 * mx
             or abs((v * direction.conjugate()).real) <= 1e-9 * mx
         }
-        universe = set(currents) - excluded
         want = set(split.feeding_buses) - excluded
         have = set(rf.earth_buses.get(f, [])) - excluded
-        swapped = False
         if want != have:
-            if have == universe - want:
-                swapped = True  # anchorless label swap, P9
-            else:
-                membership_ok = False
-        if swapped:
-            ie_dev = max(ie_dev, abs(abs(got_ie) - abs(split.i_earth)) / i_scale)
-        else:
-            ie_dev = max(ie_dev, abs(got_ie - split.i_earth) / i_scale)
+            membership_ok = False
+        ie_dev = max(ie_dev, abs(got_ie - split.i_earth) / i_scale)
         expected_r = abs(split.i_earth) / i_f
         got_r = rf.value_current.get(f)
         ri_dev = max(ri_dev, float("inf") if got_r is None else abs(got_r - expected_r))
-        # earthing impedance: Z_dp(F) once the CORE contract is in, else the
-        # current-weighted group impedance U_E / I_E.
-        if has_group_fields:
-            expected_z = oracle.z_dp[j]
-        elif swapped:
-            continue
-        else:
+        if not has_group_fields:
+            # before decision F4: the current-weighted group impedance
             potentials = {
                 name: complex(oracle.u[k, j]) for k, name in enumerate(oracle.bus_names)
             }
             u_e, _ = earthing_voltage(potentials, currents, split.feeding_buses)
             expected_z = u_e / split.i_earth
-        got_z = result.grounding_impedance.value.get(f)
-        z_pairs.append((_cn(got_z), complex(expected_z)))
-        z_scale = max(z_scale, abs(expected_z))
+            z_pairs.append(
+                (_cn(result.grounding_impedance.value.get(f)), complex(expected_z))
+            )
+            z_scale = max(z_scale, abs(expected_z))
+    if has_group_fields:
+        # Z_E = Z_dp(F) (decision F4) is a property of the earthing network
+        # and defined whether or not an earth group exists: every bin.
+        for j, f in zip(cols, freqs):
+            expected_z = complex(oracle.z_dp[j])
+            if not (math.isfinite(expected_z.real) and math.isfinite(expected_z.imag)):
+                continue
+            z_pairs.append((_cn(result.grounding_impedance.value.get(f)), expected_z))
+            z_scale = max(z_scale, abs(expected_z))
     for got, want in z_pairs:
         zg_dev = max(zg_dev, abs(got - want) / z_scale if z_scale > 0 else 0.0)
     dev["i_earth"] = ie_dev
