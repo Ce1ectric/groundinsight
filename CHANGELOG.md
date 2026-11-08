@@ -409,6 +409,44 @@ migration checklist.
   and 1000, solved in two threads for four rounds — before, one of the two
   results was wrong in every round (4 of 8, independent of timing, because the
   last global write wins); now 0 of 8, equal to two sequential runs. (ARC2)
+- **Service layer `groundinsight.api` for front ends.** A GUI, a server and the
+  command line need the same things around a network that a notebook does not:
+  a session that owns one project, undoable edits, calculations off the
+  caller's thread, and data that travels as JSON. `ProjectSession` holds one
+  network with a revision counter (undo/redo return to the number of the state
+  they restore), resource limits as constructor parameters (`max_buses`,
+  `max_branches`, `max_job_runtime_s`, `max_undo`, `max_paths`) and a file or a
+  `ProjectStore` location (`MemoryStore`, `DatabaseStore` over `gi.Database`);
+  open and save use the library's project-file functions, without results.
+  Nineteen commands (add/update/remove for buses, branches, sources, faults,
+  bus types, branch types; `SetFrequencies`) go through the library's editing
+  API, are atomic and undoable — after undo the serialised network equals the
+  one before, and a rejected command changes nothing and names the library's
+  reason. Whether a result is stale is the library's verdict
+  (`Network.is_result_stale`), so undo makes a result current again.
+  `JobRunner` runs solve, solve_all, sweep, outage and max_rho jobs in a thread
+  or a process with progress, cancel (`JobCancelled` is a `gi.StudyCancelled`),
+  a runtime limit and results bound to the revision they were computed from.
+  25 DTOs (pydantic, strictly JSON-safe, `dto_schema_version = 1`) with
+  `json_schemas()` for 27 schemas. The key figures equal `res_fault` exactly
+  and the independent reference solver to 1e-10 on the documented examples.
+  Exported from `groundinsight.api`, not from the package root. (GUI1–GUI9,
+  ARC1)
+- **Command line `python -m groundinsight` / `groundinsight`.** `run
+  <project.json> --fault <name> [--format table|json|csv]` and `check`, built on
+  the service layer (the same DTOs as the GUI); exit codes 0 (fine), 1 (check
+  errors or a failed solve), 2 (usage or file problems).
+- **`groundinsight-gui`, a separate distribution in `gui/` (GUI phase 0).**
+  NiceGUI 4.0, browser mode by default, `--native` for a desktop window,
+  German and English. Start page with templates and opening a project file,
+  editable element tables (every edit a command, undo/redo), a fault or all
+  faults as a background job with progress and cancel, key-figure tiles, key
+  figures per frequency, EPR per bus as chart and table, the diagnostics of the
+  result with links to the elements they name, the stale marker, the
+  pre-flight check, save and save-as. Every number on screen is a DTO field;
+  the GUI tests check the shown values against `res_fault`/`res_buses` of an
+  independently solved twin and against the reference solver. Released
+  together with the library under the same version, pinned to it.
 
 ### Changed
 
@@ -1614,6 +1652,22 @@ migration checklist.
 - **Tests use `gi.Database` instead of the deprecated session globals**,
   except the tests of the deprecation path, which assert the warning; the
   suite raises 11 `DeprecationWarning`s fewer. (ARC2)
+- **Release and CI keep the GUI on the library's version.** `scripts/release.py`
+  rewrites `gui/pyproject.toml` (version and `groundinsight==` pin) and
+  `gui/groundinsight_gui/__init__.py` with the other version sources and stops
+  on drift — the drift check no longer keeps one entry per file, which would
+  have hidden a pin disagreeing with the version line of the same file. The
+  release workflow's guard refuses a tag that one of them disagrees with
+  (tested by executing the guard on copies of the files). A CI job installs
+  the library and the GUI from the checkout in one pip call and runs the GUI
+  tests on ubuntu/Python 3.14; Dependabot watches the GUI's NiceGUI range and
+  leaves the library pin to the release script.
+- **Concurrent solves of different networks are tested under thread
+  pressure.** While the pathfinder kept module-level caches shared by every
+  network, clearing one network's entries while another thread inserted failed
+  with `OrderedDict mutated during iteration` (4 threads × 150 solves: 7 of 600
+  raised); the per-network memo of ARC2 removes the shared state, and the new
+  tests keep it that way (results bit-identical to solo solves).
 
 ## [0.6.0] — 2026-09-01
 
