@@ -9,6 +9,7 @@ during a calculation without the side effects of the interactive API:
 |---|---|
 | What would `run_fault` return — without touching my network? | [`gi.solve`](#solve-without-side-effects) |
 | What is wrong with this network, all at once, as data? | [`gi.check_network`](#pre-flight-check) |
+| How far is this study, and can I stop it? | [`progress` / `should_cancel`](#progress-and-cancellation) |
 | Which spelling of a parameter is the current one? | [canonical names](#canonical-parameter-names) |
 
 ## Solve without side effects
@@ -109,6 +110,48 @@ warnings raised during the check keep their own codes (`FREQUENCY_ORDER`,
 | `ISOLATED_BUS` | warning | An active bus has no active branch to any other bus. |
 | `FLOATING_ISLAND` | error | Buses joined by grounding conductors with no reference to earth. |
 
+## Progress and cancellation
+
+The five long-running entry points — `run_sweep`, `run_outage_study`,
+`find_max_rho_scaling`, `find_max_rho_f_scaling` and `TransientStudy.solve` —
+take two optional keyword arguments:
+
+- `progress(done, total, label)` is called after every unit of work: a sweep
+  point, an outage scenario (the base case included), one solve of a
+  bisection search (one bus solve of the rho-f search), a batch of FFT bins
+  (at most 512, fewer under a tight `fft_block_bytes`), a stage of the
+  state-space solver. `done` counts up by one, `label` names the unit,
+  `done <= total` holds at every call.
+- `should_cancel()` is asked before every unit. A true answer raises
+  `gi.StudyCancelled` (a `RuntimeError` with `.done` and `.total`), and the
+  network is back in the state it had when the study was called — JSON,
+  stored results, active fault, paths and assembled system.
+
+```python
+import threading
+
+stop = threading.Event()
+
+def report(done, total, label):
+    print(f"{done}/{total} {label}")      # a GUI forwards this to its event loop
+
+try:
+    study = gi.run_sweep(net, fault="F1", points=points,
+                         progress=report, should_cancel=stop.is_set)
+except gi.StudyCancelled as cancelled:
+    print(f"stopped after {cancelled.done} of {cancelled.total} points")
+```
+
+Cancellation is cooperative: it takes effect at the next unit boundary. The
+integration step of the state-space solver is a single library call and runs
+to its end once started. Both callbacks run in the study's thread; an
+exception raised by a callback propagates unchanged.
+
+`total` is fixed for sweeps, outage studies and transients. A bisection
+search announces the evaluations its bracket and tolerance require — a
+log-bisection needs the same number of halvings wherever the threshold lies —
+and ends below that when it stops early (a fully admissible bracket).
+
 ## Canonical parameter names
 
 Every concept of the public API has one parameter name. The former names
@@ -136,6 +179,8 @@ gi.run_fault(net, fault_name="F1")        # works, DeprecationWarning
 ::: groundinsight.service
 
 ::: groundinsight.checks
+
+::: groundinsight.progress
 
 ::: groundinsight.diagnostics
 
