@@ -102,6 +102,38 @@ migration checklist.
   returns, or `gi.Database(path)` — `db.session()` yields a short-lived
   SQLAlchemy session, `db.engine` is the engine. Reading `gi.session` keeps
   working with a `DeprecationWarning`. (ARC2)
+- **Formulas of a bus or branch type may only use the symbols the evaluator
+  binds.** A bus formula is evaluated with `f` and `rho`, a branch formula with
+  `f`, `rho` and `l`; `j`, `I`, `pi` and `E` are available in both. Any other
+  name (`L`, `F`, `Rho`, `R + j*X` …) used to be accepted and failed only at
+  `create_bus`/`create_branch` with "Cannot convert expression to float"; it
+  now raises when the type is created, naming the symbol, the allowed set and
+  the case-insensitive match. Migration: write the symbols in lower case as
+  listed; a bus formula has no `l`. (USE2)
+- **`Branch.length` must be a finite length > 0 km.** Zero, negative, NaN and
+  infinite lengths are rejected at construction and on assignment, with a
+  message about the length. They used to surface as "exactly zero impedance"
+  or as a negative real part, and a detached branch was not checked at all.
+  Migration: model a bus coupler or jumper with a short positive length
+  (e.g. `0.001`). A database or JSON file with such a branch no longer loads
+  until the length is corrected. (USE5)
+- **Tighter formula limits.** Exponents above 12 (written out or computed,
+  e.g. `10**-15`, `9**(2*7)`), number literals with more than 100 digits,
+  hexadecimal/octal/binary literals, more than 512 terms, more than 8 calls
+  or more than 3 arguments per call, `floor`/`ceiling` of a value with more
+  than 100 digits and `exp`/`sinh`/`cosh` of an argument above 1e100 are
+  rejected. No formula in the documentation, the notebooks or the test suite
+  comes near any of them (at most 6 digits, exponent 2, 27 terms, 2 calls,
+  2 arguments). Migration: write small factors with an exponent part
+  (`1e-15` instead of `10**-15`). (SEC1)
+- **Edit invariants.** Renaming a bus, branch, source or fault that belongs to
+  a network, rewiring a branch, source or fault to a bus the network does not
+  have, adding an element that belongs to another network, and assigning a
+  field of a `BusType`/`BranchType` now raise `ValueError`. Migration: remove
+  the element and add a renamed copy; add `element.model_copy(deep=True)` to a
+  second network; change a type with
+  `new = bus_type.model_copy(update={...})` and `network.update_bus(name, type=new)`.
+  (GUI3, F9)
 
 ### Added
 
@@ -156,6 +188,34 @@ migration checklist.
   silently dropping what the newer release stored; files without the keys
   (0.6.0 and earlier) load unchanged. The current version is
   `groundinsight.io.project_file.SCHEMA_VERSION = 1`. (GUI1)
+- **`Network.stale_results()` and `Network.is_result_stale(fault)` tell which
+  stored results no longer match the network.** `run_fault` stamps
+  `Result.input_digest`, a digest of everything the result was computed from:
+  the frequencies, every bus, branch and source as the solver reads them, and
+  the definition of the result's own fault. The comparison is by content, so
+  an undone edit makes a result current again, and `outage_context`,
+  `run_sweep` and the rho searches -- which restore the network -- leave the
+  flags as they found them; the result a study leaves behind computed under
+  modified inputs (last outage scenario, last sweep point) is reported stale.
+  Metadata (`description`, `Fault.t_k_s`/`n_factor`, a source's IEC 60909
+  characteristics) and other faults do not count. The digest survives JSON and
+  the database (results are stored as JSON there; no migration); results
+  without one -- written by an older version -- are never reported. Cost:
+  10 ms per check on a 1000-bus ring with 7 frequencies. (GUI3, F9)
+- **`Network.update_bus(name, **fields)` and `Network.update_branch(name, **fields)`.**
+  Every value is validated on a detached copy, bus references are checked and
+  the impedances derived before anything is written -- all or nothing.
+  Derived fields (`impedance`, `self_impedance`, …) and `name` are refused with
+  an explanation. (GUI3, F9)
+- **`Network.remove_bus/remove_branch/remove_source/remove_fault`.**
+  `remove_bus` refuses while a branch, source or fault refers to the bus and
+  names every one of them; `remove_fault` also drops the stored result and the
+  active flag; enumerated paths through a removed element are invalidated.
+  Unknown names raise `ValueError`, like `run_fault` for an unknown fault.
+  (GUI3, F9)
+- **`utils.validations.check_formula_symbols`, `BUS_FORMULA_SYMBOLS`,
+  `BRANCH_FORMULA_SYMBOLS`, `FORMULA_CONSTANTS`** -- the symbol check of the
+  type validators, usable by a formula editor. (USE2)
 
 ### Changed
 
@@ -265,6 +325,24 @@ migration checklist.
   plots, such as a GUI or a server, never loads pyplot's global state.
   `typing.get_type_hints` on a plotting helper needs `matplotlib.pyplot`
   imported first. (GUI8)
+- **Assigning an input of an element that belongs to a network re-derives it.**
+  `Bus.type`, `Bus.specific_earth_resistance`, `Branch.type`, `Branch.length`
+  and `Branch.specific_earth_resistance` go through `calculate_impedance`, the
+  code path of `add_*`; assigning `Network.frequencies` re-derives every
+  element, computing all of them before writing any. A failing derivation
+  leaves the element as it was and raises. `bus.specific_earth_resistance = 1000`
+  used to be accepted while the impedance kept its old value, and the next
+  `run_fault` used it silently (measured on a four-bus ring after editing one
+  bus and one branch: EPR at the fault bus 113.4 V instead of 148.4 V, at a
+  neighbouring bus 0 V instead of 13.6 V). On an element that belongs to no network an assignment only stores
+  the value. (GUI3, F9)
+- **`BusType` and `BranchType` are read-only after construction.** A type has
+  been evaluated into every element that uses it, and after a JSON or database
+  round trip every element holds its own copy, so an in-place change could
+  neither reach the elements nor be traced to them. (GUI3, F9)
+- **The optional derived fields are `None` when the type has no formula for
+  them** (`R`/`L`/`C`, `phase_impedance`, `R_self` … `M_mutual`), instead of
+  keeping whatever an earlier type left there. (GUI3, ARC9)
 
 ### Deprecated
 
@@ -450,6 +528,21 @@ migration checklist.
   4 MiB budget. The spectra are bit-identical to the old batching, and the
   run time is unchanged (200 buses, interleaved median: 1.23 s old, 1.03 s
   new). (P8)
+- **A solved network can be copied and pickled again.** `copy.deepcopy(net)`,
+  `net.model_copy(deep=True)` and `pickle.dumps(net)` failed after `run_fault`
+  with `TypeError: cannot pickle 'SuperLU' object` -- a regression of the LU
+  reuse. The factor cache is dropped in copies (it is rebuilt when needed); the
+  copied solver state refers to the copy, so `bus_response` works on it without
+  a new solve, with the same numbers as the original and as a network built
+  from scratch. (GUI2)
+- **Creating a bus or branch is atomic.** A formula that only fails when it is
+  evaluated (negative resistance, NaN at one frequency, a complex `R_self`)
+  left an element without impedances in the network, and the next `run_fault`
+  failed on "carries no impedance" instead of on the formula. The impedances
+  are now derived before the element is inserted; with `overwrite=True` the
+  previous element stays. (ARC9)
+- **`create_fault(active=True)` without a network** raises a `ValueError` that
+  says what is missing, instead of `AttributeError` on `None`. (ARC9)
 
 ### Security
 
@@ -514,6 +607,24 @@ migration checklist.
   `# nosec B608` with that reason, and a test migrates a file with a hostile
   column and table name while recording every statement the module sends
   (SEC6).
+- **Formula strings cannot make SymPy burn CPU any more.** SymPy evaluates
+  arithmetic on numbers exactly while it parses, and the guard only capped the
+  *literal* exponent: `<4080 digits>**999` cost 1.9 s per formula and a JSON
+  with 20 such bus types 17.9 s to load; `9**(99999*99999)` and
+  `floor(exp(10**12))` never returned, `(0*f + 9)**(f - f + 4000000)` cancelled
+  its symbols (2.2 s), `Max` with 120 symbolic arguments took 6.6 s. The guard
+  now bounds, before SymPy runs, the digits of number literals, every
+  exponent (by the value it can reach), the size of every exact intermediate
+  result, `floor`/`ceiling` and `exp`-like arguments, and the number of terms,
+  calls and call arguments; each message names its limit. Measured: every case
+  above is rejected in under 4 ms; the most expensive admitted formula (eight
+  `Max` of three symbolic arguments) costs about 50 ms with cold caches.
+  (SEC1)
+- **The formula guard fails closed.** A string Python's tokenizer cannot split
+  was handed on to SymPy unchecked; it is now rejected by the guard ("could
+  not be tokenized"), and so is a string that tokenizes but is no expression.
+  The string is parsed inside parentheses, which accepts exactly the leading
+  blanks and line breaks SymPy accepts. (SEC5)
 
 ### Docs
 
@@ -554,6 +665,12 @@ migration checklist.
   table; the Database page the object, threading, the module-level helpers
   and a migration table for the deprecated globals; the plotting page the
   lazy import. (GUI1, ARC2, GUI8)
+- **"Editing a network and stale results"** in the core-models API page:
+  re-derivation on assignment, `update_*`/`remove_*`, read-only types, and what
+  makes a result stale. `BusType`/`BranchType` document their formula symbols
+  and that they are read-only; `core_models` and `utils/validations` have
+  module docstrings explaining the invariants and the resource limits.
+  (GUI3, USE2, SEC1)
 
 ### Internal
 
@@ -789,6 +906,17 @@ migration checklist.
   (`_set_session`, direct assignment of `gi.engine`/`gi.session`) were
   rewritten to the new contract. A project file written by the genuine 0.6.0
   writer is a test fixture. (ARC2, GUI1)
+- `ElectricalNetwork._UNCOPYABLE_CACHES` lists the attributes that hold SciPy
+  factorisations; a new factor cache has to be listed there, or a solved
+  network stops being copyable. (GUI2)
+- `Bus/Branch._derive()` computes every derived field without writing;
+  `calculate_impedance()` is `_apply_derived(_derive(...))`. Elements share a
+  `_NetworkElement` base with a weak, equality-neutral link to their network.
+  A test keeps the table of digested and exempt model fields complete, so a new
+  field has to be classified before a result can silently stay "current".
+  (GUI3, ARC9)
+- Four tests in `test_core_models.py` used the formula `"1+roh+f"`, a typo the
+  symbol check now catches; they use `"1+rho+f"`. (USE2)
 
 ## [0.6.0] — 2026-09-01
 
