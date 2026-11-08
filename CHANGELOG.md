@@ -3317,138 +3317,66 @@ below:
 
 ### From the 2026-11-07 review (audit pass 19)
 
-Change concept of the review, as work packages in the order the review
-proposes. Each package becomes one pull request with tests that are red
-without it and a demonstration notebook. Nothing here is implemented yet;
-decisions still open with the maintainer are marked *(decision)*.
+Implemented in this release and recorded under `[Unreleased]`: work packages
+0–10 of the review -- the pass-18 series, no silent wrong result, the
+EN 50522 quantities, the transient phase split, the sparse kernel and the
+study sessions, supply chain and CI, the API and service-layer
+prerequisites, the architecture steps, standards and lint gates, calendar
+versioning, the documentation, and phase 0 of the graphical interface.
+Carried forward:
 
-**WP 0 — integrate the prepared pass-18 series.** Patches 0006–0024 onto
-`audit-pass-18`, the changelog patch 0025 merged by hand; reconcile the
-local `main` with `origin/main`, which carry two different commits under
-the same message.
+**Model fidelity.**
 
-**WP 1 — no silent wrong result, no regression against 0.6.0.**
+- Thévenin sources with the loop current as an unknown of a bordered
+  system; until then `THEVENIN_COUPLING` warns.
+- A fully coupled `phase_current_mode="coupled"` (2×2 branch blocks, twice
+  the nodes, still sparse) that removes the one-way-coupling approximation
+  and the phase proxy together; `ImportDefaults.derive_phase_impedance`
+  then derives `Z_red = Z_pp − Z_m²/Z_s` instead of `R₁ + jX₁`.
+- Eight further reference cases through `run_fault`: uniform and asymmetric
+  ring split, long feeder against the ladder limit, Thévenin single line,
+  superposition of two sources, resistive DC chain, the ladder cases through
+  the solver, a coupled uniform ring.
+- Phase-conductor dynamics as states of the state-space transient (the split
+  taken from the fundamental leaves about 1 % in rings of mixed
+  construction, `TRANSIENT_PHASE_SPLIT`), and an FFT path that couples per
+  spectral line.
 
-- A solved `Network` is copyable and picklable again: the cached `SuperLU`
-  factorisation is left out of `__deepcopy__`/`__getstate__` (or kept
-  outside the model object).
-- Assigning an input field (`specific_earth_resistance`, `length`, …)
-  re-derives the stored impedances and marks the results of that network as
-  stale; `Network.update_bus/update_branch` and `remove_*` with reference
-  checks *(decision: re-derive on assignment vs. update methods only)*.
-- `create_*`/`add_*` are atomic: the element enters the network only after
-  its impedances were computed.
-- A reachable source without a value at any solved frequency is an error,
-  partial coverage a warning.
-- The `1/Z_self` proxy treats a broken shield as a broken *shield*, not as
-  an open phase conductor, and the cycle test runs on the topological graph.
-- Unknown symbols in a formula (`L`, `F`, `Rho`) are rejected when the type
-  is built, naming the symbol and the allowed set; `Branch.length > 0`
-  validated with its unit.
-- An incomplete `Fault.scalings` warns once per run; the default of 1.0 is
-  documented and `concepts.md` corrected *(decision: keep 1.0)*.
-- The FFT `TransientModelWarning` says *higher* EPR, not lower.
-- Formula guard: a cap on the digit count of integer literals and a lower
-  exponent cap; tokenizer failures rejected by the guard itself.
-- `split_earth_currents` builds its membership set once (quadratic → linear,
-  bit-identical), and the earth-group partition becomes noise-proof: buses
-  with `|I_a| ≤ 1e-9·max` count as zero, a fault bus without electrode is
-  anchored deterministically, and `r`, `I_E`, `Z_E` are `None` with a warning
-  when their reference vanishes *(decision: thresholds and anchor rule)*.
+**Scale.**
 
-**WP 2 — model fidelity** *(decisions)*.
+- Array-backed result objects (P5c): they now dominate a large run (0.2–0.3 s
+  of 0.53 s on a 4000-bus ring) and a sweep step (45–58 %).
+- A solve session for `run_sweep` once the result objects are cheap (a
+  bit-identical prototype saved 11–24 % per point).
+- Vectorised formula evaluation in the network build, provided it stays
+  bit-identical to the per-element evaluation that `input_digest` relies on.
 
-- Thévenin sources: the loop currents become unknowns of a bordered system,
-  so the coupling, `value_current` and `i_inj` see the current that flows;
-  until then `run_fault` warns on a voltage source with coupling.
-- State-space transient: phase factors from the same phase-network solution
-  as `"auto"`, or a refusal in meshed networks.
-- EN 50522 quantities: `U_E` as the fault-bus EPR and `Z_E` as the
-  driving-point impedance at the fault bus, the current-weighted group mean
-  kept as a diagnostic; `value_current` stays the standard's `r`.
-- Name the one-way coupling as a model assumption with its validity
-  condition, define `phase_impedance_formula` as `Z_pp − Z_m²/Z_s`, and add
-  a fully coupled `phase_current_mode="coupled"` (2×2 branch blocks, twice
-  the nodes, still sparse and symmetric) that removes the proxy and the
-  Thévenin inconsistency together.
-- Eight further reference cases, all through `run_fault`: uniform and
-  asymmetric ring split, long feeder against the ladder limit, Thévenin
-  single line, superposition of two sources, resistive DC chain, the ladder
-  cases evaluated through the solver, a coupled uniform ring.
-- A "Signs" section stating the reference frame (`uepr` is the negative of
-  the physical EPR phasor, `i_s` the physical shield current from→to).
+**API and naming.**
 
-**WP 3 — scale.** The phase network factorised sparse once per frequency
-with every source as a right-hand side; the admittance matrices assembled
-sparse from index tables built once per network with per-frequency data
-vectors; the cyclic garbage collector paused around result construction;
-`bus_response` and `analyze_cuts` on the sparse matrix; a solve session for
-the studies that only updates diagonal entries; a memory-bounded block size
-in the FFT transient; bulk impedance evaluation when a network is built; and
-array-backed results with column-wise `res_*` frames. The review prototype
-of the first four steps runs a 4000-bus ring in 1.0 s instead of 28 s and
-scales linearly to 50 000 buses. Equivalence tests compare against an
-iteratively refined reference on large networks, where a fixed 1e-12 bound
-is condition-limited for any float64 kernel. The roadmap item "threads over
-the per-frequency solve" is dropped: the factorisation is 1.8 % of the run
-time and a two-thread pool measured 0.84×.
+- The `bus_response` frames still call the driving-point impedance
+  `Z_G_Ohm`; rename it to `Z_E_Ohm` with a deprecation period, as
+  `res_fault` names it.
+- The frequency rules exist a second time in `io/defaults.py`.
 
-**WP 4 — security and supply chain.** `pillow >= 12.3`, a `pip-audit` job,
-every third-party action pinned by SHA, `permissions: contents: read` at the
-top of each workflow, the four `B608` hits in `migration.py` annotated with
-their reason.
+**Graphical interface.**
 
-**WP 5 — API and usability.** `run_fault` returns the `Result` it stores and
-a pure `gi.solve(network, fault)` leaves the network untouched;
-`Network.res_fault(fault)` with a pinned schema for the key figures at the
-fault; `gi.check_network(network)` listing every problem without raising;
-a `GroundinsightWarning` base class with `code`, `severity` and `elements`,
-result-relevant `logger.warning` calls promoted to warnings and recorded in
-`Result.diagnostics`; canonical parameter names (`fault`, `u_limit`,
-`t_k_s`, `n_factor`, `frequency`) with deprecated aliases; JSON I/O in UTF-8,
-written atomically and carrying a `schema_version`; progress and
-cancellation hooks in the studies; `matplotlib.pyplot` imported lazily;
-`gi.network_from_tables(...)` and `Network.to_tables()` for spreadsheet
-round trips.
+- Phase 1: adding and pasting elements, a network graph, a session that
+  survives a page reload, the remaining studies (`find_max_rho_f_scaling`,
+  `TransientStudy`) as jobs, packaging with signed Windows and notarised
+  macOS builds.
+- The server variant (FastAPI with its own front end, single sign-on for
+  the internal deployment, a public demo) on the REST-ready DTOs of
+  `groundinsight.api`.
+- Report upstream: with NiceGUI 4.0 and AG Grid 36 the browser drops
+  `rowClicked` events (circular context); the GUI works around it.
 
-**WP 6 — architecture, without breaking import paths.** `__init__.py`
-reduced to re-exports; a `gi.Database` object instead of the module-level
-session (`gi.session`/`gi.db_session` deprecated); an explicit internal API
-instead of cross-module access to private members; one reachability and one
-passivity implementation instead of two; the large modules split after WP 3.
-Whether SQLite should become a document store of the canonical JSON instead
-of mirrored ORM models is decided after the GUI's first phase.
+**Repository and CI.**
 
-**WP 7 — standards and CI.** A ruff configuration that respects the house
-rules (no formatter, `typing.Optional/List/Dict` kept; 117 findings to
-clear), `numpydoc lint` as a gate (79 findings), module headers, a public
-`CONTRIBUTING.md`, Keep-a-Changelog section order, CI gates for lint, docs
-code blocks, API inventory coverage and notebook freshness, `gh-deploy
---strict`, Python 3.12–3.14 in the matrix and one macOS and one Windows job.
-
-**WP 8 — calendar versioning.** Releases are numbered `YYYY.M.MICRO` — year,
-month without a leading zero (PEP 440 normalises `2026.01.0` to `2026.1.0`,
-a padded tag would never match PyPI), and a counter that restarts every
-month. `scripts/release.py` computes the next version from the release date
-and refuses SemVer bump kinds with an explanation; `CITATION.cff` gains
-`date-released`; the header of this file states the scheme and a
-deprecation policy, because a calendar version carries no compatibility
-promise of its own.
-
-**WP 9 — documentation.** First the corrections that need no domain
-decision (re-run notebooks and their texts, `create_paths` out of the
-tutorials, a top-level API page for the 24 unrendered symbols, the seven
-wrong statements, notebook links), then a Diátaxis navigation with a first
-verified calculation as tutorial, pages for conventions and units, formula
-syntax, types from cable data sheets, results columns, the EN 50522
-verification workflow and a glossary.
-
-**WP 10 — graphical interface, phase 0.** The UI-free service layer
-`groundinsight.api` (project session with undoable commands, job runner,
-JSON-safe DTOs) in the library; the interface itself as a separate
-distribution `groundinsight-gui` in the same repository, NiceGUI 4.0.x with
-a pywebview window, an early packaging run for signed Windows and notarised
-macOS builds; Linux first in browser mode.
+- Register the `lint` job as a required status check so that it blocks
+  merges.
+- Strict warning filters for the GUI test suite as in the library suite, and
+  the remaining local `simplefilter("ignore")` blocks of the tests (68 in 22
+  modules) asserted or acknowledged by name.
 
 ### Explicit non-goals
 
