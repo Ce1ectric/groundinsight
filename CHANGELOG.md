@@ -81,6 +81,9 @@ migration checklist.
   argument; the reference case `en50522_chain` now checks `I_E`.
 - **Release tooling.** The console command `poetry run release` is gone;
   run `poetry run python scripts/release.py`.
+- **Dependencies.** pillow 13.0.0 or newer is required (security floor, see
+  *Security*). Upgrade pillow in the environment; if another package there
+  caps pillow below 13, that package has to move first (SEC2).
 
 ### Added
 
@@ -169,6 +172,13 @@ migration checklist.
 - **`ImportDefaults` validates `rho`, `frequencies` and `switch_length_km`**
   on construction, so an empty frequency list fails at the defaults rather
   than deep in the importer.
+- **Python 3.12 is the floor (`python = "^3.12"`, was `^3.13`).** The full
+  suite passes on 3.12, 3.13 and 3.14, and `groundfield` — which requires
+  `^3.12` and was therefore held at groundinsight 0.3.0 — can follow current
+  releases again. README and the installation page say "Python 3.12 or
+  newer" (they said 3.14); the wheel declares `Requires-Python >=3.12,<4.0`
+  and the 3.12/3.13/3.14 classifiers, which Poetry derives from the
+  constraint (F10, REL4, REL6).
 
 ### Fixed
 
@@ -328,6 +338,45 @@ migration checklist.
   (`start_dbsession` does it automatically) through a restrictive unpickler
   that resolves nothing but `builtins.list/float/int` and aborts before the
   first write when the blob names anything else.
+- **pillow floor 13.0.0, without an upper bound (`pyproject.toml`).**
+  `pillow = "^11.3.0"` meant `<12`, while every fix lies at 12.1.1 or later.
+  pip-audit lists 73 advisories for 11.3.0 and still 39 for 12.3.0; 13.0.0
+  is the first release without one. groundinsight never imports PIL —
+  matplotlib does, and asks for `pillow>=8` — so the declaration is a pure
+  security floor, and it carries no upper bound: the cap is what kept the
+  fixes out of reach of everyone installing groundinsight (SEC2).
+- **Refreshed lock with the open Dependabot updates (#5, #6).** The previous
+  lock carried 171 known advisories in 16 packages (pillow 73, mistune 30,
+  tornado 28, urllib3 7, …); the new one has none. numpy 2.1.3 → 2.4.6
+  (pandapower caps it below 2.5), scipy 1.17.1 → 1.18.1, pydantic 2.13.4 →
+  2.14.3, polars 1.16.0 → 1.44.2, sqlalchemy 2.0.36 → 2.1.8, matplotlib
+  3.10.9 → 3.11.2, pandapower 3.1.2 → 3.5.6, pytest 8.3.4 → 9.2.0,
+  mkdocstrings 0.26.2 → 1.0.8. Installed from the lock, the suite passes on
+  3.12, 3.13 and 3.14 (REL2, SEC2).
+- **Dependency audit in CI (`.github/workflows/audit.yml`).** On pushes and
+  pull requests to `main`, weekly and on demand,
+  `scripts/audit_dependencies.py` checks every version pinned in
+  `poetry.lock` — all groups, extras and platforms — with pip-audit, and any
+  known advisory fails the job. The ignore list
+  `.github/pip-audit-ignore.txt` is empty; an entry needs a reason and an
+  end date, and an expired entry fails the audit (SEC2).
+- **Every GitHub Action is pinned to a commit SHA** with its release as a
+  comment, including `pypa/gh-action-pypi-publish`, which ran from the
+  moving branch `release/v1` inside the job that holds the PyPI OIDC token.
+  Dependabot updates SHA and comment together (SEC3).
+- **The workflow token is read-only by default.** Every workflow declares
+  `permissions: contents: read`; only the PyPI publish (`id-token: write`),
+  the GitHub release and the docs deploy (`contents: write`) ask for more,
+  each with a comment saying why. Checkouts in jobs that never push no
+  longer leave the token in `.git/config`. zizmor: 50 findings (28 high,
+  7 medium) → 1 informational (SEC4).
+- **bandit B608 in `database/migration.py` triaged and annotated.** The four
+  f-string SQL statements interpolate only module constants, caller literals
+  and columns of the target schema the ORM just created; names read from the
+  file being migrated are only used in membership tests. Each site carries
+  `# nosec B608` with that reason, and a test migrates a file with a hostile
+  column and table name while recording every statement the module sends
+  (SEC6).
 
 ### Docs
 
@@ -353,6 +402,7 @@ migration checklist.
   (`mv_ring_transient.ipynb`, cell 10), the README no longer recommends the
   deprecated `auto_parallel_coefficients`, and the notebooks import the
   model classes from `gi.*`.
+- The installation page names pillow among the runtime dependencies (DOC5).
 
 ### Internal
 
@@ -553,6 +603,25 @@ migration checklist.
   `tests/test_audit_pass19_*.py`.
 
 ---
+- **CI on macOS and Windows.** The test matrix runs 3.12/3.13/3.14 on Linux
+  and the two ends, 3.12 and 3.14, on macOS and Windows — seven jobs — with
+  bash as the job shell, `MPLBACKEND=Agg`, no restored virtualenv on Windows
+  and a single coverage upload. Four test sites read or wrote text with the
+  platform's default encoding (cp1252 on Windows) and now say UTF-8; an AST
+  scan over `tests/` keeps it that way (REL7, F10).
+- **The lock is checked where the suite runs.** It had been solved for
+  `^3.14` while `pyproject.toml` said `^3.13`, which Poetry 2 refuses at
+  `poetry install`, so every CI job would have stopped before its first
+  test. The suite compares the lock with the declaration and runs
+  `poetry check --lock` when Poetry is installed (REL2).
+- **The documentation is deployed only from a strict build**
+  (`mkdocs gh-deploy --strict`) (STD11, DOC15).
+- `tests/test_audit_pass19_supply_chain.py` and
+  `tests/test_audit_pass19_workflows.py` — 63 tests on the dependency
+  floor, the lock, the audit script, the workflows and the migration
+  triage. Workflow checks read the YAML as text, because PyYAML is not in
+  the CI test environment, and repeat each check on the parsed document
+  where PyYAML is installed.
 
 ## [0.6.0] — 2026-09-01
 
