@@ -417,6 +417,73 @@ version section when a release is cut.
   review**. Fixes follow the house rule: a test that is red without the
   change, in `tests/test_audit_pass18_*.py`, with the measurement protocol
   in `docs/audit-log.md`.
+- **Audit pass 19 — review of the `audit-pass-18` state together with the
+  prepared pass-18 series (2026-11-07).** Review only; nothing below is fixed
+  yet. The pass looked at what is still open *after* patches 0006–0024 —
+  which still apply cleanly on `audit-pass-18` and keep the suite green
+  (1413 passed; 1163 without them) — so that the pass-18 findings are not
+  found a second time. Five independent tracks (numerics and performance,
+  physics with an independently written reference solver, security,
+  documentation and code standards, a GUI prototype) plus architecture,
+  usability and versioning; every physical or numerical statement checked by
+  two independent methods. Confirmed as *correct* first: the stationary core
+  matches a branch-current MNA reference to ≤ 3·10⁻¹⁴ on 17 structural cases
+  and 60 random networks, KCL, reciprocity and the power balance hold to
+  10⁻¹⁵, `bus_response` matches re-solves to 10⁻¹⁴, `iec60909_m` matches
+  numerical integration to six digits, and the pass-18 formula guard and
+  pickle fixes hold against 19 bypass vectors and a hostile `.db`. The
+  suite also passes unchanged on Python 3.12.
+  - *Model, not numerics.* A Thévenin source couples with `E/Z_src` instead
+    of the loop current it actually drives (fault EPR 6–38 % low against a
+    fully coupled multi-conductor model, unconservative, no warning); the
+    state-space transient still splits the phase current per enumerated path
+    (a symmetric ring settles at +103 % of the stationary `"auto"` result);
+    a broken shield (`"nan"`) without `phase_impedance_formula` also opens
+    the phase conductor through the proxy and silences the cycle warning
+    (−39 % EPR); and in the textbook case of the standard — a long uniform
+    cable feeder, remote source — `u_earthing` and `z_earthing` come out
+    43–45 % below the fault-bus EPR and the driving-point impedance that the
+    ladder closed form reproduces to six digits. The one-way coupling of the
+    `"auto"` phase solve is exact iff `Z_m/Z_s` is constant around every
+    mesh; `phase_impedance_formula` has to describe the screened loop
+    impedance `Z_pp − Z_m²/Z_s`, which the documentation does not say.
+  - *Regressions and silent misuse.* Since the `splu` reuse (K3) a solved
+    network can no longer be deep-copied or pickled (`SuperLU` in the cached
+    factorisation); assigning `specific_earth_resistance` or `length` is
+    validated but leaves the stored impedance stale; a source with no value
+    at any solved frequency solves to 0 V everywhere without a word; a failed
+    `create_bus`/`create_branch` leaves a half-built element in the network;
+    a missing `scalings` key still means a factor of 1.0 while
+    `docs/concepts.md` says it contributes nothing.
+  - *Scale.* The phase network is solved dense per source and frequency and
+    the admittance matrix is assembled dense per frequency, all of them kept:
+    a 4000-bus ring over seven frequencies takes 28 s and 2.3 GB, a 4000-bus
+    radial feeder with three sources 143 s — `splu` itself accounts for
+    19 ms of it. A sparse prototype solves the same cases in 1.0 s and 1.15 s
+    with 93 MB, agreeing on 606 networks to ≤ 2.6·10⁻¹², while the
+    documentation promises thousands of buses. `split_earth_currents` is
+    quadratic, and the earth-group partition behind `I_E` and `Z_G` is
+    decided by rounding noise in nameable cases (buses without physical earth
+    current, a fault bus without electrode): `Z_G` changes by a factor of
+    2.2 between two solvers that agree to 10⁻¹⁵ everywhere else.
+  - *Security and supply chain.* The guard caps the exponent but not the
+    size of the base (`<4080 digits>**999` costs 1.9 s of `sympify` per
+    formula, 17.9 s for a 20-type JSON); every fixed Pillow release lies
+    outside `pillow = "^11.3.0"`; third-party actions are pinned by tag, the
+    publish action by a moving branch inside the `id-token: write` job.
+  - *Documentation.* The site publishes stored notebook outputs, and all six
+    curated notebooks are stale — `mv_ring` shows `r = 0.904` against 0.310
+    today; the tutorials still teach `create_paths` as a mandatory step; 24
+    of 95 public symbols have no API page; seven factual statements on API
+    pages are wrong; there is no route from installation to a first verified
+    number.
+  - *For a graphical interface* the library lacks a stable project file
+    (UTF-8, atomic write, schema version), copyable networks, edit
+    invariants, structured diagnostics with element references, progress
+    and cancellation hooks and a key-figure accessor at the fault.
+  The planned work is listed under **Roadmap → From the 2026-11-07 review**.
+  The house rule stands: a test that is red without the change, in
+  `tests/test_audit_pass19_*.py`.
 
 ---
 
@@ -1731,119 +1798,154 @@ reduced network, `groundmeas` measurement store).
 
 ### From the 2026-09-08 review (audit pass 18)
 
-Open findings of the full review, ordered by the sequence the review
-proposes; the IDs refer to that review record, where each item carries its
-reproduction. Everything here is confirmed, nothing is implemented.
+Implemented by the pass-18 series that is recorded under *Security*,
+*Fixed*, *Changed*, *Added* and *Docs* of `[Unreleased]`. What the series
+deliberately left open is carried forward into the 2026-11-07 work packages
+below:
 
-**Before the next release.**
+- the two follow-up de-duplications the integration exposed — one
+  reachability search instead of `transient._sources_reaching_fault` next to
+  `Network.sources_reaching`, one passivity mask instead of two
+  (→ WP 6);
+- the residual JSON risk of plain float fields outside `ComplexNumber`
+  that are not covered by the RFC-8259-safe encoding (→ WP 5, project file);
+- a fresh `poetry lock` after the Python floor change (→ WP 4);
+- the nine documentation chapters and the Diátaxis navigation (→ WP 9).
 
-- **K1 — formula guard: NFKC-normalise every NAME token, then switch to
-  a whitelist** of symbols and SymPy functions; the fullwidth variants of
-  `eval`, `exec`, `open`, `breakpoint` become the regression test.
-- **M1 — `NetworkDB.frequencies` from `PickleType` to a JSON column**,
-  with an `add_columns` migration and a read fallback that never
-  unpickles foreign bytes without a whitelist; document that `.db` and
-  network JSON files are code-equivalent input.
-- **M2 — `_add_missing_columns` renders `DEFAULT <value>`** for the
-  eight NOT-NULL columns with Python-side defaults, reusing
-  `_declared_defaults` from the rebuild path.
-- **K2 — reachability instead of enumeration in
-  `phase_current_mode="auto"`**; full path enumeration only for
-  `"paths"`, with a cap and a warning; `docs/concepts.md:300` and
-  `docs/api/pathfinder.md:28` restated as "linear in buses for the solve,
-  exponential in cycles for the enumeration" with the measured table.
-- **S2/S6/S7/S8 — `run_sweep` restores in every case**: validate names
-  before mutating, bind `saved` before `_apply`, save `R/L/C`, one
-  snapshot per bus, `set_active_fault(previous, keep_results=True)`.
-- **S1 — FFT solver warns on non-zero mutual impedance** and
-  `docs/transient.md:104-106` states that the FFT path has no mutual
-  term; **S3** the FFT path applies `_sources_with_path_to_active_fault`;
-  **S4** `f_eval` becomes an argument defaulting to the first frequency
-  above 0 Hz, and `ω = 0` with a reactive `Z_src` is refused.
-- **A5 — the inverse-rho searches drop `network.electrical_network` in
-  `finally`**, and `bus_response` refuses a `Y` whose diagonal does not
-  match the current bus impedances.
-- **A2 — `BusResponse.evaluate` reports `Z_E = U_E/I_E`** or drops the
-  `Z_G_Ohm` column; **A1** `r_epr` is filled only for `bus == fault_bus`
-  (or recomputed per electrode from a third right-hand side).
-- **M4 — `validate_assignment=True`** on `Source`, `Fault`, `Bus`,
-  `Branch`, `Network`; **A9** `kappa ∈ (1, 2]` and `n ∈ (0, 1]` enforced
-  in `_resolve_sc_inputs`, `i_th` via `thermal_equivalent_current`.
-- **Docs D-2/D-3/D-7 and K6** — the transient example notebook runs
-  again (and a CI job executes `docs/examples/*.ipynb`), the README drops
-  `auto_parallel_coefficients`, `concepts.md:681` loses the RMS-row claim,
-  and the three places still quoting `Z_G = u_EPR/(r·I_F)` follow the
-  0.6.0 definition.
+### From the 2026-11-07 review (audit pass 19)
 
-**Runtime (no architecture change).**
+Change concept of the review, as work packages in the order the review
+proposes. Each package becomes one pull request with tests that are red
+without it and a demonstration notebook. Nothing here is implemented yet;
+decisions still open with the maintainer are marked *(decision)*.
 
-- **K3** keep the per-frequency `splu` object and reuse it for the
-  no-mutual right-hand side. **K7** array variants of
-  `check_passive_impedance`, `is_short_circuit`, `_is_open_circuit`.
-  **L1** `lru_cache` on `validate_impedance_formula_value`. **FFT** a
-  `compute_impedance_array()` raw path, a stacked `(K, n, n)` assembly
-  solved in blocks, and a column-wise `ResultTransient.to_polars()`.
-  **M12** persist `Path.segments` as branch names (or serialise the
-  fingerprint). **A** reuse the assembled `Y` in `analyze_cuts`, one
-  solve with two right-hand sides in `bus_response`, linear `extremes()`,
-  build the `set(reported)` once in `_require_complete_results`.
+**WP 0 — integrate the prepared pass-18 series.** Patches 0006–0024 onto
+`audit-pass-18`, the changelog patch 0025 merged by hand; reconcile the
+local `main` with `origin/main`, which carry two different commits under
+the same message.
 
-**Correctness, second wave.**
+**WP 1 — no silent wrong result, no regression against 0.6.0.**
 
-- **A3/A4/A13** `_unit_injection` on the solver's `Y` (fixes the 0 Hz
-  short circuit and the missing `Y_src`, and makes `identity_residual`
-  meaningful). **A6** a coarse log grid before the bisection with a
-  status flag on non-monotone EPR, the assumption named in the docstring.
-  **A7/A8** `en50522_chain` checked against the ladder closed form,
-  `ladder_potential_decay` assembled from the network's own impedances.
-  **A10** the 0 Hz bin excluded from the `I_th` RMS and reported
-  separately. **A11/A14/A15/A16** the complete-results guard in
-  `analyze_cuts`, pinned schema in `CutAnalysis.to_polars()`, an `n_nan`
-  column in `summarize` and NaN treated like null in `classify`,
-  `sweep([])` and `worst_case_electrode` with `Re(Y_net) ≤ 0` rejected.
-  **K4** every active element must cover `network.frequencies`. **K5**
-  `I_fault` as `Σ scaling·I_src`. **S5** wrap-around self-test or
-  internal zero-padding in the FFT solver; **S9/S17/S18/S19** `scalings`,
-  the Nyquist bin, the non-causal constant-reactance kernel and the sign
-  of the transient EPR listed under *Limitations*. **S10** passivity
-  check for `R/L/C/M` fields. **S11** one `_time_grid` helper for both
-  solvers. **S12** `on_error` for `run_outage_study`. **S15** remove the
-  dead `_OUTAGE_BASELINE_STACK` and its comments.
-- **M3** type merge in `save_network` warns on a differing formula and
-  the loader checks stored impedances against the formula. **M5/M6**
-  `ComplexNumber.__eq__` returns `NotImplemented`, `__hash__`, NumPy
-  scalars via `numbers.Complex`. **M7** numeric `frequency_Hz` with an
-  `is_rms` flag. **M8/M9** `ser_json_inf_nan` on every model, validated
-  `Fault.scalings` values, an RFC-8259-safe encoding of the open-end
-  sentinel. **M10** closed bus–bus switches, transformers and impedances
-  counted and previewed by the pandapower importer; a
-  `phase_impedance_formula` derived from `r/x_ohm_per_km`. **M11**
-  `cwd=root` in `_run_git`. **M13** `scripts/` out of the wheel, the
-  `release` entry point renamed or moved to the dev group. **M14**
-  `I_inj_A` in `res_buses`. **M15** a real `DeprecationWarning`. **M16**
-  `BusType`, `BranchType`, `Network`, `Bus`, `Branch`, `Fault`, `Source`,
-  `Result`, `ComplexNumber` exported, `gi.Path` no longer `pathlib.Path`.
-  **M17–M24** pinned `res_*` schemas, `try/finally` around the plot
-  helpers, `ImportDefaults` validation, the dead SymPy import, a
-  re-readable `ComplexNumber.__repr__`, tests before publish in
-  `release.yml`, `mkdocs build --strict` on pull requests, CI matrix
-  `["3.13", "3.14"]` once `python = "^3.13"` is released (the suite
-  passes on 3.13 unchanged).
-- **T1/T2** `--doctest-modules src/groundinsight` in `addopts` and the
-  three broken examples repaired; a parametrised operator matrix for
-  `ComplexNumber` in both operand orders including NumPy scalars, `None`
-  and `inf`/`nan`; a shared `simple_network` fixture in `conftest.py`.
+- A solved `Network` is copyable and picklable again: the cached `SuperLU`
+  factorisation is left out of `__deepcopy__`/`__getstate__` (or kept
+  outside the model object).
+- Assigning an input field (`specific_earth_resistance`, `length`, …)
+  re-derives the stored impedances and marks the results of that network as
+  stale; `Network.update_bus/update_branch` and `remove_*` with reference
+  checks *(decision: re-derive on assignment vs. update methods only)*.
+- `create_*`/`add_*` are atomic: the element enters the network only after
+  its impedances were computed.
+- A reachable source without a value at any solved frequency is an error,
+  partial coverage a warning.
+- The `1/Z_self` proxy treats a broken shield as a broken *shield*, not as
+  an open phase conductor, and the cycle test runs on the topological graph.
+- Unknown symbols in a formula (`L`, `F`, `Rho`) are rejected when the type
+  is built, naming the symbol and the allowed set; `Branch.length > 0`
+  validated with its unit.
+- An incomplete `Fault.scalings` warns once per run; the default of 1.0 is
+  documented and `concepts.md` corrected *(decision: keep 1.0)*.
+- The FFT `TransientModelWarning` says *higher* EPR, not lower.
+- Formula guard: a cap on the digit count of integer literals and a lower
+  exponent cap; tokenizer failures rejected by the guard itself.
+- `split_earth_currents` builds its membership set once (quadratic → linear,
+  bit-identical), and the earth-group partition becomes noise-proof: buses
+  with `|I_a| ≤ 1e-9·max` count as zero, a fault bus without electrode is
+  anchored deterministically, and `r`, `I_E`, `Z_E` are `None` with a warning
+  when their reference vanishes *(decision: thresholds and anchor rule)*.
 
-**Documentation** — the nine chapters and the Diátaxis navigation the review
-proposes: `theory.md`, `input-data.md`,
-`results.md` (with the EN 50522 touch-voltage comparison and the
-liability note), `verification.md`, `faq.md`, `persistence.md`,
-`performance.md`, `glossary.md`, and the project pages (changelog,
-contributing, citation with BibTeX, license); `audit-log.md` moved to the
-end of the navigation and excluded from search; `api/toplevel.md` with
-`::: groundinsight` so the 23 unrendered `__all__` symbols get a page;
-`api/index.md` listing all API pages; the `scalings` default of 1.0
-documented; a "Thermal and short-circuit checks" example notebook.
+**WP 2 — model fidelity** *(decisions)*.
+
+- Thévenin sources: the loop currents become unknowns of a bordered system,
+  so the coupling, `value_current` and `i_inj` see the current that flows;
+  until then `run_fault` warns on a voltage source with coupling.
+- State-space transient: phase factors from the same phase-network solution
+  as `"auto"`, or a refusal in meshed networks.
+- EN 50522 quantities: `U_E` as the fault-bus EPR and `Z_E` as the
+  driving-point impedance at the fault bus, the current-weighted group mean
+  kept as a diagnostic; `value_current` stays the standard's `r`.
+- Name the one-way coupling as a model assumption with its validity
+  condition, define `phase_impedance_formula` as `Z_pp − Z_m²/Z_s`, and add
+  a fully coupled `phase_current_mode="coupled"` (2×2 branch blocks, twice
+  the nodes, still sparse and symmetric) that removes the proxy and the
+  Thévenin inconsistency together.
+- Eight further reference cases, all through `run_fault`: uniform and
+  asymmetric ring split, long feeder against the ladder limit, Thévenin
+  single line, superposition of two sources, resistive DC chain, the ladder
+  cases evaluated through the solver, a coupled uniform ring.
+- A "Signs" section stating the reference frame (`uepr` is the negative of
+  the physical EPR phasor, `i_s` the physical shield current from→to).
+
+**WP 3 — scale.** The phase network factorised sparse once per frequency
+with every source as a right-hand side; the admittance matrices assembled
+sparse from index tables built once per network with per-frequency data
+vectors; the cyclic garbage collector paused around result construction;
+`bus_response` and `analyze_cuts` on the sparse matrix; a solve session for
+the studies that only updates diagonal entries; a memory-bounded block size
+in the FFT transient; bulk impedance evaluation when a network is built; and
+array-backed results with column-wise `res_*` frames. The review prototype
+of the first four steps runs a 4000-bus ring in 1.0 s instead of 28 s and
+scales linearly to 50 000 buses. Equivalence tests compare against an
+iteratively refined reference on large networks, where a fixed 1e-12 bound
+is condition-limited for any float64 kernel. The roadmap item "threads over
+the per-frequency solve" is dropped: the factorisation is 1.8 % of the run
+time and a two-thread pool measured 0.84×.
+
+**WP 4 — security and supply chain.** `pillow >= 12.3`, a `pip-audit` job,
+every third-party action pinned by SHA, `permissions: contents: read` at the
+top of each workflow, the four `B608` hits in `migration.py` annotated with
+their reason.
+
+**WP 5 — API and usability.** `run_fault` returns the `Result` it stores and
+a pure `gi.solve(network, fault)` leaves the network untouched;
+`Network.res_fault(fault)` with a pinned schema for the key figures at the
+fault; `gi.check_network(network)` listing every problem without raising;
+a `GroundinsightWarning` base class with `code`, `severity` and `elements`,
+result-relevant `logger.warning` calls promoted to warnings and recorded in
+`Result.diagnostics`; canonical parameter names (`fault`, `u_limit`,
+`t_k_s`, `n_factor`, `frequency`) with deprecated aliases; JSON I/O in UTF-8,
+written atomically and carrying a `schema_version`; progress and
+cancellation hooks in the studies; `matplotlib.pyplot` imported lazily;
+`gi.network_from_tables(...)` and `Network.to_tables()` for spreadsheet
+round trips.
+
+**WP 6 — architecture, without breaking import paths.** `__init__.py`
+reduced to re-exports; a `gi.Database` object instead of the module-level
+session (`gi.session`/`gi.db_session` deprecated); an explicit internal API
+instead of cross-module access to private members; one reachability and one
+passivity implementation instead of two; the large modules split after WP 3.
+Whether SQLite should become a document store of the canonical JSON instead
+of mirrored ORM models is decided after the GUI's first phase.
+
+**WP 7 — standards and CI.** A ruff configuration that respects the house
+rules (no formatter, `typing.Optional/List/Dict` kept; 117 findings to
+clear), `numpydoc lint` as a gate (79 findings), module headers, a public
+`CONTRIBUTING.md`, Keep-a-Changelog section order, CI gates for lint, docs
+code blocks, API inventory coverage and notebook freshness, `gh-deploy
+--strict`, Python 3.12–3.14 in the matrix and one macOS and one Windows job.
+
+**WP 8 — calendar versioning.** Releases are numbered `YYYY.M.MICRO` — year,
+month without a leading zero (PEP 440 normalises `2026.01.0` to `2026.1.0`,
+a padded tag would never match PyPI), and a counter that restarts every
+month. `scripts/release.py` computes the next version from the release date
+and refuses SemVer bump kinds with an explanation; `CITATION.cff` gains
+`date-released`; the header of this file states the scheme and a
+deprecation policy, because a calendar version carries no compatibility
+promise of its own.
+
+**WP 9 — documentation.** First the corrections that need no domain
+decision (re-run notebooks and their texts, `create_paths` out of the
+tutorials, a top-level API page for the 24 unrendered symbols, the seven
+wrong statements, notebook links), then a Diátaxis navigation with a first
+verified calculation as tutorial, pages for conventions and units, formula
+syntax, types from cable data sheets, results columns, the EN 50522
+verification workflow and a glossary.
+
+**WP 10 — graphical interface, phase 0.** The UI-free service layer
+`groundinsight.api` (project session with undoable commands, job runner,
+JSON-safe DTOs) in the library; the interface itself as a separate
+distribution `groundinsight-gui` in the same repository, NiceGUI 4.0.x with
+a pywebview window, an early packaging run for signed Windows and notarised
+macOS builds; Linux first in browser mode.
 
 ### Explicit non-goals
 
