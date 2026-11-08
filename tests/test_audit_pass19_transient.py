@@ -1,7 +1,7 @@
 # tests/test_audit_pass19_transient.py
 
 """
-Audit pass 19 -- transient solver: PH2, PH-L1 and PH15.
+Audit pass 19 -- transient solver: PH2, PH-L1, PH15 and P8.
 
 * **PH2** -- the state-space solver distributed the phase current over the
   routes of a ring with the enumerated source-to-fault paths and
@@ -18,18 +18,22 @@ Audit pass 19 -- transient solver: PH2, PH-L1 and PH15.
 * **PH15** -- ``docs/transient.md`` described the state-space phase factor as
   the "same algorithm as the FFT solver's mutual Norton injection", a coupling
   the FFT solver has not had for several releases.
+* **P8** -- the FFT solver assembled the admittance matrices of 512 frequency
+  bins as one dense ``(512, n, n)`` block: 1.3 GB at n = 400, 8.2 GB at
+  n = 1000. The block now follows a byte budget.
 
 Second methods (house rule): the stationary phasor solver
-(``run_fault(..., phase_current_mode="auto")``), the independent MNA
-reference in :mod:`tests._transient_reference` (branch currents of shield
-*and* phase conductor as unknowns, trapezoidal integration, phase network
-integrated as states) and the closed form ``1/|1 - Z_m/Z_s|`` for a single
-coupled branch.
+(``run_fault(..., phase_current_mode="auto")``), the independent MNA reference
+in :mod:`tests._transient_reference` (branch currents of shield *and* phase
+conductor as unknowns, trapezoidal integration, phase network integrated as
+states), closed forms (``1/|1 - Z_m/Z_s|`` for a single coupled branch) and a
+verbatim copy of the pre-P8 block solve.
 """
 
 import logging
 import math
 import pathlib
+import tracemalloc
 import warnings
 
 import numpy as np
@@ -40,7 +44,7 @@ from groundinsight import diagnostics
 from groundinsight.diagnostics import ModelAssumptionWarning
 from groundinsight.models.core_models import TransientModelWarning
 from groundinsight.simulation import waveforms
-from groundinsight.simulation.transient import TransientStudy
+from groundinsight.simulation.transient import TransientStudy, _time_grid
 
 from tests import _transient_reference as ref
 
@@ -505,3 +509,159 @@ def test_transient_chapter_no_longer_cites_an_fft_coupling():
     section = text.split("### Mutual coupling", 1)[1].split("\n### ", 1)[0]
     assert 'phase_current_mode="auto"' in section
     assert "TRANSIENT_PHASE_SPLIT" in section
+
+
+# ---------------------------------------------------------------------------
+# P8 -- the FFT block follows a byte budget
+# ---------------------------------------------------------------------------
+
+
+def _ring_network(name, n_bus):
+    bus_type = gi.BusType(name=f"bt_{name}", system_type="MV", voltage_level=20.0,
+                          impedance_formula="0.05*rho + I*2*pi*f*1e-3")
+    branch_type = gi.BranchType(
+        name=f"brt_{name}", grounding_conductor=True,
+        self_impedance_formula="(0.25 + I*2*pi*f*1.2e-3)*l",
+        mutual_impedance_formula="(0.0 + I*f*0)*l",
+    )
+    net = gi.create_network(name, frequencies=[50.0])
+    for k in range(n_bus):
+        gi.create_bus(name=f"b{k}", type=bus_type, specific_earth_resistance=100.0,
+                      network=net)
+    for k in range(n_bus):
+        gi.create_branch(name=f"L{k}", type=branch_type, from_bus=f"b{k}",
+                         to_bus=f"b{(k + 1) % n_bus}", length=0.5, network=net)
+    gi.create_source(name="src", bus="b0", values={50.0: 1000.0 + 0j}, network=net)
+    gi.create_fault(name="F1", bus=f"b{n_bus // 2}", scalings={50.0: 1.0},
+                    network=net)
+    return net
+
+
+def _fft_study(net):
+    study = TransientStudy(net, fault_name="F1")
+    study.set_source_waveform("src", waveforms.sinusoidal_with_dc_offset(
+        amplitude=1000.0, frequency_hz=50.0, t_on=0.01, t_off=0.05,
+        dc_amplitude=500.0, dc_decay_tau=0.02))
+    study.set_observation(buses=["b0", net.faults["F1"].bus], branches=["L0"])
+    return study
+
+
+def _old_blocked_spectrum(study, bus_index, bus_Z, branch_Z, i_spectrum, freqs):
+    """The pre-P8 block solve, verbatim apart from the loop variables: blocks
+    of ``512`` bins, a singular block redone bin by bin."""
+    n_freqs = freqs.size
+    u_spectrum = np.zeros((len(bus_index), n_freqs), dtype=complex)
+    for start in range(0, n_freqs, 512):
+        stop = min(start + 512, n_freqs)
+        bins = np.arange(start, stop)
+        Y_block = study._build_y_stack(bus_index, bus_Z, branch_Z, bins)
+        rhs = i_spectrum[start:stop, :, np.newaxis]
+        try:
+            u_spectrum[:, start:stop] = np.linalg.solve(Y_block, rhs)[:, :, 0].T
+        except np.linalg.LinAlgError:
+            for offset, k in enumerate(bins):
+                try:
+                    u_spectrum[:, k] = np.linalg.solve(Y_block[offset], i_spectrum[k])
+                except np.linalg.LinAlgError:
+                    pass
+    return u_spectrum
+
+
+def _spectrum_inputs(study, t_end, dt):
+    """Everything the block solve consumes, prepared as ``_solve_fft`` does."""
+    net = study.network
+    t, n = _time_grid(t_end, dt)
+    freqs = np.fft.rfftfreq(n, d=dt)
+    bus_index = {name: k for k, name in enumerate(net.buses)}
+    freq_list = freqs.tolist()
+    bus_Z = study._eval_bus_impedances(bus_index, freq_list)
+    branch_Z = study._eval_branch_self_impedances(bus_index, freq_list)
+    study._dc_substitute = study._dc_substitute_for(freq_list, bus_Z, branch_Z)
+    study._dc_bin = freq_list.index(0.0) if study._dc_substitute is not None else None
+    spectra = {name: np.fft.rfft(np.asarray(w(t), dtype=float))
+               for name, w in study._source_waveforms.items()}
+    fault_idx = bus_index[net.faults["F1"].bus]
+    i_spectrum = study._build_i_stack(bus_index, spectra, fault_idx, freqs.size)
+    return bus_index, bus_Z, branch_Z, i_spectrum, freqs
+
+
+@pytest.mark.parametrize(
+    "n_bus, budget, expected",
+    [
+        (25, None, 512),             # small networks keep the 512-bin cap
+        (181, None, 512),            # last size the default budget leaves capped
+        (182, None, 506),            # 256 MiB / (16 B * 182**2)
+        (400, None, 104),
+        (1000, None, 16),
+        (5000, None, 1),             # one matrix exceeds the budget
+        (100, 4 * 2**20, 26),
+        (100, 1, 1),
+    ],
+)
+def test_fft_block_size_follows_the_byte_budget(n_bus, budget, expected):
+    study = TransientStudy(_ring_network(f"p8_k_{n_bus}", 3), fault_name="F1")
+    assert study._fft_block_bins(n_bus, budget) == expected
+
+
+@pytest.mark.parametrize("n_bus", [25, 100, 200])
+@pytest.mark.parametrize("budget", [None, 2**20])
+def test_fft_blocked_solve_equals_the_old_routine(n_bus, budget):
+    """P8: identical spectra (≤ 1e-12, measured bit-identical) on n <= 200."""
+    study = _fft_study(_ring_network(f"p8_eq_{n_bus}", n_bus))
+    inputs = _spectrum_inputs(study, t_end=0.06, dt=1e-4)
+    old = _old_blocked_spectrum(study, *inputs)
+    block = study._fft_block_bins(n_bus, budget)
+    new = study._solve_spectrum(*inputs, block=block)
+    assert np.max(np.abs(new - old)) <= 1e-12 * np.max(np.abs(old))
+
+
+def test_fft_results_do_not_depend_on_the_budget():
+    net = _ring_network("p8_budget_end_to_end", 60)
+    default = _fft_study(net).solve(t_end=0.1, dt=1e-4, solver="fft")
+    tiny = _fft_study(net).solve(t_end=0.1, dt=1e-4, solver="fft",
+                                 fft_block_bytes=1)
+    for bus in default.epr_t:
+        np.testing.assert_array_equal(tiny.epr_t[bus], default.epr_t[bus])
+    np.testing.assert_array_equal(tiny.i_branch_t["L0"], default.i_branch_t["L0"])
+
+
+def test_fft_peak_memory_is_bounded_by_the_budget():
+    """P8 at test size: n = 100, 1001 bins. The old 512-bin block alone is
+    512 * 100**2 * 16 B = 82 MB, and the old loop held *two* blocks at once
+    (the previous one stayed referenced while the next was assembled):
+    162 MB measured for the block solve. With a 4 MiB budget the whole solve
+    stays far below one block; with the budget lifted, one block is alive at
+    a time (tracemalloc sees NumPy's allocations)."""
+    net = _ring_network("p8_mem", 100)
+
+    def peak(**kwargs):
+        study = _fft_study(net)
+        tracemalloc.start()
+        try:
+            study.solve(t_end=0.2, dt=1e-4, solver="fft", **kwargs)
+            return tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+
+    bounded = peak(fft_block_bytes=4 * 2**20)
+    assert bounded < 20e6                         # measured 10.7 MB
+    block = 512 * 100**2 * 16                     # the pre-P8 block, 82 MB
+    unbounded = peak(fft_block_bytes=2**40)       # 512-bin cap -> old block size
+    assert block < unbounded < 1.5 * block        # measured 89 MB: one block
+
+
+@pytest.mark.parametrize("value, error", [
+    (0, ValueError), (-5, ValueError), (1.5, TypeError), ("1", TypeError),
+    (True, TypeError),
+])
+def test_fft_block_bytes_is_validated(value, error):
+    study = _fft_study(_ring_network("p8_validate", 4))
+    with pytest.raises(error, match="fft_block_bytes must be"):
+        study.solve(t_end=0.02, dt=1e-4, solver="fft", fft_block_bytes=value)
+
+
+def test_fft_budget_below_one_matrix_says_so(caplog):
+    study = _fft_study(_ring_network("p8_tiny", 20))
+    with caplog.at_level(logging.WARNING, logger="groundinsight"):
+        study.solve(t_end=0.1, dt=1e-4, solver="fft", fft_block_bytes=1000)
+    assert any("fft_block_bytes" in r.getMessage() for r in caplog.records)

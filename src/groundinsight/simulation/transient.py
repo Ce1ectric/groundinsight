@@ -263,6 +263,41 @@ def _time_grid(t_end: float, dt: float) -> Tuple[np.ndarray, int]:
     return np.arange(n_samples) * dt, n_samples
 
 
+def _validated_block_bytes(value) -> Optional[int]:
+    """Check the ``fft_block_bytes`` argument of :meth:`TransientStudy.solve`.
+
+    Parameters
+    ----------
+    value : int or None
+        The caller's byte budget for one batch of FFT admittance matrices.
+
+    Returns
+    -------
+    int or None
+        ``value`` as a plain ``int``, or ``None`` for the default.
+
+    Raises
+    ------
+    TypeError
+        If ``value`` is not an integer (``bool`` included, which would
+        silently mean a budget of one byte).
+    ValueError
+        If ``value`` is not positive.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise TypeError(
+            f"fft_block_bytes must be a positive integer number of bytes or "
+            f"None, got {value!r} ({type(value).__name__})."
+        )
+    if value <= 0:
+        raise ValueError(
+            f"fft_block_bytes must be a positive number of bytes, got {value}."
+        )
+    return int(value)
+
+
 class ResultTransient(BaseModel):
     """
     Container for the time-domain results of a transient simulation.
@@ -498,6 +533,7 @@ class TransientStudy:
         solver: str = "fft",
         f_eval: Optional[float] = None,
         zero_pad: bool = False,
+        fft_block_bytes: Optional[int] = None,
     ) -> ResultTransient:
         """
         Run the transient solve and return the resulting time series.
@@ -540,6 +576,16 @@ class TransientStudy:
             the trace; doubling the window pushes the wrap out of the
             reported interval. Costs twice the solve time. Defaults to
             ``False``.
+        fft_block_bytes : int, optional
+            *FFT solver only.* Upper bound in bytes for one batch of dense
+            complex admittance matrices (``16 * n**2`` bytes per frequency
+            bin for ``n`` active buses). The solver assembles and solves at
+            most 512 bins per batch; above about 181 buses this budget
+            decides instead, so memory stays bounded for any network size --
+            the fixed 512-bin batch took 1.3 GB at 400 buses and 8.2 GB at
+            1000. The result does not depend on it (every bin is solved on
+            its own). A single matrix larger than the budget is solved one
+            bin at a time and logged. Defaults to 256 MiB.
 
         Returns
         -------
@@ -551,8 +597,11 @@ class TransientStudy:
         ValueError
             If no source waveform is set, if the time parameters are
             invalid, if ``f_eval`` is not one of ``network.frequencies``,
-            or if the network is missing the lumped RLC fields required by
-            the state-space solver.
+            if ``fft_block_bytes`` is not positive, or if the network is
+            missing the lumped RLC fields required by the state-space
+            solver.
+        TypeError
+            If ``fft_block_bytes`` is not an integer.
         NotImplementedError
             If ``solver`` is not one of the supported identifiers.
 
@@ -570,8 +619,11 @@ class TransientStudy:
             different R/L ratio, so the split the coupling uses -- exact at
             ``f_eval`` -- differs at the other frequencies in the waveform.
         """
+        block_bytes = _validated_block_bytes(fft_block_bytes)
         if solver == "fft":
-            return self._solve_fft(t_end=t_end, dt=dt, zero_pad=zero_pad)
+            return self._solve_fft(
+                t_end=t_end, dt=dt, zero_pad=zero_pad, block_bytes=block_bytes
+            )
         if solver == "state_space":
             return self._solve_state_space(t_end=t_end, dt=dt, f_eval=f_eval)
         raise NotImplementedError(
@@ -584,7 +636,12 @@ class TransientStudy:
     # ------------------------------------------------------------------
 
     def _solve_fft(
-        self, *, t_end: float, dt: float, zero_pad: bool = False
+        self,
+        *,
+        t_end: float,
+        dt: float,
+        zero_pad: bool = False,
+        block_bytes: Optional[int] = None,
     ) -> ResultTransient:
         if not self._source_waveforms:
             raise ValueError(
@@ -685,42 +742,29 @@ class TransientStudy:
         }
 
         # --- per-frequency solve -------------------------------------------
-        # Assembled and solved in blocks of ``_SOLVE_BLOCK`` bins: LAPACK is
-        # called once per block on a stacked ``(K, n, n)`` array instead of
-        # once per bin, and the assembly is one vectorised pass per element
-        # instead of a Python double loop. A block that turns out to contain
-        # a singular bin is redone bin by bin so the "skip this bin" rule
-        # below still applies to exactly that bin and not to its neighbours.
+        # Assembled and solved in blocks of bins: LAPACK is called once per
+        # block on a stacked ``(K, n, n)`` array instead of once per bin. K is
+        # bounded by the bin cap and by the byte budget (P8): a fixed 512-bin
+        # block grew as 512 * n**2 * 16 B -- 1.3 GB at 400 buses, 8.2 GB at
+        # 1000 -- and ran out of memory before it ran out of time.
         i_spectrum = self._build_i_stack(
             bus_index, source_spectra, fault_bus_idx, n_freqs
         )
-        u_spectrum = np.zeros((n_buses, n_freqs), dtype=complex)
-        for start in range(0, n_freqs, self._SOLVE_BLOCK):
-            stop = min(start + self._SOLVE_BLOCK, n_freqs)
-            bins = np.arange(start, stop)
-            Y_block = self._build_y_stack(bus_index, bus_Z, branch_Z, bins)
-            rhs = i_spectrum[start:stop, :, np.newaxis]
-            try:
-                u_spectrum[:, start:stop] = np.linalg.solve(
-                    Y_block, rhs
-                )[:, :, 0].T
-            except np.linalg.LinAlgError:
-                for offset, k in enumerate(bins):
-                    try:
-                        u_spectrum[:, k] = np.linalg.solve(
-                            Y_block[offset], i_spectrum[k]
-                        )
-                    except np.linalg.LinAlgError:
-                        # Singular at this bin (commonly f=0 with no DC
-                        # return path). We leave u as zero; for a
-                        # real-valued input signal the resulting
-                        # time-domain response is just missing the DC
-                        # component, which is what the user would expect.
-                        logger.debug(
-                            "Y(f=%g) is singular for the active fault; "
-                            "skipping.",
-                            freqs[k],
-                        )
+        block = self._fft_block_bins(n_buses, block_bytes)
+        budget = self._FFT_BLOCK_BYTES if block_bytes is None else block_bytes
+        if 16 * n_buses * n_buses > budget:
+            logger.warning(
+                "One dense %d x %d admittance matrix needs %.1f MiB, more than "
+                "fft_block_bytes = %.1f MiB; the FFT solver solves one bin at "
+                "a time and needs about twice that matrix size.",
+                n_buses,
+                n_buses,
+                16 * n_buses * n_buses / 2**20,
+                budget / 2**20,
+            )
+        u_spectrum = self._solve_spectrum(
+            bus_index, bus_Z, branch_Z, i_spectrum, freqs, block=block
+        )
 
         # --- IFFT for each observation point -------------------------------
         # ``[:n_out]`` is the identity unless ``zero_pad`` doubled the window.
@@ -1136,11 +1180,114 @@ class TransientStudy:
             out[name] = values
         return out
 
-    #: How many FFT bins are assembled and solved in one batch. Large enough
-    #: that the per-call overhead of LAPACK and of the Python assembly loop is
-    #: amortised, small enough that the ``(K, n, n)`` block stays in cache
-    #: (512 bins of a 25-bus network are 5 MB).
+    #: Upper bound on the FFT bins assembled and solved in one batch. Large
+    #: enough that the per-call overhead of LAPACK and of the Python assembly
+    #: loop is amortised, small enough that the ``(K, n, n)`` block stays in
+    #: cache for small networks (512 bins of a 25-bus network are 5 MB).
     _SOLVE_BLOCK: int = 512
+
+    #: Default byte budget for one such batch (``fft_block_bytes``). Binds
+    #: from 182 buses on; below that the 512-bin cap is the smaller bound.
+    _FFT_BLOCK_BYTES: int = 256 * 2**20
+
+    def _fft_block_bins(
+        self, n_buses: int, budget_bytes: Optional[int] = None
+    ) -> int:
+        """Number of FFT bins per batch for ``n_buses`` and a byte budget.
+
+        ``K = max(1, min(_SOLVE_BLOCK, budget // (16 * n**2)))``: one complex
+        ``n x n`` matrix per bin, at most :attr:`_SOLVE_BLOCK` bins, at least
+        one. The stacked solve copies one matrix at a time into LAPACK's
+        work buffer, so the batch itself is the dominant allocation.
+
+        Parameters
+        ----------
+        n_buses : int
+            Number of active buses, i.e. the matrix dimension.
+        budget_bytes : int, optional
+            Byte budget; ``None`` uses :attr:`_FFT_BLOCK_BYTES`.
+
+        Returns
+        -------
+        int
+            Bins per batch, between 1 and :attr:`_SOLVE_BLOCK`.
+
+        Examples
+        --------
+        >>> study._fft_block_bins(400)  # doctest: +SKIP
+        104
+        """
+        budget = self._FFT_BLOCK_BYTES if budget_bytes is None else budget_bytes
+        per_bin = max(16 * n_buses * n_buses, 1)
+        return int(max(1, min(self._SOLVE_BLOCK, budget // per_bin)))
+
+    def _solve_spectrum(
+        self,
+        bus_index: Dict[str, int],
+        bus_Z: Dict[str, np.ndarray],
+        branch_Z: Dict[str, np.ndarray],
+        i_spectrum: np.ndarray,
+        freqs: np.ndarray,
+        *,
+        block: int,
+    ) -> np.ndarray:
+        """Solve ``Y(f) u(f) = i(f)`` for every FFT bin, ``block`` bins at a time.
+
+        Each block is assembled by :meth:`_build_y_stack` and handed to
+        LAPACK as one stacked ``(K, n, n)`` array. Every bin is still an
+        independent LU solve, so the block size changes the memory and the
+        number of calls, not a single digit of the result. A block that
+        contains a singular bin is redone bin by bin, so the "skip this bin"
+        rule applies to exactly that bin and not to its neighbours.
+
+        Parameters
+        ----------
+        bus_index : dict of str to int
+            Active bus name to matrix index.
+        bus_Z, branch_Z : dict of str to numpy.ndarray
+            Impedance per element over all bins.
+        i_spectrum : numpy.ndarray
+            Injection per bin, shape ``(n_freqs, n)``.
+        freqs : numpy.ndarray
+            The bin frequencies in Hz (for the log message only).
+        block : int
+            Bins per batch, see :meth:`_fft_block_bins`.
+
+        Returns
+        -------
+        numpy.ndarray
+            Bus voltages, shape ``(n, n_freqs)``; zero in a singular bin.
+        """
+        n_freqs = freqs.size
+        u_spectrum = np.zeros((len(bus_index), n_freqs), dtype=complex)
+        for start in range(0, n_freqs, block):
+            stop = min(start + block, n_freqs)
+            bins = np.arange(start, stop)
+            Y_block = self._build_y_stack(bus_index, bus_Z, branch_Z, bins)
+            rhs = i_spectrum[start:stop, :, np.newaxis]
+            try:
+                u_spectrum[:, start:stop] = np.linalg.solve(
+                    Y_block, rhs
+                )[:, :, 0].T
+            except np.linalg.LinAlgError:
+                for offset, k in enumerate(bins):
+                    try:
+                        u_spectrum[:, k] = np.linalg.solve(
+                            Y_block[offset], i_spectrum[k]
+                        )
+                    except np.linalg.LinAlgError:
+                        # Singular at this bin (commonly f=0 with no DC
+                        # return path). We leave u as zero; for a
+                        # real-valued input signal the resulting
+                        # time-domain response is just missing the DC
+                        # component, which is what the user would expect.
+                        logger.debug(
+                            "Y(f=%g) is singular for the active fault; "
+                            "skipping.",
+                            freqs[k],
+                        )
+            del Y_block
+        return u_spectrum
 
     def _admittance_stack(
         self, values: np.ndarray, bins: np.ndarray

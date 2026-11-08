@@ -89,6 +89,25 @@ injection) and both warn when the active fault carries any. See
 [Transient simulation](../transient.md) for the derivations, the
 limitations of each path and the measured cross-checks.
 
+### Memory of the FFT solver
+
+The FFT solver assembles the dense $n \times n$ admittance matrices of up
+to 512 frequency bins at a time and hands them to LAPACK as one stacked
+array — $16\,n^2$ bytes per bin for $n$ active buses. Since audit pass 19
+the batch also stays within a byte budget, `solve(..., fft_block_bytes=...)`,
+256 MiB by default, which binds from 182 buses on. The fixed 512-bin batch
+needed 1.3 GB at 400 buses and 8.2 GB at 1000, and the previous batch was
+still alive while the next one was assembled; with the default budget a
+400-bus solve over 1001 bins peaks at about 0.3 GB. The budget changes the
+memory, not the result: every bin is an independent solve, and the
+spectra are bit-identical to the old batching. A single matrix larger than
+the budget is solved one bin at a time, with a log message.
+
+```python
+result = study.solve(t_end=0.2, dt=1e-4, solver="fft",
+                     fft_block_bytes=64 * 2**20)   # 64 MiB per batch
+```
+
 ## API reference
 
 ### Transient study and result
