@@ -1574,7 +1574,7 @@ Development release. See the git history for details.
 
 Development release. See the git history for details.
 
-## [0.1.0] — 2024-12-01
+## 0.1.0 — 2024-12-01
 
 Initial development release. Not installable via PyPI in the current
 form — superseded by 0.2.0.
@@ -1586,12 +1586,11 @@ form — superseded by 0.2.0.
 [0.5.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.4.0
 [0.3.2]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.2
-[0.3.1]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.1
+[0.3.1]: https://github.com/Ce1ectric/groundinsight/commit/28db80d1092d8e143b6a63f22979bd6e7d7c3d0e
 [0.3.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.0
-[0.2.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.2.0
-[0.1.2]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.1.2
-[0.1.1]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.1.1
-[0.1.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.1.0
+[0.2.0]: https://pypi.org/project/groundinsight/0.2.0/
+[0.1.2]: https://pypi.org/project/groundinsight/0.1.2/
+[0.1.1]: https://pypi.org/project/groundinsight/0.1.1/
 
 ---
 
@@ -1613,7 +1612,7 @@ which `groundinsight` consumes. The roadmap below is organised around
 that split: the "bridge" items below define the data-exchange surface
 between the two packages.
 
-### Near term — bridge to `groundfield` (target: 0.4.0)
+### Near term — bridge to `groundfield`
 
 These items define the data-exchange surface between field-level
 computations in `groundfield` and circuit-level solves in
@@ -1652,7 +1651,7 @@ drives the priority.
   analytical surface-potential model in layered earth; higher-fidelity
   surface potentials come from `groundfield` via `ImpedanceTable`.
 
-### Near term — external network import (target: 0.4.0)
+### Near term — external network import
 
 Building grounding networks by hand is the single most time-consuming
 step in any case study. Re-using existing distribution-network models
