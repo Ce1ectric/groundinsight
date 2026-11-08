@@ -64,12 +64,14 @@ network of a long radial feeder the sparse LU is the *more* accurate of the
 two (finding P13).
 """
 
+import hashlib
 import logging
 import math
+from collections.abc import Mapping
 
 import numpy as np
-from typing import Dict, List, Optional, Tuple
-from scipy.sparse import csc_matrix, csr_matrix
+from typing import Dict, Iterator, List, Optional, Tuple
+from scipy.sparse import csc_matrix, csr_matrix, issparse
 from scipy.sparse.csgraph import connected_components
 from scipy.sparse.linalg import splu
 from groundinsight.models.core_models import (
@@ -305,17 +307,86 @@ def _reciprocal(values: np.ndarray, usable: np.ndarray) -> np.ndarray:
     return out
 
 
+class _StampPattern:
+    """The sparsity structure of a matrix assembled from a fixed list of stamps.
+
+    The position of every stamp -- which bus, which branch end -- does not
+    depend on the frequency; only its value does. The structure (CSC
+    ``indices``/``indptr`` and the map from each stamp to its entry) is
+    therefore computed once per network and reused for every frequency, which
+    then costs one :func:`numpy.bincount` per real and imaginary part (finding
+    P2: the dense assembly allocated and filled one ``n x n`` matrix per
+    frequency in a Python loop, and converted each to CSC by scanning all
+    ``n**2`` entries).
+
+    :func:`numpy.bincount` adds the contributions of each entry starting from
+    zero in the order they were stamped -- the same additions in the same
+    order as the dense loop ``Y[r, c] += v``, hence the same rounding of the
+    sums.
+
+    Parameters
+    ----------
+    rows, cols : numpy.ndarray
+        Integer row and column of every stamp, in stamp order.
+    size : int
+        Order of the square matrix.
+    """
+
+    def __init__(self, rows: np.ndarray, cols: np.ndarray, size: int):
+        self.size = size
+        keys = np.asarray(cols, dtype=np.int64) * size + np.asarray(
+            rows, dtype=np.int64
+        )
+        unique, self.inverse = np.unique(keys, return_inverse=True)
+        self.nnz = unique.size
+        self.indices = (unique % size).astype(np.int32)
+        indptr = np.zeros(size + 1, dtype=np.int64)
+        if unique.size:
+            np.cumsum(np.bincount(unique // size, minlength=size), out=indptr[1:])
+        self.indptr = indptr.astype(np.int32)
+
+    def matrix(self, values: np.ndarray) -> csc_matrix:
+        """The matrix for one set of stamp values.
+
+        Entries that sum to exactly zero are dropped, as ``csc_matrix(dense)``
+        did; the structure arrays are then copied first, because they are
+        shared by the matrices of all frequencies.
+
+        Parameters
+        ----------
+        values : numpy.ndarray
+            Complex value of every stamp, in stamp order.
+
+        Returns
+        -------
+        scipy.sparse.csc_matrix
+            The assembled matrix with sorted indices.
+        """
+        if self.nnz == 0:
+            return csc_matrix((self.size, self.size), dtype=complex)
+        data = np.empty(self.nnz, dtype=complex)
+        data.real = np.bincount(self.inverse, weights=values.real, minlength=self.nnz)
+        data.imag = np.bincount(self.inverse, weights=values.imag, minlength=self.nnz)
+        if np.all(data != 0):
+            return csc_matrix(
+                (data, self.indices, self.indptr), shape=(self.size, self.size)
+            )
+        matrix = csc_matrix(
+            (data, self.indices.copy(), self.indptr.copy()),
+            shape=(self.size, self.size),
+        )
+        matrix.eliminate_zeros()
+        return matrix
+
+
 def _assemble_csc(
     rows: np.ndarray, cols: np.ndarray, values: np.ndarray, size: int
 ) -> csc_matrix:
     """Sum matrix stamps into a CSC matrix, every entry in stamp order.
 
-    This is the dense assembly loop ``Y[r, c] += v`` without the dense
-    matrix: the stamps are mapped to their (column-major) entry, and
-    :func:`numpy.bincount` adds the contributions of each entry starting from
-    zero in the order they were stamped -- the same additions in the same
-    order as the loop, hence the same rounding. Entries that sum to exactly
-    zero are dropped, as ``csc_matrix(dense)`` did.
+    One-off use of :class:`_StampPattern`, for a matrix whose structure is
+    not reused (the reduced phase network, whose rows depend on the galvanic
+    component of the fault bus at each frequency).
 
     Parameters
     ----------
@@ -331,22 +402,81 @@ def _assemble_csc(
     scipy.sparse.csc_matrix
         The assembled matrix with sorted indices.
     """
-    if values.size == 0:
-        return csc_matrix((size, size), dtype=complex)
-    keys = np.asarray(cols, dtype=np.int64) * size + np.asarray(rows, dtype=np.int64)
-    unique, inverse = np.unique(keys, return_inverse=True)
-    data = np.empty(unique.size, dtype=complex)
-    data.real = np.bincount(inverse, weights=values.real, minlength=unique.size)
-    data.imag = np.bincount(inverse, weights=values.imag, minlength=unique.size)
-    indptr = np.zeros(size + 1, dtype=np.int64)
-    np.cumsum(np.bincount(unique // size, minlength=size), out=indptr[1:])
-    matrix = csc_matrix(
-        (data, (unique % size).astype(np.int32), indptr.astype(np.int32)),
-        shape=(size, size),
-    )
-    if not np.all(data != 0):
-        matrix.eliminate_zeros()
-    return matrix
+    return _StampPattern(rows, cols, size).matrix(values)
+
+
+class _DenseYView(Mapping):
+    """``Y_matrices`` as it used to be: frequency to dense ``numpy`` array.
+
+    The solver works on :attr:`ElectricalNetwork.Y_sparse`. This read-only
+    mapping keeps the historic attribute usable for code that reads a dense
+    matrix -- each access materialises a fresh dense copy of the sparse
+    matrix, so the ``n x n`` cost is paid only by whoever asks for it, and
+    writing into the returned array does not reach the solve.
+
+    Parameters
+    ----------
+    sparse : dict of float to scipy.sparse.csc_matrix
+        The solver's matrices (held by reference, so a matrix replaced there
+        is seen here).
+    """
+
+    def __init__(self, sparse: Dict[float, csc_matrix]):
+        self._sparse = sparse
+
+    def __getitem__(self, freq: float) -> np.ndarray:
+        return self._sparse[freq].toarray()
+
+    def __iter__(self) -> Iterator[float]:
+        return iter(self._sparse)
+
+    def __len__(self) -> int:
+        return len(self._sparse)
+
+    def __contains__(self, freq) -> bool:
+        return freq in self._sparse
+
+    def __repr__(self) -> str:
+        return f"_DenseYView(frequencies={list(self._sparse)})"
+
+
+def _extra_entries(
+    dicts: List[Optional[Dict[float, ComplexNumber]]],
+    frequencies: List[float],
+    present: np.ndarray,
+) -> Dict[int, tuple]:
+    """Stored entries at frequencies the network is *not* solved at.
+
+    The fingerprint has always covered every stored value of an element, not
+    only the solved frequencies; :func:`_gather_impedances` reads only the
+    latter. This collects the rest, for the rare element that has any.
+
+    Parameters
+    ----------
+    dicts : list of dict or None
+        The impedance dictionaries that were gathered.
+    frequencies : list of float
+        The gathered frequencies.
+    present : numpy.ndarray
+        The presence mask returned by :func:`_gather_impedances`.
+
+    Returns
+    -------
+    dict of int to tuple
+        Element index to the sorted ``(f, real, imag)`` entries outside
+        ``frequencies``; elements without such entries are omitted.
+    """
+    found = present.sum(axis=1)
+    solved = set(frequencies)
+    extras: Dict[int, tuple] = {}
+    for i, mapping in enumerate(dicts):
+        if mapping and len(mapping) > found[i]:
+            extras[i] = tuple(
+                (float(f), float(z.real), float(z.imag))
+                for f, z in sorted(mapping.items())
+                if f not in solved
+            )
+    return extras
 
 
 class _NetworkTables:
@@ -358,10 +488,11 @@ class _NetworkTables:
     On a 4000-bus ring at seven frequencies that was several hundred thousand
     calls before any linear algebra happened (finding P6). The tables are
     filled once per :class:`ElectricalNetwork` and every later stage indexes
-    into them.
+    into them; the state fingerprint is a digest of the same arrays.
 
     Rows follow the model: ``bus_*`` arrays have one row per *active* bus in
-    :attr:`ElectricalNetwork.bus_indices` order, ``branch_*`` arrays one row
+    :attr:`ElectricalNetwork.bus_indices` order (``all_bus_*`` one per bus,
+    active or not, in ``network.buses`` order), ``branch_*`` arrays one row
     per branch in ``network.branches`` order, ``vs_*`` arrays one row per
     voltage source in ``network.sources`` order.
 
@@ -371,10 +502,18 @@ class _NetworkTables:
         Column order of every impedance array.
     column : dict of float to int
         Frequency to column.
+    all_bus_names : list of str
+        Every bus, in model order.
+    all_bus_active : numpy.ndarray
+        The ``active`` flag of every bus.
+    all_bus_z_raw, all_bus_present : numpy.ndarray
+        Stored grounding impedances of every bus, ``(n_all, F)``.
     bus_z_raw, bus_present : numpy.ndarray
-        Stored grounding impedances of the active buses, ``(n, F)``.
+        The rows of the active buses, ``(n, F)``.
     branch_names : list of str
         All branches, in model order.
+    branch_from_name, branch_to_name : list of str
+        The stored end buses of each branch.
     branch_from, branch_to : numpy.ndarray
         Bus index of each end, ``-1`` where that bus is inactive or missing.
     branch_active, branch_grounding : numpy.ndarray
@@ -390,12 +529,15 @@ class _NetworkTables:
         ``phase_impedance`` is not ``None`` at all.
     proxy_length : numpy.ndarray
         ``length`` where positive, else ``1.0`` -- the resistive proxy.
-    vs_names : list of str
-        Voltage sources in model order.
+    vs_names, vs_bus_name : list of str
+        Voltage sources in model order and the bus each one sits on.
     vs_bus : numpy.ndarray
         Bus index of each voltage source, ``-1`` where inactive or missing.
     vs_z_raw, vs_present : numpy.ndarray
         Stored source impedances, ``(s, F)``.
+    bus_extras, self_extras, vs_extras : dict of int to tuple
+        Stored entries at frequencies outside the solved ones, see
+        :func:`_extra_entries`. Only the fingerprint reads them.
     bus_z, self_z, phase_z, vs_z : numpy.ndarray
         The same values with the 0 Hz stand-in applied
         (:meth:`ElectricalNetwork._resolved_impedance`, vectorised); filled
@@ -409,60 +551,75 @@ class _NetworkTables:
         self.column = {f: j for j, f in enumerate(self.frequencies)}
         freqs = self.frequencies
 
-        buses = [network.buses[name] for name in index]
-        self.bus_z_raw, self.bus_present = _gather_impedances(
-            [bus.impedance for bus in buses], freqs
+        self.all_bus_names = list(network.buses)
+        all_buses = list(network.buses.values())
+        self.all_bus_active = np.fromiter(
+            (bool(bus.active) for bus in all_buses), dtype=bool,
+            count=len(all_buses),
         )
+        impedances = [bus.impedance for bus in all_buses]
+        self.all_bus_z_raw, self.all_bus_present = _gather_impedances(
+            impedances, freqs
+        )
+        self.bus_extras = _extra_entries(impedances, freqs, self.all_bus_present)
+        # bus_indices enumerates the active buses in model order
+        active_rows = np.flatnonzero(self.all_bus_active)
+        self.bus_z_raw = self.all_bus_z_raw[active_rows]
+        self.bus_present = self.all_bus_present[active_rows]
 
         branches = list(network.branches.values())
+        count = len(branches)
         self.branch_names = [branch.name for branch in branches]
+        self.branch_from_name = [branch.from_bus for branch in branches]
+        self.branch_to_name = [branch.to_bus for branch in branches]
         self.branch_from = np.fromiter(
-            (index.get(b.from_bus, -1) for b in branches), dtype=np.int64,
-            count=len(branches),
+            (index.get(name, -1) for name in self.branch_from_name),
+            dtype=np.int64, count=count,
         )
         self.branch_to = np.fromiter(
-            (index.get(b.to_bus, -1) for b in branches), dtype=np.int64,
-            count=len(branches),
+            (index.get(name, -1) for name in self.branch_to_name),
+            dtype=np.int64, count=count,
         )
         self.branch_active = np.fromiter(
-            (bool(b.active) for b in branches), dtype=bool, count=len(branches)
+            (bool(b.active) for b in branches), dtype=bool, count=count
         )
         self.branch_grounding = np.fromiter(
             (bool(b.type.grounding_conductor) for b in branches), dtype=bool,
-            count=len(branches),
+            count=count,
         )
         self.branch_in_net = (
             self.branch_active & (self.branch_from >= 0) & (self.branch_to >= 0)
         )
-        self.self_raw, self.self_present = _gather_impedances(
-            [b.self_impedance for b in branches], freqs
-        )
+        self_impedances = [b.self_impedance for b in branches]
+        self.self_raw, self.self_present = _gather_impedances(self_impedances, freqs)
+        self.self_extras = _extra_entries(self_impedances, freqs, self.self_present)
         self.mutual, self.mutual_present = _gather_impedances(
             [b.mutual_impedance for b in branches], freqs
         )
         self.phase_declared = np.fromiter(
             (b.phase_impedance is not None for b in branches), dtype=bool,
-            count=len(branches),
+            count=count,
         )
         self.phase_raw, self.phase_present = _gather_impedances(
             [b.phase_impedance for b in branches], freqs
         )
         self.proxy_length = np.fromiter(
             (b.length if b.length and b.length > 0 else 1.0 for b in branches),
-            dtype=float, count=len(branches),
+            dtype=float, count=count,
         )
 
         vsources = [
             s for s in network.sources.values() if s.source_type == "voltage"
         ]
         self.vs_names = [s.name for s in vsources]
+        self.vs_bus_name = [s.bus for s in vsources]
         self.vs_bus = np.fromiter(
-            (index.get(s.bus, -1) for s in vsources), dtype=np.int64,
+            (index.get(name, -1) for name in self.vs_bus_name), dtype=np.int64,
             count=len(vsources),
         )
-        self.vs_z_raw, self.vs_present = _gather_impedances(
-            [s.source_impedance for s in vsources], freqs
-        )
+        source_impedances = [s.source_impedance for s in vsources]
+        self.vs_z_raw, self.vs_present = _gather_impedances(source_impedances, freqs)
+        self.vs_extras = _extra_entries(source_impedances, freqs, self.vs_present)
         self.resolve({})
 
     def resolve(self, substitutes: Dict[float, float]) -> None:
@@ -506,6 +663,121 @@ class _NetworkTables:
             shorted = _short_circuit_mask(col.real, col.imag) & present[:, j]
             col[shorted] = complex(substitute, 0.0)
         return out
+
+    def thevenin_loops(
+        self, fault_bus_idx: Optional[int]
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The loop closures of the voltage sources, for every frequency.
+
+        A voltage source on an active bus other than the fault bus closes its
+        loop with ``1/Z_src`` between its bus and the fault bus, at every
+        frequency with a stored, not open, source impedance (0 Hz stand-in
+        applied). This is the one rule behind both the assembly of ``Y`` and
+        :meth:`ElectricalNetwork.thevenin_loop_admittances`.
+
+        Parameters
+        ----------
+        fault_bus_idx : int or None
+            Row of the active fault bus; ``None`` without an active fault.
+
+        Returns
+        -------
+        loops : numpy.ndarray
+            Indices into the voltage-source tables (``vs_*``) of the sources
+            that close a loop, in network order.
+        admittance : numpy.ndarray
+            ``(len(loops), F)`` complex ``1/Z_src``; zero where unusable.
+        usable : numpy.ndarray
+            ``(len(loops), F)`` boolean: a finite source impedance is stored.
+
+        Notes
+        -----
+        Requires :meth:`resolve` to have run.
+        """
+        width = len(self.frequencies)
+        if fault_bus_idx is None:
+            return (
+                np.zeros(0, dtype=np.int64),
+                np.zeros((0, width), dtype=complex),
+                np.zeros((0, width), dtype=bool),
+            )
+        loops = np.flatnonzero((self.vs_bus >= 0) & (self.vs_bus != fault_bus_idx))
+        z_src = self.vs_z[loops]
+        usable = self.vs_present[loops] & ~_open_mask(z_src)
+        return loops, _reciprocal(z_src, usable), usable
+
+    def fingerprint(self, active_fault: Optional[str]) -> tuple:
+        """Digest of every model value the nodal matrices are assembled from.
+
+        Covers what :meth:`ElectricalNetwork.state_fingerprint` has always
+        covered -- frequencies, active fault, every bus (name, ``active``,
+        grounding impedance), every branch (name, ``active``,
+        ``grounding_conductor``, end buses, self impedance) and every voltage
+        source (name, bus, source impedance), including stored values at
+        frequencies outside the solved ones -- with elements ordered by name,
+        so the insertion order of the model does not matter. The values enter
+        a BLAKE2 digest as raw bytes instead of a tuple of Python floats with
+        one entry per element and frequency, which on a 4000-bus ring at seven
+        frequencies took 0.26 s on every build (finding P6). Negative zeros
+        are folded into zeros first, so that ``0.0`` and ``-0.0`` compare
+        equal as they did in the tuple.
+
+        Parameters
+        ----------
+        active_fault : str or None
+            The active fault of the network.
+
+        Returns
+        -------
+        tuple
+            ``(frequencies, active fault, digest)``; hashable and only
+            meaningful for equality.
+        """
+        digest = hashlib.blake2b(digest_size=20)
+
+        def strings(values: List[str]) -> None:
+            encoded = [v.encode("utf-8", "surrogatepass") for v in values]
+            digest.update(
+                np.fromiter((len(e) for e in encoded), dtype=np.int64,
+                            count=len(encoded)).tobytes()
+            )
+            digest.update(b"".join(encoded))
+
+        def numbers(values: np.ndarray) -> None:
+            digest.update(np.ascontiguousarray(values).tobytes())
+
+        def block(tag, names, order, flags, values, present, extras, ends=()):
+            digest.update(tag)
+            rows = np.asarray(order, dtype=np.int64)
+            strings([names[i] for i in order])
+            for flag in flags:
+                numbers(flag[rows])
+            for end in ends:
+                strings([end[i] for i in order])
+            numbers(values[rows] + 0j)
+            numbers(present[rows])
+            strings([repr((names[i], extras[i])) for i in order if i in extras])
+
+        def by_name(names: List[str]) -> List[int]:
+            return sorted(range(len(names)), key=names.__getitem__)
+
+        block(
+            b"buses", self.all_bus_names, by_name(self.all_bus_names),
+            (self.all_bus_active,), self.all_bus_z_raw, self.all_bus_present,
+            self.bus_extras,
+        )
+        block(
+            b"branches", self.branch_names, by_name(self.branch_names),
+            (self.branch_active, self.branch_grounding), self.self_raw,
+            self.self_present, self.self_extras,
+            ends=(self.branch_from_name, self.branch_to_name),
+        )
+        block(
+            b"voltage sources", self.vs_names, by_name(self.vs_names), (),
+            self.vs_z_raw, self.vs_present, self.vs_extras,
+            ends=(self.vs_bus_name,),
+        )
+        return (tuple(self.frequencies), active_fault, digest.digest())
 
 
 class ElectricalNetwork:
@@ -595,7 +867,11 @@ class ElectricalNetwork:
         self.auto_phase_currents = auto_phase_currents
         self._input_checks = input_checks
         self.bus_indices = {}
-        self.Y_matrices = {}  # Admittance matrices for each frequency
+        # Nodal admittance matrix per frequency, CSC (the solver's matrices).
+        self.Y_sparse: Dict[float, csc_matrix] = {}
+        # Dense view of the same matrices, materialised on access only; see
+        # :class:`_DenseYView`. Kept for code that reads ``Y_matrices``.
+        self.Y_matrices = {}
         self.u_vectors = {}  # Voltage vectors for each frequency
         self.u_vectors_no_mutual = {}  # Voltage vectors without mutual currents
         self.i_vectors_no_mutual = {}  # Current vectors without mutual currents
@@ -638,7 +914,11 @@ class ElectricalNetwork:
         self._tables: Optional[_NetworkTables] = None
 
         self._initialize()
-        self._build_fingerprint = self.state_fingerprint()
+        # The tables were gathered from this very state a moment ago; digest
+        # them instead of reading the model a second time.
+        self._build_fingerprint = self._network_tables().fingerprint(
+            self.network.active_fault
+        )
 
     def state_fingerprint(self) -> tuple:
         """
@@ -646,7 +926,7 @@ class ElectricalNetwork:
 
         The assembled system is a *snapshot*: once ``Y`` is built, later
         changes to a bus impedance, to an ``active`` flag or to the active
-        fault do not reach it. Anything that reads ``Y_matrices`` back out
+        fault do not reach it. Anything that reads ``Y_sparse`` back out
         afterwards -- :func:`~groundinsight.analysis.response.bus_response`
         above all -- therefore has to be able to tell whether the snapshot
         still describes the network in hand. This fingerprint is that test:
@@ -659,42 +939,18 @@ class ElectricalNetwork:
             Hashable digest. Compare it against :attr:`_build_fingerprint`
             (or use :meth:`matches_network_state`); the value itself carries
             no meaning beyond equality.
-        """
-        def _imp(mapping) -> tuple:
-            if not mapping:
-                return ()
-            return tuple(
-                (float(f), float(z.real), float(z.imag))
-                for f, z in sorted(mapping.items())
-            )
 
-        buses = tuple(
-            (name, bool(bus.active), _imp(bus.impedance))
-            for name, bus in sorted(self.network.buses.items())
-        )
-        branches = tuple(
-            (
-                name,
-                bool(branch.active),
-                bool(branch.type.grounding_conductor),
-                branch.from_bus,
-                branch.to_bus,
-                _imp(branch.self_impedance),
-            )
-            for name, branch in sorted(self.network.branches.items())
-        )
-        sources = tuple(
-            (name, source.source_type, source.bus, _imp(source.source_impedance))
-            for name, source in sorted(self.network.sources.items())
-            if source.source_type == "voltage"
-        )
-        return (
-            tuple(float(f) for f in self.network.frequencies),
-            self.network.active_fault,
-            buses,
-            branches,
-            sources,
-        )
+        Notes
+        -----
+        The model is read afresh into arrays (:class:`_NetworkTables`) and
+        digested with BLAKE2 (:meth:`_NetworkTables.fingerprint`). Up to pass
+        18 this was a nested tuple with one Python float triple per element
+        and frequency, rebuilt on every assembly -- 0.26 s per build of a
+        4000-bus ring at seven frequencies (finding P6). The coverage is the
+        same, including values stored at frequencies the network is not
+        solved at; the build fingerprint reuses the tables of the assembly.
+        """
+        return _NetworkTables(self).fingerprint(self.network.active_fault)
 
     def matches_network_state(self) -> bool:
         """
@@ -1019,6 +1275,55 @@ class ElectricalNetwork:
             return complex(substitute, 0.0)
         return value
 
+    def _passive_impedances_ok(self, tables: _NetworkTables) -> bool:
+        """Vectorised pass/fail of :meth:`_validate_passive_impedances`.
+
+        The same three rules as
+        :func:`~groundinsight.utils.impedance_calculator.check_passive_impedance`
+        -- exactly zero above 0 Hz, too small to invert above 0 Hz, negative
+        real part at any frequency -- over the same elements (active buses,
+        grounding-conductor branches between active buses, voltage sources on
+        an active bus) and the same frequencies, evaluated on whole arrays.
+        Calling the element-wise check for every element cost 0.19 s on a
+        4000-bus ring (finding P6) although it almost never finds anything;
+        when this check does fail, the element-wise one runs and raises with
+        its full message, so there is still only one copy of that message.
+
+        Parameters
+        ----------
+        tables : _NetworkTables
+            The gathered model arrays (stored values, before the 0 Hz
+            stand-in).
+
+        Returns
+        -------
+        bool
+            ``True`` when no checked impedance violates a rule.
+        """
+        above_dc = np.asarray(tables.frequencies, dtype=float)[None, :] != 0.0
+
+        def passes(values: np.ndarray, present: np.ndarray) -> bool:
+            if values.size == 0:
+                return True
+            re, im = values.real, values.imag
+            finite = np.isfinite(re) & np.isfinite(im)
+            short = _short_circuit_mask(re, im)
+            exact_zero = (re == 0.0) & (im == 0.0) & finite
+            bad = (
+                (exact_zero & above_dc)
+                | (short & ~exact_zero & above_dc)
+                | (finite & ~short & (re < 0.0))
+            )
+            return not np.any(bad & present)
+
+        grid = tables.branch_in_net & tables.branch_grounding
+        on_bus = tables.vs_bus >= 0
+        return (
+            passes(tables.bus_z_raw, tables.bus_present)
+            and passes(tables.self_raw[grid], tables.self_present[grid])
+            and passes(tables.vs_z_raw[on_bus], tables.vs_present[on_bus])
+        )
+
     def _construct_Y_matrices(self):
         """
         Construct the admittance matrices Y for each frequency in the network.
@@ -1036,8 +1341,31 @@ class ElectricalNetwork:
         that is not modelled explicitly in the grounding network. Current-mode
         sources contribute nothing to ``Y`` -- they appear only in the current
         vector (Norton convention with infinite parallel impedance).
+
+        Notes
+        -----
+        **Index tables instead of dense matrices** (audit pass 19, P2/P6). The
+        matrices are kept as CSC in :attr:`Y_sparse`. The position of every
+        stamp -- bus diagonal, the four entries of a grounding branch, the four
+        entries of a Thevenin loop closure -- is fixed by the topology, so
+        those positions are laid out once (:class:`_StampPattern`) and each
+        frequency only computes the admittances and sums them per entry,
+        in the order the former dense loops added them. Until pass 18 every
+        frequency allocated a dense ``n x n`` matrix and *all* of them were
+        kept: 2.3 GB on a 4000-bus ring at seven frequencies, with a hard limit
+        near 5000 buses on an 8 GB machine, plus a scan of all ``n**2`` entries
+        to convert each one to CSC. :attr:`Y_matrices` remains as a dense view
+        that materialises a matrix only when it is read.
+
+        Validation is unchanged in effect: the passivity rules run on the
+        gathered arrays (:meth:`_passive_impedances_ok`), and only when they
+        find something does the element-wise
+        :meth:`_validate_passive_impedances` run to raise its message.
         """
-        self._validate_passive_impedances()
+        tables = _NetworkTables(self)
+        self._tables = tables
+        if not self._passive_impedances_ok(tables):
+            self._validate_passive_impedances()
 
         frequencies = self.network.frequencies
         # Active fault bus index is needed for the Thevenin loop closure. If
@@ -1059,61 +1387,52 @@ class ElectricalNetwork:
             substitute = self._dc_substitute_at(freq)
             if substitute is not None:
                 self._dc_substitutes[freq] = substitute
+        tables.resolve(self._dc_substitutes)
 
-        for freq in frequencies:
-            Y_matrix = np.zeros((self.num_buses, self.num_buses), dtype=complex)
-            # Bus grounding admittances on the diagonal (active buses only)
-            for bus_name, bus in self.network.buses.items():
-                if not bus.active:
-                    continue
-                idx = self.bus_indices[bus_name]
-                Z_complex = self._resolved_impedance(
-                    bus.impedance.get(freq), freq
-                )
-                if Z_complex is None:
-                    continue
-                if _is_open_circuit(Z_complex):
-                    continue
-                Y_matrix[idx, idx] += 1 / Z_complex
+        # Stamp positions, in the order of the former dense loops: bus
+        # diagonals (active buses), then per grounding branch (from, to),
+        # (to, from), (from, from), (to, to), then per Thevenin source
+        # (src, src), (fault, fault), (src, fault), (fault, src). Inactive
+        # branches and branches with an inactive end are not stamped at all;
+        # a value missing or open at one frequency stamps zero there.
+        n = self.num_buses
+        diagonal = np.arange(n, dtype=np.int64)
+        grid = np.flatnonzero(tables.branch_in_net & tables.branch_grounding)
+        g_from, g_to = tables.branch_from[grid], tables.branch_to[grid]
+        # The loop closures come from the same rule as
+        # :meth:`thevenin_loop_admittances` (one place, see there).
+        loops, y_loop, _ = tables.thevenin_loops(fault_bus_idx)
+        l_src = tables.vs_bus[loops]
+        l_fault = np.full(loops.size, fault_bus_idx or 0, dtype=np.int64)
+        rows = np.concatenate([
+            diagonal,
+            np.stack([g_from, g_to, g_from, g_to], axis=1).ravel(),
+            np.stack([l_src, l_fault, l_src, l_fault], axis=1).ravel(),
+        ])
+        cols = np.concatenate([
+            diagonal,
+            np.stack([g_to, g_from, g_from, g_to], axis=1).ravel(),
+            np.stack([l_src, l_fault, l_fault, l_src], axis=1).ravel(),
+        ])
+        pattern = _StampPattern(rows, cols, n)
 
-            # Branch self-admittances (inactive branches behave like an open
-            # circuit: no contribution; inactive endpoints likewise drop the
-            # branch entirely).
-            for branch in self.network.branches.values():
-                if not branch.active:
-                    continue
-                if not branch.type.grounding_conductor:
-                    continue
-                if branch.from_bus not in self.bus_indices:
-                    continue
-                if branch.to_bus not in self.bus_indices:
-                    continue
-                Z_complex = self._resolved_impedance(
-                    branch.self_impedance.get(freq), freq
-                )
-                if Z_complex is None:
-                    continue
-                if _is_open_circuit(Z_complex):
-                    continue
-                admittance = 1 / Z_complex
-                from_idx = self.bus_indices[branch.from_bus]
-                to_idx = self.bus_indices[branch.to_bus]
-                Y_matrix[from_idx, to_idx] -= admittance
-                Y_matrix[to_idx, from_idx] -= admittance
-                Y_matrix[from_idx, from_idx] += admittance
-                Y_matrix[to_idx, to_idx] += admittance
-
-            # Thevenin (voltage-source) loop closures between source bus and
-            # active fault bus. Skipped if there is no active fault yet, or if
-            # either endpoint is inactive.
-            if fault_bus_idx is not None:
-                for src_idx, loop_idx, Y_src in self.thevenin_loop_admittances(freq):
-                    Y_matrix[src_idx, src_idx] += Y_src
-                    Y_matrix[loop_idx, loop_idx] += Y_src
-                    Y_matrix[src_idx, loop_idx] -= Y_src
-                    Y_matrix[loop_idx, src_idx] -= Y_src
-
-            self.Y_matrices[freq] = Y_matrix
+        y_bus = _reciprocal(
+            tables.bus_z, tables.bus_present & ~_open_mask(tables.bus_z)
+        )
+        z_grid = tables.self_z[grid]
+        y_grid = _reciprocal(
+            z_grid, tables.self_present[grid] & ~_open_mask(z_grid)
+        )
+        self.Y_sparse = {}
+        for j, freq in enumerate(frequencies):
+            y_g, y_l = y_grid[:, j], y_loop[:, j]
+            values = np.concatenate([
+                y_bus[:, j],
+                np.stack([-y_g, -y_g, y_g, y_g], axis=1).ravel(),
+                np.stack([y_l, y_l, -y_l, -y_l], axis=1).ravel(),
+            ])
+            self.Y_sparse[freq] = pattern.matrix(values)
+        self.Y_matrices = _DenseYView(self.Y_sparse)
 
     def thevenin_loop_admittances(self, freq: float) -> List[Tuple[int, int, complex]]:
         """
@@ -1122,21 +1441,25 @@ class ElectricalNetwork:
         A voltage source closes its loop with ``Y_src = 1/Z_src`` between its
         own bus and the active fault bus: the non-grounding part of the fault
         loop (transformer, phase conductor) that the earthing network does not
-        model. :meth:`_construct_Y_matrices` assembles them from this list,
-        and :meth:`earthing_admittance_matrix` takes them back out -- one rule
-        in one place, so the two cannot drift apart.
+        model. :meth:`_construct_Y_matrices` stamps them and
+        :meth:`earthing_admittance_matrix` takes them back out, both from
+        :meth:`_NetworkTables.thevenin_loops` -- one rule in one place, so
+        the two cannot drift apart, and the values here are bit for bit the
+        ones in :attr:`Y_sparse`.
 
         Parameters
         ----------
         freq : float
-            Frequency in Hz.
+            Frequency in Hz, one of the network frequencies.
 
         Returns
         -------
         list of tuple of (int, int, complex)
             ``(source bus row, fault bus row, Y_src)`` per voltage source on
             an active bus other than the fault bus, with a finite source
-            impedance at ``freq``. Empty without an active fault.
+            impedance at ``freq``. Empty without an active fault, and for a
+            frequency the network is not solved at (``Y(freq)`` does not
+            exist there).
         """
         active_fault = self.network.active_fault
         if active_fault is None:
@@ -1144,22 +1467,19 @@ class ElectricalNetwork:
         fault_bus_idx = self.bus_indices.get(self.network.faults[active_fault].bus)
         if fault_bus_idx is None:
             return []
-        stamps: List[Tuple[int, int, complex]] = []
-        for source in self.network.sources.values():
-            if source.source_type != "voltage":
-                continue
-            src_idx = self.bus_indices.get(source.bus)
-            if src_idx is None or src_idx == fault_bus_idx:
-                continue
-            Z_src_c = self._resolved_impedance(
-                source.source_impedance.get(freq), freq
+        tables = self._network_tables()
+        column = tables.column.get(float(freq))
+        if column is None:
+            return []
+        loops, admittance, usable = tables.thevenin_loops(fault_bus_idx)
+        stamped = usable[:, column]
+        return [
+            (src_idx, fault_bus_idx, y_src)
+            for src_idx, y_src in zip(
+                tables.vs_bus[loops][stamped].tolist(),
+                admittance[stamped, column].tolist(),
             )
-            if Z_src_c is None:
-                continue
-            if _is_open_circuit(Z_src_c):
-                continue
-            stamps.append((src_idx, fault_bus_idx, 1 / Z_src_c))
-        return stamps
+        ]
 
     def earthing_admittance_matrix(self, freq: float) -> np.ndarray:
         """
@@ -1175,20 +1495,76 @@ class ElectricalNetwork:
         Parameters
         ----------
         freq : float
-            Frequency in Hz; ``Y_matrices[freq]`` must exist.
+            Frequency in Hz; ``Y_sparse[freq]`` must exist.
 
         Returns
         -------
         numpy.ndarray
-            A new array; the assembled matrix is not modified.
+            A new dense array; the assembled matrix is not modified.
+
+        Notes
+        -----
+        Like :attr:`Y_matrices` this is a dense view, materialised on
+        request: ``Z_E`` itself is computed from the sparse form
+        (:meth:`_earthing_admittance_sparse`), so ``run_fault`` never builds
+        an ``n x n`` array for it.
         """
-        Y_matrix = np.array(self.Y_matrices[freq], dtype=complex, copy=True)
-        for src_idx, loop_idx, Y_src in self.thevenin_loop_admittances(freq):
-            Y_matrix[src_idx, src_idx] -= Y_src
-            Y_matrix[loop_idx, loop_idx] -= Y_src
-            Y_matrix[src_idx, loop_idx] += Y_src
-            Y_matrix[loop_idx, src_idx] += Y_src
-        return Y_matrix
+        return self._earthing_admittance_sparse(freq).toarray()
+
+    def _earthing_admittance_sparse(self, freq: float) -> csc_matrix:
+        """
+        :meth:`earthing_admittance_matrix` in CSC: ``Y_sparse[freq]`` minus
+        the Thevenin loop closures (see :meth:`_remove_loop_closures`).
+
+        Parameters
+        ----------
+        freq : float
+            Frequency in Hz; ``Y_sparse[freq]`` must exist.
+
+        Returns
+        -------
+        scipy.sparse.csc_matrix
+            A new matrix; ``Y_sparse[freq]`` is not modified.
+        """
+        return self._remove_loop_closures(self.Y_sparse[freq], freq)
+
+    def _remove_loop_closures(self, matrix: csc_matrix, freq: float) -> csc_matrix:
+        """
+        ``matrix`` with the Thevenin loop-closure stamps of ``freq`` taken out.
+
+        The stamps of :meth:`thevenin_loop_admittances` are subtracted source
+        by source, exactly as the dense definition of the earthing matrix
+        does it -- every entry is bit for bit the one the dense
+        ``Y - loops`` gives for the same ``Y`` -- and entries that cancel to
+        zero leave the sparsity pattern. Used for the earthing matrix of the
+        solved system and, in :func:`~groundinsight.analysis.response.bus_response`,
+        for the solved system with one electrode removed.
+
+        Parameters
+        ----------
+        matrix : scipy.sparse.csc_matrix
+            A nodal matrix of this network at ``freq`` that carries the loop
+            closures.
+        freq : float
+            Frequency in Hz.
+
+        Returns
+        -------
+        scipy.sparse.csc_matrix
+            A new matrix (a copy when there is no loop closure); ``matrix``
+            is not modified.
+        """
+        size = matrix.shape[0]
+        earthing = matrix.copy()
+        for src_idx, loop_idx, y_src in self.thevenin_loop_admittances(freq):
+            loop = _assemble_csc(
+                np.array([src_idx, loop_idx, src_idx, loop_idx], dtype=np.int64),
+                np.array([src_idx, loop_idx, loop_idx, src_idx], dtype=np.int64),
+                np.array([y_src, y_src, -y_src, -y_src], dtype=complex),
+                size,
+            )
+            earthing = csc_matrix(earthing - loop)
+        return earthing
 
     def _construct_vectors(self):
         """
@@ -2048,7 +2424,7 @@ class ElectricalNetwork:
         pt = position[to_idx]
         stamp_rows = np.stack([pf, pt, pf, pt], axis=1).ravel()
         stamp_cols = np.stack([pf, pt, pt, pf], axis=1).ravel()
-        values = (y[:, None] * np.array([1.0, 1.0, -1.0, -1.0])).ravel()
+        values = np.stack([y, y, -y, -y], axis=1).ravel()
         keep = (stamp_rows >= 0) & (stamp_cols >= 0)
         matrix = _assemble_csc(
             stamp_rows[keep], stamp_cols[keep], values[keep], size
@@ -2191,42 +2567,56 @@ class ElectricalNetwork:
             Frequency at which to evaluate the branch impedances.
         phase_currents : Dict[str, complex]
             Signed phase current per branch.
+
+        Notes
+        -----
+        Evaluated on the gathered arrays (finding P6): the coupled branches --
+        active, grounding conductor, both ends active, self and mutual
+        impedance stored at this frequency, shield not open -- are selected
+        with one mask, and the injections are added with
+        :func:`numpy.add.at` in branch order, which performs the same
+        additions in the same order as the former loop.
         """
-        for branch in self.network.branches.values():
-            if not branch.active:
-                continue
-            if not branch.type.grounding_conductor:
-                continue
-            if branch.from_bus not in self.bus_indices:
-                continue
-            if branch.to_bus not in self.bus_indices:
-                continue
-            Z_self_c = self._resolved_impedance(
-                branch.self_impedance.get(freq), freq
-            )
-            Z_mutual = branch.mutual_impedance.get(freq)
-            if Z_self_c is None or Z_mutual is None:
-                continue
-            Z_mutual_c = complex(Z_mutual.real, Z_mutual.imag)
-            if _is_open_circuit(Z_self_c):
-                continue
+        tables = self._network_tables()
+        column = tables.column[float(freq)]
+        z_self = tables.self_z[:, column]
+        coupled = np.flatnonzero(
+            tables.branch_in_net
+            & tables.branch_grounding
+            & tables.self_present[:, column]
+            & tables.mutual_present[:, column]
+            & ~_open_mask(z_self)
+        )
+        if coupled.size == 0:
+            return
+        names = tables.branch_names
+        i_phase = np.fromiter(
+            (phase_currents.get(names[b], 0.0 + 0.0j) for b in coupled),
+            dtype=complex,
+            count=coupled.size,
+        )
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            i_mut = i_phase * (tables.mutual[coupled, column] / z_self[coupled])
 
-            i_phase = phase_currents.get(branch.name, 0.0 + 0.0j)
-            i_mut = i_phase * (Z_mutual_c / Z_self_c)
+        # Norton current flows from_bus -> to_bus (same direction as I_p)
+        ends = np.stack(
+            [tables.branch_from[coupled], tables.branch_to[coupled]], axis=1
+        ).ravel()
+        np.add.at(i_vector, ends, np.stack([-i_mut, i_mut], axis=1).ravel())
 
-            from_idx = self.bus_indices[branch.from_bus]
-            to_idx = self.bus_indices[branch.to_bus]
-            # Norton current flows from_bus -> to_bus (same direction as I_p)
-            i_vector[from_idx] -= i_mut
-            i_vector[to_idx] += i_mut
-
-            # Stored with flipped sign so that compute_branch_currents keeps using
-            # the formula current = (u_to - u_from) * Y_self + i_mutual_stored.
-            stored = -i_mut
-            if branch.name in self.i_mutuals[freq]:
-                self.i_mutuals[freq][branch.name] += stored
-            else:
-                self.i_mutuals[freq][branch.name] = stored
+        # Stored with flipped sign so that compute_branch_currents keeps using
+        # the formula current = (u_to - u_from) * Y_self + i_mutual_stored.
+        stored = self.i_mutuals[freq]
+        values = (-i_mut).tolist()
+        if not stored:
+            stored.update(zip((names[b] for b in coupled), values))
+        else:
+            for b, value in zip(coupled, values):
+                name = names[b]
+                if name in stored:
+                    stored[name] += value
+                else:
+                    stored[name] = value
 
     def _assert_finite_system(self, freq, Y_matrix, i_vector):
         """Reject a nodal system that contains NaN, naming the source.
@@ -2247,8 +2637,9 @@ class ElectricalNetwork:
         ----------
         freq : float
             Frequency (Hz) of the system being checked, used in the message.
-        Y_matrix : numpy.ndarray
-            The nodal admittance matrix at ``freq``.
+        Y_matrix : numpy.ndarray or scipy.sparse matrix
+            The nodal admittance matrix at ``freq``. A sparse matrix is checked
+            on its stored entries, without densifying it.
         i_vector : numpy.ndarray
             The injection vector at ``freq``.
 
@@ -2257,7 +2648,12 @@ class ElectricalNetwork:
         ValueError
             If ``Y_matrix`` or ``i_vector`` contains NaN.
         """
-        if not (np.isnan(Y_matrix).any() or np.isnan(i_vector).any()):
+        if issparse(Y_matrix):
+            entries = Y_matrix.tocoo()
+            nan_rows = entries.row[np.isnan(entries.data)]
+        else:
+            nan_rows = np.argwhere(np.isnan(Y_matrix))[:, 0]
+        if not (nan_rows.size or np.isnan(i_vector).any()):
             return
 
         index_to_bus = {idx: name for name, idx in self.bus_indices.items()}
@@ -2283,7 +2679,7 @@ class ElectricalNetwork:
                     culprit_branches.append(f"{branch.name} ({label})")
 
         affected_rows = sorted(
-            {int(row) for row in np.argwhere(np.isnan(Y_matrix))[:, 0]}
+            {int(row) for row in nan_rows}
             | {int(row) for row in np.argwhere(np.isnan(i_vector)).ravel()}
         )
         affected_names = [
@@ -2467,8 +2863,9 @@ class ElectricalNetwork:
         # been rebuilt since (a changed rho, a flipped active flag), and a
         # stale factor would silently answer with the old topology.
         self._lu_factors = {}
+        tables = self._network_tables()
         for freq in self.network.frequencies:
-            Y_matrix = self.Y_matrices[freq]
+            Y_matrix = self.Y_sparse[freq]
             i_vector = self.i_vectors[freq]
             singular_msg = (
                 f"Singular admittance matrix at f={freq} Hz: the network has no "
@@ -2489,16 +2886,20 @@ class ElectricalNetwork:
             # versions -- it may raise ``RuntimeError``, return a non-finite
             # solution, or return an arbitrary finite one (a floating network has
             # no unique EPR) -- so the common floating case is caught structurally
-            # here, before the solve, with no numerical tolerance.
-            grouped = self._classify_bus_grounding(freq)
-            if not grouped["referenced"]:
+            # here, before the solve, with no numerical tolerance. The test runs
+            # on the stored values as a whole; the per-bus classification is
+            # only needed for the message.
+            stored = tables.bus_z_raw[:, tables.column[float(freq)]]
+            present = tables.bus_present[:, tables.column[float(freq)]]
+            if not np.any(present & np.isfinite(stored) & (stored != 0)):
+                grouped = self._classify_bus_grounding(freq)
                 raise ValueError(self._no_ground_reference_message(freq, grouped))
             try:
                 # Backstops for any remaining singular case (e.g. a disconnected
                 # ungrounded island): scipy may raise, or return a non-finite
-                # solution.
-                Y_matrix_sparse = csc_matrix(Y_matrix)
-                lu = splu(Y_matrix_sparse)
+                # solution. The matrix is assembled as CSC, so it is factorised
+                # as it is -- no dense-to-sparse scan.
+                lu = splu(Y_matrix)
                 u_vector = lu.solve(i_vector)
             except (np.linalg.LinAlgError, RuntimeError) as e:
                 raise ValueError(f"{singular_msg} Original solver error: {e}") from e
@@ -2513,59 +2914,109 @@ class ElectricalNetwork:
 
         # Create ResultBus instances. Inactive buses are not in ``bus_indices``
         # and therefore do not appear in the result -- they are physically
-        # disconnected from the nodal system.
-        for bus_name, idx in self.bus_indices.items():
-            uepr_freq = {}
-            ia_freq = {}
-            i_inj_freq = {}
-            for freq in self.network.frequencies:
-                voltage = self.u_vectors[freq][idx]
-                bus = self.network.buses.get(bus_name)
-                Z_self_complex = self._resolved_impedance(
-                    bus.impedance.get(freq), freq
-                )
-                if Z_self_complex is None:
-                    current = 0
-                else:
-                    if _is_open_circuit(Z_self_complex):
-                        # Open end (Z = inf): no electrode, so no current leaves
-                        # into the soil here. Computing the quotient would give
-                        # NaN and store it in the I_a column.
-                        current = 0
-                    else:
-                        current = voltage / Z_self_complex
-
-                uepr_freq[freq] = ComplexNumber(real=voltage.real, imag=voltage.imag)
-                ia_freq[freq] = ComplexNumber(
-                    real=complex(current).real, imag=complex(current).imag
-                )
-                # Source-only injection at this bus (0 at every bus that is
-                # neither a source bus nor the fault bus).
-                inj_vector = self.source_injections.get(freq)
-                injection = 0j if inj_vector is None else complex(inj_vector[idx])
-                i_inj_freq[freq] = ComplexNumber(
-                    real=injection.real, imag=injection.imag
-                )
-
-            # Calculate RMS values
-            rms_voltage = self._calculate_rms(uepr_freq)
-            rms_current = self._calculate_rms(ia_freq)
-            rms_injection = self._calculate_rms(i_inj_freq)
-
-            result_bus = ResultBus(
-                name=bus_name,
-                uepr=rms_voltage,
-                ia=rms_current,
-                i_inj=rms_injection,
-                uepr_freq=uepr_freq,
-                ia_freq=ia_freq,
-                i_inj_freq=i_inj_freq,
+        # disconnected from the nodal system. The electrode current is
+        # ``u / Z`` with the 0 Hz stand-in applied, zero for a missing or open
+        # electrode; the injection is the source-only vector.
+        frequencies = self.network.frequencies
+        potentials = self._stacked(self.u_vectors)
+        usable = tables.bus_present & ~_open_mask(tables.bus_z)
+        electrode = np.zeros(potentials.shape, dtype=complex)
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            np.divide(potentials, tables.bus_z, out=electrode, where=usable)
+        injection = self._stacked(self.source_injections)
+        result.buses.extend(
+            self._result_rows(
+                ResultBus,
+                list(self.bus_indices),
+                frequencies,
+                {"uepr": potentials, "ia": electrode, "i_inj": injection},
             )
-            result.buses.append(result_bus)
+        )
 
         # Store the result in the network's results dictionary
         self.network.results[fault_name] = result
         self.results = result  # Also keep a reference in self.results
+
+    def _stacked(self, vectors: Dict[float, np.ndarray]) -> np.ndarray:
+        """Per-frequency bus vectors as one ``(n, F)`` array (zeros if absent).
+
+        Parameters
+        ----------
+        vectors : dict of float to numpy.ndarray
+            E.g. :attr:`u_vectors` or :attr:`source_injections`.
+
+        Returns
+        -------
+        numpy.ndarray
+            Column ``j`` is the vector of ``network.frequencies[j]``.
+        """
+        frequencies = self.network.frequencies
+        out = np.zeros((self.num_buses, len(frequencies)), dtype=complex)
+        for j, freq in enumerate(frequencies):
+            vector = vectors.get(freq)
+            if vector is not None:
+                out[:, j] = vector
+        return out
+
+    def _result_rows(
+        self,
+        model,
+        names: List[str],
+        frequencies: List[float],
+        columns: Dict[str, np.ndarray],
+    ) -> list:
+        """Build one result model per element from ``(element, F)`` arrays.
+
+        Every field ``key`` of ``columns`` becomes ``key`` (the RMS over all
+        frequencies, see :meth:`_calculate_rms`) and ``key + "_freq"`` (one
+        :class:`ComplexNumber` per frequency) on the model.
+
+        Parameters
+        ----------
+        model : type
+            :class:`ResultBus` or :class:`ResultBranch`.
+        names : list of str
+            Element names, one per row.
+        frequencies : list of float
+            Frequencies, one per column.
+        columns : dict of str to numpy.ndarray
+            Field name to complex array of shape ``(len(names), F)``.
+
+        Returns
+        -------
+        list
+            The result models, in row order.
+
+        Notes
+        -----
+        The values are taken out of the arrays with ``tolist()`` once rather
+        than indexed per element and frequency. The RMS is accumulated
+        frequency by frequency as ``sqrt(sum |x|**2)``, the convention of
+        :meth:`_calculate_rms`.
+        """
+        prepared = []
+        for key, values in columns.items():
+            square = np.zeros(values.shape[0])
+            for j in range(values.shape[1]):
+                magnitude = np.abs(values[:, j])
+                square += magnitude * magnitude
+            prepared.append(
+                (key, np.sqrt(square).tolist(), values.real.tolist(),
+                 values.imag.tolist())
+            )
+        rows = []
+        indexed = list(enumerate(frequencies))
+        for k, name in enumerate(names):
+            fields = {"name": name}
+            for key, rms, real, imag in prepared:
+                re_k, im_k = real[k], imag[k]
+                fields[key] = rms[k]
+                fields[key + "_freq"] = {
+                    freq: ComplexNumber(real=re_k[j], imag=im_k[j])
+                    for j, freq in indexed
+                }
+            rows.append(model(**fields))
+        return rows
 
     def compute_branch_currents(self):
         """
@@ -2583,59 +3034,40 @@ class ElectricalNetwork:
             raise ValueError(f"No results available for fault '{fault_name}'.")
 
         result = self.network.results[fault_name]
+        tables = self._network_tables()
+        frequencies = self.network.frequencies
 
-        for branch in self.network.branches.values():
-            i_s_freq = {}
-            # Inactive branches and branches with at least one inactive endpoint
-            # are open-circuited: their shield current is zero by construction.
-            is_open = (
-                not branch.active
-                or branch.from_bus not in self.bus_indices
-                or branch.to_bus not in self.bus_indices
-            )
-            if is_open:
-                for freq in self.network.frequencies:
-                    i_s_freq[freq] = ComplexNumber(real=0.0, imag=0.0)
-                rms_current = 0.0
-                result_branch = ResultBranch(
-                    name=branch.name, i_s=rms_current, i_s_freq=i_s_freq
+        # Inactive branches and branches with at least one inactive endpoint
+        # are open-circuited: their shield current is zero by construction, as
+        # is that of a branch without grounding conductor and of a frequency
+        # whose self impedance is missing or open. Everything else carries
+        # (u_to - u_from) * Y_self plus the stored mutual term, whose sign
+        # already combines with that difference (see _add_mutual_currents).
+        conducting = (
+            (tables.branch_in_net & tables.branch_grounding)[:, None]
+            & tables.self_present
+            & ~_open_mask(tables.self_z)
+        )
+        admittance = _reciprocal(tables.self_z, conducting)
+        potentials = self._stacked(self.u_vectors)
+        from_idx = np.where(tables.branch_from >= 0, tables.branch_from, 0)
+        to_idx = np.where(tables.branch_to >= 0, tables.branch_to, 0)
+        names = tables.branch_names
+        mutual = np.zeros(admittance.shape, dtype=complex)
+        for j, freq in enumerate(frequencies):
+            stored = self.i_mutuals.get(freq, {})
+            if stored:
+                mutual[:, j] = np.fromiter(
+                    (stored.get(name, 0) for name in names), dtype=complex,
+                    count=len(names),
                 )
-                result.branches.append(result_branch)
-                continue
-
-            from_idx = self.bus_indices[branch.from_bus]
-            to_idx = self.bus_indices[branch.to_bus]
-            for freq in self.network.frequencies:
-                from_voltage = self.u_vectors[freq][from_idx]
-                to_voltage = self.u_vectors[freq][to_idx]
-                Z_self_complex = self._resolved_impedance(
-                    branch.self_impedance.get(freq), freq
-                )
-                if (
-                    Z_self_complex is not None
-                    and branch.type.grounding_conductor
-                    and not _is_open_circuit(Z_self_complex)
-                ):
-                    Y_self_complex = 1 / Z_self_complex
-                    delta_voltage = to_voltage - from_voltage
-
-                    # Stored mutual term already carries the sign to combine with
-                    # delta_voltage = u_to - u_from. See _add_mutual_currents.
-                    i_mutual = self.i_mutuals.get(freq, {}).get(branch.name, 0)
-
-                    current = delta_voltage * Y_self_complex + i_mutual
-
-                    i_s_freq[freq] = ComplexNumber(real=current.real, imag=current.imag)
-                else:
-                    i_s_freq[freq] = ComplexNumber(real=0.0, imag=0.0)
-
-            # Calculate RMS current
-            rms_current = self._calculate_rms(i_s_freq)
-
-            result_branch = ResultBranch(
-                name=branch.name, i_s=rms_current, i_s_freq=i_s_freq
-            )
-            result.branches.append(result_branch)
+        current = np.zeros(admittance.shape, dtype=complex)
+        with np.errstate(over="ignore", invalid="ignore"):
+            delta = potentials[to_idx] - potentials[from_idx]
+            current[conducting] = (delta * admittance + mutual)[conducting]
+        result.branches.extend(
+            self._result_rows(ResultBranch, names, frequencies, {"i_s": current})
+        )
 
         # Update the result in the network's results dictionary
         self.network.results[fault_name] = result
@@ -2711,8 +3143,8 @@ class ElectricalNetwork:
         over 50 frequencies -- and did so with a *different* singularity
         treatment than the first solve, so the two paths could disagree
         about whether the same matrix was solvable. Frequencies without a
-        stored factor (``compute_reduction_factors`` called on its own) fall
-        back to the dense solve.
+        stored factor (``compute_reduction_factors`` called on its own)
+        factorise :attr:`Y_sparse` afresh with the same sparse LU.
         """
         fault_name = self.network.active_fault
         if fault_name is None:
@@ -2745,10 +3177,9 @@ class ElectricalNetwork:
                 # Solve for u_vector without mutual currents. The LU factors
                 # of Y(f) come from ``solve_network``; only a caller that
                 # skipped it has to pay for a fresh factorisation.
-                if lu is not None:
-                    u_vector = lu.solve(i_vector)
-                else:
-                    u_vector = np.linalg.solve(self.Y_matrices[freq], i_vector)
+                if lu is None:
+                    lu = splu(self.Y_sparse[freq])
+                u_vector = lu.solve(i_vector)
                 self.u_vectors_no_mutual[freq] = u_vector
 
             except (np.linalg.LinAlgError, RuntimeError) as e:
@@ -2908,7 +3339,7 @@ class ElectricalNetwork:
         The voltage one ampere injected at the bus raises the bus itself to,
         with every element of the solved matrix in place. Costs one
         triangular solve against the factorisation ``solve_network`` kept;
-        a frequency without a stored factor falls back to a dense solve.
+        a frequency without a stored factor factorises ``Y_sparse`` on its own.
 
         Parameters
         ----------
@@ -2926,10 +3357,9 @@ class ElectricalNetwork:
         unit[bus_idx] = 1.0
         lu = self._lu_factors.get(freq)
         try:
-            if lu is not None:
-                column = lu.solve(unit)
-            else:
-                column = np.linalg.solve(self.Y_matrices[freq], unit)
+            if lu is None:
+                lu = splu(self.Y_sparse[freq])
+            column = lu.solve(unit)
         except (np.linalg.LinAlgError, RuntimeError):
             return None
         value = complex(column[bus_idx])
@@ -2947,8 +3377,8 @@ class ElectricalNetwork:
         electrode and shield as assembled (0 Hz substitutes included), no
         coupling, no Thevenin loop closure. Without a voltage source ``Y_E``
         *is* the solved matrix and the value costs one triangular solve on
-        the factorisation ``solve_network`` kept; with one, ``Y_E`` is
-        factorised on its own.
+        the factorisation ``solve_network`` kept; with one, the sparse ``Y_E``
+        (:meth:`_earthing_admittance_sparse`) is factorised on its own.
 
         Parameters
         ----------
@@ -2965,7 +3395,7 @@ class ElectricalNetwork:
         values: Dict[float, Optional[complex]] = {}
         isolated: List[float] = []
         for freq in self.network.frequencies:
-            if freq not in self.Y_matrices:
+            if freq not in self.Y_sparse:
                 values[freq] = None
                 continue
             if not self.thevenin_loop_admittances(freq):
@@ -2974,7 +3404,7 @@ class ElectricalNetwork:
             unit = np.zeros(self.num_buses, dtype=complex)
             unit[bus_idx] = 1.0
             try:
-                lu = splu(csc_matrix(self.earthing_admittance_matrix(freq)))
+                lu = splu(self._earthing_admittance_sparse(freq))
                 value = complex(lu.solve(unit)[bus_idx])
             except (np.linalg.LinAlgError, RuntimeError):
                 value = None

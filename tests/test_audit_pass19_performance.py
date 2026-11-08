@@ -39,12 +39,16 @@ How the tests are organised -- and why every number is checked twice:
 
 from __future__ import annotations
 
+import gc
 import math
 import random
+import tracemalloc
+import warnings
 from typing import Dict, List
 
 import numpy as np
 import pytest
+import scipy.sparse as sp
 
 import groundinsight as gi
 from groundinsight import electrical_network as en_mod
@@ -188,7 +192,7 @@ def mesh(k: int, F: int = 7, n_sources: int = 1, freqs=None):
                     name=f"V{i}_{j}", type=CABLE, from_bus=f"M{i}_{j}",
                     to_bus=f"M{i + 1}_{j}", length=0.3, network=net,
                 )
-    corners = [f"M0_0", f"M{k - 1}_{k - 1}", f"M0_{k - 1}", f"M{k - 1}_0"]
+    corners = ["M0_0", f"M{k - 1}_{k - 1}", f"M0_{k - 1}", f"M{k - 1}_0"]
     return _finish(net, freqs, corners[:n_sources], f"M{k // 2}_{k // 2}")
 
 
@@ -646,3 +650,259 @@ def test_large_networks_against_a_refined_reference(name, builder):
         err_kernel = _relative(pkg[key], getattr(refined, key))
         err_dense = _relative(getattr(dense, key), getattr(refined, key))
         assert err_kernel <= max(2.0 * err_dense, 1e-13), (name, key, err_kernel, err_dense)
+
+
+# ---------------------------------------------------------------------------
+# 4. P2/P6: the assembled matrices
+# ---------------------------------------------------------------------------
+
+
+def _assembly_cases():
+    yield from ((f"rnd{s}", lambda s=s: random_network(s)) for s in range(0, 150, 5))
+    yield from STRUCTURED.items()
+
+
+@pytest.mark.parametrize("name,builder", list(_assembly_cases()))
+def test_sparse_assembly_equals_the_dense_reference(name, builder):
+    """``Y_sparse`` is the matrix the historic dense loops would have built.
+
+    Two references: the oracle with Python division (independent rounding,
+    normwise 1e-15) and the oracle with NumPy division and program-order
+    accumulation, which must be reproduced bit for bit -- that identity is what
+    makes the refined references of P13 references for *this* kernel.
+    """
+    net = builder()
+    net.set_active_fault("F")
+    # The assembly needs no solve: some of these networks have no solution
+    # (a floating island), but their matrices are still well defined.
+    en = en_mod.ElectricalNetwork(net, auto_phase_currents=True)
+    python_div = oracle.assemble(net, "F")
+    numpy_div = oracle.assemble(net, "F", division="numpy")
+    for freq in net.frequencies:
+        sparse_y = en.Y_sparse[freq]
+        assert sp.issparse(sparse_y) and sparse_y.format == "csc"
+        dense = sparse_y.toarray()
+        scale = np.abs(python_div[freq]).max()
+        assert np.abs(dense - python_div[freq]).max() <= 1e-15 * scale, name
+        assert np.array_equal(dense, numpy_div[freq]), name
+        # compatibility view: a dense copy of the same matrix, on demand
+        assert np.array_equal(en.Y_matrices[freq], dense)
+    assert set(en.Y_matrices) == set(net.frequencies)
+
+
+class _DenseGuard:
+    """Make every dense ``n x n`` allocation with ``n >= limit`` fail loudly."""
+
+    CREATORS = ("zeros", "empty", "ones", "full", "zeros_like", "empty_like")
+
+    def __init__(self, monkeypatch, limit: int = 500):
+        self.limit = limit
+        self.hits: List[str] = []
+        for name in self.CREATORS:
+            monkeypatch.setattr(np, name, self._wrap(getattr(np, name), name))
+        monkeypatch.setattr(np, "eye", self._wrap_eye(np.eye))
+        monkeypatch.setattr(np, "identity", self._wrap_eye(np.identity))
+        monkeypatch.setattr(np.linalg, "solve", self._wrap_solve(np.linalg.solve))
+        for cls in (sp.csc_matrix, sp.csr_matrix, sp.coo_matrix,
+                    sp.csc_array, sp.csr_array, sp.coo_array):
+            monkeypatch.setattr(cls, "toarray", self._wrap_method(cls.toarray))
+            monkeypatch.setattr(cls, "todense", self._wrap_method(cls.todense))
+
+    def _too_big(self, shape) -> bool:
+        if isinstance(shape, (int, np.integer)):
+            return False
+        dims = tuple(int(d) for d in shape)
+        return len(dims) >= 2 and min(dims[-2:]) >= self.limit
+
+    def _fail(self, what):
+        self.hits.append(what)
+        raise AssertionError(f"dense square allocation on the default path: {what}")
+
+    def _wrap(self, func, name):
+        def wrapped(shape, *args, **kwargs):
+            probe = getattr(shape, "shape", shape)
+            if self._too_big(probe):
+                self._fail(f"np.{name}{tuple(probe)}")
+            return func(shape, *args, **kwargs)
+        return wrapped
+
+    def _wrap_eye(self, func):
+        def wrapped(N, *args, **kwargs):
+            if int(N) >= self.limit:
+                self._fail(f"np.eye({N})")
+            return func(N, *args, **kwargs)
+        return wrapped
+
+    def _wrap_solve(self, func):
+        def wrapped(a, b, *args, **kwargs):
+            if self._too_big(np.shape(a)):
+                self._fail(f"np.linalg.solve{np.shape(a)}")
+            return func(a, b, *args, **kwargs)
+        return wrapped
+
+    def _wrap_method(self, func):
+        guard = self
+
+        def wrapped(matrix, *args, **kwargs):
+            if guard._too_big(matrix.shape):
+                guard._fail(f"{type(matrix).__name__}.toarray{matrix.shape}")
+            return func(matrix, *args, **kwargs)
+        return wrapped
+
+
+@pytest.mark.parametrize(
+    "builder",
+    [lambda: ring(600, F=3, n_sources=2), lambda: thevenin_ring(600, F=3)],
+    ids=["current sources", "Thevenin sources"],
+)
+def test_no_dense_square_matrix_on_the_default_path(monkeypatch, builder):
+    """P2: the default ``run_fault`` never materialises a dense ``n x n`` --
+    with Thevenin sources neither, where ``Z_E`` is taken from the earthing
+    matrix without the loop closures (PH4) and needs a factorisation of its
+    own."""
+    net = builder()
+    guard = _DenseGuard(monkeypatch)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # THEVENIN_COUPLING, PHASE_PROXY
+        gi.run_fault(net, "F")
+    assert guard.hits == []
+    assert net.results["F"].buses
+    z_e = net.results["F"].reduction_factor.z_earthing
+    assert all(z_e[f] is not None for f in net.frequencies)
+
+
+def test_the_earthing_matrix_is_the_solved_one_without_the_loop_closures():
+    """PH4 on the sparse kernel. ``thevenin_loop_admittances`` returns the
+    values stamped into ``Y_sparse`` bit for bit; ``earthing_admittance_matrix``
+    equals, bit for bit, ``Y - loops`` built densely here the way the dense
+    kernel defined it; and ``Z_E`` from the sparse factorisation agrees with a
+    dense solve of that matrix and with the oracle's driving point."""
+    net = thevenin_ring(40, F=3)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        gi.run_fault(net, "F")
+    en = net.electrical_network
+    k = en.bus_indices[net.faults["F"].bus]
+    reference = oracle.solve(net, "F", refine=2, division="numpy")
+    for j, f in enumerate(net.frequencies):
+        stamps = en.thevenin_loop_admittances(f)
+        assert [s for s, _, _ in stamps] == [en.bus_indices["B10"], en.bus_indices["B30"]]
+        solved = en.Y_matrices[f]
+        expected = solved.copy()
+        for s, fault_row, y in stamps:
+            assert fault_row == k
+            # no branch joins a source bus and the fault bus: the entry is the stamp
+            assert solved[s, k] == -y
+            expected[s, s] -= y
+            expected[k, k] -= y
+            expected[s, k] += y
+            expected[k, s] += y
+        assert np.array_equal(en.earthing_admittance_matrix(f), expected)
+        unit = np.zeros(expected.shape[0], dtype=complex)
+        unit[k] = 1.0
+        dense_z = complex(np.linalg.solve(expected, unit)[k])
+        z_e = complex(net.results["F"].reduction_factor.z_earthing[f])
+        assert abs(z_e - dense_z) <= 1e-13 * abs(dense_z)
+        assert abs(z_e - reference.z_dp[j]) <= 1e-12 * abs(reference.z_dp[j])
+
+
+def _peak_bytes(func) -> int:
+    gc.collect()
+    tracemalloc.start()
+    try:
+        func()
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+
+def test_peak_memory_is_linear_in_the_network_size():
+    """P2: no ``n**2 * F`` term left in the memory of ``run_fault``.
+
+    The dense kernel held one complex ``n x n`` matrix per frequency plus two
+    copies of the phase network: 150 MB at a 1000-bus ring with seven
+    frequencies, four times that at 2000 buses.
+    """
+    small, large = ring(1000, F=7), ring(2000, F=7)
+    peak_small = _peak_bytes(lambda: gi.run_fault(small, "F"))
+    peak_large = _peak_bytes(lambda: gi.run_fault(large, "F"))
+    assert peak_small < 60e6, f"{peak_small / 1e6:.0f} MB"
+    assert peak_large < 2.6 * peak_small, (peak_small, peak_large)
+
+
+# --- the fingerprint (P6) ----------------------------------------------------
+
+
+def _fingerprint_cases():
+    """Mutations that change the assembled ``Y`` and must be detected."""
+
+    def rho(net):
+        bus = net.buses["B3"]
+        bus.specific_earth_resistance = 500.0
+        bus.calculate_impedance(net.frequencies)
+
+    def bus_value(net):
+        z = net.buses["B4"].impedance[50.0]
+        net.buses["B4"].impedance[50.0] = gi.ComplexNumber(real=z.real * 2, imag=z.imag)
+
+    def bus_inactive(net):
+        net.buses["B5"].active = False
+
+    def branch_inactive(net):
+        net.branches["L2"].active = False
+
+    def rewire(net):
+        net.branches["L2"].to_bus = "B7"
+
+    def shield_value(net):
+        z = net.branches["L6"].self_impedance[100.0]
+        net.branches["L6"].self_impedance[100.0] = gi.ComplexNumber(
+            real=z.real, imag=z.imag * 1.5
+        )
+
+    def extra_key(net):
+        net.buses["B1"].impedance[999.0] = gi.ComplexNumber(real=1.0, imag=0.0)
+
+    def other_fault(net):
+        gi.create_fault(
+            name="F2", bus="B2", scalings={f: 1.0 for f in net.frequencies},
+            network=net,
+        )
+        net.set_active_fault("F2")
+
+    def thevenin(net):
+        source = net.sources["V0"]
+        z = source.source_impedance[50.0]
+        source.source_impedance[50.0] = gi.ComplexNumber(real=z.real + 1, imag=z.imag)
+
+    return {
+        "rho": rho, "bus_value": bus_value, "bus_inactive": bus_inactive,
+        "branch_inactive": branch_inactive, "rewire": rewire,
+        "shield_value": shield_value, "extra_key": extra_key,
+        "other_fault": other_fault, "thevenin": thevenin,
+    }
+
+
+@pytest.mark.parametrize("mutation", sorted(_fingerprint_cases()))
+def test_the_fingerprint_detects_every_change_of_the_assembled_system(mutation):
+    """Equal fingerprint <=> equal matrix, for each input of the assembly."""
+    net = thevenin_ring(12, F=2)
+    gi.run_fault(net, "F")
+    en = net.electrical_network
+    assert en.matches_network_state()
+    assert en.state_fingerprint() == en.state_fingerprint()
+    _fingerprint_cases()[mutation](net)
+    assert not en.matches_network_state()
+
+
+def test_the_fingerprint_ignores_what_the_assembly_does_not_read():
+    """Source values and mutual impedances never enter ``Y``."""
+    net = thevenin_ring(12, F=2)
+    gi.run_fault(net, "F")
+    en = net.electrical_network
+    net.sources["S0"].values[50.0] = gi.ComplexNumber(real=1.0, imag=0.0)
+    z = net.branches["L1"].mutual_impedance[50.0]
+    net.branches["L1"].mutual_impedance[50.0] = gi.ComplexNumber(
+        real=z.real, imag=z.imag * 3
+    )
+    assert en.matches_network_state()

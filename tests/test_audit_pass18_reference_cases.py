@@ -24,6 +24,7 @@ a row saying "agrees" about nothing.
 from __future__ import annotations
 
 import numpy as np
+import scipy.sparse
 import pytest
 
 import groundinsight as gi
@@ -94,6 +95,24 @@ def test_a_uniform_impedance_scaling_is_correctly_not_flagged(monkeypatch):
     monkeypatch.setattr(
         gi.electrical_network.ElectricalNetwork, "_resolved_impedance", scaled
     )
+    # Since audit pass 19 the assembly resolves the impedances as whole arrays
+    # (``_NetworkTables.resolve``, the vectorised twin of
+    # ``_resolved_impedance``), so the uniform scaling has to reach that path
+    # as well -- scaling only one of the two would be an inconsistent model,
+    # not a uniform one. Real and imaginary parts are scaled separately so an
+    # open end stays ``inf + inf*j``.
+    tables = gi.electrical_network._NetworkTables
+    real_resolve = tables.resolve
+
+    def scaled_tables(self, substitutes):
+        real_resolve(self, substitutes)
+        for name in ("bus_z", "self_z", "phase_z", "vs_z"):
+            values = getattr(self, name).copy()
+            values.real *= 1.1
+            values.imag *= 1.1
+            setattr(self, name, values)
+
+    monkeypatch.setattr(tables, "resolve", scaled_tables)
     assert _case("en50522_chain").evaluate()["agrees"]
 
 
@@ -163,14 +182,21 @@ def test_a_twenty_percent_bias_on_every_bus_admittance_is_caught(monkeypatch):
     real_construct = gi.electrical_network.ElectricalNetwork._construct_Y_matrices
 
     def biased(self):
+        # The solver factorises ``Y_sparse`` (audit pass 19, P2);
+        # ``Y_matrices`` is only a dense view of it, so the bias goes into
+        # the sparse matrices.
         real_construct(self)
-        for freq, matrix in self.Y_matrices.items():
+        for freq in list(self.Y_sparse):
+            bias = np.zeros(self.num_buses, dtype=complex)
             for name, idx in self.bus_indices.items():
                 z = self._resolved_impedance(
                     self.network.buses[name].impedance.get(freq), freq
                 )
                 if z is not None and np.isfinite(z) and z != 0:
-                    matrix[idx, idx] += 0.2 / z
+                    bias[idx] += 0.2 / z
+            self.Y_sparse[freq] = (
+                self.Y_sparse[freq] + scipy.sparse.diags(bias)
+            ).tocsc()
 
     monkeypatch.setattr(
         gi.electrical_network.ElectricalNetwork,

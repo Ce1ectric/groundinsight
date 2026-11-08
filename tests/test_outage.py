@@ -150,8 +150,11 @@ def test_default_solve_unchanged_versus_pre_change_baseline():
     e2 = _epr_at(net, "bus2")
     e3 = _epr_at(net, "bus3")
     assert e1 > 0 and e2 > 0 and e3 > 0
-    # Fault bus is the most stressed node in this topology
-    assert e3 == max(e1, e2, e3)
+    # Fault bus is the most stressed node in this topology -- jointly with the
+    # source bus, which carries the same EPR physically. The two differ in the
+    # last bit depending on the solver's rounding (audit pass 19, P13), so the
+    # comparison is relative, not bit-exact.
+    assert e3 == pytest.approx(max(e1, e2, e3), rel=1e-12)
 
 
 # ---------------------------------------------------------------------------

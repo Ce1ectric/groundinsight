@@ -283,6 +283,125 @@ def _quotient(a: complex, b: complex, division: str) -> complex:
     return a / b
 
 
+class _Model:
+    """Topology of one fault, and the per-frequency nodal assembly.
+
+    Shared by :func:`solve` and :func:`assemble`, so that the matrices the
+    assembly test compares are the ones the oracle solves.
+    """
+
+    def __init__(self, network, fault: str):
+        self.network = network
+        self.frequencies = [float(f) for f in network.frequencies]
+        self.names = [name for name, bus in network.buses.items() if bus.active]
+        self.index = {name: k for k, name in enumerate(self.names)}
+        self.n = len(self.names)
+        self.k_fault = self.index[network.faults[fault].bus]
+        self.branches = list(network.branches.values())
+        self.in_net = [
+            b.active and b.from_bus in self.index and b.to_bus in self.index
+            for b in self.branches
+        ]
+        self.vsources = [
+            s for s in network.sources.values() if s.source_type == "voltage"
+        ]
+        self.dc_sub = (
+            _dc_substitute(network, self.index) if 0.0 in self.frequencies else None
+        )
+
+    def resolver(self, f: float):
+        """``value -> complex`` with the 0 Hz stand-in applied (or ``None``)."""
+        sub = self.dc_sub if f == 0.0 else None
+
+        def resolved(z) -> Optional[complex]:
+            if z is None:
+                return None
+            value = complex(z.real, z.imag)
+            if sub is not None and is_short_circuit(value):
+                return complex(sub, 0.0)
+            return value
+
+        return resolved
+
+    def nodal(self, f: float, division: str):
+        """Stamps of the nodal matrix at ``f``.
+
+        Returns
+        -------
+        tuple
+            ``(bus_z, grid, y_grid, grid_only, full)``: the resolved bus
+            impedances, the grounding branches ``(branch, from, to, Z)`` that
+            carry an admittance, their admittances, and two assemblers -- the
+            earthing network alone and with the Thevenin loop closures.
+        """
+        resolved = self.resolver(f)
+        index, k_fault = self.index, self.k_fault
+        bus_z = [
+            resolved(self.network.buses[name].impedance.get(f)) for name in self.names
+        ]
+        grid: List[Tuple[int, int, int, complex]] = []
+        for b, branch in enumerate(self.branches):
+            if not (self.in_net[b] and branch.type.grounding_conductor):
+                continue
+            z = resolved(branch.self_impedance.get(f))
+            if z is None or _is_open(z):
+                continue
+            grid.append((b, index[branch.from_bus], index[branch.to_bus], z))
+        loops: List[Tuple[int, complex]] = []
+        for source in self.vsources:
+            s_idx = index.get(source.bus)
+            if s_idx is None or s_idx == k_fault:
+                continue
+            z = resolved((source.source_impedance or {}).get(f))
+            if z is None or _is_open(z):
+                continue
+            loops.append((s_idx, z))
+
+        usable_bus = [
+            (k, z) for k, z in enumerate(bus_z) if z is not None and not _is_open(z)
+        ]
+        y_bus = _reciprocals([z for _, z in usable_bus], division)
+        y_grid = _reciprocals([g[3] for g in grid], division)
+        y_loop = _reciprocals([z for _, z in loops], division)
+
+        grid_only = _Assembler(self.n)
+        for (k, _), y in zip(usable_bus, y_bus):
+            grid_only.stamp(k, k, y)
+        for (_, a, c, _), y in zip(grid, y_grid):
+            grid_only.branch(a, c, y)
+        full = _Assembler(self.n)
+        full.rows, full.cols, full.vals = (
+            list(grid_only.rows), list(grid_only.cols), list(grid_only.vals)
+        )
+        for (s_idx, _), y in zip(loops, y_loop):
+            full.stamp(s_idx, s_idx, y)
+            full.stamp(k_fault, k_fault, y)
+            full.stamp(s_idx, k_fault, -y)
+            full.stamp(k_fault, s_idx, -y)
+        return bus_z, grid, y_grid, grid_only, full
+
+
+def assemble(network, fault: str, *, division: str = "python") -> Dict[float, np.ndarray]:
+    """The dense nodal matrix per frequency, without solving anything.
+
+    Parameters
+    ----------
+    network : Network
+        The network.
+    fault : str
+        The fault whose bus closes the Thevenin loops.
+    division : {"python", "numpy"}, optional
+        Rounding of the admittances, see the module docstring.
+
+    Returns
+    -------
+    dict of float to numpy.ndarray
+        Frequency to dense ``Y``; also for a network whose system is singular.
+    """
+    model = _Model(network, fault)
+    return {f: model.nodal(f, division)[4].dense() for f in model.frequencies}
+
+
 def solve(
     network,
     fault: str,
@@ -322,20 +441,15 @@ def solve(
     admittance) is solved, and a source outside it contributes no phase
     current.
     """
-    freqs = [float(f) for f in network.frequencies]
+    model = _Model(network, fault)
+    freqs = model.frequencies
     fault_obj = network.faults[fault]
-    names = [name for name, bus in network.buses.items() if bus.active]
-    index = {name: k for k, name in enumerate(names)}
-    n = len(names)
-    k_fault = index[fault_obj.bus]
-    branches = list(network.branches.values())
+    names, index, n = model.names, model.index, model.n
+    k_fault = model.k_fault
+    branches, in_net = model.branches, model.in_net
     m = len(branches)
-    in_net = [
-        b.active and b.from_bus in index and b.to_bus in index for b in branches
-    ]
-    vsources = [s for s in network.sources.values() if s.source_type == "voltage"]
     reaching = network.sources_reaching(fault)
-    dc_sub = _dc_substitute(network, index) if 0.0 in freqs else None
+    dc_sub = model.dc_sub
 
     nF = len(freqs)
     dtype = np.clongdouble if refine else complex
@@ -352,16 +466,7 @@ def solve(
     electrode: List[Dict[str, complex]] = []
 
     for j, f in enumerate(freqs):
-        sub = dc_sub if f == 0.0 else None
-
-        def resolved(z) -> Optional[complex]:
-            if z is None:
-                return None
-            value = complex(z.real, z.imag)
-            if sub is not None and is_short_circuit(value):
-                return complex(sub, 0.0)
-            return value
-
+        resolved = model.resolver(f)
         scaling = fault_obj.scaling_at(f)
 
         def injection(source) -> Optional[complex]:
@@ -379,46 +484,7 @@ def solve(
             return scaling * complex(u_emf.real, u_emf.imag) / z_src
 
         # --- nodal admittance: buses, grounding branches, Thevenin closures --
-        bus_z = [resolved(network.buses[name].impedance.get(f)) for name in names]
-        grid: List[Tuple[int, int, int, complex]] = []  # (branch, from, to, Z)
-        for b, branch in enumerate(branches):
-            if not (in_net[b] and branch.type.grounding_conductor):
-                continue
-            z = resolved(branch.self_impedance.get(f))
-            if z is None or _is_open(z):
-                continue
-            grid.append((b, index[branch.from_bus], index[branch.to_bus], z))
-        loops: List[Tuple[int, complex]] = []
-        for source in vsources:
-            s_idx = index.get(source.bus)
-            if s_idx is None or s_idx == k_fault:
-                continue
-            z = resolved((source.source_impedance or {}).get(f))
-            if z is None or _is_open(z):
-                continue
-            loops.append((s_idx, z))
-
-        usable_bus = [
-            (k, z) for k, z in enumerate(bus_z) if z is not None and not _is_open(z)
-        ]
-        y_bus = _reciprocals([z for _, z in usable_bus], division)
-        y_grid = _reciprocals([g[3] for g in grid], division)
-        y_loop = _reciprocals([z for _, z in loops], division)
-
-        grid_only = _Assembler(n)
-        for (k, _), y in zip(usable_bus, y_bus):
-            grid_only.stamp(k, k, y)
-        for (_, a, c, _), y in zip(grid, y_grid):
-            grid_only.branch(a, c, y)
-        full = _Assembler(n)
-        full.rows, full.cols, full.vals = (
-            list(grid_only.rows), list(grid_only.cols), list(grid_only.vals)
-        )
-        for (s_idx, _), y in zip(loops, y_loop):
-            full.stamp(s_idx, s_idx, y)
-            full.stamp(k_fault, k_fault, y)
-            full.stamp(s_idx, k_fault, -y)
-            full.stamp(k_fault, s_idx, -y)
+        bus_z, grid, y_grid, grid_only, full = model.nodal(f, division)
         Y = full.sparse() if sparse else full.dense()
         if not sparse:
             Ys[f] = Y
