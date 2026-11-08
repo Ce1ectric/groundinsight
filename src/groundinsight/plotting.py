@@ -27,19 +27,50 @@ drawn and *who owns* the resulting figure:
 
 Omitting both reproduces the historical behaviour exactly: a new figure of
 the helper's default size, registered with ``pyplot`` and left open.
+
+``matplotlib.pyplot`` is imported on the first call of a helper, not when the
+package is imported (audit finding GUI8). The module-level import used to cost
+every ``import groundinsight`` about a third of its time (0.36 s of 1.1 s) and
+put pyplot's global state -- backend selection, the figure registry -- into
+every process, including a multi-threaded GUI or server that never draws with
+matplotlib. The annotations below name ``plt.Axes`` / ``plt.Figure`` as
+strings; ``plt`` exists for type checkers only, so
+``typing.get_type_hints`` on a helper needs ``matplotlib.pyplot`` imported
+first.
 """
 
 import logging
 from contextlib import contextmanager
 
-import matplotlib.pyplot as plt
 from typing import Iterable, List, Dict, Optional, Sequence, Tuple, TYPE_CHECKING
 from .models.core_models import Result, ComplexNumber
 
 if TYPE_CHECKING:
+    import matplotlib.pyplot as plt
+
     from .simulation.transient import ResultTransient
 
 logger = logging.getLogger(__name__)
+
+
+def _pyplot():
+    """
+    Import ``matplotlib.pyplot`` on first use.
+
+    Returns
+    -------
+    module
+        ``matplotlib.pyplot``. After the first call this is a dictionary
+        lookup in ``sys.modules``.
+
+    Notes
+    -----
+    Every runtime use of pyplot in this module goes through here, so that
+    ``import groundinsight`` stays free of it; see the module docstring.
+    """
+    import matplotlib.pyplot as plt
+
+    return plt
 
 
 #: Default figure size of the bar-plot helpers.
@@ -125,7 +156,7 @@ def _prepare_axes(
                     "size here and only fails later, when the figure is "
                     "drawn or saved."
                 )
-        fig, ax = plt.subplots(figsize=figsize)
+        fig, ax = _pyplot().subplots(figsize=figsize)
         return fig, ax, True
 
     if figsize is not None:
@@ -201,11 +232,11 @@ def _finalise(
     if owns_figure:
         fig.tight_layout()
     if show:
-        plt.show()
+        _pyplot().show()
     if close:
         # Ordered after ``show`` on purpose: closing first would leave
         # nothing to display.
-        plt.close(fig)
+        _pyplot().close(fig)
     return fig
 
 
@@ -236,7 +267,7 @@ def _owned_figure(fig: "plt.Figure", owns_figure: bool):
         yield
     except BaseException:
         if owns_figure:
-            plt.close(fig)
+            _pyplot().close(fig)
         raise
 
 

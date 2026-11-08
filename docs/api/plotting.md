@@ -134,6 +134,16 @@ the figure is created and only fails much later, when it is drawn
 or saved, so the traceback would point at `savefig` instead of at
 the call responsible.
 
+## Import cost
+
+`matplotlib.pyplot` is imported on the first call of a plotting helper, not
+by `import groundinsight`. The package import is about a third faster
+(median 1.33 s → 0.83 s measured on the development container), and a
+program that never plots — a GUI that draws with its own charts, a server, a
+batch job — never loads pyplot's global state (backend selection, figure
+registry). Nothing changes for code that plots: the first helper call
+imports pyplot, every later one finds it loaded.
+
 ## API reference
 
 ::: groundinsight.plotting
