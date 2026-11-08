@@ -21,9 +21,36 @@ strict build stops instead of publishing a page without its table.
 
 import logging
 import sys
+import types
 from pathlib import Path
 
 logger = logging.getLogger("mkdocs.hooks.reference_cases")
+
+
+def _load_result_tables():
+    """
+    Load the sibling hook ``result_tables.py`` from its file.
+
+    It writes the column tables of ``reference/results.md``. Until
+    ``mkdocs.yml`` lists it under ``hooks:`` itself, :func:`on_page_markdown`
+    hands every page on to it; running it twice is harmless, because the
+    second run finds no marker left. The source is executed rather than
+    imported, so nothing depends on ``sys.path`` and no bytecode is written
+    into ``docs/``.
+
+    Returns
+    -------
+    module
+        The loaded hook module.
+    """
+    path = Path(__file__).resolve().with_name("result_tables.py")
+    module = types.ModuleType("result_tables_hook")
+    module.__file__ = str(path)
+    exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), module.__dict__)
+    return module
+
+
+result_tables = _load_result_tables()
 
 MARKER = "<!-- reference-cases-table -->"
 _SRC = Path(__file__).resolve().parents[2] / "src"
@@ -133,6 +160,7 @@ def on_page_markdown(markdown, *, page, config, files):
     str
         The source with the marker replaced, or unchanged without a marker.
     """
+    markdown = result_tables.render(markdown)
     if MARKER not in markdown:
         return markdown
     logger.debug("Generating the reference-case table")
