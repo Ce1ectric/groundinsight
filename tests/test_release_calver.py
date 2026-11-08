@@ -161,7 +161,12 @@ def test_citation_date_released_is_written(tmp_path, has_date):
 
 def _git(*args, cwd):
     return subprocess.run(
-        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     ).stdout
 
 
@@ -209,7 +214,7 @@ def test_explicit_set_must_match_the_release_month(tmp_path, monkeypatch):
     monkeypatch.setattr(release, "_repo_root", lambda: tmp_path)
     assert release.main(["set", "2026.10.0", "--no-push", "--date", "2026-11-20"]) == 2
     # nothing was rewritten
-    assert 'version = "0.6.0"' in (tmp_path / "pyproject.toml").read_text()
+    assert 'version = "0.6.0"' in (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("kind", ["major", "minor", "patch"])

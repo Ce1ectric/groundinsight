@@ -553,10 +553,10 @@ def test_a_network_restored_from_json_is_validated(tmp_path):
     path = tmp_path / "p15.json"
     gi.save_network_to_json(net, str(path))
 
-    raw = json.loads(path.read_text())
+    raw = json.loads(path.read_text(encoding="utf-8"))
     for key in raw["buses"]["B"]["impedance"]:
         raw["buses"]["B"]["impedance"][key] = {"real": 0.0, "imag": 0.0}
-    path.write_text(json.dumps(raw))
+    path.write_text(json.dumps(raw), encoding="utf-8")
 
     restored = gi.load_network_from_json(str(path))
     assert restored.buses["B"].impedance[50.0].real == 0.0

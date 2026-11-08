@@ -621,3 +621,65 @@ def test_pip_audit_itself_is_pinned_and_kept_current():
     assert re.search(
         r'package-ecosystem:\s*"pip"\s*\n\s*directory:\s*"/\.github/audit"', dependabot
     ), dependabot
+
+
+# ---------------------------------------------------------------------------
+# REL7 / F10 -- macOS and Windows
+# ---------------------------------------------------------------------------
+
+
+def test_macos_and_windows_run_the_floor_and_the_newest_python():
+    """REL7: the maintainer and most users are not on Linux. The two ends of
+    the supported range cover what differs by platform (paths, encodings,
+    SQLite file locking); the middle version adds nothing there."""
+    combos = _text_test_matrix(_text("ci.yml"))
+    pythons = _declared_pythons()
+    for os_name in ("macos-latest", "windows-latest"):
+        assert {(os_name, pythons[0]), (os_name, pythons[-1])} <= combos, os_name
+
+
+def _test_job() -> str:
+    """
+    Source of the ``test`` job of ``ci.yml``.
+
+    Returns
+    -------
+    str
+        The job's lines joined with newlines.
+    """
+    return "\n".join(_jobs(_text("ci.yml"))["test"])
+
+
+def test_the_test_job_runs_the_same_way_on_every_runner():
+    job = _test_job()
+    # snok/install-poetry requires bash on Windows; PowerShell is the default.
+    assert re.search(r"^\s*shell:\s*bash\s*$", job, re.MULTILINE)
+    # macOS and Windows runners default to GUI backends; tests that plot
+    # must not depend on a window server.
+    assert re.search(r"^\s*MPLBACKEND:\s*Agg\s*$", job, re.MULTILINE)
+
+
+def test_the_test_job_settings_agree_with_yaml():
+    """Second method for the two settings above."""
+    job = _yaml("ci.yml")["jobs"]["test"]
+    assert job["defaults"]["run"]["shell"] == "bash"
+    assert job["env"]["MPLBACKEND"] == "Agg"
+
+
+def test_the_virtualenv_cache_is_not_restored_on_windows():
+    """snok/install-poetry documents that a cached .venv stalls Windows jobs."""
+    caches = [step for step in _steps(_jobs(_text("ci.yml"))["test"]) if "actions/cache@" in step]
+    assert len(caches) == 1
+    assert re.search(r"^\s*if:\s*runner\.os\s*!=\s*'Windows'\s*$", caches[0], re.MULTILINE)
+
+
+def test_coverage_is_uploaded_by_exactly_one_matrix_job():
+    """upload-artifact refuses a second artifact of the same name in a run,
+    and 3.14 now runs on three operating systems."""
+    uploads = [
+        step for step in _steps(_jobs(_text("ci.yml"))["test"]) if "upload-artifact@" in step
+    ]
+    assert len(uploads) == 1
+    condition = re.search(r"^\s*if:\s*(.+)$", uploads[0], re.MULTILINE).group(1)
+    assert "matrix.os == 'ubuntu-latest'" in condition
+    assert f"matrix.python-version == '{_declared_pythons()[-1]}'" in condition

@@ -27,10 +27,18 @@ groundinsight never imports PIL -- matplotlib is the only consumer and asks for
 ``pillow>=8`` -- so the direct declaration is a security floor and nothing
 else, and it carries no upper bound: a cap is what kept every fix out of
 reach, and it would do the same to the next one.
+
+REL7 -- CI now also runs on Windows, where Python 3.12-3.14 decode text files
+with the ANSI code page unless told otherwise. The tests therefore name their
+encoding wherever they read or write text; a scan over ``tests/`` keeps it so.
+The same sites were found a second way, by running the suite under
+``-X warn_default_encoding`` (``EncodingWarning``), which also caught a
+``subprocess.run(..., text=True)`` that the first version of the scan missed.
 """
 
 from __future__ import annotations
 
+import ast
 import re
 import shutil
 import subprocess
@@ -389,3 +397,126 @@ def test_print_mode_lists_the_pins_without_auditing(capsys):
     assert audit.main(["--print"]) == 0
     printed = capsys.readouterr().out.split()
     assert sorted(printed) == sorted(_raw_lock_pins())
+
+
+# ---------------------------------------------------------------------------
+# REL7 -- the tests do not depend on the platform's default encoding
+# ---------------------------------------------------------------------------
+
+_TEXT_PROCESS_CALLS = {"run", "check_output", "Popen", "check_call", "call"}
+
+
+def _keyword(node: ast.Call, name: str):
+    """
+    The value node of keyword argument ``name``, or ``None``.
+
+    Parameters
+    ----------
+    node : ast.Call
+        The call.
+    name : str
+        Keyword name.
+
+    Returns
+    -------
+    ast.expr or None
+        The argument's value.
+    """
+    return next((kw.value for kw in node.keywords if kw.arg == name), None)
+
+
+def _is_binary_mode(mode) -> bool:
+    """
+    Whether an ``open`` mode argument is a literal containing ``"b"``.
+
+    Parameters
+    ----------
+    mode : ast.expr or None
+        The mode argument.
+
+    Returns
+    -------
+    bool
+        ``True`` only for a literal binary mode.
+    """
+    return isinstance(mode, ast.Constant) and isinstance(mode.value, str) and "b" in mode.value
+
+
+def _default_encoding_calls(source: str) -> list:
+    """
+    Calls that read or write text with the platform's default encoding.
+
+    Covers ``open(...)`` / ``Path.open(...)`` in text mode, ``read_text()`` /
+    ``write_text()`` and ``subprocess`` calls with ``text=True`` or
+    ``universal_newlines=True`` -- each without ``encoding=``.
+
+    Parameters
+    ----------
+    source : str
+        Python source code.
+
+    Returns
+    -------
+    list of tuple
+        ``(line number, call name)`` per offending call.
+    """
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call) or _keyword(node, "encoding") is not None:
+            continue
+        func = node.func
+        name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+        owner = func.value.id if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) else None
+        if name == "open" and owner != "os":
+            builtin_style = isinstance(func, ast.Name) or owner in ("io", "builtins", "codecs")
+            positional = node.args[1:2] if builtin_style else node.args[0:1]
+            mode = _keyword(node, "mode") or (positional[0] if positional else None)
+            if not _is_binary_mode(mode):
+                found.append((node.lineno, "open"))
+        elif name == "read_text" and not node.args:
+            found.append((node.lineno, name))
+        elif name == "write_text" and len(node.args) < 2:
+            found.append((node.lineno, name))
+        elif name in _TEXT_PROCESS_CALLS and owner == "subprocess":
+            for flag in ("text", "universal_newlines"):
+                value = _keyword(node, flag)
+                if isinstance(value, ast.Constant) and value.value is True:
+                    found.append((node.lineno, f"subprocess.{name}({flag}=True)"))
+    return found
+
+
+def test_the_encoding_scan_recognises_what_it_is_meant_to_find():
+    source = (
+        "import subprocess\n"
+        "open('a')\n"
+        "open('a', 'w')\n"
+        "open('a', 'rb')\n"
+        "open('a', encoding='utf-8')\n"
+        "p.open('w')\n"
+        "p.open('rb')\n"
+        "p.read_text()\n"
+        "p.read_text(encoding='utf-8')\n"
+        "p.write_text('x')\n"
+        "p.write_text('x', 'utf-8')\n"
+        "subprocess.run(['git'], text=True)\n"
+        "subprocess.run(['git'], text=True, encoding='utf-8')\n"
+        "subprocess.run(['git'], capture_output=True)\n"
+        "os.open('a', 0)\n"
+    )
+    assert _default_encoding_calls(source) == [
+        (2, "open"),
+        (3, "open"),
+        (6, "open"),
+        (8, "read_text"),
+        (10, "write_text"),
+        (12, "subprocess.run(text=True)"),
+    ]
+
+
+def test_tests_name_the_encoding_of_every_text_file_they_touch():
+    """REL7: a cp1252 default would garble any non-ASCII byte on Windows."""
+    findings = []
+    for path in sorted((ROOT / "tests").glob("*.py")):
+        for lineno, call in _default_encoding_calls(path.read_text(encoding="utf-8")):
+            findings.append(f"{path.name}:{lineno} {call}")
+    assert findings == []
