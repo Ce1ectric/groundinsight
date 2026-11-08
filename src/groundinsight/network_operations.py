@@ -14,7 +14,7 @@ import warnings
 
 from .diagnostics import ModelAssumptionWarning, collecting, emit, unique
 from .models.core_models import Network, Bus, BusType, Branch, BranchType, Fault, Source
-from .utils.compat import renamed_parameters
+from .utils.compat import renamed_parameters, warn_stacklevel
 from typing import Optional, List, Dict
 
 
@@ -720,7 +720,7 @@ def _resolve_phase_current_mode(
         # every linting/CI setup that watches for removals see -- and the
         # library default is a NullHandler, so the log line alone reaches
         # nobody who has not configured logging.
-        warnings.warn(message, DeprecationWarning, stacklevel=3)
+        warnings.warn(message, DeprecationWarning, stacklevel=warn_stacklevel(3))
         logger.warning("%s", message)
         return bool(auto_parallel_coefficients)
     return phase_current_mode == "auto"

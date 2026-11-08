@@ -28,6 +28,7 @@ import pytest
 
 import groundinsight as gi
 from groundinsight import pathfinder
+from groundinsight.diagnostics import InputWarning, ModelAssumptionWarning
 from groundinsight.models.core_models import ComplexNumber
 
 FREQ = [50.0, 250.0]
@@ -674,6 +675,51 @@ def test_thermal_range_errors_name_the_canonical_keyword(check, kwargs, message)
     net = _thermal_network()
     with pytest.raises(ValueError, match=message):
         getattr(gi, check)(net, "F", kappa=1.8, **kwargs)
+
+
+def _locations(record, category, code=None):
+    """Files the matching warnings of a record are attributed to."""
+    return {
+        w.filename for w in record
+        if issubclass(w.category, category)
+        and (code is None or getattr(w.message, "code", None) == code)
+    }
+
+
+def test_warnings_under_a_renamed_parameter_point_at_the_caller():
+    """The alias decorator puts one frame between the caller and the
+    function. A warning the function raises *for its caller* must not stop at
+    that frame: Python shows a DeprecationWarning only when it is attributed
+    to ``__main__``, so one attributed to the package is hidden, and every
+    other warning would name ``utils/compat.py`` as its location."""
+    net = _thermal_network()
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        gi.run_fault(net, "F", auto_parallel_coefficients=False)
+    assert _locations(record, DeprecationWarning) == {__file__}
+
+    net.sources["SRC"].r_to_x = None
+    net.sources["SRC"].kappa = None
+    gi.create_source("SRC2", "S", {50.0: 1000.0}, network=net, r_to_x=0.1)
+    gi.create_source("SRC3", "S", {50.0: 1000.0}, network=net, r_to_x=0.3)
+    gi.run_fault(net, "F")
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        gi.resolve_fault_sc_characteristics(net, "F")
+    assert _locations(record, ModelAssumptionWarning, "SC_KAPPA_MIXED") == {__file__}
+    assert _locations(record, InputWarning, "SC_DATA_INCOMPLETE") == {__file__}
+
+    half = gi.BranchType(
+        name="half", grounding_conductor=True, conductor_material="Cu",
+        self_impedance_formula="(0.25 + j*f*0.012)*l",
+        mutual_impedance_formula="(0.05 + j*f*0.012)*l",
+    )
+    net.update_branch("SA", type=half)
+    gi.run_fault(net, "F")
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        gi.check_conductor_limits(net, "F", t_k_s=0.5, kappa=1.8)
+    assert _locations(record, InputWarning, "THERMAL_DATA_INCOMPLETE") == {__file__}
 
 
 def test_iec60909_primitives_accept_the_old_names():

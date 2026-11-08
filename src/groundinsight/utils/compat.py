@@ -33,12 +33,13 @@ A decorator rather than ``**kwargs`` in each signature, because
 import functools
 import inspect
 import logging
+import sys
 import warnings
 from typing import Any, Callable, Dict, TypeVar
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["DEPRECATION_POLICY", "renamed_parameters"]
+__all__ = ["DEPRECATION_POLICY", "renamed_parameters", "warn_stacklevel"]
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -55,6 +56,58 @@ _POSITIONAL_KINDS = (
     inspect.Parameter.POSITIONAL_ONLY,
     inspect.Parameter.POSITIONAL_OR_KEYWORD,
 )
+
+
+def warn_stacklevel(stacklevel: int) -> int:
+    """
+    The ``stacklevel`` for a :func:`warnings.warn` call, alias wrappers not counted.
+
+    :func:`renamed_parameters` puts one frame of this module between a caller
+    and the decorated function. A warning that the function raises with a
+    ``stacklevel`` aimed at its caller would stop at that frame -- and a
+    ``DeprecationWarning`` attributed to the package instead of ``__main__``
+    is hidden by Python's default filters. Call this function from the frame
+    that calls :func:`warnings.warn` and pass the level that would be right
+    without any wrapper; the result counts the wrapper frames in between as
+    well. (``warnings.warn(skip_file_prefixes=...)`` does the same on Python
+    3.14, but Python 3.12 never matches a prefix that is a complete file
+    name, so the count is done here.)
+
+    Parameters
+    ----------
+    stacklevel : int
+        The level as for :func:`warnings.warn`, counted from the calling
+        frame (``1``), with the wrapper frames of this module left out.
+
+    Returns
+    -------
+    int
+        The level to pass to :func:`warnings.warn` from the calling frame.
+
+    Examples
+    --------
+    A warning meant for the caller of a function with a renamed parameter:
+
+    >>> import warnings
+    >>> @renamed_parameters(old_name="name")
+    ... def api(name=None):
+    ...     warnings.warn("for the caller", UserWarning, stacklevel=warn_stacklevel(2))
+    >>> with warnings.catch_warnings(record=True) as caught:
+    ...     warnings.simplefilter("always")
+    ...     api()
+    >>> caught[0].filename.startswith("<doctest")  # not this module
+    True
+    """
+    frame = sys._getframe(1)
+    level = 1
+    remaining = int(stacklevel) - 1
+    while remaining > 0 and frame.f_back is not None:
+        frame = frame.f_back
+        level += 1
+        if frame.f_code.co_filename == __file__:
+            continue  # a wrapper frame of renamed_parameters: not counted
+        remaining -= 1
+    return level
 
 
 def _display_name(func: Callable[..., Any]) -> str:

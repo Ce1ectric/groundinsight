@@ -643,7 +643,7 @@ def resolve_fault_sc_characteristics(
             f"for an exact mixed-R/X result.",
             code="SC_KAPPA_MIXED",
             elements=[("source", name) for name in kappas] + [("fault", fault)],
-            stacklevel=3,
+            stacklevel=2,
         )
     if without_kappa:
         share = weight_without_kappa / i_k_total if i_k_total > 0 else 0.0
@@ -664,7 +664,7 @@ def resolve_fault_sc_characteristics(
             f"i_p applies it to the whole current.{majority}",
             code="SC_DATA_INCOMPLETE",
             elements=[("source", name) for name in without_kappa] + [("fault", fault)],
-            stacklevel=3,
+            stacklevel=2,
         )
 
     r_to_x_eff = None

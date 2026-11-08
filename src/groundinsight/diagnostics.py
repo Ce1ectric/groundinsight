@@ -44,6 +44,8 @@ from typing import Iterator, List, Literal, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, ConfigDict
 
+from groundinsight.utils.compat import warn_stacklevel
+
 ElementRef = Tuple[str, str]
 
 _SEVERITIES = ("info", "warning", "error")
@@ -201,6 +203,10 @@ def emit(
         Defaults to ``"warning"``.
     stacklevel : int, optional
         As for :func:`warnings.warn`, counted from the caller of ``emit``.
+        The frames of the parameter-alias wrapper are not counted (see
+        :func:`groundinsight.utils.compat.warn_stacklevel`), so a level aimed
+        at the caller of a public function reaches it whether or not the
+        function has a renamed parameter.
 
     Raises
     ------
@@ -213,7 +219,7 @@ def emit(
             f"{category!r}"
         )
     warning = category(message, code=code, elements=elements, severity=severity)
-    warnings.warn(warning, stacklevel=stacklevel + 1)
+    warnings.warn(warning, stacklevel=warn_stacklevel(stacklevel + 1))
 
 
 @contextlib.contextmanager
