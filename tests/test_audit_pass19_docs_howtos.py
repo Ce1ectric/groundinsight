@@ -795,3 +795,70 @@ def test_service_page_names_the_building_blocks():
                    "session.submit_solve(", "`FaultResultDTO`", "json_schemas()", "groundinsight run",
                    "groundinsight check", "groundinsight-gui", "exit code"):
         assert phrase in text, phrase
+
+
+# ---------------------------------------------------------------------------
+# EN 50522 check -- the key figures of res_fault
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def en50522():
+    return run_snippet("en50522_check.py")
+
+
+def test_en50522_key_figures_are_the_stated_ones(en50522):
+    """The last printed lines are the block the guide states for them."""
+    _ns, stdout, _records = en50522
+    stated = [
+        line.rstrip()
+        for line in stated_output("howto/en50522-check.md", "en50522_check.py, last lines")
+        .strip("\n").splitlines()
+    ]
+    printed = [line.rstrip() for line in stdout.strip("\n").splitlines()]
+    assert printed[-len(stated):] == stated
+
+
+def test_en50522_page_maps_the_symbols_to_the_res_fault_columns():
+    text = _flat(_page("howto/en50522-check.md"))
+    for column in ("U_E_V", "Z_E_Ohm", "r_current", "I_E_A", "I_F_A"):
+        assert f"`{column}` of `res_fault()`" in text or f"`{column}`, " in text, column
+    assert "net.res_fault(fault)" in text
+
+
+def test_en50522_key_figures_by_the_reference_solver(en50522):
+    """
+    Every figure of the frame, recomputed with the independent reference solver.
+
+    ``I_F`` is the sum of the source currents, ``U_E`` the potential of the
+    fault bus, ``Z_E`` the driving-point impedance of the earthing network at
+    the fault bus, ``I_E`` the earth-return group of the electrode currents
+    (brute-force half-plane split) and ``r = |I_E| / |I_F|``; the RMS row is
+    the root sum of squares, without ratio and impedance.
+    """
+    ns, _stdout, _records = en50522
+    net, fault_bus = ns["net"], ns["FAULT_BUS"]
+    frame = ns["KEY_FIGURES"]
+    rows = {row["frequency_Hz"]: row for row in frame.iter_rows(named=True) if not row["is_rms"]}
+    squares = {"I_F_A": 0.0, "I_E_A": 0.0, "U_E_V": 0.0}
+    for f in ns["FREQUENCIES"]:
+        rd = ref.reference_network(net, f, "F")
+        solution = ref.solve_oneway(rd)
+        mapped = ref.to_package_frame(solution)
+        i_earth, _group = ref.half_plane_split(mapped["ia"], rd["fault_bus"])
+        expected = {
+            "I_F_A": abs(solution["I_F"]),
+            "U_E_V": abs(mapped["u"][fault_bus]),
+            "Z_E_Ohm": abs(ref.driving_point_impedance(rd, fault_bus)),
+            "I_E_A": abs(i_earth),
+            "r_current": abs(i_earth) / abs(solution["I_F"]),
+        }
+        for column, value in expected.items():
+            assert rows[f][column] == pytest.approx(value, rel=1e-9), (f, column)
+        for column in squares:
+            squares[column] += expected[column] ** 2
+    rms = frame.filter(pl.col("is_rms")).row(0, named=True)
+    for column, total in squares.items():
+        assert rms[column] == pytest.approx(math.sqrt(total), rel=1e-9), column
+    assert rms["r_current"] is None and rms["Z_E_Ohm"] is None
+    assert rms["U_E_V"] == pytest.approx(ns["U_E_RMS"], rel=1e-12)

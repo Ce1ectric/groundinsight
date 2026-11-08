@@ -35,11 +35,11 @@ EN 50522. It does **not** compute:
 
 | EN 50522 | Meaning | groundinsight | In the tables |
 |---|---|---|---|
-| `3I_0` | earth-fault current at the fault location | `ResultReductionFactor.i_fault` — the source currents that reach the fault, times the fault scalings | – |
-| `r` | reduction factor | `ResultReductionFactor.value_current` | `reduction_factor_current` of `res_all_impedances()` |
-| `I_E` | earth current, `r·3I_0` | `ResultReductionFactor.i_earth` | – |
-| `Z_E` | earthing impedance | `ResultReductionFactor.z_earthing`, equal to `ResultGroundingImpedance.value` | `grounding_impedance_Ohm` of `res_all_impedances()` |
-| `U_E` | earth potential rise | `ResultReductionFactor.u_earthing`, equal to the `uepr_freq` of the fault bus | `EPR_V` of the fault bus in `res_buses()` |
+| `3I_0` | earth-fault current at the fault location | `ResultReductionFactor.i_fault` — the source currents that reach the fault, times the fault scalings | `I_F_A` of `res_fault()` |
+| `r` | reduction factor | `ResultReductionFactor.value_current` | `r_current` of `res_fault()`; `reduction_factor_current` of `res_all_impedances()` |
+| `I_E` | earth current, `r·3I_0` | `ResultReductionFactor.i_earth` | `I_E_A` of `res_fault()` |
+| `Z_E` | earthing impedance | `ResultReductionFactor.z_earthing`, equal to `ResultGroundingImpedance.value` | `Z_E_Ohm`, `Z_E_degree` of `res_fault()`; `grounding_impedance_Ohm` of `res_all_impedances()` |
+| `U_E` | earth potential rise | `ResultReductionFactor.u_earthing`, equal to the `uepr_freq` of the fault bus | `U_E_V` of `res_fault()`; `EPR_V` of the fault bus in `res_buses()` |
 | `U_T`, `U_vT` | touch voltage, prospective touch voltage | not computed | – |
 | `U_Tp` | permissible touch voltage | not part of the package | EN 50522:2022, 5.4.1 and Annexes A, B |
 | `t_F` | fault duration | not used by the solve | from the protection |
@@ -70,7 +70,9 @@ EN 50522. It does **not** compute:
    the stations. Put the fault current at the infeed as `Source.values`, the
    fault at the station under study.
 3. **Solve and read** `U_E`, `Z_E`, `I_E` and `r` per frequency, and `U_E` as
-   the total RMS over the frequencies (see [Harmonics and DC](#harmonics-and-dc)).
+   the total RMS over the frequencies (see [Harmonics and DC](#harmonics-and-dc)):
+   `net.res_fault(fault)` reports all of them in one frame
+   ([below](#the-key-figures-in-one-frame)).
 4. **Permissible touch voltage.** Read `U_Tp(t_F)` from EN 50522:2022, 5.4.1;
    Annexes A and B derive it and the prospective permissible touch voltage.
 5. **Design procedure.** Apply the procedure of 5.4.3 (the flow chart of the
@@ -118,6 +120,32 @@ Output of [`en50522_check.py`](../snippets/en50522_check.py):
 `|U_E|` is the earth potential rise of `S3` in `res_buses()`, and `|Z_E|` is
 the driving-point impedance an independent nodal solve of the same electrodes
 and screens gives; the test suite checks both.
+
+### The key figures in one frame
+
+The script reads the quantities from the result objects to show where each one
+lives. `net.res_fault(fault)` puts them side by side in one frame — one row per
+frequency and an RMS row, read from the stored result without solving again:
+`I_F_A` is `3I_0`, `r_current` is `r`, `I_E_A` is `I_E`, `Z_E_Ohm` (with
+`Z_E_degree`) is `Z_E` and `U_E_V` is `U_E`. The column `r_epr` of the same
+frame is the EPR-based factor, not the `r` of EN 50522
+([Result tables](../reference/results.md#networkres_faultfault)).
+
+```python
+--8<-- "docs/snippets/en50522_check.py:key_figures"
+```
+
+```text title="Output of en50522_check.py, last lines"
+res_fault    I_F_A r_current   I_E_A  Z_E_Ohm    U_E_V
+    50 Hz   1000.0    0.2165   216.5    1.189   384.45
+   250 Hz     50.0    0.0766     3.8    2.232     9.10
+      RMS   1001.2         -   216.5        -   384.56
+```
+
+On the RMS row the ratio and the impedance are empty (`null`); `U_E_V` there is
+the total RMS of `U_E` over the frequencies, the value to compare with
+`U_Tp(t_F)`. The test suite recomputes every figure of the frame with an
+independent nodal solver.
 
 The chain $U_E = r \cdot 3I_0 \cdot Z_E$ of the standard is a hand formula. It
 holds where the standard's lumped picture holds — a long, homogeneous cable run

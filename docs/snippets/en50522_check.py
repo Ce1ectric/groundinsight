@@ -10,7 +10,8 @@ station ``S3``. The infeed carries 1000 A at 50 Hz and 50 A at 250 Hz (RMS;
 illustrative values). The script prints, per frequency, the fault current
 ``3I_0``, the reduction factor ``r``, the earth current ``I_E``, the earthing
 impedance ``Z_E`` and the earth potential rise ``U_E`` at the fault bus, the
-chain ``r * 3I_0 * Z_E`` for comparison, and the total RMS of ``U_E``.
+chain ``r * 3I_0 * Z_E`` for comparison, and the total RMS of ``U_E``; then
+the same key figures as ``Network.res_fault`` reports them in one frame.
 
 The permissible touch voltage is not part of the package: fill in
 ``U_TP_V`` from EN 50522:2022 for the fault duration of your protection.
@@ -82,6 +83,12 @@ for f in FREQUENCIES:
 U_E_RMS = math.sqrt(sum(row["U_E"] ** 2 for row in ROWS))  # total RMS over frequencies
 # --8<-- [end:quantities]
 
+# --8<-- [start:key_figures]
+KEY_FIGURES = net.res_fault("F").select(  # one row per frequency and an RMS row
+    "frequency_Hz", "is_rms", "I_F_A", "r_current", "I_E_A", "Z_E_Ohm", "U_E_V"
+)
+# --8<-- [end:key_figures]
+
 # --8<-- [start:criterion]
 U_TP_V = None  # U_Tp(t_F) from EN 50522:2022, 5.4.1 / Annex B, for your fault duration
 
@@ -98,3 +105,9 @@ if __name__ == "__main__":
         print(f"{row['f']:7.0f} {row['I_F']:9.1f} {row['r']:7.4f} {row['I_E']:8.1f}"
               f" {row['Z_E']:11.3f} {row['U_E']:10.2f} {row['chain']:17.2f}")
     print(f"U_E, total RMS: {U_E_RMS:.1f} V -- {verdict}")
+    print(f"{'res_fault':>9} {'I_F_A':>8} {'r_current':>9} {'I_E_A':>7} {'Z_E_Ohm':>8} {'U_E_V':>8}")
+    for row in KEY_FIGURES.iter_rows(named=True):
+        label = "RMS" if row["is_rms"] else f"{row['frequency_Hz']:.0f} Hz"
+        r = "-" if row["r_current"] is None else f"{row['r_current']:.4f}"
+        z = "-" if row["Z_E_Ohm"] is None else f"{row['Z_E_Ohm']:.3f}"
+        print(f"{label:>9} {row['I_F_A']:8.1f} {r:>9} {row['I_E_A']:7.1f} {z:>8} {row['U_E_V']:8.2f}")
