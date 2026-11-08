@@ -84,6 +84,16 @@ migration checklist.
 - **Dependencies.** pillow 13.0.0 or newer is required (security floor, see
   *Security*). Upgrade pillow in the environment; if another package there
   caps pillow below 13, that package has to move first (SEC2).
+- **State-space transients of meshed networks with mutual coupling change
+  value.** The phase current that drives the coupling is now divided between
+  the routes of a ring or mesh like the stationary default
+  `phase_current_mode="auto"`; before, every route carried the full source
+  current. Chains, trees and networks without coupling are unchanged.
+  Migration: there is no switch back — the old numbers were those of the
+  legacy split (`run_fault(..., phase_current_mode="paths")`, still available
+  stationarily). `Branch.parallel_coefficient` is no longer read by
+  `TransientStudy`, and a state-space solve no longer fills `network.paths`;
+  call `gi.create_paths(network)` where the paths are needed as data. (PH2)
 
 ### Added
 
@@ -101,6 +111,17 @@ migration checklist.
 - A shared `simple_network` fixture in `tests/conftest.py`.
 - CI: the release workflow runs the test suite before it builds; pull
   requests run `mkdocs build --strict` and execute `docs/examples/*.ipynb`.
+- **`TransientStudy.solve(..., fft_block_bytes=None)` bounds the memory of the
+  FFT solver.** Upper bound in bytes for one batch of dense admittance
+  matrices, 256 MiB by default; the batch holds
+  `max(1, min(512, fft_block_bytes // (16 * n**2)))` frequency bins for `n`
+  active buses. A non-integer raises `TypeError`, a value ≤ 0 `ValueError`.
+  (P8)
+- **Diagnostic code `TRANSIENT_PHASE_SPLIT`** (`ModelAssumptionWarning`,
+  elements: the coupled branches). Raised by the state-space solver when the
+  phase split of a meshed network depends on frequency — routes of different
+  R/L ratio — so that a DC offset and harmonics are divided as at `f_eval`.
+  (PH2)
 
 ### Changed
 
@@ -313,6 +334,47 @@ migration checklist.
 - **Three doctests had gone stale** (`create_fault`, `create_source`, the
   `simulation/outage.py` module example); the suite now runs the doctests
   (`--doctest-modules`) so they cannot rot again.
+- **The state-space solver divides the phase current of a ring like the
+  stationary solver.** It took the phase factor of each branch from the
+  enumerated source-to-fault paths as `sign * parallel_coefficient` (default
+  1.0), i.e. the legacy `"paths"` mode, which gives every route of a ring the
+  full source current: 338.3 V at the fault of a symmetric four-bus ring in
+  steady state against 166.6 V from `run_fault` (+103 %), without a warning.
+  The split now comes from the same phase-network solve as
+  `phase_current_mode="auto"`, at `f_eval`, with 1 A per source; the complex
+  split is folded into the coupling of each branch,
+  `R' + jωM' = (R_mut + jωM)·α`, which makes the `f_eval` steady state exact
+  for every topology (keeping only `Re α` put a cable/overhead-line ring 4.4 %
+  low at the fault). Measured against `run_fault`: 3.6e-7 in the symmetric
+  ring, 6.9e-8 in a chain (unchanged), 3.3e-7 in the mixed ring. Against an
+  independent reference that integrates shield and phase conductors as
+  states: 5.8e-7 of the peak for a homogeneous ring of unequal lengths under
+  a fully offset fault current, 0.99 % for the mixed ring, where the solver
+  says so (`TRANSIENT_PHASE_SPLIT`). The study no longer rebuilds
+  `network.paths` and never touches `network.active_fault`. (PH2)
+- **The FFT solver's coupling warning names the right direction.** The
+  `TransientModelWarning` for the mutual coupling the FFT solver does not
+  evaluate said "expect a lower earth potential rise"; it is higher: 77.6 V
+  against 49.2 V in the steady state of a coupled two-bus cable link, exactly
+  `1/|1 − Z_m/Z_s|` for one coupled branch, and +44 % to +101 % on the
+  post-inception peak of a fully offset fault current in four networks.
+  Without the coupling no induced share of the fault current returns through
+  the shields, so the FFT answer is conservative at the fault bus and as the
+  network maximum (higher in all of 600 random chains and meshes, while 6 % of
+  the remote buses came out lower, which the message now says). The warning
+  is emitted with code `TRANSIENT_MODEL` and every coupled branch as an
+  element, and points at the caller's line. `docs/transient.md` claimed the
+  same wrong direction. (PH-L1)
+- **The FFT solver no longer needs gigabytes for mid-size networks.** It
+  assembled 512 frequency bins as one dense `(512, n, n)` block — 1.3 GB at
+  400 buses, 8.2 GB at 1000 — and kept the previous block alive while
+  building the next, so the peak was about two blocks. The batch now follows
+  the `fft_block_bytes` budget and is released before the next one: a 400-bus
+  ring over 1001 bins peaks at 293 MB (tracemalloc, whole solve), a 100-bus
+  ring at 89 MB instead of 167 MB with the default and at 10.7 MB with a
+  4 MiB budget. The spectra are bit-identical to the old batching, and the
+  run time is unchanged (200 buses, interleaved median: 1.23 s old, 1.03 s
+  new). (P8)
 
 ### Security
 
@@ -403,6 +465,15 @@ migration checklist.
   deprecated `auto_parallel_coefficients`, and the notebooks import the
   model classes from `gi.*`.
 - The installation page names pillow among the runtime dependencies (DOC5).
+- **`docs/transient.md` describes the state-space coupling the code
+  implements.** The "Mutual coupling" section derived the phase factor from
+  "the network's path topology — same algorithm as the FFT solver's mutual
+  Norton injection", a coupling the FFT solver does not have; it now states
+  the auto split at `f_eval`, the fold of a complex split and the
+  `TRANSIENT_PHASE_SPLIT` warning. The API page documents
+  `fft_block_bytes`, including that a very small budget costs time on
+  mid-size networks (150 buses: 0.7 s at the default, 4.5 s at 1 MiB).
+  (PH15, P8)
 
 ### Internal
 
@@ -622,6 +693,16 @@ migration checklist.
   triage. Workflow checks read the YAML as text, because PyYAML is not in
   the CI test environment, and repeat each check on the parsed document
   where PyYAML is installed.
+- **Independent reference solver for transient tests**
+  (`tests/_transient_reference.py`): modified nodal analysis with shield and
+  phase-conductor branch currents as unknowns, phasor and trapezoidal
+  time-domain solve, optionally with a prescribed phase split; reproduces
+  `run_fault` to 1e-15. `tests/test_audit_pass19_transient.py` (35 tests)
+  checks PH2, PH-L1, PH15 and P8 against it, against the stationary solver,
+  against `1/|1 − Z_m/Z_s|` and against a verbatim copy of the old FFT block
+  loop. Three pass-10 tests that pinned the path-based factor (paths rebuilt
+  with a log line, factor exactly 1.0) now assert untouched paths and the
+  factor to 1e-12.
 
 ## [0.6.0] — 2026-09-01
 
