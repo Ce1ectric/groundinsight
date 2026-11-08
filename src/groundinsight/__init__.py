@@ -67,6 +67,12 @@ from .models.database_models import (
     NetworkDB as _NetworkDB,
 )
 from .utils.impedance_calculator import DCLimitWarning
+from .diagnostics import (
+    Diagnostic,
+    GroundinsightWarning,
+    InputWarning,
+    ModelAssumptionWarning,
+)
 from .network_operations import (
     create_network,
     create_bus,
@@ -202,6 +208,12 @@ __all__ = [
     "TransientModelWarning",
     # DC (0 Hz) evaluation warning.
     "DCLimitWarning",
+    # Structured diagnostics: common warning base, categories and the record
+    # type stored in Result.diagnostics.
+    "GroundinsightWarning",
+    "ModelAssumptionWarning",
+    "InputWarning",
+    "Diagnostic",
     "Outage",
     "OutageStudyResult",
     "outage_context",

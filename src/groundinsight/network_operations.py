@@ -12,6 +12,7 @@ calculations and updates.
 import logging
 import warnings
 
+from .diagnostics import collecting, unique
 from .models.core_models import Network, Bus, BusType, Branch, BranchType, Fault, Source
 from typing import Optional, List, Dict
 
@@ -799,6 +800,14 @@ def run_fault(
         ``EPR = 0``. Kept for reproducing older studies and for networks
         where the split is known from measurement and set by hand.
 
+    Returns
+    -------
+    Result
+        The result of the run -- the same object that is stored as
+        ``network.results[fault_name]``. Its ``diagnostics`` list holds every
+        package warning raised during the run, with code and element
+        references (see :mod:`groundinsight.diagnostics`).
+
     Raises
     ------
     ValueError
@@ -853,36 +862,46 @@ def run_fault(
     # up a path set that no longer matches the topology. Users who want the
     # paths as data keep asking for them with ``gi.create_paths(network)``.
     _assert_network_is_excited(network)
-    if not auto_phase_currents:
-        if network._needs_path_rebuild():
+    # Every package warning raised from here on belongs to this run. The
+    # sink is per thread/task (see groundinsight.diagnostics), so concurrent
+    # runs keep their messages apart, and it records warnings the caller has
+    # filtered out as well -- the result carries them either way.
+    with collecting() as sink:
+        if not auto_phase_currents:
+            if network._needs_path_rebuild():
+                network.invalidate_paths()
+                create_paths(network)
+        elif network.paths and network._needs_path_rebuild():
             network.invalidate_paths()
-            create_paths(network)
-    elif network.paths and network._needs_path_rebuild():
-        network.invalidate_paths()
 
-    # Warn only in the legacy mode, and only when the network around this fault
-    # actually has parallel routes -- see _warning_parallel_coeffcient.
-    if not auto_phase_currents:
-        _warning_parallel_coeffcient(network, auto_phase_currents)
+        # Warn only in the legacy mode, and only when the network around this
+        # fault actually has parallel routes -- see _warning_parallel_coeffcient.
+        if not auto_phase_currents:
+            _warning_parallel_coeffcient(network, auto_phase_currents)
 
-    # Build the electrical network from the physical network. auto_phase_currents
-    # switches the phase-current determination from the path-based scheme
-    # (parallel_coefficient per branch) to the phase-network solve.
-    build_electrical_network(network, auto_phase_currents=auto_phase_currents)
+        # Build the electrical network from the physical network.
+        # auto_phase_currents switches the phase-current determination from
+        # the path-based scheme (parallel_coefficient per branch) to the
+        # phase-network solve.
+        build_electrical_network(network, auto_phase_currents=auto_phase_currents)
 
-    # Solve the network
-    network.electrical_network.solve_network()
+        # Solve the network
+        network.electrical_network.solve_network()
 
-    # Compute branch currents
-    network.electrical_network.compute_branch_currents()
+        # Compute branch currents
+        network.electrical_network.compute_branch_currents()
 
-    # Compute reduction factors
-    network.electrical_network.compute_reduction_factors()
+        # Compute reduction factors
+        network.electrical_network.compute_reduction_factors()
 
-    # Compute grounding impedance
-    network.electrical_network.compute_grounding_impedance()
+        # Compute grounding impedance
+        network.electrical_network.compute_grounding_impedance()
 
-    # Results are stored in net.results within the ElectricalNetwork methods
+    # Results are stored in net.results within the ElectricalNetwork methods;
+    # the diagnostics of the run are attached to that same object.
+    result = network.results[fault_name]
+    result.diagnostics = unique(sink)
+    return result
 
 
 def create_network_assistant(

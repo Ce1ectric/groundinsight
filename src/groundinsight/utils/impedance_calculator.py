@@ -40,6 +40,7 @@ import numpy as np
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
+from groundinsight.diagnostics import GroundinsightWarning
 from groundinsight.utils.validations import assert_safe_formula
 
 
@@ -187,7 +188,7 @@ _DC_SUBSTITUTE_FACTOR: float = float(np.sqrt(np.finfo(float).eps))
 _DC_SUBSTITUTE_FALLBACK_OHM: float = 1.0
 
 
-class DCLimitWarning(UserWarning):
+class DCLimitWarning(GroundinsightWarning):
     """Something about a formula at 0 Hz needed a decision rather than a value.
 
     Raised in four situations, all of them at ``f = 0`` only:
@@ -207,6 +208,9 @@ class DCLimitWarning(UserWarning):
     stops on the first unusual formula is of no use. Promote it with
     ``warnings.simplefilter("error", DCLimitWarning)`` to make a study strict.
     """
+
+    default_code = "DC_LIMIT"
+
 
 
 def _is_open_end(formula_str: str) -> bool:

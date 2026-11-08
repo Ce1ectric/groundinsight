@@ -16,6 +16,7 @@ from pydantic import (
     model_validator,
 )
 from typing import Any, Optional, List, Dict, Literal, Union
+from groundinsight.diagnostics import Diagnostic, GroundinsightWarning
 from groundinsight.utils.validations import validate_impedance_formula_value
 from groundinsight.utils.impedance_calculator import (
     check_passive_impedance,
@@ -28,7 +29,7 @@ import polars as pl
 logger = logging.getLogger(__name__)
 
 
-class NetworkFrequencyOrderWarning(UserWarning):
+class NetworkFrequencyOrderWarning(GroundinsightWarning):
     """Warning category for non-strictly-monotone ``Network.frequencies``.
 
     Emitted by :class:`Network` when ``frequencies`` is supplied in a
@@ -49,8 +50,11 @@ class NetworkFrequencyOrderWarning(UserWarning):
     process by combining it with ``simplefilter('once', ...)``.
     """
 
+    default_code = "FREQUENCY_ORDER"
 
-class TransientModelWarning(UserWarning):
+
+
+class TransientModelWarning(GroundinsightWarning):
     """Warning category for a transient run whose model is narrower than its input.
 
     Emitted by :mod:`groundinsight.simulation.transient` when the network
@@ -77,6 +81,9 @@ class TransientModelWarning(UserWarning):
     Suppress with ``warnings.simplefilter('ignore', TransientModelWarning)``;
     turn into an error with ``simplefilter('error', TransientModelWarning)``.
     """
+
+    default_code = "TRANSIENT_MODEL"
+
 
 
 def json_safe_float(value: float) -> Union[float, str]:
@@ -1718,6 +1725,13 @@ class Result(BaseModel):
         The grounding impedance result, if available.
     fault : str
         The name of the fault that was active during the calculation.
+    diagnostics : list of Diagnostic
+        Every package warning raised while this result was computed, with
+        its code and the elements it concerns, in the order raised and
+        without exact repetitions. Filled by :func:`groundinsight.run_fault`
+        independently of the caller's warning filters, so a program (or a
+        GUI) can read the conditions that qualify the result from the result
+        itself. See :mod:`groundinsight.diagnostics`.
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -1727,6 +1741,7 @@ class Result(BaseModel):
     reduction_factor: Optional[ResultReductionFactor] = None
     grounding_impedance: Optional[ResultGroundingImpedance] = None
     fault: str = ""  # name of the fault that was active
+    diagnostics: List[Diagnostic] = []
 
     def __str__(self):
         return f"Result(buses={len(self.buses)}, branches={len(self.branches)})"
