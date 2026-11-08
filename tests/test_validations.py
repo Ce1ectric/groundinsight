@@ -16,7 +16,10 @@ def test_validate_impedance_formula_invalid():
     """
     Test invalid impedance formulas that should raise ValueError.
     """
-    with pytest.raises(ValueError, match="Sympify of expression"):
+    # Rejected by the formula guard itself since it fails closed on a string
+    # that is not an expression (audit pass 19, SEC5); before, SymPy's parser
+    # raised the error.
+    with pytest.raises(ValueError, match="not a valid arithmetic expression"):
         validate_impedance_formula_value("R +")  # Incomplete formula
     with pytest.raises(ValueError, match="Sympify of expression"):
         validate_impedance_formula_value("")  # Empty formula
