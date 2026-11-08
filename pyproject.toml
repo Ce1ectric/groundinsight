@@ -16,10 +16,12 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-# 0.6.1: relaxed from "^3.14". The package runs unchanged on 3.13 (full suite
-# green), and 3.13 is what the distribution pythons and most pandapower
-# environments still ship. The CI matrix covers both.
-python = "^3.13"
+# Audit pass 19 (F10): relaxed from "^3.13" to "^3.12". The full suite is
+# green on 3.12, and groundfield -- which requires "^3.12" -- was held at
+# groundinsight 0.3.0 because every later release asked for a newer Python.
+# CI runs 3.12, 3.13 and 3.14. Poetry derives the "Programming Language ::
+# Python :: 3.x" classifiers from this constraint, so they are not repeated.
+python = "^3.12"
 pydantic = "^2.12"
 numpy = "^2.1.0"
 sqlalchemy = "^2.0.32"

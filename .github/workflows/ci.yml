@@ -14,11 +14,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        # 3.13 is the floor pyproject declares (audit pass 18, M23) and what
-        # the distribution pythons and most pandapower environments ship;
-        # 3.14 is the version the docs and the release workflow use. Both are
-        # tested so the declared floor is a claim the CI actually backs.
-        python-version: ["3.13", "3.14"]
+        # 3.12 is the floor pyproject declares (audit pass 19, F10; it is
+        # what groundfield requires), 3.14 the version the docs and the
+        # release workflow use. Every minor version in between is tested so
+        # the declared range is a claim the CI actually backs.
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       - name: Check out repository

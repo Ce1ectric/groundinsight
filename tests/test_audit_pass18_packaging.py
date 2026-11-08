@@ -251,11 +251,19 @@ def test_scripts_are_not_packaged_and_install_no_console_commands():
 
 
 def test_python_floor_matches_the_ci_matrix():
+    """M23: the declared floor is a version the CI actually runs.
+
+    Audit pass 19 (F10) moved the floor from 3.13 to 3.12, so the floor is
+    read from ``pyproject.toml`` instead of being repeated here; the number
+    itself is pinned in ``test_audit_pass19_supply_chain.py``.
+    """
     data = _pyproject()
-    assert data["tool"]["poetry"]["dependencies"]["python"] == "^3.13"
+    constraint = data["tool"]["poetry"]["dependencies"]["python"]
+    assert constraint.startswith("^")
+    floor = constraint[1:]
 
     workflow = (_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    assert '"3.13", "3.14"' in workflow
+    assert f'"{floor}"' in workflow
 
 
 def test_the_third_party_notices_file_is_not_ignored():

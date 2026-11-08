@@ -96,7 +96,7 @@ for the full list and the API reference.
 
 ## Installation
 
-`groundinsight` requires **Python 3.14 or newer** and is published on PyPI:
+`groundinsight` requires **Python 3.12 or newer** and is published on PyPI:
 
 ```bash
 pip install groundinsight
