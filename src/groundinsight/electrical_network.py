@@ -867,6 +867,7 @@ class ElectricalNetwork:
         # Set of source names that actually have at least one path to the active
         # fault; sources without a path do not contribute to the injection.
         sources_with_path = self._sources_with_path_to_active_fault()
+        self._warn_thevenin_coupling(sources_with_path, fault)
 
         for freq in frequencies:
             u_vector = np.zeros(self.num_buses, dtype=complex)
@@ -912,6 +913,81 @@ class ElectricalNetwork:
 
             self.i_vectors[freq] = i_vector
             self.u_vectors[freq] = u_vector
+
+    def _warn_thevenin_coupling(self, sources_with_path, fault: Fault) -> None:
+        """
+        Announce a Thevenin source that drives coupled branches (PH1, F5).
+
+        A voltage source's loop current is ``(E - (u_S - u_F)) / Z_src``, but
+        the stationary solver uses the Norton current ``E / Z_src`` as the
+        phase current that drives the shield coupling, as the fault current of
+        ``value_current`` and as ``i_inj``. The EPR depends on the difference
+        ``I - k * I_p`` of two nearly equal currents, so a few percent of
+        current error become tens of percent of EPR -- too low, i.e.
+        unconservative. Until the loop current is solved (planned), every run
+        in which that can happen says so once.
+
+        It can happen when a voltage source on an active bus other than the
+        fault bus feeds the fault and at least one active branch with a
+        grounding conductor has a non-zero mutual impedance at a solved
+        frequency. A Thevenin source *on* the fault bus is exact (its loop
+        current is ``E / Z_src``), and without coupling the phase current does
+        not enter the earth side at all.
+
+        Parameters
+        ----------
+        sources_with_path : iterable of str
+            Sources that reach the active fault.
+        fault : Fault
+            The active fault.
+        """
+        voltage_sources = [
+            name
+            for name in sources_with_path
+            if self.network.sources[name].source_type == "voltage"
+            and self.network.sources[name].bus in self.bus_indices
+            and self.network.sources[name].bus != fault.bus
+        ]
+        if not voltage_sources:
+            return
+        coupled: List[str] = []
+        for branch in self.network.branches.values():
+            if not branch.active or not branch.type.grounding_conductor:
+                continue
+            if branch.from_bus not in self.bus_indices:
+                continue
+            if branch.to_bus not in self.bus_indices:
+                continue
+            for freq in self.network.frequencies:
+                z_mutual = (branch.mutual_impedance or {}).get(freq)
+                z_self = self._resolved_impedance(
+                    (branch.self_impedance or {}).get(freq), freq
+                )
+                if z_mutual is None or z_self is None or _is_open_circuit(z_self):
+                    continue
+                if complex(z_mutual.real, z_mutual.imag) != 0:
+                    coupled.append(branch.name)
+                    break
+        if not coupled:
+            return
+        emit(
+            ModelAssumptionWarning,
+            f"Fault '{fault.name}': the Thevenin source(s) "
+            f"{', '.join(repr(s) for s in voltage_sources)} feed the fault while "
+            f"branches with mutual coupling carry phase current "
+            f"({_shortlist(coupled)}). The stationary solver couples them with "
+            f"the Norton current E/Z_src instead of the actual loop current and "
+            f"uses that current as the fault current of value_current and as "
+            f"i_inj (audit finding PH1, not yet corrected). Against a fully "
+            f"coupled multi-conductor reference the EPR at the fault came out 6 "
+            f"to 38 % too low on cable feeders with Z_src between 5+15j and "
+            f"0.3+1j Ohm -- unconservative, and growing as Z_src falls. For a "
+            f"stationary study, model the infeed as a current source carrying "
+            f"the prospective fault current (gi.create_source).",
+            code="THEVENIN_COUPLING",
+            elements=[("source", name) for name in voltage_sources],
+            stacklevel=5,
+        )
 
     def _source_injection(
         self, source: Source, freq: float, scaling: float

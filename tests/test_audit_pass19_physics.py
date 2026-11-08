@@ -688,3 +688,124 @@ def test_pq_ph3_the_proxy_note_names_the_branches_on_an_intact_ring():
     assert len(records) == 1
     assert {name for kind, name in records[0].elements if kind == "branch"} == {"R1", "R2", "R3", "R4"}
     assert ("fault", "F1") in records[0].elements
+
+
+# ---------------------------------------------------------------------------
+# PQ-PH1b -- warn about Thevenin sources with coupling while PH1 is open
+# ---------------------------------------------------------------------------
+
+import math  # noqa: E402
+
+
+def _carson_cable_per_km(f: float = 50.0, rho: float = 100.0):
+    """Loop impedances (Ohm/km) of a 20 kV cable 1x240/25 in trefoil, three
+    screens bonded at both ends, by the simplified Carson formulas:
+    ``R_e = pi^2 f 1e-4``, ``X = 2 pi f 2e-4 ln(658.87 sqrt(rho/f) / d)``."""
+    r_earth = math.pi ** 2 * f * 1e-4
+
+    def x(d: float) -> float:
+        return 2 * math.pi * f * 2e-4 * math.log(658.87 * math.sqrt(rho / f) / d)
+
+    bundle = (0.0165 * 0.036 * 0.036) ** (1 / 3)
+    z_pp = complex(0.125 + r_earth, x(0.0072))
+    z_ss = complex(0.727 / 3 + r_earth, x(bundle))
+    z_ps = complex(r_earth, x(bundle))
+    return z_pp, z_ss, z_ps
+
+
+def _formula(z50: complex) -> str:
+    return f"({z50.real:.6f}+{z50.imag:.6f}*j*f/50)*l"
+
+
+def _thevenin_chain(z_src: complex, explicit_phase: bool) -> dict:
+    """Chain S-A-B-F of the Carson cable with a voltage source at S. With
+    ``explicit_phase`` the source impedance is the transformer only (the
+    coupled reference models the phase conductor); otherwise the screened
+    phase path sum(Z_red * l) is lumped into it, as the package needs."""
+    z_pp, z_ss, z_ps = _carson_cable_per_km()
+    z_red = z_pp - z_ps ** 2 / z_ss
+    lengths = [1.2, 0.8, 1.5]
+    branches = {}
+    for i, (a, b) in enumerate((("S", "A"), ("A", "B"), ("B", "F"))):
+        branches[f"L{i + 1}"] = dict(a=a, b=b, l=lengths[i], zs=_formula(z_ss),
+                                     zm=_formula(z_ps), zp=_formula(z_red))
+    source_impedance = z_src if explicit_phase else z_src + z_red * sum(lengths)
+    return dict(
+        freqs=[50.0],
+        buses={"S": ("0.3", 100.0), "A": ("2.0", 100.0), "B": ("3.0", 100.0), "F": ("1.5", 100.0)},
+        branches=branches,
+        sources={"vs": dict(kind="voltage", bus="S", E=at50(11547.0), Zsrc=at50(source_impedance))},
+        faults={"F1": ("F", {50.0: 1.0})},
+    )
+
+
+def test_pq_ph1b_a_thevenin_source_with_coupling_is_announced():
+    """PQ-PH1b: a voltage source feeding the fault over coupled branches
+    gets a THEVENIN_COUPLING ModelAssumptionWarning naming the source, and
+    the numbers do not change (second way: the reference solver with the
+    package's Norton phase current reproduces them to 1e-12)."""
+    net = build(_thevenin_chain(1 + 3j, explicit_phase=False), "ph1b")
+    with pytest.warns(ModelAssumptionWarning) as record:
+        result = gi.run_fault(net, "F1")
+    coupling = [w.message for w in record if getattr(w.message, "code", None) == "THEVENIN_COUPLING"]
+    assert len(coupling) == 1
+    assert ("source", "vs") in coupling[0].elements
+    assert "too low" in str(coupling[0]) and "unconservative" in str(coupling[0])
+    assert "THEVENIN_COUPLING" in [d.code for d in result.diagnostics]
+
+    rd = ref.reference_network(net, 50.0, "F1")
+    mapped = ref.to_package_frame(ref.solve_oneway(rd, thevenin_phase="norton"))
+    assert ref.max_relative_deviation(package_vectors(result, 50.0)["u"], mapped["u"]) <= TOL
+    # The direction the warning states: with the actual loop current the
+    # fault-bus EPR is higher (the package value is unconservative).
+    actual = ref.solve_oneway(rd, thevenin_phase="actual")
+    assert abs(actual["u"]["F"]) > abs(mapped["u"]["F"])
+
+
+@pytest.mark.parametrize(
+    "z_transformer, expected_percent",
+    [(5 + 15j, -5.8), (1 + 3j, -22.2), (0.3 + 1j, -37.9)],
+)
+def test_pq_ph1b_the_quoted_error_range_is_reproducible(z_transformer, expected_percent):
+    """The warning quotes EPR 6 to 38 % too low. Second way for that claim:
+    the fully coupled multi-conductor reference (phase conductor explicit,
+    Z_src the transformer only) against the package with the screened phase
+    path lumped into Z_src."""
+    coupled = ref.solve_coupled(_coupled_reference(z_transformer))
+    net = build(_thevenin_chain(z_transformer, explicit_phase=False), "ph1b_size")
+    result = solve(net)
+    u_package = abs(next(complex(b.uepr_freq[50.0]) for b in result.buses if b.name == "F"))
+    deviation = 100.0 * (u_package / abs(coupled["u"]["F"]) - 1.0)
+    assert deviation == pytest.approx(expected_percent, abs=0.1)
+
+
+def _coupled_reference(z_transformer: complex) -> dict:
+    """The reference dict of the explicit-phase chain with Z_pp per branch."""
+    spec = _thevenin_chain(z_transformer, explicit_phase=True)
+    net = build(spec, "ph1b_coupled")
+    rd = ref.reference_network(net, 50.0, "F1")
+    z_pp, _, _ = _carson_cable_per_km()
+    for name, branch in rd["branches"].items():
+        branch["zpp"] = complex(_formula_value(z_pp, spec["branches"][name]["l"]))
+    return rd
+
+
+def _formula_value(z50: complex, length: float) -> complex:
+    """The value the 6-decimal formula string of ``z50`` evaluates to."""
+    return complex(round(z50.real, 6), round(z50.imag, 6)) * length
+
+
+@pytest.mark.parametrize("variant", ["current source", "no coupling", "source on the fault bus"])
+def test_pq_ph1b_stays_silent_where_ph1_cannot_act(variant):
+    """No Thevenin source, no coupling, or a Thevenin source on the fault bus
+    (its loop current *is* E/Z_src): nothing to warn about."""
+    spec = _thevenin_chain(1 + 3j, explicit_phase=False)
+    if variant == "current source":
+        spec["sources"] = {"q": dict(kind="current", bus="S", I=at50(1000.0))}
+    elif variant == "no coupling":
+        spec["branches"] = {k: dict(v, zm="0") for k, v in spec["branches"].items()}
+    else:
+        spec["sources"] = {"vs": dict(kind="voltage", bus="F", E=at50(11547.0), Zsrc=at50(1 + 3j)),
+                           "q": dict(kind="current", bus="S", I=at50(1000.0))}
+    result = solve(build(spec, "ph1b_silent"))
+    assert "THEVENIN_COUPLING" not in [d.code for d in result.diagnostics]
