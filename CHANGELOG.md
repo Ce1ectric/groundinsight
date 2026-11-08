@@ -283,6 +283,14 @@ migration checklist.
   `InputWarning` `SOURCE_FREQUENCY_GAP`, `SOURCE_FREQUENCY_OUTSIDE_NETWORK`
   (USE3) and `SCALINGS_INCOMPLETE` (PH6); info `LEGACY_EARTHING_DEFINITION`
   (PH4).
+- **`BusResponse.z_fault_ideal`.** Where the electrode at the studied bus is
+  the only one on the fault side, the earthing network without it floats and
+  its open-network values (`z_fault_open`, `z_fault_transfer`, `z_bus_open`)
+  do not exist. `Z_E` still exists for every electrode there, because all of
+  the current leaves through it: `fault_driving_point(z_bus)` returns
+  `z_bus + z_fault_ideal`, where `z_fault_ideal` is the driving point at the
+  fault bus with an ideal electrode at the studied bus. With no electrode, it
+  returns `None`. (PH4 follow-up)
 
 ### Changed
 
@@ -517,6 +525,12 @@ migration checklist.
   both kernels are up to 6e-8..8e-8 away from the exact solution there. Tests
   that compare such values bit-exactly or at 1e-9 need a tolerance; two were
   adjusted. (P13)
+- **A declared phase impedance obeys the passivity rule of the other
+  elements.** When the phase network is solved (`phase_current_mode="auto"`),
+  `run_fault` refuses a `phase_impedance_formula` value with a `ValueError`
+  naming the branch when it is zero or too small to invert above 0 Hz, or has
+  a negative real part at any frequency. Before, an exact zero above 0 Hz
+  raised a bare `ZeroDivisionError`, and a negative real part was accepted.
 
 ### Deprecated
 
@@ -755,6 +769,43 @@ migration checklist.
   verdict no longer depends on the branch length, and the value used at
   0 Hz is unchanged. The FFT transient solver was not affected; it evaluates
   self impedances only. (D7)
+- **`EARTHING_IMPEDANCE_UNDEFINED` is decided by structure.** `Z_E`
+  (`z_earthing`, the grounding impedance) is `None` when no bus connected to
+  the fault bus through shields has an electrode. That decision used to be
+  left to the sparse solver, which caught only a fault bus standing alone.
+  With one or three electrode-less buses behind the fault bus, the earthing
+  matrix is singular only up to rounding, and `z_earthing` came out as about
+  −4.5e15 or −3.6e15 Ω with no diagnostic. The reverse case was wrong too: a
+  voltage source on a bus without an electrode reported `Z_E = None` for a
+  fault side earthed at both ends, and the note blamed the fault bus. Now
+  only the fault bus's own group is factorised, and the note names that
+  group. `bus_response` uses the same rule for its earthing columns, and its
+  check that another electrode remains now looks at the studied bus's group
+  instead of the whole network. Checked against the closed forms of a series
+  chain (Σ Z_s + Z_e) and a parallel pair (Z_F ∥ (Z_s + Z_B)), and against
+  the reference solver of the tests, which finds the group by its own search
+  and refuses a group without an electrode. (PH4, F4)
+- **A group of buses with no path to earth is refused by the solve.**
+  `run_fault` refused a network in which no bus is earthed. A group of
+  electrode-less buses joined by shields, for example a tower behind an
+  overhead line without an earth wire, was solved to rounding noise: 2.18e18 V
+  at the fault bus, with no warning. Every group of buses that the nodal
+  matrix couples now needs a bus with an electrode. Otherwise `run_fault`
+  raises the documented `ValueError` ("Singular admittance matrix … no path
+  to reference earth"), naming the group. The check costs 0.5 ms per
+  frequency on a 4000-bus ring and 2 ms on a 20 000-bus ring, less than 1 %
+  of `run_fault`.
+- **A purely inductive phase conductor at 0 Hz no longer makes `run_fault`
+  raise `ZeroDivisionError`.** A `phase_impedance_formula` such as
+  `j*2*pi*f*L*l` is exactly zero at DC. The 0 Hz scan did not cover phase
+  conductors, so a network whose only DC short was one crashed. Phase
+  conductors now get the documented DC stand-in `sqrt(eps)·Z_min` with a
+  `DCLimitWarning` that names them. `Z_min` remains the smallest impedance
+  of the earthing network, so the earthing results of networks that already
+  had a DC short are unchanged, bit for bit. Where every parallel route of
+  the phase network is an ideal short at DC, the routes split as if all
+  conductors had one and the same impedance; declare the DC resistance where
+  that split matters.
 
 ### Security
 
@@ -939,6 +990,9 @@ migration checklist.
 - The data-sheet how-to, the formula syntax reference, the concepts chapter
   and the transient chapter state both rules at 0 Hz; the how-to no longer
   documents the Carson warning as expected. (D7)
+- **`docs/concepts.md` covers both rules.** The grounding-impedance section
+  states when `Z_E` is `None` and how `z_fault_ideal` is used. The 0 Hz
+  section covers phase conductors.
 
 ### Internal
 
@@ -1259,6 +1313,11 @@ migration checklist.
   closed-form ring split) and refined references, checks that the sparse
   matrices and their dense view travel together through `copy.deepcopy` and
   `pickle`, and holds the `slow`-marked size acceptance. (P1, P2, P6, P7, P13)
+- **The reference solver of the tests is group-aware.**
+  `tests/_reference_mna.py` gains `earthing_group`, `has_electrode`,
+  `driving_point_system` and `FloatingEarthError`. The driving point is now
+  solved on the bus's earthing group only, and a group without an electrode
+  is refused.
 
 ## [0.6.0] — 2026-09-01
 
