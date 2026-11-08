@@ -18,6 +18,34 @@ permissions:
 # (audit pass 19, SEC3). A tag can be moved by whoever controls the action's
 # repository; a SHA cannot. Dependabot updates SHA and comment together.
 jobs:
+  # Lint, never format (STD8): ruff and numpydoc at the versions the dev group
+  # pins (tests/test_audit_pass19_standards.py keeps the two in step). A
+  # finding fails the workflow and is fixed by a deliberate edit, never by a
+  # formatter. Python 3.12 is the floor, so numpydoc's parse also refuses
+  # syntax newer than the floor.
+  lint:
+    name: Lint (ruff, numpydoc)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned linters
+        run: python -m pip install "ruff==0.17.4" "numpydoc==1.11.0"
+
+      - name: ruff (lint only, no formatter)
+        run: ruff check src tests scripts gui docs/snippets --output-format=github
+
+      - name: numpydoc (public API docstrings)
+        run: numpydoc lint $(git ls-files 'src/groundinsight/*.py')
+
   test:
     name: Tests (Python ${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}

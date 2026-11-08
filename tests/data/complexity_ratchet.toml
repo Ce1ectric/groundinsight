@@ -1,0 +1,93 @@
+# tests/data/complexity_ratchet.toml
+#
+# Cyclomatic complexity ratchet (radon cc) for src/groundinsight, read by
+# tests/test_audit_pass19_standards.py. A function above the limit is listed
+# here with its complexity when the ratchet was set; it may get simpler, never
+# more complex, and a new function above the limit fails the test. When a
+# function drops to the limit or below, or disappears, its line goes: the list
+# only shrinks. Keys are <path below src/groundinsight>::<qualified name>; a
+# nested function is named after its enclosing one (outer.inner).
+
+limit = 10
+
+[functions]
+"analysis/_session.py::BusImpedanceSession.same_matrix_as" = 11
+"analysis/decomposition.py::_unit_injection" = 13
+"analysis/decomposition.py::_validate_cuts" = 12
+"analysis/decomposition.py::analyze_cuts" = 57
+"analysis/inverse_rho.py::find_max_rho_scaling" = 25
+"analysis/inverse_rho_f.py::_evaluate_max_epr_under_k" = 37
+"analysis/inverse_rho_f.py::find_max_rho_f_scaling" = 13
+"analysis/inverse_rho_f.py::find_max_rho_f_scaling._session_eprs" = 12
+"analysis/inverse_rho_f.py::select_rho_f_from_catalog" = 11
+"analysis/response.py::BusResponse._earth_quantities" = 12
+"analysis/response.py::BusResponse.fault_driving_point" = 11
+"analysis/response.py::_earthing_columns" = 14
+"analysis/response.py::bus_response" = 27
+"analysis/shortcircuit.py::resolve_fault_sc_characteristics" = 30
+"analysis/shortcircuit.py::sources_feeding" = 12
+"analysis/statistics.py::classify" = 12
+"analysis/statistics.py::summarize" = 12
+"analysis/thermal.py::_resolve_sc_inputs" = 20
+"analysis/thermal.py::_warn_dc_excluded" = 11
+"analysis/thermal.py::check_conductor_limits" = 13
+"analysis/thermal.py::check_node_limits" = 23
+"api/jobs.py::JobRunner._run_in_process" = 18
+"checks.py::_check_faults" = 11
+"checks.py::_check_impedances" = 13
+"checks.py::_check_sources" = 20
+"checks.py::_check_topology" = 35
+"checks.py::_impedance_checks" = 18
+"database/crud.py::save_network" = 13
+"database/migration.py::_insert" = 17
+"database/migration.py::_rebuild_from_legacy" = 18
+"electrical_network.py::ElectricalNetwork._assert_finite_system" = 25
+"electrical_network.py::ElectricalNetwork._check_source_coverage" = 16
+"electrical_network.py::ElectricalNetwork._compute_current_reduction_factors" = 17
+"electrical_network.py::ElectricalNetwork._compute_phase_currents_auto" = 18
+"electrical_network.py::ElectricalNetwork._compute_phase_currents_from_paths" = 13
+"electrical_network.py::ElectricalNetwork._dc_substitute_at" = 14
+"electrical_network.py::ElectricalNetwork._report_undefined_reduction_quantities" = 18
+"electrical_network.py::ElectricalNetwork._validate_frequency_coverage" = 14
+"electrical_network.py::ElectricalNetwork._validate_passive_impedances" = 12
+"electrical_network.py::ElectricalNetwork._warn_phase_impedance_proxy" = 12
+"electrical_network.py::ElectricalNetwork.compute_reduction_factors" = 20
+"electrical_network.py::_NetworkTables.__init__" = 26
+"io/pandapower_import.py::_classify_lines" = 11
+"io/pandapower_import.py::_classify_switches" = 14
+"io/pandapower_import.py::_warn_about_unimported" = 13
+"io/pandapower_import.py::from_pandapower" = 17
+"io/pandapower_import.py::preview_pandapower_import" = 13
+"io/pandapower_sc.py::apply_shortcircuit_characteristics" = 38
+"io/pandapower_sc.py::read_shortcircuit_results" = 27
+"io/tables.py::_build" = 74
+"io/tables.py::_cast" = 16
+"io/tables.py::_coerce" = 11
+"io/tables.py::_model" = 12
+"io/tables.py::network_from_tables" = 14
+"io/tables.py::network_to_tables" = 13
+"models/core_models.py::Network._update_element" = 13
+"models/core_models.py::Result._flag_pre_f4_result" = 11
+"models/core_models.py::Source._validate_source_mode" = 11
+"models/core_models.py::_fault_key_figures" = 15
+"network_operations.py::_warning_parallel_coeffcient" = 16
+"plotting.py::_check_frequencies" = 14
+"plotting.py::plot_branch_currents" = 13
+"plotting.py::plot_bus_currents" = 13
+"plotting.py::plot_bus_voltages" = 13
+"simulation/outage.py::outage_context" = 13
+"simulation/outage.py::run_outage_study" = 15
+"simulation/sweep.py::run_sweep" = 22
+"simulation/transient.py::TransientStudy._phase_split" = 11
+"simulation/transient.py::TransientStudy._solve_fft" = 23
+"simulation/transient.py::TransientStudy._solve_state_space" = 139
+"simulation/transient.py::TransientStudy._warn_about_frequency_dependent_split" = 19
+"simulation/transient.py::TransientStudy._warn_about_ignored_mutual_coupling" = 15
+"utils/earth_current.py::split_earth_currents" = 19
+"utils/impedance_calculator.py::_impedance_array" = 26
+"utils/impedance_calculator.py::_raise_if_not_passive" = 13
+"utils/impedance_calculator.py::_resolve_dc" = 18
+"utils/validations.py::_assert_no_runaway_power" = 16
+"utils/validations.py::_combine" = 36
+"utils/validations.py::assert_safe_formula" = 24
+"utils/validations.py::check_formula_symbols" = 11
