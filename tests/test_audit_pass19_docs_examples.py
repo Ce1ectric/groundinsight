@@ -44,11 +44,13 @@ EN50522_SNIPPET = SNIPPETS / "en50522_check.py"
 #: Tolerances the how-to page states for the closed form against the integral
 #: (worked example, 50 Hz and 250 Hz, 100 Ohm*m, cable at 0.7 m).
 TOL_R_EXAMPLE = 5e-5
-#: ... and over the stated grid (16.7 Hz ... 2.5 kHz, 10 ... 10 000 Ohm*m).
-TOL_R_GRID = 1.2e-4
+#: ... and over the stated range (16.7 Hz ... 2.5 kHz, 10 ... 10 000 Ohm*m). The
+#: log grid below contains the worst region (about 400 Hz in 10 Ohm*m soil, where
+#: a 40 x 40 grid finds 1.3e-4).
+TOL_R_GRID = 1.5e-4
 TOL_Z_GRID = 5e-3
-GRID_F = (16.7, 50.0, 250.0, 1000.0, 2500.0)
-GRID_RHO = (10.0, 100.0, 1000.0, 10000.0)
+GRID_F = tuple(float(f) for f in np.geomspace(16.7, 2500.0, 12))
+GRID_RHO = tuple(float(r) for r in np.geomspace(10.0, 10000.0, 7))
 
 
 @pytest.fixture(scope="module")
@@ -198,6 +200,7 @@ def test_types_snippet_closed_form_against_pollaczek_grid(types_ns):
             worst_r = max(worst_r, abs(abs(1 - zm_a / zs_a) - abs(1 - zm_b / zs_b)))
             worst_z = max(worst_z, abs(zs_a - zs_b) / abs(zs_b), abs(zm_a - zm_b) / abs(zm_b))
     assert worst_r <= TOL_R_GRID
+    assert worst_r > 1.2e-4  # the grid reaches the worst region the page names
     assert worst_z <= TOL_Z_GRID
 
 

@@ -209,9 +209,11 @@ Result, impedances in Ω/km:
   constant: with 658.87 instead of 658 the difference in r drops to 4.8·10⁻⁶.
   The rest is the burial depth; it shrinks in proportion to $h$.
 - Over 16.7 Hz … 2.5 kHz and 10 … 10 000 Ω·m (depth 0.7 m) the closed form stays
-  within 1.2·10⁻⁴ of the integral in r and within 0.5 % in $\lvert Z_s'\rvert$
-  and $\lvert Z_m'\rvert$. The integral itself is checked against an independent
-  quadrature (mpmath) to 1e-9 and against its analytic low-frequency limit.
+  within 1.5·10⁻⁴ of the integral in r and within 0.5 % in $\lvert Z_s'\rvert$
+  and $\lvert Z_m'\rvert$; the largest deviation in r on a 40 × 40 grid of that
+  range is 1.3·10⁻⁴, near 400 Hz and 10 Ω·m. The integral itself is checked
+  against an independent quadrature (mpmath) to 1e-9 and against its analytic
+  low-frequency limit.
 
 ## Three-phase system: the other two screens
 
