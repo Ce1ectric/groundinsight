@@ -122,11 +122,13 @@ plugins:
 # one run of gi.run_reference_cases(), so the table cannot go stale.
 # result_tables.py writes the column tables of reference/results.md from the
 # schema constants and a probe solve. notebooks.py prepares the environment
-# the example notebooks run in.
+# the example notebooks run in. project_pages.py shows CHANGELOG.md,
+# CONTRIBUTING.md and the citation from CITATION.cff on the project pages.
 hooks:
   - docs/hooks/reference_cases.py
   - docs/hooks/result_tables.py
   - docs/hooks/notebooks.py
+  - docs/hooks/project_pages.py
 
 # The hooks are build code, not pages or downloads.
 exclude_docs: |
@@ -234,4 +236,8 @@ nav:
           - Statistics and classification: api/statistics.md
           - Transient simulations: api/transient.md
   - Project:
+      - Changelog: project/changelog.md
+      - Contributing: project/contributing.md
+      - Citation: project/citation.md
+      - License: project/license.md
       - Audit log: audit-log.md

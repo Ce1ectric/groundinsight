@@ -888,3 +888,183 @@ def test_notebook_hook_flags_a_page_that_shows_the_build_machine(caplog):
         assert hook.on_post_page(leaked, _Page("examples/a.ipynb"), None) == leaked
     assert len(caplog.records) == 1
     assert "examples/a.ipynb" in caplog.records[0].getMessage()
+
+
+# --------------------------------------------------------------------------
+# D1 -- the project pages: changelog, contributing, citation, license
+# --------------------------------------------------------------------------
+
+#: The Project section of the navigation, in order.
+PROJECT_PAGES = [
+    "project/changelog.md",
+    "project/contributing.md",
+    "project/citation.md",
+    "project/license.md",
+    "audit-log.md",
+]
+
+#: What the contribution guide has to state (the public house conventions).
+CONTRIBUTING_TOPICS = [
+    "English",
+    "NumPy style",
+    "Optional[float]",
+    "logging.getLogger(__name__)",
+    "ValueError",
+    "groundinsight.diagnostics.emit",
+    "Internal API",
+    "two independent methods",
+    "**Breaking**",
+    "two releases and six months",
+    "calendar versioning",
+    "scripts/release.py",
+    "Lint, do not reformat",
+    "GROUNDINSIGHT_CI=1",
+    "mkdocs build --strict",
+]
+
+LIABILITY_NOTE = (
+    "groundinsight is a research and engineering tool. Its results support, but "
+    "do not replace, an assessment according to EN 50522 / IEC 61936-1 by a "
+    "qualified person, including the measurements the standards require. The "
+    "software is provided under the MIT License, without warranty of any kind."
+)
+
+
+def _project_hook():
+    """
+    The build hook ``docs/hooks/project_pages.py`` as a module.
+
+    Returns
+    -------
+    module
+        The loaded hook.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "_docs_hooks_project_pages", DOCS / "hooks" / "project_pages.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_project_section_holds_the_project_pages_in_order():
+    config = _mkdocs_config()
+    project = [page for page, trail in _nav_entries(config["nav"]) if trail and trail[0] == "Project"]
+    assert project == PROJECT_PAGES
+    assert "docs/hooks/project_pages.py" in config["hooks"]
+
+
+def test_contributing_guide_states_the_house_conventions():
+    text = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    missing = [topic for topic in CONTRIBUTING_TOPICS if topic not in text]
+    assert missing == []
+
+
+def test_contributing_guide_and_changelog_are_shown_on_the_site():
+    contributing = (DOCS / "project" / "contributing.md").read_text(encoding="utf-8")
+    changelog = (DOCS / "project" / "changelog.md").read_text(encoding="utf-8")
+    assert contributing.strip() == '--8<-- "CONTRIBUTING.md"'
+    assert '\n--8<-- "CHANGELOG.md"\n' in changelog
+    assert _front_matter(changelog)["search"]["exclude"] is True  # history, as large as the site
+    assert "../project/contributing.md" in _page_links("getting-started/installation.md")
+
+
+def test_root_file_links_are_rewritten_for_the_site():
+    """A link written for the repository works on the site: into docs/ it
+    becomes relative to the page, a root file with a page goes to the page,
+    anything else to GitHub; code blocks and absolute links stay as they are."""
+    hook = _project_hook()
+    text = "\n".join([
+        "[log](docs/audit-log.md#audit-pass-19)",
+        "[guide](CONTRIBUTING.md#language)",
+        "[script](scripts/release.py)",
+        "[web](https://example.org/x)",
+        "[here](#unreleased)",
+        "```text",
+        "[code](docs/not-a-link.md)",
+        "```",
+    ])
+    out = hook.rewrite_links(text, "project/changelog.md", "https://github.com/Ce1ectric/groundinsight")
+    assert "[log](../audit-log.md#audit-pass-19)" in out
+    assert "[guide](contributing.md#language)" in out
+    assert "[script](https://github.com/Ce1ectric/groundinsight/blob/main/scripts/release.py)" in out
+    assert "[web](https://example.org/x)" in out
+    assert "[here](#unreleased)" in out
+    assert "[code](docs/not-a-link.md)" in out
+
+
+def test_every_link_of_the_shown_root_files_reaches_its_target():
+    """The strict build checks the expanded pages; the suite checks the same
+    after the rewrite, without building the site."""
+    hook = _project_hook()
+    broken = []
+    for page, name in hook.INCLUDES.items():
+        text = hook.rewrite_links(
+            (ROOT / name).read_text(encoding="utf-8"), page, "https://github.com/owner/repo"
+        )
+        for target in _LINK.findall(_FENCE.sub("", text)):
+            path, _, anchor = target.partition("#")
+            if re.match(r"^[a-z][a-z0-9+.-]*:", target) or not path:
+                continue
+            resolved = ((DOCS / page).parent / path).resolve()
+            if not resolved.is_file():
+                broken.append((name, target, "no such file"))
+                continue
+            relative = resolved.relative_to(DOCS.resolve()).as_posix()
+            ids = _anchors(relative) if anchor and relative.endswith(".md") else None
+            if ids is not None and anchor not in ids:
+                broken.append((name, target, "no such anchor"))
+    assert broken == []
+
+
+def test_citation_is_generated_from_the_citation_file():
+    """The page carries markers; the hook fills them from CITATION.cff. The
+    expected text is assembled here from the same fields by hand."""
+    yaml = pytest.importorskip("yaml")
+    hook = _project_hook()
+    cff = yaml.safe_load((ROOT / "CITATION.cff").read_text(encoding="utf-8"))
+    formats = hook.citation_formats(cff)
+    (author,) = cff["authors"]
+    year = str(cff["date-released"])[:4] if cff.get("date-released") else "n.d."
+    assert formats["apa"] == (
+        f"{author['family-names']}, {author['given-names'][0]}. ({year}). *{cff['title']}* "
+        f"(Version {cff['version']}) [Computer software]. {cff['repository-code']}"
+    )
+    bibtex = formats["bibtex"].splitlines()
+    assert bibtex[0] == "@software{ehlert_groundinsight,"
+    assert f"  author  = {{{author['family-names']}, {author['given-names']}}}," in bibtex
+    assert f"  version = {{{cff['version']}}}," in bibtex
+    assert bibtex[-2] == f"  url     = {{{cff['repository-code']}}}"
+    page = (DOCS / "project" / "citation.md").read_text(encoding="utf-8")
+    assert "<!-- citation: bibtex -->" in page and "<!-- citation: apa -->" in page
+
+
+def test_citation_formats_cover_several_authors_a_date_and_a_doi():
+    hook = _project_hook()
+    formats = hook.citation_formats({
+        "title": "tool: a test",
+        "version": "2026.11.0",
+        "date-released": "2026-11-15",
+        "doi": "10.5281/zenodo.1",
+        "repository-code": "https://example.org/tool",
+        "authors": [
+            {"family-names": "Doe", "given-names": "Jane Ann"},
+            {"family-names": "Roe", "given-names": "Jean-Luc"},
+            {"family-names": "Poe", "given-names": "Al"},
+        ],
+    })
+    assert formats["apa"] == (
+        "Doe, J. A., Roe, J.-L., & Poe, A. (2026). *tool: a test* (Version 2026.11.0) "
+        "[Computer software]. https://doi.org/10.5281/zenodo.1"
+    )
+    assert "  author  = {Doe, Jane Ann and Roe, Jean-Luc and Poe, Al}," in formats["bibtex"]
+    assert "  year    = {2026}," in formats["bibtex"] and "  doi     = {10.5281/zenodo.1}," in formats["bibtex"]
+    with pytest.raises(ValueError, match="version"):
+        hook.citation_formats({"title": "t", "authors": [{"family-names": "A", "given-names": "B"}],
+                               "url": "https://example.org"})
+
+
+def test_license_page_shows_the_license_and_the_scope_of_the_results():
+    text = (DOCS / "project" / "license.md").read_text(encoding="utf-8")
+    assert '--8<-- "LICENSE"' in text
+    assert LIABILITY_NOTE in " ".join(line.strip() for line in text.splitlines())

@@ -158,8 +158,8 @@ Install a specific group with:
 poetry install --with docs,dev
 ```
 
-`CONTRIBUTING.md` in the repository describes how to run the tests and build
-this documentation.
+[Contributing](../project/contributing.md) describes how to run the tests and
+build this documentation, and the conventions of the code base.
 
 ## The graphical front end
 
