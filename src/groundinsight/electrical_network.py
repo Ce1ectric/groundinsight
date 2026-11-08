@@ -1214,6 +1214,7 @@ class ElectricalNetwork:
         Y_phase = np.zeros((n, n), dtype=complex)
         branch_y_phase: Dict[str, complex] = {}
         proxied: List[str] = []
+        broken_shields: List[str] = []
         for branch in self.network.branches.values():
             if not branch.active:
                 continue
@@ -1237,12 +1238,21 @@ class ElectricalNetwork:
                 Z_complex = self._resolved_impedance(
                     branch.self_impedance.get(freq), freq
                 )
-                if branch.type.grounding_conductor and Z_complex is not None:
-                    if _is_open_circuit(Z_complex):
-                        y = 0.0 + 0.0j
-                    else:
-                        y = 1.0 / Z_complex
+                if (
+                    branch.type.grounding_conductor
+                    and Z_complex is not None
+                    and not _is_open_circuit(Z_complex)
+                ):
+                    y = 1.0 / Z_complex
                 else:
+                    # No grounding conductor -- or a broken one: an infinite
+                    # Z_self ("nan") opens the *shield*, not the phase
+                    # conductor next to it. Taking 1/Z_self = 0 here removed
+                    # the phase conductor from the phase network, sent the
+                    # whole current round the other side of a ring and hid
+                    # the cycle from the proxy warning (PH3, -39 % EPR).
+                    if branch.type.grounding_conductor and Z_complex is not None:
+                        broken_shields.append(branch.name)
                     length = (
                         branch.length if branch.length and branch.length > 0 else 1.0
                     )
@@ -1267,7 +1277,9 @@ class ElectricalNetwork:
         # source current regardless of its impedance. Warning about the proxy on
         # a radial network would be noise, so the warning is scoped to the
         # meshed case and emitted once per solve rather than once per frequency.
-        self._warn_phase_impedance_proxy(proxied, branch_y_phase, component)
+        self._warn_phase_impedance_proxy(
+            proxied, branch_y_phase, component, broken_shields
+        )
         keep = [i for i in sorted(component) if i != fault_bus_idx]
         keep_pos = {bus_idx: j for j, bus_idx in enumerate(keep)}
         # An empty ``keep`` means the fault bus is alone in the phase network.
@@ -1346,6 +1358,7 @@ class ElectricalNetwork:
         proxied: List[str],
         branch_y_phase: Dict[str, complex],
         component: set,
+        broken_shields: Optional[List[str]] = None,
     ) -> None:
         """
         Warn once per solve when a *meshed* network relies on the phase proxy.
@@ -1356,7 +1369,15 @@ class ElectricalNetwork:
         result and saying so would only add noise. As soon as the fault bus sits
         in a component that carries a cycle, the split *is* decided by the
         impedance values, and a proxy there is a modelling assumption the user
-        needs to know about.
+        needs to know about. It is emitted as a ``ModelAssumptionWarning`` with
+        code ``PHASE_PROXY`` and the proxied branches of that component as
+        elements, so a program can find it in ``Result.diagnostics``.
+
+        The cycle test counts every branch with a non-zero phase admittance.
+        Since the proxy no longer opens the phase conductor of a broken shield
+        (PH3), only a *declared* open phase conductor (``phase_impedance_formula
+        = "nan"``) has zero admittance -- and that one genuinely breaks the
+        cycle.
 
         Parameters
         ----------
@@ -1366,6 +1387,9 @@ class ElectricalNetwork:
             Phase admittance per branch name for the current frequency.
         component : set
             Bus indices in the galvanic component of the fault bus.
+        broken_shields : List[str], optional
+            Proxied branches with a grounding conductor whose ``Z_self`` is
+            infinite, which fell back to the length proxy.
         """
         if self._phase_proxy_warned or not proxied:
             return
@@ -1387,17 +1411,32 @@ class ElectricalNetwork:
             return
 
         self._phase_proxy_warned = True
-        logger.warning(
-            "The phase network around the fault carries at least one cycle, so "
-            "the source current genuinely divides between routes -- and %d of "
-            "the branches in it declare no 'phase_impedance_formula': %s. Their "
-            "phase admittance falls back to 1/Z_self for a branch with a "
-            "grounding conductor and to 1/length (purely real) for one without, "
-            "two quantities that are not comparable. The split between routes of "
-            "different construction is therefore a heuristic, not a physical "
-            "result. Set BranchType.phase_impedance_formula to make it physical.",
-            len(relevant),
-            ", ".join(relevant),
+        broken = sorted(set(broken_shields or ()) & set(relevant))
+        broken_note = (
+            f" The shield of {', '.join(broken)} is broken (self impedance "
+            f"'nan'); its phase conductor is kept in the phase network with the "
+            f"length proxy, since a broken shield does not open the phase "
+            f"conductor next to it."
+            if broken
+            else ""
+        )
+        fault_name = self.network.active_fault
+        emit(
+            ModelAssumptionWarning,
+            f"The phase network around fault '{fault_name}' carries at least one "
+            f"cycle, so the source current genuinely divides between routes -- "
+            f"and {len(relevant)} of the branches in it declare no "
+            f"'phase_impedance_formula': {', '.join(relevant)}. Their phase "
+            f"admittance falls back to 1/Z_self for a branch with an intact "
+            f"grounding conductor and to 1/length (purely real) for one without, "
+            f"two quantities that are not comparable. The split between routes "
+            f"of different construction is therefore a heuristic, not a physical "
+            f"result.{broken_note} Set BranchType.phase_impedance_formula to make "
+            f"it physical.",
+            code="PHASE_PROXY",
+            elements=[("branch", name) for name in relevant]
+            + [("fault", str(fault_name))],
+            stacklevel=5,
         )
 
     def _phase_network_component(

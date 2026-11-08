@@ -351,19 +351,21 @@ def test_a_source_cut_off_from_the_fault_is_named_not_silently_dropped(caplog):
 # --- the proxy warning is scoped to the case where the proxy matters --------
 
 
-def test_the_proxy_warning_stays_quiet_on_a_radial_network(caplog):
+def test_the_proxy_warning_stays_quiet_on_a_radial_network():
     """
     Without a cycle the proxy cannot influence anything, so warning about it
     would only train the user to ignore the log.
+
+    Since audit pass 19 (PH3) the note is a structured ModelAssumptionWarning
+    with code PHASE_PROXY rather than a log line, so the result's diagnostics
+    are what is checked; the scope is unchanged.
     """
-    with caplog.at_level(logging.WARNING, logger="groundinsight"):
-        _solve(_network(RADIAL, ["S", "A", "F"]))
-    assert not [
-        r for r in caplog.records if "phase_impedance_formula" in r.getMessage()
-    ]
+    net = _network(RADIAL, ["S", "A", "F"])
+    _solve(net)
+    assert "PHASE_PROXY" not in [d.code for d in net.results["F"].diagnostics]
 
 
-def test_the_proxy_warning_fires_once_on_a_meshed_network(caplog):
+def test_the_proxy_warning_fires_once_on_a_meshed_network():
     """In a ring the split *is* decided by the impedances, so the proxy is a
     modelling assumption and is announced -- once, not once per frequency."""
     bus_type = _bus_type()
@@ -377,11 +379,11 @@ def test_the_proxy_warning_fires_once_on_a_meshed_network(caplog):
         )
     gi.create_fault("F", "F", {50.0: 1.0, 150.0: 1.0, 250.0: 1.0}, active=True, network=net)
     gi.create_source("SRC", "S", {50.0: 1000.0, 150.0: 100.0, 250.0: 50.0}, network=net)
-    with caplog.at_level(logging.WARNING, logger="groundinsight"):
-        gi.run_fault(net, "F")
-    matching = [
-        r for r in caplog.records if "phase_impedance_formula" in r.getMessage()
-    ]
+    # A structured ModelAssumptionWarning since audit pass 19 (PH3), so it is
+    # counted on the result rather than in the log.
+    with pytest.warns(gi.ModelAssumptionWarning, match="phase_impedance_formula"):
+        result = gi.run_fault(net, "F")
+    matching = [d for d in result.diagnostics if d.code == "PHASE_PROXY"]
     assert len(matching) == 1
 
 

@@ -601,3 +601,90 @@ def test_pq_ph4_bus_response_reports_the_same_z_e_for_every_electrode(bus, z_bus
     fresh = network(z_bus)
     expected = abs(complex(solve(fresh).reduction_factor.z_earthing[50.0]))
     assert row["Z_G_Ohm"][0] == pytest.approx(expected, rel=1e-10)
+
+
+# ---------------------------------------------------------------------------
+# PQ-PH3 -- a broken shield must not open the phase conductor
+# ---------------------------------------------------------------------------
+
+from groundinsight.diagnostics import ModelAssumptionWarning  # noqa: E402
+
+CAB_NO_PHASE = dict(zs="(0.29+0.625*j*f/50)*l", zm="(0.049+0.625*j*f/50)*l")
+
+
+def _broken_shield_ring(phase_formula: Optional[str] = None, broken: bool = True) -> dict:
+    """Ring S - A - F - B - S of one cable type, fault opposite the source;
+    the shield of R1 broken (``"nan"`` self impedance), its phase conductor
+    intact. Without a phase formula the split falls to the proxy."""
+    branches = {}
+    for name, (a, b) in dict(R1=("S", "A"), R2=("A", "F"), R3=("F", "B"), R4=("B", "S")).items():
+        d = dict(a=a, b=b, l=1.0, **CAB_NO_PHASE)
+        if phase_formula is not None:
+            d["zp"] = phase_formula
+        branches[name] = d
+    if broken:
+        branches["R1"]["zs"] = "nan"
+    return dict(
+        freqs=[50.0],
+        buses={"S": ("0.3", 100.0), "A": ("2.0", 100.0), "F": ("2.0", 100.0), "B": ("2.0", 100.0)},
+        branches=branches,
+        sources={"src": dict(kind="current", bus="S", I=at50(1000.0))},
+        faults={"F1": ("F", {50.0: 1.0})},
+    )
+
+
+def test_pq_ph3_a_broken_shield_keeps_its_phase_conductor():
+    """PQ-PH3: the proxy ``1/Z_self`` of a broken shield (Z_self infinite) used
+    to remove the *phase* conductor from the phase network: 0 A on R1,
+    1000 A on R4, the EPR 39 % low, and -- the ring now looking radial -- no
+    warning at all. The phase conductor of R1 must carry current, Kirchhoff
+    must hold at the source, and the proxy must be announced naming R1.
+
+    Second way: the reference solver's phase split with the same proxy rule
+    (length proxy for a branch without an intact shield)."""
+    net = build(_broken_shield_ring(), "ph3_broken")
+    with pytest.warns(ModelAssumptionWarning) as record:
+        result = gi.run_fault(net, "F1")
+    phase = net.electrical_network.phase_currents[50.0]
+    assert abs(phase["R1"]) > 100.0
+    assert abs(phase["R1"] - phase["R4"] - 1000.0) <= 1e-9 * 1000.0
+    proxy = [w.message for w in record if getattr(w.message, "code", None) == "PHASE_PROXY"]
+    assert len(proxy) == 1
+    assert ("branch", "R1") in proxy[0].elements
+    assert "broken" in str(proxy[0]) and "R1" in str(proxy[0])
+    assert "PHASE_PROXY" in [d.code for d in result.diagnostics]
+
+    rd = ref.reference_network(net, 50.0, "F1")
+    alpha = ref.phase_split(rd, "declared")["src"]
+    for name in ("R1", "R2", "R3", "R4"):
+        assert abs(phase[name] - 1000.0 * alpha[name]) <= TOL * 1000.0
+    mapped = ref.to_package_frame(ref.solve_oneway(rd, thevenin_phase="norton"))
+    assert ref.max_relative_deviation(package_vectors(result, 50.0)["u"], mapped["u"]) <= TOL
+
+
+def test_pq_ph3_a_declared_phase_impedance_splits_the_ring_in_half():
+    """With the phase impedance declared (identical conductors) the split of
+    the symmetric ring is 500/500 A whatever the shields do -- second way:
+    the reference split on Z_pp."""
+    net = build(_broken_shield_ring(phase_formula="(0.33+0.16*j*f/50)*l"), "ph3_declared")
+    solve(net)
+    phase = net.electrical_network.phase_currents[50.0]
+    assert abs(phase["R1"]) == pytest.approx(500.0, rel=1e-12)
+    assert abs(phase["R4"]) == pytest.approx(500.0, rel=1e-12)
+    rd = ref.reference_network(net, 50.0, "F1")
+    for branch in rd["branches"].values():
+        branch["zpp"] = branch["zp"]
+    alpha = ref.phase_split(rd, "zpp")["src"]
+    assert abs(phase["R1"] - 1000.0 * alpha["R1"]) <= TOL * 1000.0
+
+
+def test_pq_ph3_the_proxy_note_names_the_branches_on_an_intact_ring():
+    """The proxy note is a structured ModelAssumptionWarning with the
+    branches of the cycle as elements, once per run."""
+    net = build(_broken_shield_ring(broken=False), "ph3_intact")
+    with pytest.warns(ModelAssumptionWarning):
+        result = gi.run_fault(net, "F1")
+    records = [d for d in result.diagnostics if d.code == "PHASE_PROXY"]
+    assert len(records) == 1
+    assert {name for kind, name in records[0].elements if kind == "branch"} == {"R1", "R2", "R3", "R4"}
+    assert ("fault", "F1") in records[0].elements
