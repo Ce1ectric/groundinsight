@@ -229,7 +229,13 @@ class ElectricalNetwork:
                 state[name] = {}
         return state
 
-    def __init__(self, network: Network, auto_phase_currents: bool = False):
+    def __init__(
+        self,
+        network: Network,
+        auto_phase_currents: bool = False,
+        *,
+        input_checks: bool = False,
+    ):
         """
         Initialize the ElectricalNetwork with a given Network model.
 
@@ -245,9 +251,22 @@ class ElectricalNetwork:
             If False (default) the phase current is derived from the enumerated
             source-to-fault paths using each branch's ``parallel_coefficient``
             (Variant A). Defaults to False.
+        input_checks : bool, optional
+            Run the input checks of :func:`~groundinsight.run_fault` while the
+            vectors are assembled: a source that reaches the fault with a
+            value at none of the network frequencies raises ``ValueError``
+            (USE3/F8); partial source coverage, an incomplete
+            ``Fault.scalings`` (F7) and a Thevenin source driving coupled
+            branches (F5) are announced. :func:`~groundinsight.build_electrical_network`,
+            the step ``run_fault`` uses, turns them on. Other users of the
+            assembly leave them off -- the phase-split probe of the transient
+            solver injects 1 A per source whatever its stationary values, and
+            a source that only carries a transient waveform is legitimate
+            there. Defaults to False.
         """
         self.network = network
         self.auto_phase_currents = auto_phase_currents
+        self._input_checks = input_checks
         self.bus_indices = {}
         self.Y_matrices = {}  # Admittance matrices for each frequency
         self.u_vectors = {}  # Voltage vectors for each frequency
@@ -871,9 +890,11 @@ class ElectricalNetwork:
         # Set of source names that actually have at least one path to the active
         # fault; sources without a path do not contribute to the injection.
         sources_with_path = self._sources_with_path_to_active_fault()
-        self._check_source_coverage(sources_with_path, fault)
-        self._warn_incomplete_scalings(fault)
-        self._warn_thevenin_coupling(sources_with_path, fault)
+        if self._input_checks:
+            # The run_fault checks of the input (see ``input_checks``).
+            self._check_source_coverage(sources_with_path, fault)
+            self._warn_incomplete_scalings(fault)
+            self._warn_thevenin_coupling(sources_with_path, fault)
 
         for freq in frequencies:
             u_vector = np.zeros(self.num_buses, dtype=complex)

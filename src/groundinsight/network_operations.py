@@ -642,6 +642,20 @@ def build_electrical_network(network: Network, auto_phase_currents: bool = False
     ------
     ImportError
         If the :class:`ElectricalNetwork` class cannot be imported.
+    ValueError
+        If a source that reaches the active fault has a value at none of the
+        network frequencies (USE3, decision F8). The checks of the input that
+        :func:`run_fault` makes run here, while the vectors are assembled.
+
+    Warns
+    -----
+    InputWarning
+        ``SOURCE_FREQUENCY_GAP`` for a source that misses some network
+        frequencies, ``SCALINGS_INCOMPLETE`` for an incomplete
+        ``Fault.scalings``.
+    ModelAssumptionWarning
+        ``THEVENIN_COUPLING`` for a Thevenin source that drives coupled
+        branches.
 
     Examples
     --------
@@ -651,7 +665,7 @@ def build_electrical_network(network: Network, auto_phase_currents: bool = False
     from groundinsight.electrical_network import ElectricalNetwork
 
     network.electrical_network = ElectricalNetwork(
-        network, auto_phase_currents=auto_phase_currents
+        network, auto_phase_currents=auto_phase_currents, input_checks=True
     )
 
 

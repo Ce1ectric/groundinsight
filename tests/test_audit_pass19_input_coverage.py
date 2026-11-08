@@ -202,3 +202,88 @@ def test_scaling_at_is_the_single_place_that_defines_the_default():
     assert fault.scaling_at(50) == 0.5
     assert fault.scaling_at(150.0) == 1.0
     assert gi.Fault(name="F2", bus="F").scaling_at(0.0) == 1.0
+
+
+# ---------------------------------------------------------------------------
+# The checks belong to run_fault, not to every user of the assembly
+# ---------------------------------------------------------------------------
+
+
+def _state_space_chain(name: str, values: Dict[float, complex], frequencies=(50.0,)) -> gi.Network:
+    """S - A - F with the lumped data the state-space solver needs."""
+    net = gi.create_network(name=name, frequencies=list(frequencies))
+    for bus, resistance in (("S", 0.3), ("A", 2.0), ("F", 2.0)):
+        bus_type = gi.BusType(
+            name=f"{name}_{bus}", system_type="S", voltage_level=20.0,
+            impedance_formula=f"{resistance!r}", R_formula=f"{resistance!r}",
+        )
+        gi.create_bus(name=bus, type=bus_type, network=net)
+    cable = gi.BranchType(
+        name=f"{name}_cab", grounding_conductor=True,
+        self_impedance_formula="(0.29 + j*2*pi*f*0.002)*l",
+        mutual_impedance_formula="(0.049 + j*2*pi*f*0.0017)*l",
+        phase_impedance_formula="(0.13 + j*2*pi*f*0.0004)*l",
+        R_self_formula="0.29*l", L_self_formula="0.002*l",
+        R_mutual_formula="0.049*l", M_mutual_formula="0.0017*l",
+    )
+    gi.create_branch(name="L1", type=cable, from_bus="S", to_bus="A", length=1.0, network=net)
+    gi.create_branch(name="L2", type=cable, from_bus="A", to_bus="F", length=1.0, network=net)
+    _quiet_source(net, "Q", "S", values)
+    gi.create_fault(name="F1", bus="F", scalings={50.0: 1.0}, network=net)
+    return net
+
+
+def test_a_transient_only_source_is_not_judged_by_its_stationary_values():
+    """The transient solver takes the source's waveform, not ``Source.values``,
+    and probes the phase split with 1 A per source through the stationary
+    assembly. A source that carries a transient only -- values at none of the
+    network frequencies, legitimately -- must not make that probe raise the
+    run_fault error, and the run_fault notes (coverage gap, incomplete
+    scalings, Thevenin coupling) do not apply to a transient. run_fault on the
+    same network still refuses it."""
+    from groundinsight.simulation import waveforms
+    from groundinsight.simulation.transient import TransientStudy
+
+    net = _state_space_chain("use3_transient", {60.0: 1.0})
+    study = TransientStudy(net, fault_name="F1")
+    study.set_source_waveform("Q", waveforms.step(amplitude=100.0))
+    study.set_observation(buses=["S", "A", "F"])
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        result = study.solve(t_end=0.02, dt=1e-4, solver="state_space")
+    codes = {getattr(w.message, "code", None) for w in record}
+    assert not codes & {"SOURCE_FREQUENCY_GAP", "SCALINGS_INCOMPLETE", "THEVENIN_COUPLING"}
+    # The step reaches the earthing system: the fault bus rises.
+    assert max(abs(v) for v in result.epr_t["F"]) > 1.0
+    with pytest.raises(ValueError, match="none of the network frequencies"):
+        gi.run_fault(net, "F1")
+
+
+def test_a_fault_without_scalings_keeps_a_fresh_result_fresh(tmp_path):
+    """``Result.input_digest`` (GUI3/F9) covers ``Fault.scalings``. ``None`` and
+    ``{}`` are stored as the same empty mapping, so a fresh result is not
+    stale -- in memory and after the JSON project file -- and the result
+    fields added in this pass (``i_fault``, ``*_group``) survive the file
+    without entering the digest."""
+    for label, scalings in (("none", None), ("empty", {})):
+        net = _network(f"ph6_digest_{label}")
+        _quiet_source(net, "Q", "S", {50.0: 1000.0, 150.0: 100.0})
+        gi.create_fault(name="F1", bus="F", scalings=scalings, network=net)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", InputWarning)
+            result = gi.run_fault(net, "F1")
+        assert net.stale_results() == [] and not net.is_result_stale("F1")
+        path = tmp_path / f"{label}.json"
+        gi.save_network_to_json(net, path)
+        loaded = gi.load_network_from_json(path)
+        assert loaded.faults["F1"].scalings == {}
+        assert loaded.stale_results() == []
+        assert loaded.results["F1"].input_digest == result.input_digest
+        before, after = result.reduction_factor, loaded.results["F1"].reduction_factor
+        for f in FREQS:
+            assert complex(after.u_earthing[f]) == complex(before.u_earthing[f])
+            assert complex(after.u_earthing_group[f]) == complex(before.u_earthing_group[f])
+            assert complex(after.i_fault[f]) == complex(before.i_fault[f])
+        # Changing the scalings is a change of the input.
+        net.faults["F1"].scalings = {50.0: 0.5}
+        assert net.is_result_stale("F1")
