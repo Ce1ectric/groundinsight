@@ -35,6 +35,7 @@ import logging
 import os
 import shutil
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -429,14 +430,14 @@ def test_migrating_a_current_file_changes_nothing(tmp_path):
     gi.start_dbsession(path)
     gi.save_network_to_db(_build_network("net", ["A", "B"], [("L1", "A", "B")]))
     gi.close_dbsession()
-    before = open(path, "rb").read()
+    before = Path(path).read_bytes()
 
     report = migrate_database(path)
 
     assert report.migrated is False
     assert report.kind == "none"
     assert report.backup_path is None
-    assert open(path, "rb").read() == before
+    assert Path(path).read_bytes() == before
     assert not os.path.exists(path + ".bak")
 
 
@@ -525,19 +526,19 @@ def test_a_database_written_by_the_released_ddl_loads_after_migration(tmp_path):
 def test_the_unmodified_file_is_copied_before_anything_is_written(tmp_path):
     """The backup must be byte-identical to the pre-migration file."""
     path, _ = _legacy_file(tmp_path)
-    before = open(path, "rb").read()
+    before = Path(path).read_bytes()
 
     report = migrate_database(path)
 
     assert report.backup_path == path + ".bak"
-    assert open(report.backup_path, "rb").read() == before
-    assert open(path, "rb").read() != before  # it really was rewritten
+    assert Path(report.backup_path).read_bytes() == before
+    assert Path(path).read_bytes() != before  # it really was rewritten
 
 
 def test_a_second_migration_never_overwrites_an_existing_backup(tmp_path):
     """Losing the only copy of the original to a re-run is not acceptable."""
     path, _ = _legacy_file(tmp_path)
-    first = open(path, "rb").read()
+    first = Path(path).read_bytes()
     migrate_database(path)
 
     # Downgrade the migrated file again and migrate a second time.
@@ -545,7 +546,7 @@ def test_a_second_migration_never_overwrites_an_existing_backup(tmp_path):
     report = migrate_database(path)
 
     assert report.backup_path == path + ".bak.1"
-    assert open(path + ".bak", "rb").read() == first
+    assert Path(path + ".bak").read_bytes() == first
     assert os.path.exists(path + ".bak.1")
 
 
@@ -560,7 +561,7 @@ def test_backup_false_skips_the_copy(tmp_path):
 def test_a_failing_rebuild_leaves_the_original_file_untouched(tmp_path, monkeypatch):
     """An interrupted migration must not produce a half-converted database."""
     path, _ = _legacy_file(tmp_path)
-    before = open(path, "rb").read()
+    before = Path(path).read_bytes()
 
     from groundinsight.database import migration as migration_module
 
@@ -572,7 +573,7 @@ def test_a_failing_rebuild_leaves_the_original_file_untouched(tmp_path, monkeypa
     with pytest.raises(RuntimeError, match="disk full"):
         migrate_database(path)
 
-    assert open(path, "rb").read() == before
+    assert Path(path).read_bytes() == before
     assert not os.path.exists(path + ".migrating")
     assert needs_migration(path) == "legacy_scoped"
 
@@ -818,13 +819,13 @@ def test_start_dbsession_migrates_a_legacy_file_automatically(tmp_path):
 def test_start_dbsession_with_migrate_false_gives_an_actionable_error(tmp_path):
     """Opting out must fail early and say exactly what to run."""
     path, _ = _legacy_file(tmp_path)
-    before = open(path, "rb").read()
+    before = Path(path).read_bytes()
 
     gi.start_dbsession(path, migrate=False)
     with pytest.raises(RuntimeError, match="migrate_database"):
         gi.load_network_from_db("netA")
 
-    assert open(path, "rb").read() == before
+    assert Path(path).read_bytes() == before
     assert not os.path.exists(path + ".bak")
 
 
@@ -953,15 +954,15 @@ def test_a_missing_branch_length_aborts_instead_of_being_guessed(tmp_path):
     """
     path, _ = _legacy_file(tmp_path)
     _null_out(path, "branches", "length", "L2")
-    before = open(path, "rb").read()
+    before = Path(path).read_bytes()
 
     with pytest.raises(RuntimeError, match=r"branches\.length of 'L2'"):
         migrate_database(path)
 
     # Refusing is only acceptable because it is recoverable.
-    assert open(path, "rb").read() == before
+    assert Path(path).read_bytes() == before
     assert not os.path.exists(path + ".migrating")
-    assert open(path + ".bak", "rb").read() == before
+    assert Path(path + ".bak").read_bytes() == before
 
 
 def test_a_missing_fault_scaling_aborts_instead_of_being_guessed(tmp_path):
