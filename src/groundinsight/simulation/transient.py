@@ -584,8 +584,12 @@ class TransientStudy:
             decides instead, so memory stays bounded for any network size --
             the fixed 512-bin batch took 1.3 GB at 400 buses and 8.2 GB at
             1000. The result does not depend on it (every bin is solved on
-            its own). A single matrix larger than the budget is solved one
-            bin at a time and logged. Defaults to 256 MiB.
+            its own). A very small budget costs time on mid-size networks,
+            because every batch is one pass of the element-wise assembly:
+            150 buses and 1001 bins took 4.5 s at 1 MiB (two bins per batch)
+            against 0.7 s at the default. A single matrix larger than the
+            budget is solved one bin at a time and logged. Defaults to
+            256 MiB.
 
         Returns
         -------

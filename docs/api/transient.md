@@ -100,8 +100,11 @@ needed 1.3 GB at 400 buses and 8.2 GB at 1000, and the previous batch was
 still alive while the next one was assembled; with the default budget a
 400-bus solve over 1001 bins peaks at about 0.3 GB. The budget changes the
 memory, not the result: every bin is an independent solve, and the
-spectra are bit-identical to the old batching. A single matrix larger than
-the budget is solved one bin at a time, with a log message.
+spectra are bit-identical to the old batching. A very small budget does
+cost time on mid-size networks, because each batch is one assembly pass
+over all elements — 150 buses and 1001 bins take 0.7 s at the default and
+4.5 s at 1 MiB (two bins per batch). A single matrix larger than the
+budget is solved one bin at a time, with a log message.
 
 ```python
 result = study.solve(t_end=0.2, dt=1e-4, solver="fft",
