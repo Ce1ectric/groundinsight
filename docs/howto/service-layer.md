@@ -108,14 +108,14 @@ For the project saved by the script, `groundinsight run projekt.json` prints
 after a two-line header (version, network, fault and input digest):
 
 ```text title="Output of groundinsight run projekt.json"
-f [Hz]  I_F [A]  EPR fault [V]  EPR max [V]      at bus    r_epr  r_current  I_E [A]  U_E [V]  Z_E [Ohm]
-------  -------  -------------  -----------  ----------  -------  ---------  -------  -------  ---------
-    50     1000          275.4        275.4   bus_fault   0.3846     0.2741    274.1    275.4      0.844
-   250      200          17.12        17.12   bus_fault  0.08305    0.07656    15.31    17.12      1.073
-   350      100          6.741        6.741  bus_source  0.05942    0.05523    5.523    6.741      1.177
-   450       50          2.901        2.901   bus_fault  0.04625    0.04313    2.156    2.901      1.299
-   550       25          1.314        1.314   bus_fault  0.03785    0.03536    0.884    1.314      1.437
-   RMS     1026          276.1        276.1   bus_fault        -          -    274.6    276.1          -
+f [Hz]  I_F [A]  EPR fault [V]  EPR max [V]     at bus    r_epr  r_current  I_E [A]  U_E [V]  Z_E [Ohm]
+------  -------  -------------  -----------  ---------  -------  ---------  -------  -------  ---------
+    50     1000          275.4        275.4  bus_fault   0.3846     0.2741    274.1    275.4      0.844
+   250      200          17.12        17.12  bus_fault  0.08305    0.07656    15.31    17.12      1.073
+   350      100          6.741        6.741  bus_fault  0.05942    0.05523    5.523    6.741      1.177
+   450       50          2.901        2.901  bus_fault  0.04625    0.04313    2.156    2.901      1.299
+   550       25          1.314        1.314  bus_fault  0.03785    0.03536    0.884    1.314      1.437
+   RMS     1026          276.1        276.1  bus_fault        -          -    274.6    276.1          -
 ```
 
 followed by the diagnostic `SCALINGS_INCOMPLETE`: the quickstart example gives

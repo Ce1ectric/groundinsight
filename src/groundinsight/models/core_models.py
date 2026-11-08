@@ -479,6 +479,45 @@ def _root_sum_of_squares(values: List[Optional[complex]]) -> Optional[float]:
     return math.sqrt(sum(defined))
 
 
+#: Two EPR magnitudes closer than this, relative to the larger, are a tie for
+#: ``EPR_max_bus``. Below it the order is decided by the last bits of the
+#: solution, which differ between the BLAS/LAPACK builds of the platforms.
+_EPR_TIE_RTOL = 1e-9
+
+
+def _largest_epr(
+    magnitudes: List[Tuple[str, Optional[float]]], fault_bus: str
+) -> Tuple[Optional[str], Optional[float]]:
+    """
+    The largest EPR magnitude and its bus, with ties resolved deterministically.
+
+    Both ends of a symmetric line carry the same EPR magnitude; a strict
+    ``>`` then names whichever bus the last bit of the solution favours, and
+    that differs between platforms. Magnitudes within ``_EPR_TIE_RTOL`` of
+    the largest count as a tie, and a tie names the fault bus if it is part
+    of it, otherwise the first tied bus in the given order.
+
+    Parameters
+    ----------
+    magnitudes : list of tuple
+        ``(bus name, |EPR| or None)`` in result order.
+    fault_bus : str
+        The bus of the fault.
+
+    Returns
+    -------
+    tuple
+        ``(bus name, largest magnitude)``, or ``(None, None)`` when no bus
+        has a value.
+    """
+    present = [(name, value) for name, value in magnitudes if value is not None]
+    if not present:
+        return None, None
+    top = max(value for _, value in present)
+    tied = [name for name, value in present if value >= top * (1.0 - _EPR_TIE_RTOL)]
+    return (fault_bus if fault_bus in tied else tied[0]), top
+
+
 def _fault_key_figures(network: "Network", fault: str, result: "Result") -> pl.DataFrame:
     """
     The rows of :meth:`Network.res_fault` for a stored result.
@@ -524,12 +563,15 @@ def _fault_key_figures(network: "Network", fault: str, result: "Result") -> pl.D
         u_fault = (
             _phasor(fault_result.uepr_freq, frequency) if fault_result is not None else None
         )
-        # The largest EPR and its bus; the first bus in result order on a tie.
-        top_bus, top = None, None
-        for bus in buses:
-            potential = _phasor(bus.uepr_freq, frequency)
-            if potential is not None and (top is None or abs(potential) > top):
-                top_bus, top = bus.name, abs(potential)
+        top_bus, top = _largest_epr(
+            [
+                (bus.name, None if potential is None else abs(potential))
+                for bus, potential in (
+                    (bus, _phasor(bus.uepr_freq, frequency)) for bus in buses
+                )
+            ],
+            fault_bus,
+        )
         fault_currents.append(i_fault)
         earth_currents.append(i_earth)
         earthing_voltages.append(u_earthing)
@@ -554,7 +596,7 @@ def _fault_key_figures(network: "Network", fault: str, result: "Result") -> pl.D
         )
     # The RMS row: the stored RMS EPR per bus, root sums of squares otherwise;
     # ratios, impedances and angles have no RMS value.
-    top_rms = max(buses, key=lambda bus: bus.uepr, default=None)
+    top_rms_bus, top_rms = _largest_epr([(bus.name, bus.uepr) for bus in buses], fault_bus)
     rows.append(
         {
             "fault": fault,
@@ -565,8 +607,8 @@ def _fault_key_figures(network: "Network", fault: str, result: "Result") -> pl.D
             "I_F_degree": None,
             "EPR_fault_V": fault_result.uepr if fault_result is not None else None,
             "EPR_fault_degree": None,
-            "EPR_max_V": top_rms.uepr if top_rms is not None else None,
-            "EPR_max_bus": top_rms.name if top_rms is not None else None,
+            "EPR_max_V": top_rms,
+            "EPR_max_bus": top_rms_bus,
             "r_epr": None,
             "r_current": None,
             "I_E_A": _root_sum_of_squares(earth_currents),
