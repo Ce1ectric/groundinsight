@@ -414,6 +414,18 @@ if given is not None:
         hypothesis (derandomized, so the suite stays deterministic)."""
         _check_invariants(seed)
 
+else:
+
+    def test_invariants_hold_for_hypothesis_generated_seeds():
+        """PQ-INV, hypothesis variant -- hypothesis is not installed.
+
+        Without this stand-in the test would simply not exist, and nobody
+        would notice that it never ran. It skips like any optional import,
+        and fails in CI strict mode (``GROUNDINSIGHT_CI=1``, see
+        ``tests/conftest.py``), where hypothesis comes with the dev group.
+        """
+        pytest.importorskip("hypothesis")
+
 
 # ---------------------------------------------------------------------------
 # PQ-PH4 -- the EN 50522 quantities U_E, Z_E (decision F4)

@@ -32,17 +32,27 @@ STD11 / DOC15 -- ``docs.yml`` deployed with ``mkdocs gh-deploy`` and no
 ``--strict``: the pull-request job built strictly, but a push to ``main``
 published whatever built, warnings included.
 
-The workflow files are read as text. PyYAML only comes with the optional
-``docs`` group and is therefore missing from the CI test environment, so every
-property has a dependency-free primary check. Where PyYAML is importable the
-same property is checked a second time on the parsed document, which guards
-the hand-written text checks against a layout they do not understand.
+CI strict mode -- these YAML cross-checks and the bandit check were skipped in
+CI, because the test job installs only the ``dev`` group and PyYAML sat in the
+``docs`` group, bandit in none (and hypothesis, for PQ-INV, in none either).
+All three are in ``dev`` now, and the test jobs set ``GROUNDINSIGHT_CI=1``,
+under which ``tests/conftest.py`` turns a skip for a missing import into a
+failure.
+
+The workflow files are read as text, so every property has a
+dependency-free primary check. The same property is checked a second time on
+the PyYAML document, which guards the hand-written text checks against a
+layout they do not understand; outside CI that second check skips when
+PyYAML is not installed.
 """
 
 from __future__ import annotations
 
 import itertools
+import os
 import re
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
@@ -90,7 +100,7 @@ def _text(name: str) -> str:
 
 def _yaml(name: str) -> dict:
     """
-    Parse one workflow file with PyYAML, or skip when PyYAML is missing.
+    Parse one workflow file with PyYAML; skip without it (fail in CI strict mode).
 
     Parameters
     ----------
@@ -715,3 +725,108 @@ def test_strict_deploy_agrees_with_yaml():
     steps = _yaml("docs.yml")["jobs"]["build-and-deploy"]["steps"]
     commands = [step["run"] for step in steps if "gh-deploy" in step.get("run", "")]
     assert len(commands) == 1 and "--strict" in commands[0].split()
+
+
+# ---------------------------------------------------------------------------
+# CI strict mode -- a missing test dependency fails instead of skipping
+# ---------------------------------------------------------------------------
+
+#: The jobs that run the suite and therefore set GROUNDINSIGHT_CI=1.
+_SUITE_JOBS = (("ci.yml", "test"), ("release.yml", "test"))
+
+
+def test_the_suite_jobs_run_in_strict_mode():
+    for name, job in _SUITE_JOBS:
+        source = "\n".join(_jobs(_text(name))[job])
+        assert re.search(r"^\s*GROUNDINSIGHT_CI:\s*['\"]?1['\"]?\s*$", source, re.MULTILINE), (
+            f"{name}/{job} does not set GROUNDINSIGHT_CI=1"
+        )
+
+
+def test_strict_mode_agrees_with_yaml():
+    """Second method: the job environment of the parsed documents."""
+    for name, job in _SUITE_JOBS:
+        assert str(_yaml(name)["jobs"][job]["env"]["GROUNDINSIGHT_CI"]) == "1", name
+
+
+_INNER_TESTS = '''
+import pytest
+
+
+def test_needs_a_missing_module():
+    pytest.importorskip("groundinsight_surely_missing_module")
+
+
+def test_skips_for_another_reason():
+    pytest.skip("platform specific")
+'''
+
+_INNER_MODULE_LEVEL = '''
+import pytest
+
+pytest.importorskip("groundinsight_surely_missing_module")
+
+
+def test_never_collected():
+    pass
+'''
+
+
+def _run_inner_suite(tmp_path: Path, strict: bool) -> subprocess.CompletedProcess:
+    """
+    Run a two-file suite under the repository's ``conftest.py``.
+
+    Parameters
+    ----------
+    tmp_path : pathlib.Path
+        Empty directory for the inner suite.
+    strict : bool
+        Whether ``GROUNDINSIGHT_CI=1`` is set for the inner run.
+
+    Returns
+    -------
+    subprocess.CompletedProcess
+        The finished pytest process (text output).
+    """
+    conftest = (ROOT / "tests" / "conftest.py").read_text(encoding="utf-8")
+    (tmp_path / "conftest.py").write_text(conftest, encoding="utf-8")
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+    (tmp_path / "test_inner.py").write_text(_INNER_TESTS, encoding="utf-8")
+    (tmp_path / "test_inner_module.py").write_text(_INNER_MODULE_LEVEL, encoding="utf-8")
+    env = {key: value for key, value in os.environ.items() if key != "GROUNDINSIGHT_CI"}
+    # A pipe on Windows is written in the ANSI code page unless told otherwise.
+    env["PYTHONIOENCODING"] = "utf-8"
+    if strict:
+        env["GROUNDINSIGHT_CI"] = "1"
+    return subprocess.run(
+        # A module-level miss is a collection error in strict mode, which
+        # stops a run; --continue-on-collection-errors lets one inner run
+        # show the test-level case next to it.
+        [sys.executable, "-m", "pytest", "-q", "-rA", "-p", "no:cacheprovider",
+         "--continue-on-collection-errors",
+         "-c", str(tmp_path / "pytest.ini"), "--rootdir", str(tmp_path), str(tmp_path)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        timeout=300,
+    )
+
+
+def test_a_missing_import_is_a_skip_outside_ci(tmp_path):
+    proc = _run_inner_suite(tmp_path, strict=False)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "3 skipped" in proc.stdout, proc.stdout
+
+
+def test_a_missing_import_fails_in_ci_strict_mode(tmp_path):
+    """Test-level and module-level ``importorskip`` both turn into failures;
+    a skip with any other reason stays a skip."""
+    proc = _run_inner_suite(tmp_path, strict=True)
+    out = proc.stdout
+    assert proc.returncode != 0, out
+    assert "FAILED test_inner.py::test_needs_a_missing_module" in out, out
+    assert "ERROR test_inner_module.py" in out, out
+    assert "GROUNDINSIGHT_CI=1" in out, out
+    assert re.search(r"SKIPPED \[1\] test_inner\.py:\d+: platform specific", out), out

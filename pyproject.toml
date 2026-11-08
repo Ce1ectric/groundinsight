@@ -52,6 +52,14 @@ pytest-cov = ">=5,<8"
 black = ">=24.8,<27.0"
 pandapower = "^3.0"
 pyzmq = "^27.0"
+# Test-only imports (audit pass 19): the workflow checks parse the YAML a
+# second time with PyYAML, the SEC6 check runs bandit, and the PQ-INV
+# invariant tests draw networks with hypothesis. All three were missing in
+# CI, which installs only this group; under GROUNDINSIGHT_CI=1 a missing test
+# dependency now fails instead of skipping (tests/conftest.py).
+pyyaml = "^6.0"
+bandit = "^1.9"
+hypothesis = "^6.0"
 
 [tool.poetry.group.docs]
 optional = true

@@ -43,6 +43,13 @@ used in membership tests, and values go through ``?`` placeholders. Each
 site now says so next to a ``# nosec B608``. The claim is also checked by
 behaviour: a legacy file with a hostile column and table name is migrated
 while every SQL string the module sends is recorded.
+
+CI strict mode -- every module the suite imports through
+``pytest.importorskip`` has to be in the ``dev`` group, which is all the CI
+test job installs; PyYAML and bandit were not, so 12 tests were skipped in CI
+without anyone seeing it, and the hypothesis variant of the PQ-INV invariant
+test was not even defined there. Under ``GROUNDINSIGHT_CI=1`` such a skip, and
+a missing tool such as ``poetry``, now fails (``tests/conftest.py``).
 """
 
 from __future__ import annotations
@@ -185,15 +192,15 @@ def test_lock_was_resolved_for_the_declared_python_range():
     assert _lock()["metadata"]["python-versions"] == declared
 
 
-def test_poetry_accepts_the_lock_file():
+def test_poetry_accepts_the_lock_file(require_tool):
     """Poetry's own verdict on the lock (content hash over ``pyproject.toml``).
 
     This is the check ``poetry install`` performs in CI before installing
     anything; running it here catches a stale lock where the suite runs.
+    Without Poetry the test skips -- except in CI strict mode, where Poetry is
+    always installed and its absence is a broken job (``require_tool``).
     """
-    poetry = shutil.which("poetry")
-    if poetry is None:
-        pytest.skip("poetry is not installed in this environment")
+    poetry = require_tool("poetry")
     proc = subprocess.run(
         [poetry, "check", "--lock", "--no-interaction"],
         cwd=ROOT,
@@ -595,7 +602,7 @@ def test_every_sql_fstring_in_the_migration_is_suppressed_with_a_reason():
 
 
 def test_bandit_reports_no_open_b608_in_the_migration():
-    """Second method: bandit itself, where it is installed."""
+    """Second method: bandit itself (dev group; skips only outside CI)."""
     pytest.importorskip("bandit")
     proc = subprocess.run(
         [sys.executable, "-m", "bandit", "-q", "-f", "json", str(_MIGRATION)],
@@ -698,3 +705,74 @@ def test_migration_never_puts_a_name_from_the_file_into_sql(tmp_path, monkeypatc
     finally:
         conn.close()
     assert bus_columns == {column.name for column in Base.metadata.tables["buses"].columns}
+
+
+# ---------------------------------------------------------------------------
+# CI runs what the suite can run: test-only imports and tools
+# ---------------------------------------------------------------------------
+
+#: Top-level module -> distribution name, where they differ.
+_DISTRIBUTION_OF = {"yaml": "pyyaml"}
+
+
+def _optional_imports() -> List[Tuple[str, str]]:
+    """
+    Every module the suite imports through ``pytest.importorskip``.
+
+    Read from the source with ``ast``, so a module that is missing in this
+    environment is found as well.
+
+    Returns
+    -------
+    list of tuple
+        ``(test file, top-level module)`` per call with a literal argument.
+    """
+    found = []
+    for path in sorted((ROOT / "tests").glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "importorskip"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+            ):
+                found.append((path.name, node.args[0].value.split(".")[0]))
+    return found
+
+
+def test_every_optional_import_of_the_suite_is_in_the_dev_group():
+    """The CI test job installs ``--with dev``; whatever the suite imports
+    optionally has to come with it, or CI skips those tests (11 workflow
+    checks and the bandit check were skipped there before, and the
+    hypothesis variant of PQ-INV did not exist without hypothesis)."""
+    imports = _optional_imports()
+    assert {"yaml", "bandit", "pandapower", "hypothesis"} <= {
+        module for _, module in imports
+    }
+
+    dev = {
+        name.lower()
+        for name in _pyproject()["tool"]["poetry"]["group"]["dev"]["dependencies"]
+    }
+    locked_groups = {p["name"]: set(p.get("groups", [])) for p in _lock()["package"]}
+    for test_file, module in imports:
+        distribution = _DISTRIBUTION_OF.get(module, module)
+        assert distribution in dev, f"{test_file}: {distribution} is not in the dev group"
+        # Second route: the resolved lock, not the declaration.
+        assert "dev" in locked_groups.get(distribution, set()), (
+            f"{test_file}: {distribution} is not locked for the dev group"
+        )
+
+
+def test_a_missing_tool_fails_in_ci_strict_mode_and_skips_elsewhere(
+    require_tool, monkeypatch
+):
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    monkeypatch.setenv("GROUNDINSIGHT_CI", "1")
+    with pytest.raises(pytest.fail.Exception, match="GROUNDINSIGHT_CI"):
+        require_tool("poetry")
+    for relaxed in ("0", ""):
+        monkeypatch.setenv("GROUNDINSIGHT_CI", relaxed)
+        with pytest.raises(pytest.skip.Exception):
+            require_tool("poetry")

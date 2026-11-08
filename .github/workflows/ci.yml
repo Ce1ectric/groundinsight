@@ -53,6 +53,11 @@ jobs:
       # macOS and Windows runners default to GUI backends; plotting tests
       # must not depend on a window server.
       MPLBACKEND: Agg
+      # Strict mode (tests/conftest.py): a test that would skip for a missing
+      # import or tool fails instead -- this job installs the dev group, so
+      # such a skip means the install is incomplete, not that a test is
+      # optional.
+      GROUNDINSIGHT_CI: "1"
 
     steps:
       - name: Check out repository

@@ -36,6 +36,10 @@ jobs:
   test:
     name: Tests on the tagged commit
     runs-on: ubuntu-latest
+    env:
+      # Strict mode, as in ci.yml: a missing test dependency fails the gate
+      # instead of skipping the tests that need it (tests/conftest.py).
+      GROUNDINSIGHT_CI: "1"
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
