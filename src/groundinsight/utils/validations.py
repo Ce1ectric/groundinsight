@@ -593,9 +593,10 @@ def assert_safe_formula(value: str) -> None:
         # below depend on SymPy's parser rejecting it -- it does today,
         # because it uses the same tokenizer, but a real impedance formula
         # always tokenises, so there is nothing to gain from that coupling.
+        detail = exc.args[0] if exc.args else exc
         raise ValueError(
-            f"Impedance formula could not be tokenized ({exc}). Check for an "
-            "unclosed parenthesis or a stray quote."
+            f"Impedance formula could not be tokenized ({detail}). Check for "
+            "an unclosed parenthesis or a stray quote."
         ) from exc
 
     for tok in tokens:
