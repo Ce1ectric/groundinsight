@@ -17,6 +17,7 @@ again.
 """
 
 import doctest
+import importlib
 import tomllib
 from pathlib import Path
 
@@ -62,24 +63,52 @@ def test_the_repaired_doctests_run(module):
     assert result.attempted > 0
 
 
-def test_every_module_of_the_package_has_running_doctests():
+#: Modules that may need an optional extra, with the extra. Only these may
+#: be left out, and only where the extra is missing: the skip goes through
+#: ``pytest.importorskip``, which CI strict mode (``GROUNDINSIGHT_CI=1``,
+#: see ``conftest.py``) turns into a failure. Any other ImportError fails.
+_OPTIONAL_IMPORTS = {
+    "groundinsight.io.pandapower_import": "pandapower",
+    "groundinsight.io.pandapower_sc": "pandapower",
+}
+
+
+def _package_modules():
+    """
+    The importable name of every module of the package, sorted.
+
+    Returns
+    -------
+    list of str
+        Dotted module names, ``__init__`` files as their package.
+    """
+    package_root = Path(groundinsight.__file__).resolve().parent
+    names = []
+    for path in sorted(package_root.rglob("*.py")):
+        relative = path.relative_to(package_root).with_suffix("")
+        parts = [part for part in relative.parts if part != "__init__"]
+        names.append(".".join(["groundinsight", *parts]))
+    return names
+
+
+@pytest.mark.parametrize("module_name", _package_modules())
+def test_every_module_of_the_package_has_running_doctests(module_name):
     """No module may carry an example that raises when it is run.
 
     The failure mode this guards against is not a wrong expected output --
     pytest reports that -- but a module nobody ever executed because it was
-    outside the collection path.
+    outside the collection path. A module that cannot be imported is such a
+    module, so its ImportError fails here instead of being passed over.
     """
-    package_root = Path(groundinsight.__file__).resolve().parent
-    failures = []
-    for path in sorted(package_root.rglob("*.py")):
-        relative = path.relative_to(package_root).with_suffix("")
-        parts = [part for part in relative.parts if part != "__init__"]
-        module_name = ".".join(["groundinsight", *parts])
-        try:
-            module = __import__(module_name, fromlist=["__doc__"])
-        except ImportError:  # optional dependency (pandapower extra)
-            continue
-        result = doctest.testmod(module, verbose=False, report=False)
-        if result.failed:
-            failures.append(f"{module_name}: {result.failed} failed")
-    assert not failures, "; ".join(failures)
+    extra = _OPTIONAL_IMPORTS.get(module_name)
+    if extra is not None:
+        pytest.importorskip(extra)
+    module = importlib.import_module(module_name)
+    result = doctest.testmod(module, verbose=False, report=False)
+    assert result.failed == 0, f"{module_name}: {result.failed} failed"
+
+
+def test_the_optional_imports_name_existing_modules():
+    """Second method: the allowlist names modules that exist, so a renamed
+    module cannot keep a stale exemption."""
+    assert set(_OPTIONAL_IMPORTS) <= set(_package_modules())
