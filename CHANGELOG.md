@@ -2,11 +2,27 @@
 
 All notable changes to `groundinsight` are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Releases up to 0.6.0 followed [Semantic Versioning](https://semver.org/spec/v2.0.0.html);
+from the first release after 0.6.0 on, the project uses
+[calendar versioning](https://calver.org/) in the form `YYYY.M.MICRO` — the
+year, the month without a leading zero, and a counter that restarts at 0 in
+every month (`2026.11.0`, `2026.11.1`, `2026.12.0`, `2027.1.0`). The month
+carries no leading zero because PEP 440 normalises `2026.01.0` to
+`2026.1.0`, and a padded tag would never match the version on PyPI.
 
-Change categories follow the Keep-a-Changelog vocabulary:
+A calendar version says *when* a release was cut, not whether it is
+compatible with the previous one. Two rules carry that promise instead:
 
+- Every change that can break working user code is listed under
+  **Breaking** with a migration note, in addition to its regular entry.
+- A deprecated feature keeps working and emits a `DeprecationWarning` for at
+  least **two releases and six months** before it is removed.
+
+Change categories follow the Keep-a-Changelog vocabulary, plus *Breaking*:
+
+- **Breaking** — changes that can break working user code, each with a
+  migration note (also listed under their regular category).
 - **Added** — new features and public API.
 - **Changed** — behaviour changes to existing public API.
 - **Deprecated** — features that still work but will be removed.
@@ -25,6 +41,46 @@ version section when a release is cut.
 ---
 
 ## [Unreleased]
+
+### Breaking
+
+Each item is detailed under its regular category below; this list is the
+migration checklist.
+
+- **Version scheme.** The first release after 0.6.0 is numbered by the
+  calendar (`YYYY.M.MICRO`). A Poetry constraint such as `groundinsight =
+  "^0.6"` will not pick it up; use `groundinsight = ">=2026.11"`.
+- **`frequency_Hz` is numeric** in `res_buses()`, `res_branches()` and the
+  sweep frames; the RMS rows are marked by the boolean column `is_rms`.
+  Replace `pl.col("frequency_Hz") == "RMS"` with `pl.col("is_rms")` and
+  `== "50"` with `== 50.0`. (`OutageStudyResult.compare_*()` keeps its string
+  join key.)
+- **`network.paths` is empty after a default `run_fault`.** Call
+  `gi.create_paths(network)` where the enumerated paths are needed as data.
+- **Networks that used to solve silently now raise**: an active element
+  without an impedance at a solved frequency, `kappa`/`n` outside the
+  IEC 60909 range, negative `R/L/C/M` fields in the state-space solver,
+  assignments that violate a field validator, formulas calling functions
+  outside the whitelist, `bus_response` on a stale nodal system, and
+  `ImportDefaults(frequencies=[])`. Each message names the element and the
+  fix.
+- **Values change** where the old ones were wrong: `value_current` with a
+  source on the fault bus; `BusResponse.evaluate` (`Z_G_Ohm`, `r_epr`);
+  `I_th`/`i_p` with a 0 Hz bin; `analyze_cuts` at 0 Hz and with Thévenin
+  sources (new row `source_loop`); FFT transients with unreachable sources;
+  the state-space solver with 0 Hz first in the frequency list, and its time
+  series is one sample shorter.
+- **Persistence.** Databases written by 0.6.0 or earlier are migrated when
+  they are opened (a backup is kept); JSON writes `"inf"` instead of the
+  non-standard `Infinity` (old files still load); `save_network` refuses to
+  rewrite a bus or branch type shared with another network unless
+  `overwrite_types=True`.
+- **Top-level API.** `gi.NetworkDB`, `gi.BusTypeDB` and `gi.BranchTypeDB`
+  are no longer re-exported; `gi.Path` is the domain model, not
+  `pathlib.Path`; `BusResponse.admittance` lost its unused `freq`
+  argument; the reference case `en50522_chain` now checks `I_E`.
+- **Release tooling.** The console command `poetry run release` is gone;
+  run `poetry run python scripts/release.py`.
 
 ### Security
 
@@ -187,6 +243,17 @@ version section when a release is cut.
 
 ### Changed
 
+- **Calendar versioning (`YYYY.M.MICRO`) instead of SemVer.**
+  `scripts/release.py` computes the next version from the release date —
+  the first release in a month gets the counter 0, every further one counts
+  up — and `set` accepts only a well-formed calendar version for the month of
+  the release date that is newer than the current one. The SemVer bump kinds
+  `major`/`minor`/`patch` stop with an explanation instead of guessing, and
+  `CITATION.cff` gains a `date-released` field on every release. The month
+  carries no leading zero because PEP 440 strips it (`2026.01.0` is published
+  as `2026.1.0`), so a padded tag would never match PyPI. The head of this
+  file states the scheme and the deprecation policy that replaces the
+  compatibility promise SemVer used to carry.
 - **Two reference cases were replaced by ones that can fail.**
   `en50522_chain` checked `U_E = 3*I_0 * Z_E * r` with all three factors read
   out of one result — an identity the implementation closes by construction,

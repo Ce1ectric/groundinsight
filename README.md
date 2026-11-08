@@ -238,13 +238,14 @@ The GitHub Actions release workflow then takes over, runs the test suite on
 the tagged commit, builds sdist and wheel and publishes to PyPI via OIDC
 Trusted Publishing.
 
-Run it from the repository root:
+Releases use calendar versioning, `YYYY.M.MICRO` (see the head of
+`CHANGELOG.md`). Run the script from the repository root; it derives the
+next version from the release date:
 
 ```bash
-poetry run python scripts/release.py patch
-poetry run python scripts/release.py minor
-poetry run python scripts/release.py major
-poetry run python scripts/release.py set 1.2.3
+poetry run python scripts/release.py                  # next calendar version
+poetry run python scripts/release.py set 2026.11.2    # explicit version
+poetry run python scripts/release.py --dry-run        # show what would happen
 ```
 
 (Up to 0.6.0 this was the console command `poetry run release`. The entry
