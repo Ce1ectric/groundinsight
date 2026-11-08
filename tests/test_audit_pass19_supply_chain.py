@@ -56,6 +56,7 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path
+from typing import List, Tuple
 
 import pytest
 from packaging.specifiers import SpecifierSet
@@ -296,7 +297,7 @@ def _audit_module():
     return module
 
 
-def _raw_lock_pins() -> list:
+def _raw_lock_pins() -> List[str]:
     """
     ``name==version`` of every lock entry, read with a regular expression.
 
@@ -454,7 +455,7 @@ def _is_binary_mode(mode) -> bool:
     return isinstance(mode, ast.Constant) and isinstance(mode.value, str) and "b" in mode.value
 
 
-def _default_encoding_calls(source: str) -> list:
+def _default_encoding_calls(source: str) -> List[Tuple[int, str]]:
     """
     Calls that read or write text with the platform's default encoding.
 
@@ -485,9 +486,9 @@ def _default_encoding_calls(source: str) -> list:
             mode = _keyword(node, "mode") or (positional[0] if positional else None)
             if not _is_binary_mode(mode):
                 found.append((node.lineno, "open"))
-        elif name == "read_text" and not node.args:
-            found.append((node.lineno, name))
-        elif name == "write_text" and len(node.args) < 2:
+        elif (name == "read_text" and not node.args) or (
+            name == "write_text" and len(node.args) < 2
+        ):
             found.append((node.lineno, name))
         elif name in _TEXT_PROCESS_CALLS and owner == "subprocess":
             for flag in ("text", "universal_newlines"):
@@ -542,7 +543,7 @@ _MIGRATION = ROOT / "src" / "groundinsight" / "database" / "migration.py"
 _DML = re.compile(r"\b(SELECT\b.*\bFROM|INSERT\s+INTO|UPDATE\b.*\bSET|DELETE\s+FROM)\b", re.I)
 
 
-def _sql_fstrings(source: str) -> list:
+def _sql_fstrings(source: str) -> List[Tuple[int, int]]:
     """
     f-strings with DML passed to ``execute`` / ``executemany`` -- B608's rule.
 
@@ -639,20 +640,26 @@ class _RecordingSqlite:
         connection = sqlite3.connect(*args, **kwargs)
 
         class _Proxy:
+            """Records the SQL text, then forwards to the real connection."""
+
             def execute(self, sql, *rest):
+                """Log ``sql`` and run it on the real connection."""
                 log.append(sql)
                 return connection.execute(sql, *rest)
 
             def executemany(self, sql, *rest):
+                """Log ``sql`` and run it on the real connection."""
                 log.append(sql)
                 return connection.executemany(sql, *rest)
 
             def __getattr__(self, name):
+                """Everything else (``commit``, ``close`` ...) is the real one."""
                 return getattr(connection, name)
 
         return _Proxy()
 
     def __getattr__(self, name):
+        """Every other module attribute is the real ``sqlite3``'s."""
         return getattr(sqlite3, name)
 
 

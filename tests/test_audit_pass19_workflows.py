@@ -473,6 +473,7 @@ def _yaml_permissions(name: str) -> Tuple[Optional[Dict[str, str]], Dict[str, Op
     """
 
     def normalise(value):
+        """Map a parsed ``permissions`` value onto the text helper's shape."""
         if value is None:
             return None
         if isinstance(value, dict):
