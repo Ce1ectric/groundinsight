@@ -49,7 +49,6 @@ sqlalchemy-stubs = "^0.4"
 ipykernel = "^6.29.5"
 pytest = ">=8.3.2,<10.0.0"
 pytest-cov = ">=5,<8"
-black = ">=24.8,<27.0"
 pandapower = "^3.0"
 pyzmq = "^27.0"
 # Test-only imports (audit pass 19): the workflow checks parse the YAML a
@@ -60,6 +59,15 @@ pyzmq = "^27.0"
 pyyaml = "^6.0"
 bandit = "^1.9"
 hypothesis = "^6.0"
+# Lint gate: exact pins, because a new release of either linter can report
+# findings in code nobody touched, and the CI lint job must only turn red for
+# a change in the repository. The lint job in .github/workflows/ci.yml
+# installs the same two versions; tests/test_audit_pass19_standards.py checks
+# that both places agree. radon measures the cyclomatic complexity for the
+# complexity ratchet in that test module.
+ruff = "0.17.4"
+numpydoc = "1.11.0"
+radon = "6.0.1"
 
 [tool.poetry.group.docs]
 optional = true
@@ -96,6 +104,106 @@ testpaths = ["tests", "src/groundinsight"]
 addopts = "-ra --doctest-modules"
 markers = [
     "slow: size and timing checks (deselect with '-m \"not slow\"')",
+]
+
+# Lint, never format. ruff runs as a linter only: there is no formatter
+# configuration and no formatter in CI, because line breaks follow
+# readability here, and one formatter pass over untouched code would bury
+# every real change under whitespace edits. Every finding is fixed by a
+# deliberate edit; a "# noqa: <code>" carries a reason and stands only where
+# the rule is wrong for that line. Run:
+#     ruff check src tests scripts gui docs/snippets
+[tool.ruff]
+target-version = "py312"
+src = ["src", "tests", "gui"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes: unused imports and variables, undefined names
+    "B",         # bugbear: likely bugs (zip without strict=, raise without from, ...)
+    "N",         # pep8-naming, with the domain names below
+    "D",         # pydocstyle, numpy convention
+    "SIM",       # simplifications
+    "UP",        # pyupgrade, minus the typing spellings below
+    "RUF013",    # implicit Optional
+    "T20",       # print() in library code: the package logs instead
+]
+ignore = [
+    # House style: typing.Optional / List / Dict / Tuple throughout, never
+    # "X | None" or "list[...]" -- one spelling in the whole code base.
+    "UP006", "UP007", "UP035", "UP045",
+    # No formatter is enforced, so there is no line length to enforce either.
+    "E501",
+    # l (length) and I (current) are physics symbols, as in the formula strings.
+    "E741",
+    # The operator overloads of ComplexNumber (__add__, __mul__, ...) are
+    # documented once, on the class.
+    "D105",
+    # Summary lines describe what an object is or returns ("Driving-point
+    # impedance of ..."); the imperative mood is not the house style.
+    "D401",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.pep8-naming]
+# pydantic field validators take cls without an explicit @classmethod.
+classmethod-decorators = ["pydantic.field_validator"]
+# Domain names. Matrix and quantity symbols -- Y admittance, Z impedance,
+# R/L/C/M resistance, inductance, capacitance and mutual inductance, I/U
+# current and voltage -- alone, indexed (Y0) or qualified (Z_self, R_mut),
+# also inside a longer name (bus_Z, _construct_Y_matrices); and the unit
+# suffixes of the naming convention (EPR_V, frequency_Hz, theta_final_C).
+extend-ignore-names = [
+    "Y", "Y[0-9_]*", "Z", "Z[0-9_]*", "R", "R[0-9_]*", "L", "L[0-9_]*",
+    "C", "C[0-9_]*", "M", "M[0-9_]*", "I", "I[0-9_]*", "U", "U[0-9_]*",
+    "*_Y_*", "*_Z_*", "*_Z",
+    "*_A", "*_V", "*_kV", "*_Hz", "*_Ohm", "*_C", "*_mm2",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests are named after what they check; their docstrings are optional and
+# their names may quote the domain symbols of the code under test.
+"tests/**" = ["D", "N"]
+"gui/tests/**" = ["D", "N"]
+# The how-to scripts of the documentation print their results: what a page
+# states as the output is what the script prints.
+"docs/snippets/**" = ["T20"]
+# The numerical kernels write their matrices in MNA notation (G, B, A_CL,
+# K_mut, ...); the names follow the equations, not PEP 8.
+"src/groundinsight/simulation/transient.py" = ["N806"]
+"src/groundinsight/electrical_network.py" = ["N806"]
+
+# numpydoc lint: the docstring sections of the public API. Run:
+# numpydoc lint $(git ls-files 'src/groundinsight/*.py')
+[tool.numpydoc_validation]
+# "all", then the checks that are switched off. Each is a matter of style the
+# code base does not follow, not a missing piece of the contract.
+checks = [
+    "all",
+    "ES01",  # an extended summary is optional
+    "SA01",  # a "See Also" section is optional
+    "EX01",  # Examples: required for every object in groundinsight.__all__,
+             # which tests/test_audit_pass19_standards.py checks instead
+    "SS05",  # summaries describe; no infinitive verb required (cf. ruff D401)
+    "SS03",  # the summary period is ruff's D400
+    "SS06",  # a summary may wrap; ruff's D205 checks the blank line after it
+    "GL01", "GL02", "GL03",  # where the quotes and blank lines go
+    "PR06",  # type spelling ("integer" vs "int")
+    "PR08", "PR09", "RT04", "RT05",  # capital letter and period in descriptions
+    "SA03", "SA04",  # descriptions inside "See Also"
+]
+# Objects that are not public API, matched against "module.Class.method":
+exclude = [
+    '^[^.]+$',             # module docstrings: design notes in headed
+                           # sections of their own (rendered as admonitions),
+                           # not an API object with Parameters or Returns
+    '(^|\.)_',             # private modules, classes and functions and
+                           # everything nested in them; dunder methods
+    '\.model_post_init$',  # pydantic hook
+    '[A-Z]\w*\.validate_\w+$',  # pydantic field and model validators
 ]
 
 [build-system]
