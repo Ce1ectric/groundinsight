@@ -80,6 +80,8 @@ plugins:
   - redirects:
       redirect_maps:
         concepts.md: explanation/index.md
+        quickstart.md: getting-started/index.md
+        installation.md: getting-started/installation.md
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -151,8 +153,10 @@ validation:
 nav:
   - Home: index.md
   - Getting started:
-      - Installation: installation.md
-      - Quickstart: quickstart.md
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+      - Your first fault calculation: getting-started/first-calculation.md
+      - From a line to a ring: getting-started/ring.md
   - How-to guides:
       - Bus and branch types from data sheets: howto/types-from-datasheets.md
       - Compare results with EN 50522 limits: howto/en50522-check.md

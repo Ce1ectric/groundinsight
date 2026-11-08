@@ -15,6 +15,7 @@ the docs job of the CI builds the site strictly on top of them. They use only
 the standard library and PyYAML (dev group).
 """
 
+import math
 import re
 from pathlib import Path
 
@@ -403,3 +404,200 @@ def test_nothing_links_to_the_removed_concepts_page():
         if target.partition("#")[0].endswith("concepts.md")
     ]
     assert hits == []
+
+
+# --------------------------------------------------------------------------
+# DOC5 -- getting started: installation and two tutorials with numbers
+# --------------------------------------------------------------------------
+
+SNIPPETS = DOCS / "snippets"
+
+#: Section ids of the former ``docs/quickstart.md`` and ``docs/installation.md``.
+QUICKSTART_ANCHORS = [
+    "1-import-and-create-a-network", "2-define-bus-and-branch-types",
+    "3-add-buses-and-branches", "4-add-the-source-and-the-fault",
+    "5-create-paths-and-solve", "6-inspect-the-results", "7-plot",
+    "8-save-and-load", "9-optional-outage-what-if-studies",
+    "10-optional-inverse-rho-analysis", "11-optional-import-from-pandapower",
+    "12-optional-transient-simulation", "13-logging-and-silencing-output",
+]
+INSTALLATION_ANCHORS = [
+    "install-from-pypi", "install-from-source", "optional-dependency-groups",
+    "optional-extras", "verify-the-installation",
+]
+GETTING_STARTED = [
+    "getting-started/index.md",
+    "getting-started/installation.md",
+    "getting-started/first-calculation.md",
+    "getting-started/ring.md",
+]
+
+
+def _run_snippet(name, monkeypatch, tmp_path, capsys):
+    """
+    Run a documentation snippet as a script in an empty directory.
+
+    Returns
+    -------
+    tuple
+        ``(namespace, printed lines)``.
+    """
+    import runpy
+
+    monkeypatch.chdir(tmp_path)
+    namespace = runpy.run_path(str(SNIPPETS / name), run_name="__main__")
+    printed = [line.rstrip() for line in capsys.readouterr().out.splitlines()]
+    return namespace, printed
+
+
+def _text_block_lines(relative):
+    """Every line of the ```text blocks of a page."""
+    text = (DOCS / relative).read_text(encoding="utf-8")
+    lines = set()
+    for block in re.findall(r"^```text\n(.*?)^```", text, re.M | re.S):
+        lines.update(line.rstrip() for line in block.splitlines())
+    return lines
+
+
+def test_getting_started_holds_the_tutorials_in_order():
+    config = _mkdocs_config()
+    section = [
+        page for page, trail in _nav_entries(config["nav"])
+        if trail[:1] == ("Getting started",)
+    ]
+    assert section == GETTING_STARTED
+
+
+def test_quickstart_and_installation_forward_with_their_anchors():
+    """The old Quickstart forwards to the overview, which carries every former
+    section id on a link to its new place; the installation page moved under
+    "Getting started" and kept its section ids."""
+    redirects = _redirects()
+    assert redirects.get("quickstart.md") == "getting-started/index.md"
+    assert redirects.get("installation.md") == "getting-started/installation.md"
+    text = (DOCS / "getting-started" / "index.md").read_text(encoding="utf-8")
+    ids = re.findall(r"\]\([^)]+\)\{\s*#([\w-]+)\s*\}", text)
+    assert ids == QUICKSTART_ANCHORS
+    assert set(INSTALLATION_ANCHORS) <= _anchors("getting-started/installation.md")
+
+
+def test_documented_python_floor_matches_pyproject():
+    """REL4 / DOC5: the installation page and the README state the floor
+    that ``pyproject.toml`` declares (``python = "^3.N"``)."""
+    import tomllib
+
+    declared = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    caret = declared["tool"]["poetry"]["dependencies"]["python"]
+    floor = re.fullmatch(r"\^(\d+\.\d+)", caret).group(1)
+    for page in (DOCS / "getting-started" / "installation.md", ROOT / "README.md"):
+        text = page.read_text(encoding="utf-8")
+        assert f"**Python {floor} or newer**" in text, page
+        stated = set(re.findall(r"Python (\d+\.\d+) or newer", text))
+        assert stated == {floor}, (page, stated)
+
+
+def test_installation_self_test_prints_what_the_page_shows(monkeypatch, tmp_path, capsys):
+    _, printed = _run_snippet("installation_check.py", monkeypatch, tmp_path, capsys)
+    shown = _text_block_lines("getting-started/installation.md")
+    import groundinsight as gi
+
+    assert printed[0] == f"groundinsight {gi.__version__}"
+    assert len(printed) == 7
+    for line in printed[1:]:
+        assert line in shown, line
+        assert line.endswith(" agrees")
+
+
+def _reference_solution(net, fault, bus):
+    """|EPR| at ``bus`` and the driving-point impedance there, from the
+    independent reference MNA of the test suite (branch currents as unknowns,
+    physical sign frame)."""
+    from tests import _reference_mna as ref
+
+    rd = ref.reference_network(net, 50.0, fault)
+    solution = ref.solve_oneway(rd)
+    return abs(solution["u"][bus]), ref.driving_point_impedance(rd, bus)
+
+
+def test_first_calculation_reproduces_its_numbers_two_ways(monkeypatch, tmp_path, capsys):
+    """Tutorial 1: the page shows what the snippet prints, and the numbers
+    agree with the closed forms of a single line and with the reference MNA."""
+    import cmath
+
+    ns, printed = _run_snippet("first_calculation.py", monkeypatch, tmp_path, capsys)
+    shown = _text_block_lines("getting-started/first-calculation.md")
+    for line in printed:
+        if line.startswith("[") or line.startswith("diagnostics"):
+            continue
+        assert line in shown, line
+    assert "diagnostics: []" in printed
+    key = ns["key"]
+    z_b, z_s, z_m, current = 1.0 + 0.1j, (0.25 + 0.6j) * 5.0, 0.6j * 5.0, 1000.0
+    i_earth = current * (z_s - z_m) / (z_s + 2 * z_b)
+    z_e = z_b * (z_s + z_b) / (z_s + 2 * z_b)
+    assert key["r_epr"] == pytest.approx(1.25 / 3.25, rel=1e-12)
+    assert key["r_current"] == pytest.approx(abs(i_earth) / current, rel=1e-12)
+    assert key["U_E_V"] == pytest.approx(abs(z_b * i_earth), rel=1e-12)
+    assert key["Z_E_Ohm"] == pytest.approx(abs(z_e), rel=1e-12)
+    assert key["Z_E_degree"] == pytest.approx(math.degrees(cmath.phase(z_e)), abs=1e-9)
+    u_ref, z_ref = _reference_solution(ns["net"], "fault_at_remote_bus", "bus_fault")
+    assert key["U_E_V"] == pytest.approx(u_ref, rel=1e-12)
+    assert key["Z_E_Ohm"] == pytest.approx(abs(z_ref), rel=1e-12)
+    assert (tmp_path / "first_calculation.json").is_file()
+
+
+def test_first_calculation_chain_closes_with_an_ideal_infeed_earth(monkeypatch, tmp_path, capsys):
+    """The page says: make the infeed electrode ideal and U_E = |1-k| I |Z_E|."""
+    import groundinsight as gi
+    from groundinsight.models.core_models import ComplexNumber
+
+    ns, _ = _run_snippet("first_calculation.py", monkeypatch, tmp_path, capsys)
+    net = ns["net"]
+    net.buses["bus_source"].impedance = {50.0: ComplexNumber(real=1e-9, imag=0.0)}
+    gi.run_fault(net, fault="fault_at_remote_bus")
+    key = net.res_fault("fault_at_remote_bus").row(0, named=True)
+    assert key["U_E_V"] == pytest.approx(key["r_epr"] * 1000.0 * key["Z_E_Ohm"], rel=1e-8)
+    text = " ".join((DOCS / "getting-started" / "first-calculation.md").read_text(
+        encoding="utf-8").split())
+    assert "= 231.3 V" in text and "it is 324.6 V" in text
+    assert f"{ns['key']['r_current'] * 1000 * ns['key']['Z_E_Ohm']:.1f}" == "231.3"
+    assert f"{ns['key']['r_epr'] * 1000 * ns['key']['Z_E_Ohm']:.1f}" == "324.6"
+
+
+def test_ring_reproduces_its_numbers_two_ways(monkeypatch, tmp_path, capsys):
+    """Tutorial 2: the page shows what the snippet prints; the numbers agree
+    with the closed forms of the symmetric ring and with the reference MNA;
+    the split is 500 A per route; the legacy mode gives (1 - 2k)."""
+    ns, printed = _run_snippet("ring.py", monkeypatch, tmp_path, capsys)
+    shown = _text_block_lines("getting-started/ring.md")
+    for line in printed:
+        assert line in shown, line
+    assert "ModelAssumptionWarning PHASE_PROXY" in printed
+    z_b, z_s, z_m, current = 1.0 + 0.1j, (0.25 + 0.6j) * 2.5, 0.6j * 2.5, 1000.0
+    k = z_m / z_s
+
+    def parallel(a, b):
+        return a * b / (a + b)
+
+    rows = {row["frequency_Hz"]: row
+            for row in ns["net"].res_fault("fault_at_remote_bus").iter_rows(named=True)}
+    key = rows[50.0]
+    assert key["U_E_V"] == pytest.approx(abs(1 - k) * current * abs(parallel(z_b, z_s / 2)), rel=1e-12)
+    assert key["r_current"] == pytest.approx(abs(z_s - z_m) / 2 / abs(z_b + z_s / 2), rel=1e-12)
+    z_e = parallel(z_b, z_s / 2 + parallel(z_b / 2, z_s / 2 + z_b))
+    assert key["Z_E_Ohm"] == pytest.approx(abs(z_e), rel=1e-12)
+    u_ref, z_ref = _reference_solution(ns["net"], "fault_at_remote_bus", "bus_fault")
+    assert key["U_E_V"] == pytest.approx(u_ref, rel=1e-12)
+    assert key["Z_E_Ohm"] == pytest.approx(abs(z_ref), rel=1e-12)
+    phase = ns["net"].electrical_network.phase_currents[50.0]
+    assert all(abs(complex(phase[name])) == pytest.approx(500.0, rel=1e-12) for name in phase)
+    legacy = ns["old"]
+    assert legacy["r_epr"] == pytest.approx(abs(1 - 2 * k), rel=1e-12) == pytest.approx(1.0)
+    assert legacy["U_E_V"] == pytest.approx(abs(1 - 2 * k) * current * abs(parallel(z_b, z_s / 2)),
+                                            rel=1e-12)
+    z_s250, z_m250 = (0.25 + 3.0j), 3.0j
+    assert rows[250.0]["r_epr"] == pytest.approx(abs(1 - z_m250 / z_s250), rel=1e-12)
+    rms = [row for row in ns["net"].res_fault("fault_at_remote_bus").iter_rows(named=True)
+           if row["is_rms"]][0]
+    assert rms["U_E_V"] == pytest.approx(math.hypot(rows[50.0]["U_E_V"], rows[250.0]["U_E_V"]),
+                                         rel=1e-12)

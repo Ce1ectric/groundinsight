@@ -157,7 +157,7 @@ def test_documented_python_floor_matches_pyproject():
     statements = _documented_floors()
 
     pages = {page for page, _ in statements}
-    assert {"README.md", "docs/installation.md"} <= pages, statements
+    assert {"README.md", "docs/getting-started/installation.md"} <= pages, statements
     wrong = [(page, version) for page, version in statements if version != floor]
     assert wrong == [], f"documented floor differs from pyproject ^{floor}: {wrong}"
 
@@ -270,7 +270,7 @@ def test_installation_page_names_every_runtime_dependency():
         for name, spec in dependencies.items()
         if name != "python" and not (isinstance(spec, dict) and spec.get("optional"))
     ]
-    page = (ROOT / "docs" / "installation.md").read_text(encoding="utf-8")
+    page = (ROOT / "docs" / "getting-started" / "installation.md").read_text(encoding="utf-8")
     missing = [name for name in runtime if f"`{name}`" not in page]
     assert missing == []
 

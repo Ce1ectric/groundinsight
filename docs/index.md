@@ -82,7 +82,8 @@ gi.run_fault(network=net, fault="f1")
 print(net.res_all_impedances())
 ```
 
-See the [Quickstart](quickstart.md) for the full walkthrough.
+[Your first fault calculation](getting-started/first-calculation.md) builds this
+network step by step and checks every number by hand.
 
 ## Feature overview
 
@@ -128,8 +129,8 @@ See the [Quickstart](quickstart.md) for the full walkthrough.
 
 ## Where to go next
 
-- [Installation](installation.md) — how to get `groundinsight` onto your system.
-- [Quickstart](quickstart.md) — end-to-end walkthrough of a minimal network.
+- [Getting started](getting-started/index.md) — installation with a self-test, and
+  two tutorials: a line and a ring, with every number checked by hand.
 - [Understanding the model](explanation/index.md) — the physical and numerical model
   behind the code, its assumptions and their limits.
 - [Transient simulation](transient.md) — FFT and state-space solver paths for

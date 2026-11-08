@@ -842,7 +842,7 @@ def test_bus_response_methods_accept_the_old_frequency_name():
 
 
 def _quickstart() -> gi.Network:
-    """The network of ``docs/quickstart.md`` sections 1-4, verbatim."""
+    """The network of the former quickstart page, sections 1-4, verbatim."""
     net = gi.create_network(
         name="quickstart_demo", frequencies=[50, 250, 350, 450, 550]
     )

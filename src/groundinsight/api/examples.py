@@ -7,8 +7,9 @@ tests need networks whose numbers are documented. Both use the networks of
 the documentation, rebuilt here through the public API exactly as the pages
 build them:
 
-* ``"quickstart"`` -- ``docs/quickstart.md``: two substations, one cable,
-  five frequencies, a fault whose scalings cover 50 Hz only;
+* ``"quickstart"`` -- the network of ``docs/getting-started/first-calculation.md``
+  (two substations, one cable), at five frequencies and with a fault whose
+  scalings cover 50 Hz only;
 * ``"minimal"`` -- ``docs/examples/minimal.ipynb``: a three-bus cable line
   at 50 Hz whose reduction factor has a closed form;
 * ``"mv_ring"`` -- ``docs/examples/mv_ring.ipynb``: a 20-station 20 kV cable
@@ -30,7 +31,7 @@ __all__ = ["EXAMPLES", "build_minimal", "build_mv_ring", "build_quickstart"]
 
 def build_quickstart() -> gi.Network:
     """
-    The network of the quickstart page.
+    The network of the first tutorial, at five frequencies.
 
     Returns
     -------

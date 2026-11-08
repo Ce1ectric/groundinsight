@@ -377,3 +377,54 @@ def test_a_formula_is_evaluated_again_when_its_input_changes():
     assert complex(net.branches["L"].self_impedance[50.0]) == pytest.approx((0.25 + 0.6j) * 3.0)
     net.frequencies = [50.0, 250.0]
     assert complex(net.buses["B"].impedance[250.0]) == pytest.approx(1.0 + 0.25j)
+
+
+def test_phase_split_of_the_example_is_the_one_the_solver_uses(phase_split):
+    """The page computes the split as a current divider of the declared phase
+    impedances; the solver's own phase network must give the same."""
+    for label, route_2 in (("homogeneous", phase_split["CABLE"]),
+                           ("mixed", phase_split["OVERHEAD_LINE"])):
+        for phase in ("Z_red", "Z_pp", "proxy"):
+            net = phase_split["ring"](route_2, phase)
+            phase_split["epr_at_fault"](net)
+            solver = abs(complex(net.electrical_network.phase_currents[50.0]["SA"]))
+            assert phase_split["TABLE"][(label, phase)][0] == pytest.approx(solver, rel=1e-12)
+
+
+def _symmetric_ring(z_self, z_mutual, mode):
+    """Four 1 km sections S-A-F-B-S, 10 Ohm stations, 1000 A, fault at F."""
+    net = gi.create_network(name="ring", frequencies=[50.0])
+    station = gi.BusType(name="st", system_type="MV", voltage_level=20.0, impedance_formula="10")
+    cable = gi.BranchType(name="c", grounding_conductor=True,
+                          self_impedance_formula=z_self, mutual_impedance_formula=z_mutual)
+    for bus in "SAFB":
+        gi.create_bus(name=bus, type=station, network=net)
+    for name, a, b in (("SA", "S", "A"), ("AF", "A", "F"), ("SB", "S", "B"), ("BF", "B", "F")):
+        gi.create_branch(name=name, type=cable, from_bus=a, to_bus=b, length=1.0, network=net)
+    gi.create_source(name="src", bus="S", values={50.0: 1000.0}, network=net)
+    gi.create_fault(name="F1", bus="F", network=net)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", gi.ModelAssumptionWarning)
+        result = gi.run_fault(net, "F1", phase_current_mode=mode)
+    return result
+
+
+def test_legacy_mode_counts_the_coupling_twice_in_a_ring():
+    """The page: the injections become (1 - 2k) I instead of (1 - k) I; with
+    k = 0.5 the ring collapses to 0 V, value 0 and no value_current. Second
+    way: the EPR ratio of the legacy mode is |1 - 2k| against the auto mode's
+    |1 - k|, for k = 0.5 and for k of the tutorial cable."""
+    for z_self, z_mutual, z_s, z_m in (
+        ("(0.1+0.2*j)*l", "(0.05+0.1*j)*l", 0.1 + 0.2j, 0.05 + 0.1j),
+        ("(0.25+0.6*j)*l", "(0.6*j)*l", 0.25 + 0.6j, 0.6j),
+    ):
+        k = z_m / z_s
+        auto = _symmetric_ring(z_self, z_mutual, "auto").reduction_factor
+        paths = _symmetric_ring(z_self, z_mutual, "paths").reduction_factor
+        assert auto.value[50.0] == pytest.approx(abs(1 - k), rel=1e-12)
+        assert paths.value[50.0] == pytest.approx(abs(1 - 2 * k), abs=1e-12)
+        assert complex(paths.z_earthing[50.0]) == pytest.approx(complex(auto.z_earthing[50.0]),
+                                                                rel=1e-12)
+        if k == 0.5:
+            assert paths.value_current[50.0] is None
+    assert "$(1-2k)\\,I$ instead of $(1-k)\\,I$" in _page("explanation/phase-currents.md")

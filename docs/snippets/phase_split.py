@@ -72,19 +72,28 @@ def ring(route_2, phase):
     return net
 
 
-def solve(net):
-    """Phase current on route 1 and the EPR at the fault bus, in A and V."""
+def split(route_2, phase):
+    """Phase current on route 1 in A: the current divider of the two routes.
+
+    The proxy of a branch with a grounding conductor is its shield impedance.
+    """
+    per_km = {"Z_red": z_red, "Z_pp": lambda c: c["zpp"], "proxy": lambda c: c["zs"]}[phase]
+    z_route_1 = per_km(CABLE) * 2 * 1.2
+    z_route_2 = per_km(route_2) * 2 * 1.5
+    return abs(1000.0 * z_route_2 / (z_route_1 + z_route_2))
+
+
+def epr_at_fault(net):
+    """EPR at the fault bus F in V."""
     with warnings.catch_warnings():
         # the proxy variant is announced by a ModelAssumptionWarning PHASE_PROXY
         warnings.simplefilter("ignore", gi.ModelAssumptionWarning)
         result = gi.run_fault(net, "F1")
-    i_route_1 = abs(complex(net.electrical_network.phase_currents[50.0]["SA"]))
-    u_fault = abs(complex(next(b.uepr_freq[50.0] for b in result.buses if b.name == "F")))
-    return i_route_1, u_fault
+    return abs(complex(next(b.uepr_freq[50.0] for b in result.buses if b.name == "F")))
 
 
 TABLE = {
-    (label, phase): solve(ring(route_2, phase))
+    (label, phase): (split(route_2, phase), epr_at_fault(ring(route_2, phase)))
     for label, route_2 in (("homogeneous", CABLE), ("mixed", OVERHEAD_LINE))
     for phase in ("Z_red", "Z_pp", "proxy")
 }
