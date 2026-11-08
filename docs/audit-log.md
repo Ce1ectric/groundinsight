@@ -1,3 +1,11 @@
+---
+# The audit log stays on the site -- it records how each finding was
+# established -- but it is a working record, not user documentation, and it
+# was 18.7 % of the search index (audit pass 19, DOC12).
+search:
+  exclude: true
+---
+
 # Audit log
 
 Working record of the code-audit passes run over `groundinsight` between
