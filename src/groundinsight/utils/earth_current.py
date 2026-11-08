@@ -212,19 +212,25 @@ def split_earth_currents(
     values = np.array([complex(electrode_currents[n]) for n in names], dtype=complex)
     total_magnitude = float(np.abs(values).sum())
 
+    # Every membership test below goes against a set built *once*. Building
+    # ``set(chosen)`` inside the comprehensions -- once per bus -- made the
+    # split quadratic: 12 s per frequency at 20 000 buses (P3).
     if feeding_buses is not None:
-        chosen = [n for n in names if n in set(feeding_buses)]
+        pinned = set(feeding_buses)
+        chosen = [n for n in names if n in pinned]
         i_earth = complex(
             sum((complex(electrode_currents[n]) for n in chosen), 0.0 + 0.0j)
         )
     else:
         chosen, i_earth = _best_half_plane(names, values)
-        rest_names = [n for n in names if n not in set(chosen)]
+        chosen_set = set(chosen)
+        rest_names = [n for n in names if n not in chosen_set]
         if _should_swap(chosen, rest_names, reference_bus):
             chosen, rest_names = rest_names, chosen
             i_earth = -i_earth
 
-    rest = [n for n in names if n not in set(chosen)]
+    chosen_set = set(chosen)
+    rest = [n for n in names if n not in chosen_set]
     separation = (
         float(abs(i_earth) / (0.5 * total_magnitude)) if total_magnitude > 0 else 0.0
     )
@@ -268,6 +274,36 @@ def _best_half_plane(
     enough to slide a half-turn window over the angle-sorted phasors. Prefix
     sums over the doubled array make that one pass: ``O(n log n)`` for the sort
     and ``O(n)`` after it, with no angle to nominate and no tolerance to tune.
+
+    Parameters
+    ----------
+    names : list of str
+        Bus names, aligned with ``values``.
+    values : numpy.ndarray
+        Non-zero electrode currents.
+
+    Returns
+    -------
+    tuple of (list of str, complex)
+        The members of the best half-plane (in angle order, starting at the
+        window's first phasor) and their sum.
+
+    Notes
+    -----
+    The window end of every start ``i`` is found with one vectorised
+    :func:`numpy.searchsorted` instead of a scalar ``while`` loop (P3). It is
+    the *same* index the loop produced: the loop carried ``j`` over from the
+    previous start, clamped it to at least ``i`` and advanced it while
+    ``j < i + n`` and ``doubled_angles[j] < sorted_angles[i] + pi``. Because
+    ``doubled_angles`` is sorted and the limits never decrease with ``i``,
+    the first index whose angle reaches the limit is
+    ``s_i = searchsorted(doubled_angles, limit_i, side="left")``, the carried
+    ``j`` never exceeds ``min(max(s_i, i), i + n)``, and the loop therefore
+    stopped exactly there. The candidate sums are the same IEEE subtractions
+    of the same prefix sums, and :func:`numpy.argmax` returns the *first*
+    maximum, which is the loop's strict ``>`` against a running best. The
+    result is bit-for-bit what the loop returned; the test suite keeps the
+    loop as an oracle.
     """
     n = len(values)
     if n == 1:
@@ -282,20 +318,16 @@ def _best_half_plane(
     doubled_angles = np.concatenate([sorted_angles, sorted_angles + 2.0 * np.pi])
     prefix = np.concatenate([[0.0 + 0.0j], np.cumsum(doubled)])
 
-    best_sum = 0.0 + 0.0j
-    best_span = (0, 0)
-    j = 0
-    for i in range(n):
-        if j < i:
-            j = i
-        limit = sorted_angles[i] + np.pi
-        while j < i + n and doubled_angles[j] < limit:
-            j += 1
-        candidate = complex(prefix[j] - prefix[i])
-        if abs(candidate) > abs(best_sum):
-            best_sum = candidate
-            best_span = (i, j)
+    starts = np.arange(n)
+    stops = np.searchsorted(doubled_angles, sorted_angles + np.pi, side="left")
+    stops = np.minimum(np.maximum(stops, starts), starts + n)
+    candidates = prefix[stops] - prefix[starts]
+    magnitudes = np.abs(candidates)
+    best = int(np.argmax(magnitudes))
+    if not magnitudes[best] > 0.0:
+        # No window beats an empty sum -- the loop then kept (0, 0).
+        return [], 0.0 + 0.0j
 
-    start, stop = best_span
+    start, stop = int(starts[best]), int(stops[best])
     chosen = [names[order[k % n]] for k in range(start, stop)]
-    return chosen, best_sum
+    return chosen, complex(candidates[best])

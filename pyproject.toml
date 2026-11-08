@@ -76,6 +76,9 @@ mkdocs-jupyter = ">=0.25,<0.27"
 [tool.pytest.ini_options]
 testpaths = ["tests", "src/groundinsight"]
 addopts = "-ra --doctest-modules"
+markers = [
+    "slow: size and timing checks (deselect with '-m \"not slow\"')",
+]
 
 [build-system]
 requires = ["poetry-core"]
