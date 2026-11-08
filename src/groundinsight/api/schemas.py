@@ -390,12 +390,17 @@ class SessionLimitsDTO(BaseDTO):
         Wall-clock limit of one job; ``None`` is no limit.
     max_undo : int, optional
         Number of commands kept for undo; older ones are dropped.
+    max_paths : int, optional
+        Cap of the path enumeration on the session's network (its
+        ``PathfinderSettings.max_paths``); ``None`` keeps the network's
+        settings.
     """
 
     max_buses: Optional[int] = Field(default=None, ge=1)
     max_branches: Optional[int] = Field(default=None, ge=0)
     max_job_runtime_s: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
     max_undo: Optional[int] = Field(default=500, ge=1)
+    max_paths: Optional[int] = Field(default=None, ge=1)
 
 
 class NetworkSummaryDTO(BaseDTO):

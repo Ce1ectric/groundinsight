@@ -349,6 +349,12 @@ class ProjectSession:
         Runtime limit of every job of this session.
     max_undo : int, optional
         Number of commands kept for undo (default 500).
+    max_paths : int, optional
+        Cap of the path enumeration on this session's network (the
+        ``"paths"`` phase-current mode, the transient solver): it becomes the
+        network's own :class:`groundinsight.PathfinderSettings`, so other
+        sessions in the process keep theirs. ``None`` leaves the network's
+        settings as they are.
 
     Raises
     ------
@@ -386,6 +392,7 @@ class ProjectSession:
         max_branches: Optional[int] = None,
         max_job_runtime_s: Optional[float] = None,
         max_undo: Optional[int] = 500,
+        max_paths: Optional[int] = None,
     ) -> None:
         if not isinstance(network, gi.Network):
             raise TypeError(f"a session holds a groundinsight.Network, got {type(network).__name__}")
@@ -398,8 +405,16 @@ class ProjectSession:
             max_branches=max_branches,
             max_job_runtime_s=max_job_runtime_s,
             max_undo=max_undo,
+            max_paths=max_paths,
         )
         _check_size(network, self._limits)
+        if self._limits.max_paths is not None:
+            # Runtime settings of this network only: kept by the job snapshots
+            # (copies and pickles keep them), not written to the project file.
+            network.pathfinder_settings = gi.PathfinderSettings(
+                max_paths=self._limits.max_paths,
+                cache_size=network.pathfinder_settings.cache_size,
+            )
         network.to_tables()  # refuses two different types of the same name
         self._network = network
         self._path = str(path) if path is not None else None

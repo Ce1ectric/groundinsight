@@ -793,6 +793,48 @@ def test_size_limits_reject_an_element_too_many():
         session.close()
 
 
+@pytest.mark.parametrize("backend", ["thread", "process"])
+def test_a_session_caps_the_path_enumeration_of_its_own_network(backend):
+    """``max_paths`` becomes the network's own path-search settings (ARC2), so
+    a server caps the enumerating "paths" mode per user and the other
+    sessions of the process keep theirs. Second way: the library raises the
+    same error for a twin with the same settings."""
+    api = _api()
+    runner = api.JobRunner(backend)
+    capped = _session("mv_ring", max_paths=1, runner=runner)
+    free = _session("mv_ring", runner=runner)
+    try:
+        assert capped.limits.max_paths == 1 and capped.summary().limits.max_paths == 1
+        assert free.limits.max_paths is None
+        assert capped.network.pathfinder_settings.max_paths == 1
+        assert free.network.pathfinder_settings.max_paths > 1
+        with pytest.raises(api.JobFailed) as failed:
+            capped.submit_solve("F1", phase_current_mode="paths").result(timeout=120)
+        twin = api.EXAMPLES["mv_ring"]()
+        twin.pathfinder_settings = gi.PathfinderSettings(max_paths=1)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with pytest.raises(ValueError) as direct:
+                gi.solve(twin, "F1", phase_current_mode="paths")
+        assert (failed.value.error_type, failed.value.error_message) == ("ValueError", str(direct.value))
+        assert "limit of 1 paths" in failed.value.error_message
+        # The other session enumerates the same network in the same process.
+        assert free.submit_solve("F1", phase_current_mode="paths").result(timeout=120).fault == "F1"
+        # The default mode enumerates nothing, so the cap does not bite.
+        assert capped.submit_solve("F1").result(timeout=120).fault == "F1"
+    finally:
+        capped.close()
+        free.close()
+        runner.shutdown()
+
+
+def test_a_path_cap_must_be_positive():
+    api = _api()
+    with pytest.raises(ValueError, match="max_paths"):
+        _session("quickstart", max_paths=0)
+    assert api.SessionLimitsDTO().max_paths is None
+
+
 def test_a_new_command_after_undo_drops_redo_and_gets_a_fresh_revision(quickstart):
     api = _api()
     quickstart.apply(api.UpdateBranch(name="cable_1", fields={"length": 6.0}))

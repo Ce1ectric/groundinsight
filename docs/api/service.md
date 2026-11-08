@@ -325,8 +325,11 @@ they are stale. A server keeps projects in a `ProjectStore` instead: a
 
 The constructor takes the resource limits a server sets per user:
 `max_buses`, `max_branches` (a larger file is refused on open, a command that
-would exceed them is rejected), `max_job_runtime_s` (every job of the session)
-and `max_undo` (history depth).
+would exceed them is rejected), `max_job_runtime_s` (every job of the session),
+`max_undo` (history depth) and `max_paths`, the cap of the path enumeration of
+the `"paths"` phase-current mode. `max_paths` becomes the network's own
+`gi.PathfinderSettings` (see [Pathfinder](pathfinder.md#settings-and-memo-per-network)),
+so two sessions with different caps share nothing.
 
 ### Commands
 
