@@ -1057,6 +1057,26 @@ migration checklist.
   `earth_current_vanishes()`, and `split_earth_currents(..., anchor=,
   noise_rel=)`. The pytest marker `slow` is registered in `pyproject.toml`.
   (P3, P9)
+- **CI runs every test the suite has; a missing test dependency fails.**
+  The CI test job installs only the `dev` group, but PyYAML (for the YAML
+  cross-checks of the workflow tests) sat in the `docs` group, and bandit
+  (for the SEC6 check) and hypothesis (for one variant of the PQ-INV
+  invariant tests) were in no group at all. So 12 tests were skipped in CI
+  without anyone seeing it, and the hypothesis variant was not even defined
+  there. All three are dev dependencies now (`pyyaml ^6.0`, `bandit ^1.9`,
+  `hypothesis ^6.0`); the lock keeps every other version and adds bandit
+  1.9.4, hypothesis 6.170.15, rich 15.0.0, sortedcontainers 2.4.0 and
+  stevedore 5.9.1 (pip-audit: 133 pins, no known advisory). The test jobs of
+  `ci.yml` and `release.yml` set `GROUNDINSIGHT_CI=1`, under which
+  `tests/conftest.py` turns a skip caused by `pytest.importorskip` — in a
+  test, a fixture or at module level — into a failure, and a new
+  `require_tool` fixture does the same for a missing executable (`poetry`).
+  Without hypothesis, the PQ-INV module now defines a stand-in that skips
+  visibly instead of leaving no trace. Skips for any other reason
+  (platform, permissions, `+SKIP` doctests) are untouched, and outside CI
+  everything skips as before. A test scans the suite's `importorskip`
+  targets and requires each of them in the `dev` group, so the next
+  optional import cannot go missing in CI either.
 
 ## [0.6.0] — 2026-09-01
 
