@@ -27,7 +27,7 @@ from groundinsight.models.database_models import (
     PathSegmentDB,
     NetworkDB,
 )
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +160,7 @@ def _validate_path_segments(network: Network):
 
 
 def _networks_using_type(
-    session: Session, element_cls, type_name: str, exclude: str
+    session: Session, element_cls, type_name: str, exclude: Optional[str]
 ) -> List[str]:
     """
     Other networks whose elements reference a stored type.
@@ -173,8 +173,9 @@ def _networks_using_type(
         ``BusDB`` or ``BranchDB``.
     type_name : str
         Name of the type.
-    exclude : str
+    exclude : str or None
         The network currently being saved; never reported against itself.
+        ``None`` reports every network.
 
     Returns
     -------
@@ -187,7 +188,10 @@ def _networks_using_type(
         .distinct()
         .all()
     )
-    return sorted({row[0] for row in rows if row[0] is not None} - {exclude})
+    names = {row[0] for row in rows if row[0] is not None}
+    if exclude is not None:
+        names.discard(exclude)
+    return sorted(names)
 
 
 def _check_type_merge(network: Network, session: Session, overwrite_types: bool):
@@ -552,3 +556,155 @@ def load_network(name: str, session: Session) -> Network:
         raise ValueError(f"Network '{name}' not found.")
     network = network_db.to_pydantic()
     return network
+
+
+def list_networks(session: Session) -> List[str]:
+    """
+    List the names of all networks stored in the database.
+
+    Parameters
+    ----------
+    session : Session
+        The SQLAlchemy session used for database operations.
+
+    Returns
+    -------
+    List[str]
+        Network names, sorted.
+
+    Raises
+    ------
+    RuntimeError
+        If the database still uses the legacy, globally-keyed element tables.
+    """
+    ensure_current_schema(session)
+    return sorted(row[0] for row in session.query(NetworkDB.name).all())
+
+
+def delete_network(name: str, session: Session):
+    """
+    Delete a stored network together with all of its elements.
+
+    Buses, branches, faults, sources and paths are scoped to their network
+    and go with it (the relationships cascade). Bus and branch types are a
+    global catalogue and stay; delete them with :func:`delete_bustype` /
+    :func:`delete_branchtype` once no network uses them any more.
+
+    Parameters
+    ----------
+    name : str
+        The name of the network to delete.
+    session : Session
+        The SQLAlchemy session used for database operations.
+
+    Raises
+    ------
+    ValueError
+        If no network of that name is stored.
+    RuntimeError
+        If the database still uses the legacy, globally-keyed element tables.
+    Exception
+        If the commit fails; the transaction is rolled back first.
+    """
+    ensure_current_schema(session)
+    network_db = session.get(NetworkDB, name)
+    if network_db is None:
+        raise ValueError(f"Network '{name}' not found.")
+    try:
+        session.delete(network_db)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+
+
+def delete_bustype(name: str, session: Session):
+    """
+    Delete a stored BusType that no stored network uses.
+
+    Parameters
+    ----------
+    name : str
+        The name of the BusType.
+    session : Session
+        The SQLAlchemy session used for database operations.
+
+    Raises
+    ------
+    ValueError
+        If no BusType of that name is stored, or if a stored network still
+        has a bus of that type (the message names the networks).
+    RuntimeError
+        If the database still uses the legacy, globally-keyed element tables.
+    """
+    _delete_type(session, BusTypeDB, BusDB, name, "BusType")
+
+
+def delete_branchtype(name: str, session: Session):
+    """
+    Delete a stored BranchType that no stored network uses.
+
+    Parameters
+    ----------
+    name : str
+        The name of the BranchType.
+    session : Session
+        The SQLAlchemy session used for database operations.
+
+    Raises
+    ------
+    ValueError
+        If no BranchType of that name is stored, or if a stored network still
+        has a branch of that type (the message names the networks).
+    RuntimeError
+        If the database still uses the legacy, globally-keyed element tables.
+    """
+    _delete_type(session, BranchTypeDB, BranchDB, name, "BranchType")
+
+
+def _delete_type(session: Session, type_cls, element_cls, name: str, label: str):
+    """
+    Delete a catalogue type after checking that nothing references it.
+
+    The check is not optional: the element tables reference the type by name
+    without an enforced foreign key, and the ORM would answer a plain delete
+    by setting ``type_name`` of every referencing bus or branch to ``NULL`` --
+    a stored network that can no longer be loaded.
+
+    Parameters
+    ----------
+    session : Session
+        Session to use.
+    type_cls : type
+        ``BusTypeDB`` or ``BranchTypeDB``.
+    element_cls : type
+        ``BusDB`` or ``BranchDB``, the rows that reference the type.
+    name : str
+        Name of the type.
+    label : str
+        ``"BusType"`` or ``"BranchType"`` for the messages.
+
+    Raises
+    ------
+    ValueError
+        If the type is not stored or still referenced.
+    Exception
+        If the commit fails; the transaction is rolled back first.
+    """
+    ensure_current_schema(session)
+    stored = session.get(type_cls, name)
+    if stored is None:
+        raise ValueError(f"{label} '{name}' not found.")
+    users = _networks_using_type(session, element_cls, name, exclude=None)
+    if users:
+        raise ValueError(
+            f"{label} '{name}' is still used by the stored network(s) "
+            f"{', '.join(repr(user) for user in users)}. Delete those networks "
+            "or save them with another type first."
+        )
+    try:
+        session.delete(stored)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise

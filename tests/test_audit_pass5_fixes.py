@@ -24,6 +24,14 @@ implementation block:
    values.
 6. ``Network.set_active_fault(..., keep_results=True)`` preserves
    the cached ``Result`` for the activated fault.
+
+Audit pass 19 (ARC2) replaced the session globals by ``gi.Database``.
+Findings 3 and 4 are kept in their new form: ``db_session`` stays importable
+as a deprecated alias but leaves ``__all__`` (a star import must not raise
+the deprecation), and ``close_dbsession`` still never raises while tearing
+the default database down. The old half-state tests assigned the globals
+directly; that is no longer possible -- such an assignment would only shadow
+the alias for the rest of the process.
 """
 
 from __future__ import annotations
@@ -235,7 +243,14 @@ def test_cache_does_not_falsely_hit_after_id_recycle():
 # Pass-5 finding 3 — ``db_session`` is importable and is the same handle.
 # ---------------------------------------------------------------------------
 
+#: These tests exercise the deprecated session aliases on purpose.
+_LEGACY_ALIASES = pytest.mark.filterwarnings(
+    r"ignore:groundinsight\.(session|db_session|engine|SessionLocal) is "
+    r"deprecated:DeprecationWarning"
+)
 
+
+@_LEGACY_ALIASES
 def test_db_session_importable_from_top_level():
     """``from groundinsight import db_session`` must not raise."""
     # Re-import path: by attribute first.
@@ -244,11 +259,15 @@ def test_db_session_importable_from_top_level():
     from groundinsight import db_session  # noqa: F401  -- import must succeed
 
 
-def test_db_session_listed_in_dunder_all():
-    assert "db_session" in gi.__all__
-    assert "session" in gi.__all__
+def test_db_session_importable_but_no_longer_in_dunder_all():
+    """Deprecated since pass 19: importable with a warning, not star-exported."""
+    assert "db_session" not in gi.__all__
+    assert "session" not in gi.__all__
+    with pytest.deprecated_call():
+        from groundinsight import db_session  # noqa: F401
 
 
+@_LEGACY_ALIASES
 def test_db_session_alias_tracks_session(tmp_path):
     """After ``start_dbsession`` both names point at the same scoped session."""
     db_path = tmp_path / "alias.db"
@@ -265,65 +284,49 @@ def test_db_session_alias_tracks_session(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Pass-5 finding 4 — ``close_dbsession`` is defensive against half-state.
+# Pass-5 finding 4 — ``close_dbsession`` never raises while tearing down.
 # ---------------------------------------------------------------------------
 
 
-def test_close_dbsession_handles_partial_state_session_only(caplog):
-    """``session is None`` + ``engine is not None`` must not raise."""
-    import groundinsight as gi_mod
-    # Build a half-constructed state manually.
-    from sqlalchemy import create_engine
-    fake_engine = create_engine("sqlite:///:memory:")
-    gi_mod.engine = fake_engine
-    gi_mod.SessionLocal = None
-    gi_mod.session = None
-    gi_mod.db_session = None
-    try:
-        with caplog.at_level(logging.INFO, logger="groundinsight"):
-            gi.close_dbsession()  # must not raise
-    finally:
-        gi_mod.engine = None
-        gi_mod.SessionLocal = None
-        gi_mod.session = None
-        gi_mod.db_session = None
-    # The helper logs that it tore something down (engine in this case).
+def test_close_dbsession_survives_a_failing_engine_dispose(
+    tmp_path, caplog, monkeypatch
+):
+    """A failing teardown step is logged; the default is released anyway."""
+    gi.close_dbsession()
+    database = gi.start_dbsession(str(tmp_path / "dispose.db"))
+
+    def boom():
+        raise RuntimeError("dispose failed")
+
+    monkeypatch.setattr(database.engine, "dispose", boom)
+    with caplog.at_level(logging.INFO, logger="groundinsight"):
+        gi.close_dbsession()  # must not raise
+    assert database.closed
+    assert any("dispose failed" in r.getMessage() for r in caplog.records)
     assert any(
         "Database session closed" in r.getMessage() for r in caplog.records
     )
+    with pytest.raises(RuntimeError, match="not started"):
+        gi.load_bustypes_from_db()
 
 
-def test_close_dbsession_handles_partial_state_no_engine():
-    """``engine is None`` + ``session is not None`` must not raise."""
-    import groundinsight as gi_mod
-    from sqlalchemy.orm import sessionmaker, scoped_session
-    from sqlalchemy import create_engine
-    tmp_engine = create_engine("sqlite:///:memory:")
-    tmp_session_local = sessionmaker(bind=tmp_engine)
-    tmp_scoped = scoped_session(tmp_session_local)
-    try:
-        gi_mod.engine = None  # half-state: session live, engine missing
-        gi_mod.SessionLocal = tmp_session_local
-        gi_mod.session = tmp_scoped
-        gi_mod.db_session = tmp_scoped
-        gi.close_dbsession()  # must not raise
-        assert gi_mod.session is None
-        assert gi_mod.SessionLocal is None
-    finally:
-        tmp_engine.dispose()
-        gi_mod.engine = None
-        gi_mod.SessionLocal = None
-        gi_mod.session = None
-        gi_mod.db_session = None
+@_LEGACY_ALIASES
+def test_close_dbsession_removes_a_live_legacy_session(tmp_path):
+    """The successor of the "session live, engine missing" half-state: a
+    thread-local session handed out through ``gi.session`` is removed too."""
+    gi.close_dbsession()
+    database = gi.start_dbsession(str(tmp_path / "legacy.db"))
+    legacy = gi.session
+    legacy().execute(__import__("sqlalchemy").text("SELECT 1"))  # open it
+    gi.close_dbsession()  # must not raise
+    assert database.closed
+    assert gi.session is None
+    assert gi.db_session is None
 
 
 def test_close_dbsession_with_no_state_just_warns(caplog):
     """Calling close on an idle module emits a WARNING, not an exception."""
-    import groundinsight as gi_mod
-    gi_mod.engine = None
-    gi_mod.SessionLocal = None
-    gi_mod.session = None
-    gi_mod.db_session = None
+    gi.close_dbsession()  # make sure nothing is open
     with caplog.at_level(logging.WARNING, logger="groundinsight"):
         gi.close_dbsession()
     assert any(

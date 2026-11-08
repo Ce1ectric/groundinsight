@@ -31,6 +31,13 @@ Findings covered here
    importable, gracefully skips them otherwise.
 8. ``show_versions`` is listed in ``__all__`` so ``from groundinsight
    import *`` and type-checkers see it.
+
+Audit pass 19 (ARC2) replaced the module globals by ``gi.Database``:
+``session`` and ``db_session`` are deprecated aliases that one accessor
+resolves from the default database, so findings 1-4 hold by construction and
+``_set_session`` is gone. The tests below pin the same lock-step contract
+through the aliases; their deprecation itself is tested in
+``tests/test_audit_pass19_persistence.py``.
 """
 
 from __future__ import annotations
@@ -44,6 +51,12 @@ import pytest
 
 import groundinsight as gi
 
+#: These tests exercise the deprecated session aliases on purpose.
+_LEGACY_ALIASES = pytest.mark.filterwarnings(
+    r"ignore:groundinsight\.(session|db_session|engine|SessionLocal) is "
+    r"deprecated:DeprecationWarning"
+)
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -52,12 +65,10 @@ import groundinsight as gi
 
 @pytest.fixture()
 def clean_session() -> Iterator[None]:
-    """Ensure the module-level session globals start and end at ``None``."""
-    if gi.session is not None or gi.engine is not None:
-        gi.close_dbsession()
+    """Ensure no default database is open before and after the test."""
+    gi.close_dbsession()
     yield
-    if gi.session is not None or gi.engine is not None:
-        gi.close_dbsession()
+    gi.close_dbsession()
 
 
 @pytest.fixture()
@@ -66,48 +77,41 @@ def tmp_db_path(tmp_path: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Central setter: ``_set_session``
+# One accessor for both aliases (formerly the central setter ``_set_session``)
 # ---------------------------------------------------------------------------
 
 
-def test_set_session_is_importable_from_package() -> None:
-    """The central setter must be reachable on the package surface so
-    future helpers (``swap_dbsession`` ctx manager, test monkeypatching)
-    can route through it."""
-    assert hasattr(gi, "_set_session")
-    assert callable(gi._set_session)
+def test_the_central_setter_is_gone_with_the_globals() -> None:
+    """Nothing is assigned any more, so there is nothing to keep in step:
+    both names are looked up from the default database on access."""
+    assert not hasattr(gi, "_set_session")
+    assert "session" not in vars(gi)
+    assert "db_session" not in vars(gi)
 
 
-def test_set_session_assigns_both_names_in_lock_step(clean_session) -> None:
-    """``_set_session(obj)`` must update ``session`` and ``db_session``
-    in a single observable transition."""
-    sentinel = object()
-    gi._set_session(sentinel)  # type: ignore[arg-type]
-    try:
-        assert gi.session is sentinel
-        assert gi.db_session is sentinel
-        assert gi.session is gi.db_session
-    finally:
-        gi._set_session(None)
+@_LEGACY_ALIASES
+def test_both_aliases_are_none_without_a_session(clean_session) -> None:
     assert gi.session is None
     assert gi.db_session is None
 
 
-def test_set_session_none_clears_both_aliases(clean_session) -> None:
-    """``_set_session(None)`` is the documented clear-path; both
-    aliases must drop to ``None`` symmetrically."""
-    sentinel = object()
-    gi._set_session(sentinel)  # type: ignore[arg-type]
-    gi._set_session(None)
-    assert gi.session is None
-    assert gi.db_session is None
+@_LEGACY_ALIASES
+def test_both_aliases_are_the_same_object_while_a_session_is_active(
+    clean_session, tmp_db_path: str
+) -> None:
+    gi.start_dbsession(tmp_db_path)
+    first = gi.session
+    assert first is not None
+    assert gi.db_session is first
+    assert gi.session is first  # stable, not a new object per access
 
 
 # ---------------------------------------------------------------------------
-# ``start_dbsession`` / ``close_dbsession`` route through the central setter
+# ``start_dbsession`` / ``close_dbsession`` keep both aliases in step
 # ---------------------------------------------------------------------------
 
 
+@_LEGACY_ALIASES
 def test_start_dbsession_binds_both_aliases(
     clean_session, tmp_db_path: str
 ) -> None:
@@ -119,6 +123,7 @@ def test_start_dbsession_binds_both_aliases(
     assert gi.session is gi.db_session
 
 
+@_LEGACY_ALIASES
 def test_close_dbsession_clears_both_aliases(
     clean_session, tmp_db_path: str
 ) -> None:
@@ -130,6 +135,7 @@ def test_close_dbsession_clears_both_aliases(
     assert gi.db_session is None
 
 
+@_LEGACY_ALIASES
 def test_force_rebind_keeps_aliases_in_sync(
     clean_session, tmp_path: Path
 ) -> None:
@@ -218,7 +224,8 @@ def test_show_versions_reports_peer_when_present(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_fresh_import_starts_with_aliases_aligned() -> None:
+@_LEGACY_ALIASES
+def test_fresh_import_starts_with_aliases_aligned(clean_session) -> None:
     """A clean import must start with ``session`` and ``db_session``
     both bound to ``None`` (the documented quiescent state)."""
     mod = importlib.reload(gi)

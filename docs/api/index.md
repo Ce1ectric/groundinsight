@@ -58,7 +58,7 @@ gi.run_fault(network=net, fault_name="...")
 ```
 
 Top-level helpers and persistence factories (`gi.set_log_level`,
-`gi.start_dbsession`, `gi.close_dbsession`, `gi.save_*_to_db`,
+`gi.Database`, `gi.start_dbsession`, `gi.close_dbsession`, `gi.save_*_to_db`,
 `gi.load_*_from_db`, `gi.save_network_to_json`,
 `gi.load_network_from_json`) are listed in `groundinsight.__all__` as
 of 0.5 and are therefore visible to `from groundinsight import *`

@@ -173,15 +173,18 @@ gi.save_network_to_json(network=net, path="quickstart.json")
 loaded = gi.load_network_from_json(path="quickstart.json")
 
 # --- SQLite ---
-gi.start_dbsession(sqlite_path="quickstart.db")
-gi.save_network_to_db(network=net, overwrite=True)
-restored = gi.load_network_from_db(name="QuickstartNet")
-gi.close_dbsession()
+with gi.Database("quickstart.db") as db:
+    db.save_network(net, overwrite=True)
+    restored = db.load_network("QuickstartNet")
 ```
 
 The JSON project file is UTF-8 on every platform, is written atomically (a
 failed save leaves the previous file intact) and carries a `schema_version`;
-see [Project files (JSON)](api/io.md#project-files-json).
+see [Project files (JSON)](api/io.md#project-files-json). A `gi.Database`
+holds many networks and a shared type catalogue; several databases can be open
+at once. The module-level helpers `gi.start_dbsession(...)`,
+`gi.save_network_to_db(...)` and `gi.load_network_from_db(...)` still work and
+use a default database; see [Database](api/database.md).
 
 That is the full workflow. The [Concepts](concepts.md) page explains the model
 behind the scenes; the [Examples](examples/index.md) section contains
