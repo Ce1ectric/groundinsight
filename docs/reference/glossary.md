@@ -24,7 +24,7 @@ reports it. The symbols follow EN 50522 where the standard has one.
 | `I_E` | earth current: the part of the fault current that returns through the soil, summed over the electrodes of the earth group | `ResultReductionFactor.i_earth` |
 | earth group | the buses whose electrodes feed the soil, from the fault outwards up to where the potential profile turns | `ResultReductionFactor.earth_buses` |
 | `r` | reduction factor of EN 50522, the earth current over the fault current | `ResultReductionFactor.value_current`; column `reduction_factor_current` |
-| `value` | EPR ratio at the fault bus with and without the inductive coupling; for one ideally bonded line the magnitude of `1 − k` | `ResultReductionFactor.value`; column `reduction_factor` |
+| `value` | EPR ratio at the fault bus with and without the inductive coupling; for a single line the magnitude of `1 − k`, whatever the electrodes | `ResultReductionFactor.value`; column `reduction_factor` |
 | `U_T`, `U_vT` | touch voltage and prospective touch voltage | not computed; `U_E` is their upper bound |
 | `U_Tp` | permissible touch voltage of EN 50522, a function of the fault duration | not part of the package |
 | `t_F` | fault duration, set by the protection; the argument of `U_Tp` | not used by the stationary solve |

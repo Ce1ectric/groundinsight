@@ -261,6 +261,27 @@ def test_trefoil_bundle_closed_form_is_exact(types_ns):
     assert by_f[250.0]["r_model"] == pytest.approx(0.080223, abs=5e-7)
 
 
+def test_trefoil_share_of_the_faulted_screen(types_ns):
+    """The share of the faulted core's screen that sets the bundle's thermal
+    cross-section: 3x3 solve in the snippet against the 2x2 closed form that
+    trefoil symmetry allows (I_2 = I_3)."""
+    loop = types_ns["loop_impedance"]
+    r_s, r_dc, d = types_ns["R_SCREEN_MEAN"], types_ns["R_SCREEN"], types_ns["D_OUTER"]
+    for f, expected in ((50.0, 0.359), (250.0, 0.481)):
+        a, b = loop(r_dc, r_s, 100.0, f), loop(0.0, d, 100.0, f)
+        c1, c2 = loop(0.0, r_s, 100.0, f), loop(0.0, d, 100.0, f)
+        det = a * (a + b) - 2 * b * b
+        i1 = (-c1 * (a + b) + 2 * b * c2) / det
+        i2 = (-a * c2 + b * c1) / det
+        closed = abs(i1) / abs(i1 + 2 * i2)
+        shares = types_ns["screen_current_shares"](types_ns["TREFOIL"], 0, r_s, r_dc, 100.0, f)
+        assert shares[0] == pytest.approx(closed, rel=1e-12)
+        assert shares[1] == pytest.approx(shares[2], rel=1e-12)
+        assert shares[0] == pytest.approx(expected, abs=5e-4)
+    assert types_ns["cable_system"].cross_section_mm2 == pytest.approx(25.0 / types_ns["SHARE_FAULTED_SCREEN"], abs=0.05)
+    assert types_ns["cable_system"].cross_section_mm2 == 69.7
+
+
 def test_flat_formation_needs_the_matrix_reduction(types_ns):
     """In flat formation the GMD formula is only approximate (stated on the page)."""
     loop = types_ns["loop_impedance"]

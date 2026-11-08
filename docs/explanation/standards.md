@@ -25,8 +25,8 @@ edition carries the amendment A1:2024.
   earthing impedance `Z_E` and earth potential rise `U_E`
   ([how-to](../howto/en50522-check.md)).
 - Reduction factors of cable screens and earth wires from their impedances,
-  for any topology — the standard's informative Annex I tabulates typical
-  values for the single line.
+  for any topology — the standard's informative Annex I gives typical
+  values at 50 Hz.
 - Earth potential rise of every bus, for the transfer of potentials between
   bonded stations.
 - The final temperatures of uninsulated earthing conductors and electrodes

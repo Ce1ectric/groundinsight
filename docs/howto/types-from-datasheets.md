@@ -256,7 +256,7 @@ cable_system = gi.BranchType(
         "/(0.727/3 + pi**2*1e-4*f + j*4*pi*1e-4*f*log(658*sqrt(rho/f)/0.03151272)))*l"
     ),
     conductor_material="Cu",
-    cross_section_mm2=75.0,
+    cross_section_mm2=69.7,
 )
 ```
 
@@ -276,6 +276,14 @@ cross-bonded, needs its own derivation.
   phase faulted). Compute the bundle with the matrix reduction
   (`bundle_equivalent` in the snippet) at the study frequencies and check the
   formula against it.
+- **Thermal check of the screens.** `check_conductor_limits` compares the
+  current of the branch — here the bundle — with `cross_section_mm2`. The three
+  screens do not share it equally: with the screens ideally bonded, the
+  coupling drives 35.9 % of the bundle current through the screen of the
+  faulted core at 50 Hz, and 48.1 % at 250 Hz (a voltage drop along the bundle
+  adds an equal part to every screen). The type therefore carries
+  25 mm²/0.359 = 69.7 mm² instead of 75 mm², which covers the faulted core's
+  screen at 50 Hz; with a large harmonic content use the larger share.
 - **Screen temperature.** r grows with the screen resistance. With the
   screens at 70 °C instead of 20 °C (factor 304.5/254.5 for copper) r of the
   trefoil system at 50 Hz rises from 0.342 to 0.397. The 20 °C value is the
@@ -363,7 +371,7 @@ A `BusType` needs the impedance of the station's electrode to remote earth,
 --8<-- "docs/snippets/types_from_datasheets.py:electrodes"
 ```
 
-The two variants agree within 2 … 4 %; the soil model behind them — homogeneous
+The two variants agree within 4 %; the soil model behind them — homogeneous
 ρ — is the larger uncertainty. **Frequency dependence is a modelling choice.**
 The formulas give a resistance, the same at every frequency. A measured
 impedance with an inductive part is written so that the reactance scales with

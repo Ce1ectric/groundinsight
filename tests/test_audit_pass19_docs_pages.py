@@ -285,7 +285,10 @@ def test_types_page_shows_the_snippet_formulas():
     for key in ("cable", "cable_system", "overhead_line"):
         branch_type = ns[key]
         shown = literal[branch_type.name]
-        for field in ("self_impedance_formula", "mutual_impedance_formula", "phase_impedance_formula"):
+        for field in (
+            "self_impedance_formula", "mutual_impedance_formula", "phase_impedance_formula",
+            "conductor_material", "cross_section_mm2",
+        ):
             assert shown.get(field) == getattr(branch_type, field), (key, field)
 
 

@@ -235,8 +235,33 @@ def bundle_equivalent(positions, faulted, r_screen, r_dc, rho, f):
     return complex(z_s_eq), complex(z_m_eq)
 
 
+def screen_current_shares(positions, faulted, r_screen, r_dc, rho, f):
+    """
+    Share of each screen in the bundle current, screens ideally bonded.
+
+    With no voltage drop along the screens the coupling alone drives them:
+    ``I = −Z_ss⁻¹ z_c`` per ampere in the faulted core. Returns
+    ``|I_k| / |Σ I|`` for every screen.
+    """
+    n = len(positions)
+    z_ss = np.empty((n, n), dtype=complex)
+    z_c = np.empty(n, dtype=complex)
+    for i in range(n):
+        for k in range(n):
+            d = r_screen if i == k else math.dist(positions[i], positions[k])
+            z_ss[i, k] = loop_impedance(r_dc if i == k else 0.0, d, rho, f)
+        d = r_screen if i == faulted else math.dist(positions[i], positions[faulted])
+        z_c[i] = loop_impedance(0.0, d, rho, f)
+    currents = -np.linalg.solve(z_ss, z_c)
+    return np.abs(currents) / abs(currents.sum())
+
+
 TREFOIL = [(0.0, 0.0), (D_OUTER, 0.0), (D_OUTER / 2, D_OUTER * math.sqrt(3) / 2)]
 GMR_TREFOIL = round((R_SCREEN_MEAN * D_OUTER**2) ** (1 / 3), 8)  # bundle GMR = core-bundle GMD
+# The thermal check compares the bundle current with cross_section_mm2: give the
+# cross-section that covers the screen of the faulted core at 50 Hz.
+SHARE_FAULTED_SCREEN = screen_current_shares(TREFOIL, 0, R_SCREEN_MEAN, R_SCREEN, RHO, 50.0)[0]
+S_BUNDLE_MM2 = round(25.0 / SHARE_FAULTED_SCREEN, 1)
 
 z_s3_expr = loop_expression(R_SCREEN, GMR_TREFOIL, parallel=3)
 z_m3_expr = loop_expression(0.0, GMR_TREFOIL)
@@ -247,7 +272,7 @@ cable_system = gi.BranchType(
     mutual_impedance_formula=f"{z_m3_expr}*l",
     phase_impedance_formula=f"{reduced_phase_expression(z_pp_expr, z_m3_expr, z_s3_expr)}*l",
     conductor_material="Cu",
-    cross_section_mm2=75.0,
+    cross_section_mm2=S_BUNDLE_MM2,
 )
 # --8<-- [end:trefoil]
 
