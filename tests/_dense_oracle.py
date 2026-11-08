@@ -129,7 +129,18 @@ class OracleSolution:
 
 
 def _is_open(z: complex) -> bool:
-    """``True`` for the open-end sentinel (an infinite component)."""
+    """``True`` for the open-end sentinel (an infinite component).
+
+    Parameters
+    ----------
+    z : complex
+        An impedance.
+
+    Returns
+    -------
+    bool
+        ``True`` when either part is infinite; ``NaN`` is not open.
+    """
     return math.isinf(z.real) or math.isinf(z.imag)
 
 
@@ -198,18 +209,43 @@ class _Assembler:
         self.vals: List[complex] = []
 
     def stamp(self, r: int, c: int, v: complex) -> None:
+        """Record one contribution ``Y[r, c] += v``.
+
+        Parameters
+        ----------
+        r, c : int
+            Row and column.
+        v : complex
+            The contribution.
+        """
         self.rows.append(r)
         self.cols.append(c)
         self.vals.append(v)
 
     def branch(self, a: int, b: int, y: complex) -> None:
-        """The four stamps of an admittance between ``a`` and ``b``."""
+        """The four stamps of an admittance between ``a`` and ``b``.
+
+        Parameters
+        ----------
+        a, b : int
+            The two nodes, in the order of the former dense loop
+            (``(a, b)``, ``(b, a)``, ``(a, a)``, ``(b, b)``).
+        y : complex
+            The admittance.
+        """
         self.stamp(a, b, -y)
         self.stamp(b, a, -y)
         self.stamp(a, a, y)
         self.stamp(b, b, y)
 
     def dense(self) -> np.ndarray:
+        """The dense matrix, each entry summed in stamp order.
+
+        Returns
+        -------
+        numpy.ndarray
+            Complex ``(size, size)`` array.
+        """
         matrix = np.zeros((self.size, self.size), dtype=complex)
         if self.vals:
             np.add.at(
@@ -220,6 +256,13 @@ class _Assembler:
         return matrix
 
     def sparse(self) -> sp.csc_matrix:
+        """The same matrix as CSC, entries summed in stamp order, zeros dropped.
+
+        Returns
+        -------
+        scipy.sparse.csc_matrix
+            Complex ``(size, size)`` matrix.
+        """
         n = self.size
         if not self.vals:
             return sp.csc_matrix((n, n), dtype=complex)
@@ -244,6 +287,25 @@ def _solve(matrix, rhs: np.ndarray, refine: int):
     Returns ``numpy.clongdouble`` values when ``refine > 0`` so that the
     quantities derived from the potentials (differences across a branch) do
     not lose the digits the refinement bought back.
+
+    Parameters
+    ----------
+    matrix : numpy.ndarray or scipy.sparse matrix
+        The system matrix (float64 complex).
+    rhs : numpy.ndarray
+        Right-hand side, ``(n,)`` or ``(n, k)``; may be ``clongdouble``.
+    refine : int
+        Number of refinement steps (0: plain float64 solve).
+
+    Returns
+    -------
+    numpy.ndarray
+        The solution, ``complex`` or ``clongdouble``.
+
+    Raises
+    ------
+    numpy.linalg.LinAlgError or RuntimeError
+        If the matrix is singular (dense or sparse factorisation).
     """
     if sp.issparse(matrix):
         lu = splu(sp.csc_matrix(matrix))
@@ -267,7 +329,25 @@ def _solve(matrix, rhs: np.ndarray, refine: int):
 
 
 def _reciprocals(values: List[complex], division: str) -> List[complex]:
-    """``1/z`` for every value, with the requested rounding."""
+    """``1/z`` for every value, with the requested rounding.
+
+    Parameters
+    ----------
+    values : list of complex
+        Impedances.
+    division : {"python", "numpy"}
+        Python's complex division or NumPy's array division.
+
+    Returns
+    -------
+    list of complex
+        The admittances, in the same order.
+
+    Raises
+    ------
+    ZeroDivisionError
+        For an exact zero with ``division="python"``.
+    """
     if division == "numpy":
         if not values:
             return []
@@ -276,7 +356,20 @@ def _reciprocals(values: List[complex], division: str) -> List[complex]:
 
 
 def _quotient(a: complex, b: complex, division: str) -> complex:
-    """``a/b`` with the requested rounding (see the module docstring)."""
+    """``a/b`` with the requested rounding (see the module docstring).
+
+    Parameters
+    ----------
+    a, b : complex
+        Numerator and denominator.
+    division : {"python", "numpy"}
+        Python's complex division or NumPy's array division.
+
+    Returns
+    -------
+    complex
+        The quotient.
+    """
     if division == "numpy":
         quotient = np.asarray([a], dtype=complex) / np.asarray([b], dtype=complex)
         return complex(quotient[0])
@@ -288,6 +381,14 @@ class _Model:
 
     Shared by :func:`solve` and :func:`assemble`, so that the matrices the
     assembly test compares are the ones the oracle solves.
+
+    Parameters
+    ----------
+    network : Network
+        The network.
+    fault : str
+        The fault; its bus is the reference of the phase network and the end
+        of every Thevenin loop closure.
     """
 
     def __init__(self, network, fault: str):
@@ -310,7 +411,19 @@ class _Model:
         )
 
     def resolver(self, f: float):
-        """``value -> complex`` with the 0 Hz stand-in applied (or ``None``)."""
+        """``value -> complex`` with the 0 Hz stand-in applied (or ``None``).
+
+        Parameters
+        ----------
+        f : float
+            The frequency the values belong to.
+
+        Returns
+        -------
+        callable
+            Maps a stored value to ``complex`` -- at 0 Hz a short circuit to
+            the stand-in -- and ``None`` to ``None``.
+        """
         sub = self.dc_sub if f == 0.0 else None
 
         def resolved(z) -> Optional[complex]:
@@ -325,6 +438,13 @@ class _Model:
 
     def nodal(self, f: float, division: str):
         """Stamps of the nodal matrix at ``f``.
+
+        Parameters
+        ----------
+        f : float
+            The frequency.
+        division : {"python", "numpy"}
+            Rounding of the admittances.
 
         Returns
         -------
@@ -669,14 +789,41 @@ def solve(
 
 
 def _cn(value) -> complex:
-    """A ``ComplexNumber`` (or ``None``) as ``complex`` (NaN for ``None``)."""
+    """A ``ComplexNumber`` (or ``None``) as ``complex`` (NaN for ``None``).
+
+    Parameters
+    ----------
+    value : ComplexNumber or None
+        A stored result value.
+
+    Returns
+    -------
+    complex
+        The value, or ``nan + nan*j``.
+    """
     if value is None:
         return complex(np.nan, np.nan)
     return complex(value.real, value.imag)
 
 
 def package_arrays(network, fault: str) -> Dict[str, np.ndarray]:
-    """Read the stored result of ``fault`` into arrays aligned with the oracle."""
+    """Read the stored result of ``fault`` into arrays aligned with the oracle.
+
+    Parameters
+    ----------
+    network : Network
+        A network solved by ``run_fault``.
+    fault : str
+        The solved fault.
+
+    Returns
+    -------
+    dict
+        ``u``, ``ia``, ``i_inj``, ``i_shield``, ``i_phase`` as ``(elements, F)``
+        arrays; the RMS values ``u_rms``, ``ia_rms``, ``i_shield_rms`` per
+        element; and the lists ``bus_names`` / ``branch_names`` for the
+        alignment check.
+    """
     result = network.results[fault]
     freqs = [float(f) for f in network.frequencies]
     out = {
@@ -703,7 +850,21 @@ def package_arrays(network, fault: str) -> Dict[str, np.ndarray]:
 
 
 def _normwise(a: np.ndarray, b: np.ndarray, scale: float) -> float:
-    """``max|a - b| / scale`` with NaN treated as a mismatch."""
+    """``max|a - b| / scale``; a NaN must sit at the same place in both.
+
+    Parameters
+    ----------
+    a, b : numpy.ndarray
+        Arrays of the same shape.
+    scale : float
+        The physical scale to divide by.
+
+    Returns
+    -------
+    float
+        The normwise deviation; ``inf`` for a shape or NaN-pattern mismatch
+        and for a nonzero difference at a zero scale.
+    """
     a = np.asarray(a)
     b = np.asarray(b)
     if a.shape != b.shape:

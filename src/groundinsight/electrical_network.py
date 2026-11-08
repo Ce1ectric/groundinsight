@@ -343,7 +343,19 @@ def _gather_impedances(
 
 
 def _open_mask(values: np.ndarray) -> np.ndarray:
-    """Vectorised :func:`_is_open_circuit`: ``True`` where a part is infinite."""
+    """Vectorised :func:`_is_open_circuit`: ``True`` where a part is infinite.
+
+    Parameters
+    ----------
+    values : numpy.ndarray
+        Complex impedances of any shape.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean mask of the same shape; ``NaN`` counts as *not* open, as in
+        the scalar function.
+    """
     return np.isinf(values.real) | np.isinf(values.imag)
 
 
@@ -726,8 +738,25 @@ class _NetworkTables:
         present: np.ndarray,
         substitutes: Dict[float, float],
     ) -> np.ndarray:
-        """Copy of ``values`` with the shorted entries of substituted columns
-        replaced; ``values`` itself when nothing is substituted."""
+        """Apply the 0 Hz stand-in to one impedance table.
+
+        Parameters
+        ----------
+        values : numpy.ndarray
+            Stored impedances, ``(elements, F)``.
+        present : numpy.ndarray
+            Where a value is stored at all.
+        substitutes : dict of float to float
+            Frequency to stand-in impedance.
+
+        Returns
+        -------
+        numpy.ndarray
+            A copy in which every stored short circuit of a substituted
+            column (zero, or too small to invert; see ``_short_circuit_mask``)
+            is replaced by the stand-in, or ``values`` itself when nothing is
+            substituted.
+        """
         columns = [
             (self.column[f], s) for f, s in substitutes.items() if f in self.column
         ]
