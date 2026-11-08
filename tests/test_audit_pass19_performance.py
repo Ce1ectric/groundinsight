@@ -23,9 +23,9 @@ How the tests are organised -- and why every number is checked twice:
   phase network is factorised once per frequency for all sources together, and
   no dense ``n x n`` array is allocated on the default path (guarded
   allocation functions *and* the ``tracemalloc`` peak).
-* **Large networks (P13).** For a 1000-bus ring the phase network has a
-  condition number of order 1e5..1e6, so *no* float64 kernel is exact to
-  1e-12. The reference there is an iteratively refined solution (residual in
+* **Large networks (P13).** For a 1000-bus ring the reduced phase network
+  has the condition number ``4 n**2 / pi**2 = 4.05e5`` (checked numerically),
+  so *no* float64 kernel is exact to 1e-12. The reference there is an iteratively refined solution (residual in
   ``clongdouble``) of the bit-identical stored system; on a uniform ring it is
   checked against the closed-form current split, on a radial feeder against the
   exact KCL currents. The kernel must be no worse than twice the dense LAPACK
@@ -1175,22 +1175,25 @@ def ring4000():
 
 @pytest.mark.slow
 def test_ring_4000_at_seven_frequencies_runs_in_seconds(ring4000):
-    """PQ-P2: 28 s with the dense kernel (and 2.3 GB, below)."""
+    """P1/P2: the dense kernel needs 23-28 s here (extrapolated from 1000 to
+    2500 buses / measured in the audit); see below for the memory."""
     seconds = _cpu_seconds(lambda: gi.run_fault(ring4000, "F"))
     assert seconds < 3.0, f"{seconds:.2f} s"
 
 
 @pytest.mark.slow
 def test_ring_4000_at_seven_frequencies_stays_below_400_mb(ring4000):
-    """PQ-P2: the dense kernel peaked at 2.3 GB here (seven n x n matrices
-    plus two copies of the phase network); what is left is linear in n."""
+    """P2: the dense kernel peaks at 2.3 GB here (seven n x n matrices plus
+    two copies of the phase network; the fit over 1000 to 2500 buses and the
+    audit agree); what is left is linear in n."""
     peak = _peak_bytes(lambda: gi.run_fault(ring4000, "F"))
     assert peak < 400e6, f"{peak / 1e6:.0f} MB"
 
 
 @pytest.mark.slow
 def test_radial_4000_with_three_sources_runs_in_seconds():
-    """143 s with the dense kernel: the phase solve was repeated per source."""
+    """P1: 143-210 s with the dense kernel, which repeated the phase solve
+    per source (audit / extrapolated from 1000 and 2000 buses)."""
     net = radial(4000, F=7, n_sources=3)
     seconds = _cpu_seconds(lambda: gi.run_fault(net, "F"))
     assert seconds < 3.0, f"{seconds:.2f} s"
@@ -1198,7 +1201,7 @@ def test_radial_4000_with_three_sources_runs_in_seconds():
 
 @pytest.mark.slow
 def test_mesh_50x50_with_four_sources_runs_in_seconds():
-    """26.9 s with the dense kernel."""
+    """P1/P2: 20-27 s with the dense kernel (extrapolated / audit)."""
     net = mesh(50, F=7, n_sources=4)
     seconds = _cpu_seconds(lambda: gi.run_fault(net, "F"))
     assert seconds < 3.0, f"{seconds:.2f} s"
@@ -1206,7 +1209,8 @@ def test_mesh_50x50_with_four_sources_runs_in_seconds():
 
 @pytest.mark.slow
 def test_bus_response_and_cuts_on_large_rings_run_in_fractions_of_a_second():
-    """PQ-P7: 3.1 s / 3.0 s on a 2000-bus ring with the dense solves."""
+    """P7: 2.8 s each on a 2000-bus ring with the dense solves (measured
+    interleaved against the base implementation)."""
     net = ring(2000, F=7)
     gi.run_fault(net, "F")
     fault_bus = net.faults["F"].bus

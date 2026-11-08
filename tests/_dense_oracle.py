@@ -726,7 +726,7 @@ def compare(
 ) -> Dict[str, float]:
     """Deviation of the stored result from the oracle, quantity by quantity.
 
-    Scales are physical, as in the performance review: potentials against
+    Scales are physical: potentials against
     ``max|U|``, currents against the largest injection (the fault current),
     the dimensionless reduction factors absolutely, impedances against their
     own maximum. RMS columns are checked as well.
