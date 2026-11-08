@@ -243,3 +243,51 @@ def test_bus_response_of_a_bus_outside_a_floating_fault_side():
     for f in FREQS:
         for z_bus in (None, 0.5, 0.0, complex(1.0, -4.0)):
             assert response.fault_driving_point(z_bus, f) is None
+
+
+# ---------------------------------------------------------------------------
+# solve_network: a floating group is refused, not solved to rounding noise
+# ---------------------------------------------------------------------------
+
+
+OVERHEAD = gi.BranchType(
+    name="fe_ohl", grounding_conductor=False,
+    self_impedance_formula="(0.3 + j*f*0.015)*l",
+    mutual_impedance_formula="(j*f*0.004)*l",
+    phase_impedance_formula="(0.15 + j*f*0.012)*l",
+)
+
+
+@pytest.mark.parametrize("chain", [0, 1, 3])
+def test_a_floating_group_is_refused_instead_of_solved_to_noise(chain):
+    """Current source at S, overhead line without earth wire S - F, and the
+    tower F with 0, 1 or 3 electrode-less buses behind it through shields.
+    The fault side has no path to earth, so its potential is undefined. F
+    alone gave an exactly zero row and raised; with buses behind it the matrix
+    is singular only up to rounding, and run_fault reported 2.2e18 V at the
+    fault bus without a word. Now every chain raises the documented ValueError
+    naming the group. Second way: the reference solver's own search finds the
+    same group without electrode, and its MNA matrix is rank-deficient."""
+    net = gi.create_network(name=f"fe_island_{chain}", frequencies=list(FREQS))
+    gi.create_bus(name="S", type=STATION, specific_earth_resistance=100.0, network=net)
+    gi.create_bus(name="F", type=TOWER, specific_earth_resistance=100.0, network=net)
+    gi.create_branch(name="O", type=OVERHEAD, from_bus="S", to_bus="F", length=1.0, network=net)
+    previous = "F"
+    for k, length in enumerate(_lengths(chain)):
+        gi.create_bus(name=f"B{k}", type=TOWER, specific_earth_resistance=100.0, network=net)
+        gi.create_branch(name=f"L{k}", type=CABLE, from_bus=previous, to_bus=f"B{k}",
+                         length=length, network=net)
+        previous = f"B{k}"
+    gi.create_source(name="Q", bus="S", values={f: 1000.0 for f in FREQS}, network=net)
+    gi.create_fault(name="F1", bus="F", network=net)
+    group = ["F"] + [f"B{k}" for k in range(chain)]
+    with pytest.raises(ValueError, match="no path to reference earth") as excinfo:
+        gi.run_fault(net, "F1")
+    for name in group:
+        assert f"'{name}'" in str(excinfo.value)
+    for f in FREQS:
+        rd = ref.reference_network(net, f, "F1")
+        assert ref.earthing_group(rd, "F") == group
+        assert not any(ref.has_electrode(rd, b) for b in group)
+        A, _, _ = ref.driving_point_system(rd, "F")
+        assert np.linalg.matrix_rank(A) < A.shape[0]

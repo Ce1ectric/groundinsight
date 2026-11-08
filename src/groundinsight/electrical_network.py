@@ -3083,6 +3083,74 @@ class ElectricalNetwork:
                 grouped["referenced"].append(bus_name)
         return grouped
 
+    def _floating_buses(self, freq: float, matrix) -> List[str]:
+        """
+        Buses whose group in the solved matrix has no path to remote earth.
+
+        A group is the set of buses coupled by the off-diagonal entries of
+        ``matrix`` -- shields with a non-zero admittance and the loop closures
+        of voltage sources (:func:`_component_labels`); it reaches remote
+        earth if one of its buses has a finite, non-zero electrode admittance
+        (:meth:`_earthed_buses`).
+
+        Parameters
+        ----------
+        freq : float
+            Frequency in Hz.
+        matrix : scipy.sparse.spmatrix
+            The nodal matrix about to be solved.
+
+        Returns
+        -------
+        list of str
+            The buses of every group without an electrode, in
+            :attr:`bus_indices` order; empty when every group is earthed.
+        """
+        labels = _component_labels(matrix)
+        earthed_groups = np.zeros(int(labels.max()) + 1, dtype=bool)
+        earthed_groups[labels[self._earthed_buses(freq)]] = True
+        names = list(self.bus_indices)
+        return [names[i] for i in np.flatnonzero(~earthed_groups[labels])]
+
+    def _floating_group_message(self, freq: float, floating: List[str]) -> str:
+        """
+        The diagnosis for buses connected to one another but not to earth.
+
+        Parameters
+        ----------
+        freq : float
+            Frequency (Hz) of the singular system.
+        floating : list of str
+            Output of :meth:`_floating_buses`.
+
+        Returns
+        -------
+        str
+            The full message for the :class:`ValueError`; it starts with
+            "Singular" like the other messages of :meth:`solve_network`.
+        """
+        if len(floating) == 1:
+            subject = (
+                f"bus {floating[0]!r} has no finite grounding impedance and no "
+                f"branch with a grounding conductor (or loop closure of a "
+                f"voltage source) to an earthed bus, so it has"
+            )
+        else:
+            subject = (
+                f"buses {_shortlist([repr(name) for name in floating])} are "
+                f"connected to one another -- through shields or the loop "
+                f"closure of a voltage source -- but none of them has a finite "
+                f"grounding impedance, so they have"
+            )
+        return (
+            f"Singular admittance matrix at f={freq} Hz: the {subject} no path "
+            f"to reference earth and an undefined potential. A linear solver "
+            f"still returns numbers for a group of such buses (1e15 V and more, "
+            f"from rounding), which is why it is refused here. Give one of them "
+            f"an electrode, connect them to an earthed bus through a branch with "
+            f"a grounding conductor, or deactivate them."
+        )
+
     def _no_ground_reference_message(self, freq, grouped):
         """Build the diagnosis for a network with no path to reference earth.
 
@@ -3215,6 +3283,13 @@ class ElectricalNetwork:
             if not np.any(present & np.isfinite(stored) & (stored != 0)):
                 grouped = self._classify_bus_grounding(freq)
                 raise ValueError(self._no_ground_reference_message(freq, grouped))
+            # The same question for every group of buses the matrix couples:
+            # one group without an electrode is enough to make Y singular, and
+            # once it holds two or more buses only up to rounding -- splu then
+            # returns 1e18 V for it instead of raising (see _component_labels).
+            floating = self._floating_buses(freq, Y_matrix)
+            if floating:
+                raise ValueError(self._floating_group_message(freq, floating))
             try:
                 # Backstops for any remaining singular case (e.g. a disconnected
                 # ungrounded island): scipy may raise, or return a non-finite
