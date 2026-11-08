@@ -379,8 +379,8 @@ R_{\text{self}}\,i_s + L_{\text{self}}\,\dot{i}_s
 \;+\; R_{\text{mut}}\,I_p + M\,\dot{I}_p,
 $$
 
-with $I_p$ the phase current on the source-to-fault path traversing
-this branch. The $\dot{I}_p$ term is awkward because $I_p$ is a function
+with $I_p$ the phase current of this branch. The $\dot{I}_p$ term is
+awkward because $I_p$ is a function
 of the source waveform, not a state — we would have to numerically
 differentiate the input. The state-space solver avoids this with the
 substitution
@@ -399,10 +399,19 @@ $$
 $$
 
 a clean ODE in $z$ with $I_p$ entering as a regular linear input. The
-phase factor $I_p / I_{\text{src}}$ per branch is derived from the
-network's path topology — same algorithm as the FFT solver's mutual
-Norton injection. The actually observed shield current is recovered at
-output time via $i_s = z - (M/L_{\text{self}})\,I_p$.
+phase current is $I_p = \alpha\,I_{\text{src}}$, with $\alpha$ the per-unit
+split of the phase-conductor network at $f_{\text{eval}}$ — the same solve
+`run_fault(..., phase_current_mode="auto")` uses (fault bus as reference,
+`phase_impedance_formula` or its proxy per branch), so a ring divides the
+source current between its routes; `parallel_coefficient` is not read. A
+complex $\alpha$ (routes of different R/L ratio) is folded into the
+coupling, $R'_{\text{mut}} + j\omega M' = (R_{\text{mut}} + j\omega M)\,\alpha$,
+which is exact in the $f_{\text{eval}}$ steady state; a DC offset and
+harmonics then see the $f_{\text{eval}}$ split, and the solver says so with
+a `ModelAssumptionWarning` (code `TRANSIENT_PHASE_SPLIT`; below 1 % of the
+peak EPR on a cable/overhead-line ring with a fully offset fault current).
+The actually observed shield current is recovered at output time via
+$i_s = z - (M'/L_{\text{self}})\,I_{\text{src}}$.
 
 The mutual coupling for state-space sources is currently restricted to
 current sources; voltage sources are skipped with a one-time warning

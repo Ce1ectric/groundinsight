@@ -1,7 +1,7 @@
 # tests/test_audit_pass19_transient.py
 
 """
-Audit pass 19 -- transient solver: PH2 and PH-L1.
+Audit pass 19 -- transient solver: PH2, PH-L1 and PH15.
 
 * **PH2** -- the state-space solver distributed the phase current over the
   routes of a ring with the enumerated source-to-fault paths and
@@ -15,6 +15,9 @@ Audit pass 19 -- transient solver: PH2 and PH-L1.
   does not evaluate said "expect a *lower* EPR". Measured, the FFT EPR without
   coupling is *higher* (77.6 V against 49.2 V), at the fault bus and as the
   network maximum -- conservative there.
+* **PH15** -- ``docs/transient.md`` described the state-space phase factor as
+  the "same algorithm as the FFT solver's mutual Norton injection", a coupling
+  the FFT solver has not had for several releases.
 
 Second methods (house rule): the stationary phasor solver
 (``run_fault(..., phase_current_mode="auto")``), the independent MNA
@@ -489,3 +492,16 @@ def test_transient_chapter_states_the_direction_of_the_missing_coupling():
     assert "under*-estimating" not in text
     notes = text.split("*Mutual coupling — not modelled.*", 1)[1].split("\n\n", 1)[0]
     assert "higher" in notes and "conservative" in notes
+
+
+# ---------------------------------------------------------------------------
+# PH15 -- the transient chapter describes what the code does
+# ---------------------------------------------------------------------------
+
+
+def test_transient_chapter_no_longer_cites_an_fft_coupling():
+    text = (DOCS / "transient.md").read_text(encoding="utf-8")
+    assert "same algorithm as the FFT solver's mutual" not in text
+    section = text.split("### Mutual coupling", 1)[1].split("\n### ", 1)[0]
+    assert 'phase_current_mode="auto"' in section
+    assert "TRANSIENT_PHASE_SPLIT" in section
