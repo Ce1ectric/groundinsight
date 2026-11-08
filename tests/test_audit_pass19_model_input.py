@@ -439,3 +439,180 @@ def test_short_positive_length_is_accepted():
     assert net.branches["jumper"].self_impedance == compute_impedance(
         SELF_FORMULA, FREQUENCIES, {"rho": 100.0, "l": 1e-6}
     )
+
+
+# ---------------------------------------------------------------------------
+# USE2 -- unknown formula symbols are rejected when the type is created
+# ---------------------------------------------------------------------------
+
+_BUS_FORMULA_FIELDS = ["impedance_formula", "R_formula", "L_formula", "C_formula"]
+_BRANCH_FORMULA_FIELDS = [
+    "self_impedance_formula", "mutual_impedance_formula", "phase_impedance_formula",
+    "R_self_formula", "L_self_formula", "C_self_formula",
+    "R_mutual_formula", "M_mutual_formula",
+]
+
+
+def _make_type(kind, field, formula):
+    """A bus or branch type whose ``field`` carries ``formula``."""
+    if kind == "bus":
+        fields = dict(name="T", system_type="S", voltage_level=20,
+                      impedance_formula="rho*0.01")
+        fields[field] = formula
+        return gi.BusType(**fields)
+    fields = dict(name="T", grounding_conductor=True,
+                  self_impedance_formula="(0.25 + j*f*0.012)*l",
+                  mutual_impedance_formula="(j*f*0.012)*l")
+    fields[field] = formula
+    return gi.BranchType(**fields)
+
+
+_ALL_FIELDS = [("bus", f) for f in _BUS_FORMULA_FIELDS] + [
+    ("branch", f) for f in _BRANCH_FORMULA_FIELDS
+]
+
+
+@pytest.mark.parametrize("kind,field", _ALL_FIELDS)
+@pytest.mark.parametrize(
+    "formula,symbol,suggestion",
+    [("rho*0.01 + j*F*0.1", "F", "f"), ("Rho*0.01", "Rho", "rho"), ("RHO + f", "RHO", "rho")],
+)
+def test_unknown_symbol_is_rejected_when_the_type_is_created(kind, field, formula, symbol, suggestion):
+    with pytest.raises(ValueError) as excinfo:
+        _make_type(kind, field, formula)
+    message = str(excinfo.value)
+    assert f"'{symbol}'" in message
+    assert f"did you mean '{suggestion}'" in message
+    assert field in message
+    for allowed in (("f", "rho") if kind == "bus" else ("f", "rho", "l")):
+        assert f"{allowed} (" in message
+
+
+@pytest.mark.parametrize("field", _BRANCH_FORMULA_FIELDS)
+def test_upper_case_length_is_rejected_in_branch_formulas(field):
+    """The review case: ``(0.25 + j*f*0.012)*L`` was accepted and only failed
+    at create_branch with "Cannot convert expression to float"."""
+    with pytest.raises(ValueError, match="did you mean 'l'"):
+        _make_type("branch", field, "(0.25 + j*f*0.012)*L")
+
+
+@pytest.mark.parametrize("field", _BUS_FORMULA_FIELDS)
+def test_length_is_not_a_bus_symbol(field):
+    with pytest.raises(ValueError) as excinfo:
+        _make_type("bus", field, "rho*0.01*l")
+    assert "only" in str(excinfo.value) and "branch" in str(excinfo.value)
+
+
+def test_several_unknown_symbols_are_all_named_without_a_guess():
+    with pytest.raises(ValueError) as excinfo:
+        _make_type("branch", "self_impedance_formula", "R + j*X*omega")
+    message = str(excinfo.value)
+    for symbol in ("'R'", "'X'", "'omega'"):
+        assert symbol in message
+    assert "did you mean" not in message
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "rho/(2*pi*1.5)*(1 + j*0.01*f)",
+        "rho*0.01 + I*2*pi*f*1e-6",
+        "sqrt(rho/f)*exp(-f/1000) + E**0",
+        "Abs(rho - 50) + Max(f, 1)*0",
+        "nan", "NaN", "  NaN  ",
+        "2.5e-3 + 1j*f*0",
+    ],
+)
+def test_allowed_symbols_constants_and_the_open_end_pass(formula):
+    assert _make_type("bus", "impedance_formula", formula).impedance_formula == formula
+
+
+def test_branch_formula_symbols_include_the_length():
+    bt = _make_type("branch", "phase_impedance_formula", "(0.1 + I*0.4)*l + rho*0 + f*0")
+    assert bt.phase_impedance_formula.endswith("f*0")
+
+
+def test_symbol_sets_match_what_the_elements_bind():
+    """The checked set is the set the evaluator binds: ``f`` plus the
+    parameters a bus/branch passes (second way: read off the elements)."""
+    from groundinsight.utils.validations import BRANCH_FORMULA_SYMBOLS, BUS_FORMULA_SYMBOLS
+
+    net = build_ring()
+    assert set(BUS_FORMULA_SYMBOLS) == {"f"} | set(net.buses["a"]._params())
+    assert set(BRANCH_FORMULA_SYMBOLS) == {"f"} | set(net.branches["l0"]._params())
+
+
+def test_unvalidated_type_copy_still_gets_the_clear_message():
+    """``model_copy(update=...)`` skips validation; deriving an element from
+    such a type reports the unknown symbol, not a SymPy conversion error."""
+    bt = _bus_type().model_copy(update={"impedance_formula": "rho*L"})
+    net = gi.create_network(name="n", frequencies=FREQUENCIES)
+    with pytest.raises(ValueError, match="did you mean 'l'|unknown symbol 'L'"):
+        gi.create_bus(name="a", type=bt, network=net)
+    assert not net.buses
+
+
+def test_importer_and_default_formulas_pass():
+    """The formulas the package itself builds are inside the allowed set."""
+    from groundinsight.io.defaults import ImportDefaults
+    from groundinsight.io.pandapower_import import _phase_impedance_formula
+
+    ImportDefaults(  # the example of the ImportDefaults docstring
+        rho=100.0, frequencies=[50.0],
+        default_bus_type=gi.BusType(
+            name="ImportedBus", system_type="Grounded", voltage_level=20.0,
+            impedance_formula="rho * 0 + 1.0 + I * f * 0",
+        ),
+        default_branch_type=gi.BranchType(
+            name="ImportedCable", grounding_conductor=True,
+            self_impedance_formula="(0.25 + I * 0.6) * l",
+            mutual_impedance_formula="(0.0 + I * 0.6) * l",
+        ),
+    )
+    formula = _phase_impedance_formula({"r_ohm_per_km": 0.161, "x_ohm_per_km": 0.117})
+    _make_type("branch", "phase_impedance_formula", formula)
+    # The reference cases build their types from f-strings of floats.
+    assert gi.run_reference_cases()["agrees"].all()
+
+
+def _documented_formulas():
+    """Every literal type formula in the docs, the curated notebooks and the
+    README, with the field it is assigned to (f-strings are skipped; the
+    suite constructs those)."""
+    import json
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    field = (
+        r"(impedance_formula|self_impedance_formula|mutual_impedance_formula|"
+        r"phase_impedance_formula|R_formula|L_formula|C_formula|R_self_formula|"
+        r"L_self_formula|C_self_formula|R_mutual_formula|M_mutual_formula)"
+    )
+    pattern = re.compile(r"\b" + field + r"\s*=\s*(f?)(\"|')(.*?)\3")
+    texts = []
+    for path in sorted(root.glob("docs/**/*.md")) + [root / "README.md"]:
+        texts.append((str(path.relative_to(root)), path.read_text(encoding="utf-8")))
+    for path in sorted(root.glob("docs/**/*.ipynb")) + sorted(root.glob("notebooks/0*.ipynb")):
+        cells = json.loads(path.read_text(encoding="utf-8")).get("cells", [])
+        for cell in cells:
+            texts.append((str(path.relative_to(root)), "".join(cell.get("source", []))))
+    found = set()
+    for where, text in texts:
+        for match in pattern.finditer(text):
+            if not match.group(2):  # not an f-string
+                found.add((match.group(1), match.group(4), where))
+    return sorted(found)
+
+
+def test_every_documented_formula_passes_the_type_checks():
+    formulas = _documented_formulas()
+    assert len(formulas) > 50  # the scan itself works
+    failures = []
+    for field, formula, where in formulas:
+        kind = "bus" if field in _BUS_FORMULA_FIELDS else "branch"
+        try:
+            _make_type(kind, field, formula)
+        except ValueError as exc:
+            failures.append(f"{where}: {field}={formula!r}: {str(exc)[:120]}")
+    assert not failures, "\n".join(failures)

@@ -10,6 +10,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     PrivateAttr,
+    ValidationInfo,
     computed_field,
     field_serializer,
     field_validator,
@@ -17,7 +18,12 @@ from pydantic import (
 )
 from typing import Any, ClassVar, Dict, List, Literal, Optional, Tuple, Union
 from groundinsight.diagnostics import Diagnostic, GroundinsightWarning
-from groundinsight.utils.validations import validate_impedance_formula_value
+from groundinsight.utils.validations import (
+    BRANCH_FORMULA_SYMBOLS,
+    BUS_FORMULA_SYMBOLS,
+    check_formula_symbols,
+    validate_impedance_formula_value,
+)
 from groundinsight.utils.impedance_calculator import (
     check_passive_impedance,
     compute_impedance,
@@ -501,6 +507,69 @@ class ComplexNumber(BaseModel):
         return ComplexNumber(real=converted.real, imag=converted.imag)
 
 
+def _check_type_symbols(
+    element_type: BaseModel, kind: str, allowed: Tuple[str, ...], element: str
+) -> None:
+    """
+    Re-check the formula symbols of a type when an element is derived from it.
+
+    The type validators already reject unknown symbols, but
+    ``model_copy(update=...)`` builds a type without running them. Checking
+    again here -- the token scan is cached per formula -- keeps the clear
+    message on that path too, instead of SymPy's "Cannot convert expression
+    to float".
+
+    Parameters
+    ----------
+    element_type : BaseModel
+        The ``BusType`` or ``BranchType`` of the element.
+    kind : str
+        ``"BusType"`` or ``"BranchType"``, for the message.
+    allowed : Tuple[str, ...]
+        The parameters the element binds.
+    element : str
+        How to name the element in the message, e.g. ``"bus 'a'"``.
+
+    Raises
+    ------
+    ValueError
+        As documented for
+        :func:`~groundinsight.utils.validations.check_formula_symbols`.
+    """
+    for field in type(element_type).model_fields:
+        if not field.endswith("_formula"):
+            continue
+        formula = getattr(element_type, field)
+        if formula is not None:
+            check_formula_symbols(
+                formula,
+                allowed,
+                context=f"{kind} {element_type.name!r} ({element}): {field}",
+            )
+
+
+def _formula_context(kind: str, info: ValidationInfo) -> str:
+    """
+    Name a formula field of a type for an error message.
+
+    Parameters
+    ----------
+    kind : str
+        ``"BusType"`` or ``"BranchType"``.
+    info : ValidationInfo
+        Pydantic's validation context of the field being validated. ``name``
+        is declared first on both types, so it is available here.
+
+    Returns
+    -------
+    str
+        For example ``"BranchType 'cable': self_impedance_formula"``.
+    """
+    name = info.data.get("name") if info.data else None
+    owner = f"{kind} {name!r}" if name is not None else kind
+    return f"{owner}: {info.field_name}"
+
+
 # user interface
 class BusType(BaseModel):
     """
@@ -591,6 +660,14 @@ class BusType(BaseModel):
     the cross-section of the respective element are set; the two elements
     are independent, so a bus may declare only its electrode or only its
     earthing conductor.
+
+    **Formula symbols.** Every formula of a bus type is evaluated with ``f``
+    (frequency in Hz) and ``rho`` (specific earth resistance in Ohm*m); the
+    constants ``j``/``I`` (imaginary unit), ``pi`` and ``E`` are available
+    as well. Any other name -- ``F``, ``Rho``, or the branch length ``l`` --
+    is rejected when the type is created, with the case-insensitive match as
+    a suggestion (see
+    :func:`~groundinsight.utils.validations.check_formula_symbols`).
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -615,16 +692,27 @@ class BusType(BaseModel):
     electrode_current_split: float = 1.0
 
     @field_validator("impedance_formula")
-    def validate_impedance_formula(cls, value):
-        """Validate the SymPy ``impedance_formula`` string."""
-        return validate_impedance_formula_value(value)
+    def validate_impedance_formula(cls, value, info: ValidationInfo):
+        """Validate the SymPy ``impedance_formula`` string.
+
+        Runs the security guard and the SymPy parse, then checks that the
+        formula only uses the symbols a bus formula is evaluated with
+        (:data:`~groundinsight.utils.validations.BUS_FORMULA_SYMBOLS`).
+        """
+        value = validate_impedance_formula_value(value)
+        return check_formula_symbols(
+            value, BUS_FORMULA_SYMBOLS, context=_formula_context("BusType", info)
+        )
 
     @field_validator("R_formula", "L_formula", "C_formula")
-    def validate_rlc_formula(cls, value):
+    def validate_rlc_formula(cls, value, info: ValidationInfo):
         """Validate the optional lumped RLC formula strings; ``None`` is allowed."""
         if value is None:
             return value
-        return validate_impedance_formula_value(value)
+        value = validate_impedance_formula_value(value)
+        return check_formula_symbols(
+            value, BUS_FORMULA_SYMBOLS, context=_formula_context("BusType", info)
+        )
 
     @field_validator(
         "earthing_conductor_cross_section_mm2", "electrode_cross_section_mm2"
@@ -755,7 +843,8 @@ class Bus(ValidatedAssignmentModel):
         ValueError
             As documented for :meth:`calculate_impedance`.
         """
-        params = {"rho": self.specific_earth_resistance}
+        params = self._params()
+        _check_type_symbols(self.type, "BusType", BUS_FORMULA_SYMBOLS, f"bus {self.name!r}")
 
         # Mandatory frequency-domain impedance.
         impedance = compute_impedance(
@@ -800,6 +889,10 @@ class Bus(ValidatedAssignmentModel):
         """
         for field, value in derived.items():
             setattr(self, field, value)
+
+    def _params(self) -> Dict[str, float]:
+        """Formula parameters of this bus: the specific earth resistance ``rho``."""
+        return {"rho": self.specific_earth_resistance}
 
     @field_validator("impedance", mode="before")
     def validate_impedance(cls, value):
@@ -880,6 +973,16 @@ class BranchType(BaseModel):
     M_mutual_formula : str, optional
         Per-branch mutual inductance in Henry. Used only by the transient
         solvers.
+
+    Notes
+    -----
+    **Formula symbols.** Every formula of a branch type is evaluated with
+    ``f`` (frequency in Hz), ``rho`` (specific earth resistance in Ohm*m) and
+    ``l`` (branch length in km); the constants ``j``/``I`` (imaginary unit),
+    ``pi`` and ``E`` are available as well. Any other name -- ``L``, ``F``,
+    ``Rho`` -- is rejected when the type is created, with the
+    case-insensitive match as a suggestion (see
+    :func:`~groundinsight.utils.validations.check_formula_symbols`).
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -901,9 +1004,17 @@ class BranchType(BaseModel):
     theta_final_C: Optional[float] = None
 
     @field_validator("self_impedance_formula", "mutual_impedance_formula")
-    def validate_impedance_formula(cls, value):
-        """Validate the SymPy self / mutual impedance formula strings."""
-        return validate_impedance_formula_value(value)
+    def validate_impedance_formula(cls, value, info: ValidationInfo):
+        """Validate the SymPy self / mutual impedance formula strings.
+
+        Runs the security guard and the SymPy parse, then checks that the
+        formula only uses the symbols a branch formula is evaluated with
+        (:data:`~groundinsight.utils.validations.BRANCH_FORMULA_SYMBOLS`).
+        """
+        value = validate_impedance_formula_value(value)
+        return check_formula_symbols(
+            value, BRANCH_FORMULA_SYMBOLS, context=_formula_context("BranchType", info)
+        )
 
     @field_validator(
         "phase_impedance_formula",
@@ -913,11 +1024,14 @@ class BranchType(BaseModel):
         "R_mutual_formula",
         "M_mutual_formula",
     )
-    def validate_rlc_formula(cls, value):
-        """Validate the optional lumped RLC formula strings; ``None`` is allowed."""
+    def validate_rlc_formula(cls, value, info: ValidationInfo):
+        """Validate the optional phase / lumped RLCM formula strings; ``None`` is allowed."""
         if value is None:
             return value
-        return validate_impedance_formula_value(value)
+        value = validate_impedance_formula_value(value)
+        return check_formula_symbols(
+            value, BRANCH_FORMULA_SYMBOLS, context=_formula_context("BranchType", info)
+        )
 
     @field_validator("cross_section_mm2")
     def _validate_cross_section(cls, value):
@@ -1056,6 +1170,9 @@ class Branch(ValidatedAssignmentModel):
         ValueError
             As documented for :meth:`calculate_impedance`.
         """
+        _check_type_symbols(
+            self.type, "BranchType", BRANCH_FORMULA_SYMBOLS, f"branch {self.name!r}"
+        )
         derived: Dict[str, Any] = {
             "self_impedance": self._calculate_self_impedance(frequencies),
             "mutual_impedance": self._calculate_mutual_impedance(frequencies),

@@ -1,3 +1,22 @@
+# utils/validations.py
+"""
+Validation of impedance formula strings and numeric inputs.
+
+A formula string reaches ``sympy.sympify`` and ``sympy.lambdify``, which
+evaluate Python. Everything that can arrive from a shared file -- a network
+JSON, a database row, an import default -- therefore passes the guard in
+:func:`assert_safe_formula` before SymPy sees it. The guard is a whitelist
+over Python's own tokenizer: names, calls and operators are checked token by
+token, and the magnitude of the numbers a formula can build is bounded before
+SymPy computes any of them (see :func:`_assert_no_runaway_power`).
+
+On top of the security guard sits a usability check,
+:func:`check_formula_symbols`: a formula of a bus or branch type may only use
+the symbols the evaluator binds for that kind of element. Anything else
+(``L`` for ``l``, ``Rho`` for ``rho``) used to pass here and fail much later,
+at ``create_branch``, with "Cannot convert expression to float".
+"""
+
 from functools import lru_cache
 from sympy import sympify, I, symbols
 import ast
@@ -5,6 +24,7 @@ import io
 import keyword
 import tokenize
 import unicodedata
+from typing import Iterable, Tuple
 
 
 # Names that must never appear in a formula string: the usual entry points
@@ -367,6 +387,157 @@ def _validate_impedance_formula_uncached(value: str) -> str:
     except Exception as e:
         raise ValueError(f"Invalid impedance formula: {e}")
     return value
+
+
+#: Names every type formula may use besides its parameters: ``j`` and ``I``
+#: are the imaginary unit (``j`` is substituted by the evaluator, ``I`` is
+#: SymPy's), ``pi`` and ``E`` are SymPy's constants.
+FORMULA_CONSTANTS: Tuple[str, ...] = ("j", "I", "pi", "E")
+
+#: Parameters a *bus* formula (``BusType.impedance_formula``, ``R_formula``,
+#: ``L_formula``, ``C_formula``) is evaluated with: the frequency and the
+#: specific earth resistance of the bus. A bus has no length.
+BUS_FORMULA_SYMBOLS: Tuple[str, ...] = ("f", "rho")
+
+#: Parameters a *branch* formula (every formula field of ``BranchType``) is
+#: evaluated with: the frequency, the specific earth resistance and the
+#: length of the branch.
+BRANCH_FORMULA_SYMBOLS: Tuple[str, ...] = ("f", "rho", "l")
+
+_SYMBOL_MEANING = {
+    "f": "frequency in Hz",
+    "rho": "specific earth resistance in Ohm*m",
+    "l": "branch length in km",
+}
+
+
+def _is_open_end_sentinel(formula: str) -> bool:
+    """``True`` for the ``"nan"`` open-end sentinel (whole string, any case).
+
+    Mirrors :func:`groundinsight.utils.impedance_calculator._is_open_end`,
+    which cannot be imported here without a cycle.
+    """
+    return formula.strip().lower() == "nan"
+
+
+@lru_cache(maxsize=1024)
+def _value_names(formula: str) -> Tuple[str, ...]:
+    """
+    Names a formula uses as values, in order of first appearance.
+
+    A name directly followed by ``(`` is a call and is checked by the
+    function whitelist of :func:`assert_safe_formula`; every other name ends
+    up as a SymPy symbol (or a SymPy constant) and has to be bound by the
+    evaluator.
+
+    Parameters
+    ----------
+    formula : str
+        A formula that :func:`assert_safe_formula` has already accepted.
+
+    Returns
+    -------
+    Tuple[str, ...]
+        The distinct value names. Empty when the string cannot be tokenized
+        (the guard has rejected such a string before this is reached).
+    """
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(formula).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return ()
+    significant = _significant_tokens(tokens)
+    names = []
+    for index, tok in enumerate(significant):
+        if tok.type != tokenize.NAME:
+            continue
+        following = significant[index + 1] if index + 1 < len(significant) else None
+        if following is not None and following.string == "(":
+            continue
+        if tok.string not in names:
+            names.append(tok.string)
+    return tuple(names)
+
+
+def check_formula_symbols(
+    formula: str, allowed: Iterable[str], *, context: str = "formula"
+) -> str:
+    """
+    Reject a formula that uses symbols the evaluator does not bind.
+
+    A bus formula is evaluated with ``f`` and ``rho``, a branch formula with
+    ``f``, ``rho`` and ``l`` (see :data:`BUS_FORMULA_SYMBOLS`,
+    :data:`BRANCH_FORMULA_SYMBOLS`); :data:`FORMULA_CONSTANTS` are available
+    in both. Any other name stays a free SymPy symbol, and the formula then
+    fails only when an element is created -- with "Cannot convert expression
+    to float", which names neither the symbol nor the field. The typical
+    cause is the wrong case (``L``, ``F``, ``Rho``), so the message suggests
+    the case-insensitive match when there is one.
+
+    The open-end sentinel ``"nan"`` is not a formula and passes unchanged.
+
+    Parameters
+    ----------
+    formula : str
+        The formula, already accepted by :func:`assert_safe_formula`.
+    allowed : Iterable[str]
+        The parameters the evaluator binds for this formula; ``f`` must be
+        among them. :data:`FORMULA_CONSTANTS` are added automatically.
+    context : str, optional
+        How to name the formula in the message, e.g.
+        ``"BranchType 'cable': self_impedance_formula"``.
+
+    Returns
+    -------
+    str
+        ``formula``, unchanged.
+
+    Raises
+    ------
+    ValueError
+        If the formula uses a name outside the allowed set. The message names
+        every unknown symbol, the allowed symbols with their meaning, and the
+        case-insensitive match where one exists.
+
+    Examples
+    --------
+    >>> check_formula_symbols("(0.25 + j*f*0.012)*l", BRANCH_FORMULA_SYMBOLS)
+    '(0.25 + j*f*0.012)*l'
+    >>> check_formula_symbols("rho*L", BRANCH_FORMULA_SYMBOLS)  # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+    ...
+    ValueError: formula uses the unknown symbol 'L' (did you mean 'l'?). ...
+    """
+    if not isinstance(formula, str) or _is_open_end_sentinel(formula):
+        return formula
+    parameters = tuple(allowed)
+    permitted = set(parameters) | set(FORMULA_CONSTANTS)
+    unknown = [name for name in _value_names(formula) if name not in permitted]
+    if not unknown:
+        return formula
+
+    hints = []
+    for name in unknown:
+        matches = sorted(a for a in permitted if a.lower() == name.lower())
+        if matches:
+            hints.append(f"'{name}' (did you mean '{matches[0]}'?)")
+        elif name in BRANCH_FORMULA_SYMBOLS and name not in parameters:
+            hints.append(
+                f"'{name}' (the {_SYMBOL_MEANING[name]} is only defined in "
+                "branch formulas)"
+            )
+        else:
+            hints.append(f"'{name}'")
+    noun = "symbol" if len(unknown) == 1 else "symbols"
+    described = ", ".join(
+        f"{name} ({_SYMBOL_MEANING.get(name, 'parameter')})" for name in parameters
+    )
+    raise ValueError(
+        f"{context} uses the unknown {noun} {', '.join(hints)}. This formula "
+        f"is evaluated with {described}; the constants "
+        f"{', '.join(FORMULA_CONSTANTS[:2])} (imaginary unit), "
+        f"{', '.join(FORMULA_CONSTANTS[2:])} are available as well. Names are "
+        "case-sensitive."
+    )
 
 
 def validate_numerics_dict(value):

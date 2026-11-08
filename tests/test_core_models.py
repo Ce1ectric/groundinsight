@@ -135,13 +135,13 @@ def test_bustype_initialization_valid():
         description="A high voltage bus type",
         system_type="AC",
         voltage_level=230.0,
-        impedance_formula="1+roh+f",
+        impedance_formula="1+rho+f",
     )
     assert bus_type.name == "Type A"
     assert bus_type.description == "A high voltage bus type"
     assert bus_type.system_type == "AC"
     assert bus_type.voltage_level == 230.0
-    assert bus_type.impedance_formula == "1+roh+f"
+    assert bus_type.impedance_formula == "1+rho+f"
 
 def test_bustype_initialization_missing_optional():
     """
@@ -200,13 +200,13 @@ def test_branchtype_initialization_valid():
         name="Type A",
         description="A high voltage branch type",
         grounding_conductor=True,
-        self_impedance_formula="1+roh+f",
-        mutual_impedance_formula="1+roh+f",
+        self_impedance_formula="1+rho+f",
+        mutual_impedance_formula="1+rho+f",
     )
     assert branch_type.name == "Type A"
     assert branch_type.description == "A high voltage branch type"
-    assert branch_type.self_impedance_formula == "1+roh+f"
-    assert branch_type.mutual_impedance_formula == "1+roh+f"
+    assert branch_type.self_impedance_formula == "1+rho+f"
+    assert branch_type.mutual_impedance_formula == "1+rho+f"
     assert branch_type.grounding_conductor == True
 
 def test_branchtype_initialization_missing_optional():
@@ -415,7 +415,7 @@ def test_bus_initialization_valid():
         description="A high voltage bus type",
         system_type="AC",
         voltage_level=230.0,
-        impedance_formula="1+roh+f",
+        impedance_formula="1+rho+f",
     )
     bus = Bus(
         name="Bus A",
@@ -440,7 +440,7 @@ def test_bus_initialization_missing_optional():
         description="A high voltage bus type",
         system_type="AC",
         voltage_level=230.0,
-        impedance_formula="1+roh+f",
+        impedance_formula="1+rho+f",
     )
     bus = Bus(
         name="Bus A",
@@ -466,7 +466,7 @@ def test_bus_initialization_invalid():
             description="A high voltage bus type",
             system_type="AC",
             voltage_level=230.0,
-            impedance_formula="1+roh+f",
+            impedance_formula="1+rho+f",
         )
         bus = Bus(
             name="Bus A",
@@ -482,7 +482,7 @@ def test_bus_initialization_invalid():
             description="A high voltage bus type",
             system_type="AC",
             voltage_level=230.0,
-            impedance_formula="1+roh+f",
+            impedance_formula="1+rho+f",
         )
         bus = Bus(
             name=1,
@@ -498,7 +498,7 @@ def test_bus_initialization_invalid():
             description="A high voltage bus type",
             system_type="AC",
             voltage_level=230.0,
-            impedance_formula="1+roh+f",
+            impedance_formula="1+rho+f",
         )
         bus = Bus(
             name="Bus A",
@@ -515,8 +515,8 @@ def test_branch_initialization_valid():
         name="Type A",
         description="A high voltage branch type",
         grounding_conductor=True,
-        self_impedance_formula="1+roh+f",
-        mutual_impedance_formula="1+roh+f",
+        self_impedance_formula="1+rho+f",
+        mutual_impedance_formula="1+rho+f",
     )
     branch = Branch(
         name="Branch A",
@@ -549,8 +549,8 @@ def test_branch_initialization_missing_optional():
         name="Type A",
         description="A high voltage branch type",
         grounding_conductor=True,
-        self_impedance_formula="1+roh+f",
-        mutual_impedance_formula="1+roh+f",
+        self_impedance_formula="1+rho+f",
+        mutual_impedance_formula="1+rho+f",
     )
     branch = Branch(
         name="Branch A",
@@ -585,8 +585,8 @@ def test_branch_initialization_invalid():
             name="Type A",
             description="A high voltage branch type",
             grounding_conductor=True,
-            self_impedance_formula="1+roh+f",
-            mutual_impedance_formula="1+roh+f",
+            self_impedance_formula="1+rho+f",
+            mutual_impedance_formula="1+rho+f",
         )
         branch = Branch(
             name="Branch A",
@@ -606,8 +606,8 @@ def test_branch_initialization_invalid():
             name="Type A",
             description="A high voltage branch type",
             grounding_conductor=True,
-            self_impedance_formula="1+roh+f",
-            mutual_impedance_formula="1+roh+f",
+            self_impedance_formula="1+rho+f",
+            mutual_impedance_formula="1+rho+f",
         )
         branch = Branch(
             name=1,
@@ -627,8 +627,8 @@ def test_branch_initialization_invalid():
             name="Type A",
             description="A high voltage branch type",
             grounding_conductor=True,
-            self_impedance_formula="1+roh+f",
-            mutual_impedance_formula="1+roh+f",
+            self_impedance_formula="1+rho+f",
+            mutual_impedance_formula="1+rho+f",
         )
         branch = Branch(
             name="Branch A",
@@ -648,8 +648,8 @@ def test_branch_initialization_invalid():
             name="Type A",
             description="A high voltage branch type",
             grounding_conductor=True,
-            self_impedance_formula="1+roh+f",
-            mutual_impedance_formula="1+roh+f",
+            self_impedance_formula="1+rho+f",
+            mutual_impedance_formula="1+rho+f",
         )
         branch = Branch(
             name="Branch A",
@@ -1282,8 +1282,8 @@ def test_path_initialization_valid():
                 name="Type A",
                 description="A high voltage branch type",
                 grounding_conductor=True,
-                self_impedance_formula="1+roh+f",
-                mutual_impedance_formula="1+roh+f",
+                self_impedance_formula="1+rho+f",
+                mutual_impedance_formula="1+rho+f",
             ),
             length=100,
             from_bus="Bus A",
@@ -1324,8 +1324,8 @@ def test_path_initialization_missing_optional():
                 name="Type A",
                 description="A high voltage branch type",
                 grounding_conductor=True,
-                self_impedance_formula="1+roh+f",
-                mutual_impedance_formula="1+roh+f",
+                self_impedance_formula="1+rho+f",
+                mutual_impedance_formula="1+rho+f",
             ),
             length=100,
             from_bus="Bus A",
@@ -1369,8 +1369,8 @@ def test_path_initialization_invalid():
                     name="Type A",
                     description="A high voltage branch type",
                     grounding_conductor=True,
-                    self_impedance_formula="1+roh+f",
-                    mutual_impedance_formula="1+roh+f",
+                    self_impedance_formula="1+rho+f",
+                    mutual_impedance_formula="1+rho+f",
                 ),
                 length=100,
                 from_bus="Bus A",
@@ -1386,8 +1386,8 @@ def test_path_initialization_invalid():
                     name="Type A",
                     description="A high voltage branch type",
                     grounding_conductor=True,
-                    self_impedance_formula="1+roh+f",
-                    mutual_impedance_formula="1+roh+f",
+                    self_impedance_formula="1+rho+f",
+                    mutual_impedance_formula="1+rho+f",
                 ),
                 length=100,
                 from_bus="Bus A",
@@ -1413,8 +1413,8 @@ def test_path_initialization_invalid():
                     name="Type A",
                     description="A high voltage branch type",
                     grounding_conductor=True,
-                    self_impedance_formula="1+roh+f",
-                    mutual_impedance_formula="1+roh+f",
+                    self_impedance_formula="1+rho+f",
+                    mutual_impedance_formula="1+rho+f",
                 ),
                 length=100,
                 from_bus="Bus A",
@@ -1440,8 +1440,8 @@ def test_path_initialization_invalid():
                     name="Type A",
                     description="A high voltage branch type",
                     grounding_conductor=True,
-                    self_impedance_formula="1+roh+f",
-                    mutual_impedance_formula="1+roh+f",
+                    self_impedance_formula="1+rho+f",
+                    mutual_impedance_formula="1+rho+f",
                 ),
                 length=100,
                 from_bus="Bus A",
@@ -1467,8 +1467,8 @@ def test_path_initialization_invalid():
                     name="Type A",
                     description="A high voltage branch type",
                     grounding_conductor=True,
-                    self_impedance_formula="1+roh+f",
-                    mutual_impedance_formula="1+roh+f",
+                    self_impedance_formula="1+rho+f",
+                    mutual_impedance_formula="1+rho+f",
                 ),
                 length=100,
                 from_bus="Bus A",
