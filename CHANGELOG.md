@@ -134,6 +134,29 @@ migration checklist.
   second network; change a type with
   `new = bus_type.model_copy(update={...})` and `network.update_bus(name, type=new)`.
   (GUI3, F9)
+- **`ResultReductionFactor.u_earthing` / `z_earthing` and the grounding
+  impedance are now the EN 50522 quantities at the fault bus.** `u_earthing`
+  is the EPR of the fault bus (`U_E`); `z_earthing`,
+  `ResultGroundingImpedance.value`, `Z_G` in `res_all_impedances()` and
+  `Z_G_Ohm` of `bus_response` are the driving-point impedance of the earthing
+  network there (`Z_E`). Migration: the old values (the current-weighted mean
+  potential of the earth group and that mean divided by `I_E`) are in
+  `u_earthing_group`/`z_earthing_group`. A result stored before the change
+  loads with its values moved to those fields, `u_earthing`/`z_earthing` and
+  the grounding impedance left empty, and an info diagnostic
+  `LEGACY_EARTHING_DEFINITION`; run the fault again to get `U_E` and `Z_E`.
+  (PH4, F4)
+- **`run_fault` raises `ValueError` for a source that has no value at any
+  network frequency.** Such a source used to contribute 0 A, and the run
+  reported 0 V at every bus. Migration: give the source values at the network
+  frequencies, or deactivate it. (USE3, F8)
+- **Earth-return quantities that are undefined are `None`, not rounding
+  noise.** `I_E`, `value_current` and the earth group are `None`/`[]` when no
+  electrode current exceeds `1e-9·|I_F|`. The EPR-based `value` is `None` when
+  the fault-bus EPR without coupling is below `1e-9·|I_F|·|Z_E|`. Migration:
+  code that turns these fields into floats has to handle `None`; the
+  diagnostics `EARTH_GROUP_UNDEFINED` and `REDUCTION_FACTOR_UNDEFINED` give
+  the reason. (P9, F14)
 
 ### Added
 
@@ -216,6 +239,29 @@ migration checklist.
 - **`utils.validations.check_formula_symbols`, `BUS_FORMULA_SYMBOLS`,
   `BRANCH_FORMULA_SYMBOLS`, `FORMULA_CONSTANTS`** -- the symbol check of the
   type validators, usable by a formula editor. (USE2)
+- **`ResultReductionFactor.i_fault`, `u_earthing_group`,
+  `z_earthing_group`.** `i_fault` is the denominator of `value_current` (the
+  sum of the scaled source currents that reach the fault). The two group
+  fields keep the earth-group mean as a diagnostic. (PH4, F4)
+- **`Fault.scaling_at(frequency)`, and `scalings` is optional.**
+  `create_fault(..., scalings=None)`, `scalings={}` and `Fault(...)` without
+  the argument all mean factor 1.0 at every frequency. `scaling_at` is the one
+  place that applies this default. (PH6, USE4, F7)
+- **`ElectricalNetwork.earthing_admittance_matrix(freq)` and
+  `ElectricalNetwork.thevenin_loop_admittances(freq)`.** The first is the
+  earthing network alone: electrodes and shields, without coupling and
+  without Thevenin loop closures, from which `Z_E` is computed. The second
+  returns the loop-closure stamps that the Y assembly and the earthing matrix
+  share. `BusResponse.fault_driving_point(z_bus, freq)` returns `Z_E` for the
+  electrode under test. (PH4)
+- **Diagnostics with codes, collected in `Result.diagnostics`:**
+  `ModelAssumptionWarning` `EARTH_GROUP_UNDEFINED`,
+  `REDUCTION_FACTOR_UNDEFINED`, `EARTHING_IMPEDANCE_UNDEFINED` (P9, PH4),
+  `PHASE_PROXY` (PH3), `THEVENIN_COUPLING` (PH1),
+  `SOURCE_WITHOUT_PHASE_PATH` (PH9) and `THERMAL_DC_EXCLUDED` (PH10);
+  `InputWarning` `SOURCE_FREQUENCY_GAP`, `SOURCE_FREQUENCY_OUTSIDE_NETWORK`
+  (USE3) and `SCALINGS_INCOMPLETE` (PH6); info `LEGACY_EARTHING_DEFINITION`
+  (PH4).
 
 ### Changed
 
@@ -343,6 +389,51 @@ migration checklist.
 - **The optional derived fields are `None` when the type has no formula for
   them** (`R`/`L`/`C`, `phase_impedance`, `R_self` … `M_mutual`), instead of
   keeping whatever an earlier type left there. (GUI3, ARC9)
+- **`U_E = 3·I_0·Z_E·r` now holds as physics, not by definition.** The
+  earth-group mean, which `u_earthing`/`z_earthing` used to report, came out
+  43 % below the fault-bus EPR and 45 % below the driving-point impedance on a
+  homogeneous cable chain with the fault far from the infeed, the norm's ideal
+  case. Taken as `U_E` into a touch-voltage assessment, that is
+  unconservative. The chain closed only because `Z_E` was defined as
+  `U_E/I_E`. On a 64-section chain the new values match the closed forms
+  `|u_F| = |1−k|·I·|Z_∞|` and `Z_∞ = −Z'/2 + √(Z'²/4 + Z_e·Z')` to 1e-5.
+  `Z_E` equals the driving point of an independent reference solver to 1e-12
+  on 17 structural networks. Thevenin loops are not part of `Z_E`; a fault
+  bus that only a Thevenin loop reaches gives `None` and
+  `EARTHING_IMPEDANCE_UNDEFINED`. `value` and `value_current` keep their
+  definitions. (PH4, F4)
+- **A Thevenin source that drives coupled branches is announced.** The
+  stationary solver takes the Norton current `E/Z_src` as the phase current.
+  Compared with a fully coupled multi-conductor reference, that puts the
+  fault EPR 5.8 / 22.2 / 37.9 % too low for `Z_src` = 5+15j / 1+3j /
+  0.3+1j Ω on a cable chain. `run_fault` emits `THEVENIN_COUPLING` once per
+  run until the loop-current solution lands; a Thevenin source on the fault
+  bus is exact and stays silent. (PH1, F5)
+- **Source coverage is checked.** A source that reaches the fault but lacks
+  values at some network frequencies gives one `SOURCE_FREQUENCY_GAP` per
+  source and run. Keys outside the network frequencies are announced by
+  `create_source`, `create_voltage_source` and `Network.add_source` with
+  `SOURCE_FREQUENCY_OUTSIDE_NETWORK`; the solve ignores them, as before.
+  The run-time checks belong to `run_fault`: `build_electrical_network`
+  switches them on (`ElectricalNetwork(..., input_checks=True)`), while the
+  phase-split probe of the transient solver leaves them off. A source that
+  carries only a transient waveform stays legitimate there. (USE3, F8)
+- **An incomplete `scalings` mapping is announced.** One `SCALINGS_INCOMPLETE`
+  per run names the frequencies that fall back to 1.0. (PH6, F7)
+- **The phase-proxy note and the note on a source without a phase path are
+  structured warnings.** Both used to be `logger.warning` lines, which the
+  library's `NullHandler` hides. They are now `ModelAssumptionWarning`s,
+  emitted once per run (the source note used to repeat at every frequency),
+  and the source note says that the source current still enters the earthing
+  system with reduction factor 1 for its share. (PH3, PH9)
+- **The thermal checks name the direct current they leave out.**
+  `check_conductor_limits` and `check_node_limits` keep the 0 Hz bin out of
+  `I_th` (pass 18). They now emit `THERMAL_DC_EXCLUDED` with the elements and
+  the increase of `I_th` from `I_th² = I_ac²(m + n) + I_dc²`, because a direct
+  current that flows during `T_k` makes the check unconservative. The formula
+  leaves out a cross term with the decaying DC offset, which can have either
+  sign: for 1000 A AC, 700 A DC, R/X = 0.1 and `T_k` = 0.5 s, the numerically
+  integrated current gives an `I_th` 3.7 % above or 4.4 % below it. (PH10)
 
 ### Deprecated
 
@@ -543,6 +634,30 @@ migration checklist.
   previous element stays. (ARC9)
 - **`create_fault(active=True)` without a network** raises a `ValueError` that
   says what is missing, instead of `AttributeError` on `None`. (ARC9)
+- **A broken shield no longer opens the phase conductor.** For a branch with
+  a grounding conductor and an infinite self impedance (`"nan"`, the
+  documented broken shield) and no declared phase impedance, the phase-split
+  proxy `1/Z_self` was 0. That removed the phase conductor too. On a
+  symmetric ring, the branch carried 0 A instead of half the current, and the
+  fault EPR was 207.1 V instead of 342.0 V. Because the phase network then
+  looked radial, the proxy note was suppressed as well. The branch now falls
+  back to the length proxy (520.4 A / 541.3 A, 300.7 V), and `PHASE_PROXY`
+  names it. (PH3)
+- **Earth group, `I_E` and the reduction factors are no longer decided by
+  rounding noise.** Electrode currents of zero in exact arithmetic come out
+  of the solver at about 1e-17 of the largest one, at an arbitrary angle,
+  and joined an arbitrary group: 786 membership flips in 514 random networks
+  between two kernels that otherwise agree to 1e-13. Without an electrode at
+  the fault bus, `I_E` flipped sign and `Z_G` moved by a factor of 2.2. A
+  fault bus at zero potential reported the quotient of two rounding errors
+  as `value` (0.449 = 5.1e-14 V / 1.1e-13 V for a source behind a dead end).
+  Currents up to `1e-9·max|I_a|` now join no group. Without a fault-bus
+  electrode, the group in phase with the fault-bus EPR feeds. When no current
+  is dropped, the split is bit for bit the previous one. (P9, F14)
+- **The earth-return split is O(n log n).** It was quadratic: 11.2 s per
+  frequency at 20 000 buses, now 9 ms (0.6 / 2.1 / 106 ms at 1 000 /
+  4 000 / 100 000). On 2 000 random phasor sets and a 4 000-bus set, the
+  result equals that of the previous implementation with `==`. (P3)
 
 ### Security
 
@@ -671,6 +786,20 @@ migration checklist.
   and that they are read-only; `core_models` and `utils/validations` have
   module docstrings explaining the invariants and the resource limits.
   (GUI3, USE2, SEC1)
+- **`docs/concepts.md` defines `U_E`, `Z_E`, `I_E` and `r` at the fault bus.**
+  The section on the EN 50522 reduction factor and the grounding-impedance
+  section are rewritten, and `docs/examples/fault_decomposition.ipynb`
+  prints the new quantities next to the group mean. (PH4)
+- **A missing `scalings` key means 1.0.** The DC section said 0 ("a fault
+  that does not scale 0 Hz contributes nothing at DC"); a fault without a
+  0 Hz key in fact gives |u_F(0 Hz)| = 33.47 V. (PH6, USE4)
+- **The driving point of `bus_response` is monotone only for an electrode
+  within 90° of the network admittance.** Along `Y_B = t·e^{jφ}`, `|Z_dp|`
+  falls for every `t` if and only if `cos(φ − arg(1/Z_net)) ≥ 0`, which a
+  resistive electrode always meets. The passive worst case
+  `|Z_net|/cos(arg Z_net)` is 0.08 % above `|Z_net|` on a nearly resistive
+  site and 57 % above it at the far end of a four-bus cable chain; the
+  documentation called it "very little". (PH13)
 
 ### Internal
 
@@ -917,6 +1046,17 @@ migration checklist.
   (GUI3, ARC9)
 - Four tests in `test_core_models.py` used the formula `"1+roh+f"`, a typo the
   symbol check now catches; they use `"1+rho+f"`. (USE2)
+- **An independent reference solver as a test helper.**
+  `tests/_reference_mna.py` uses modified nodal analysis with branch currents
+  as unknowns, in the physical sign frame. With it, the permanent physics
+  tests (`tests/test_audit_pass19_physics.py`) pin 17 structural networks to
+  1e-12, and KCL, reciprocity, passivity and Tellegen on seeded random meshes
+  (plus a hypothesis variant when hypothesis is installed). A 1e-6 error in
+  the coupling injection turns 38 of 39 of these tests red. (PQ-REF, PQ-INV)
+- **`groundinsight.utils.earth_current`:** `NOISE_REL = 1e-9`,
+  `earth_current_vanishes()`, and `split_earth_currents(..., anchor=,
+  noise_rel=)`. The pytest marker `slow` is registered in `pyproject.toml`.
+  (P3, P9)
 
 ## [0.6.0] — 2026-09-01
 
