@@ -64,10 +64,13 @@ network of a long radial feeder the sparse LU is the *more* accurate of the
 two (finding P13).
 """
 
+import gc
 import hashlib
 import logging
 import math
+import threading
 from collections.abc import Mapping
+from contextlib import contextmanager
 
 import numpy as np
 from typing import Dict, Iterator, List, Optional, Tuple
@@ -210,6 +213,50 @@ def _is_open_circuit(Z_complex: complex) -> bool:
     the same C double roughly an order of magnitude faster.
     """
     return math.isinf(Z_complex.real) or math.isinf(Z_complex.imag)
+
+
+_GC_PAUSE_LOCK = threading.Lock()
+_GC_PAUSE_DEPTH = 0
+_GC_PAUSE_RESTORE = False
+
+
+@contextmanager
+def _gc_paused() -> Iterator[None]:
+    """Pause the cyclic garbage collector while result objects are built.
+
+    A solve allocates one :class:`ComplexNumber` per element, quantity and
+    frequency -- a quarter of a million objects for a 4000-bus ring at seven
+    frequencies -- and every few hundred allocations trigger a collection
+    that traverses the *whole* object graph, the network model included.
+    None of these objects forms a reference cycle: they are freed by
+    reference counting the moment they are dropped, so the traversals find
+    nothing and only cost time (finding P5: half of the result-building time
+    on large networks).
+
+    The collector is disabled only if it was enabled when the first pause
+    began, and enabled again when the last pause ends -- also when the
+    building raises. Pauses may nest and may overlap across threads; a
+    counter under a lock makes the collector come back exactly once. A
+    collector the caller switched off stays off.
+
+    Yields
+    ------
+    None
+        Control, with the collector paused.
+    """
+    global _GC_PAUSE_DEPTH, _GC_PAUSE_RESTORE
+    with _GC_PAUSE_LOCK:
+        if _GC_PAUSE_DEPTH == 0:
+            _GC_PAUSE_RESTORE = gc.isenabled()
+            gc.disable()
+        _GC_PAUSE_DEPTH += 1
+    try:
+        yield
+    finally:
+        with _GC_PAUSE_LOCK:
+            _GC_PAUSE_DEPTH -= 1
+            if _GC_PAUSE_DEPTH == 0 and _GC_PAUSE_RESTORE:
+                gc.enable()
 
 
 def _gather_impedances(
@@ -2992,7 +3039,8 @@ class ElectricalNetwork:
         The values are taken out of the arrays with ``tolist()`` once rather
         than indexed per element and frequency. The RMS is accumulated
         frequency by frequency as ``sqrt(sum |x|**2)``, the convention of
-        :meth:`_calculate_rms`.
+        :meth:`_calculate_rms`. The objects are built with the cyclic garbage
+        collector paused (:func:`_gc_paused`, finding P5a).
         """
         prepared = []
         for key, values in columns.items():
@@ -3006,16 +3054,17 @@ class ElectricalNetwork:
             )
         rows = []
         indexed = list(enumerate(frequencies))
-        for k, name in enumerate(names):
-            fields = {"name": name}
-            for key, rms, real, imag in prepared:
-                re_k, im_k = real[k], imag[k]
-                fields[key] = rms[k]
-                fields[key + "_freq"] = {
-                    freq: ComplexNumber(real=re_k[j], imag=im_k[j])
-                    for j, freq in indexed
-                }
-            rows.append(model(**fields))
+        with _gc_paused():
+            for k, name in enumerate(names):
+                fields = {"name": name}
+                for key, rms, real, imag in prepared:
+                    re_k, im_k = real[k], imag[k]
+                    fields[key] = rms[k]
+                    fields[key + "_freq"] = {
+                        freq: ComplexNumber(real=re_k[j], imag=im_k[j])
+                        for j, freq in indexed
+                    }
+                rows.append(model(**fields))
         return rows
 
     def compute_branch_currents(self):

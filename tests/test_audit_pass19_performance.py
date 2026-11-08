@@ -42,6 +42,7 @@ from __future__ import annotations
 import gc
 import math
 import random
+import threading
 import tracemalloc
 import warnings
 from typing import Dict, List
@@ -906,3 +907,81 @@ def test_the_fingerprint_ignores_what_the_assembly_does_not_read():
         real=z.real, imag=z.imag * 3
     )
     assert en.matches_network_state()
+
+
+# ---------------------------------------------------------------------------
+# 5. P5a: the garbage collector is paused while result rows are built
+# ---------------------------------------------------------------------------
+
+
+def _record_gc_state(monkeypatch, raise_on_first: bool = False):
+    states: List[bool] = []
+    for name in ("ResultBus", "ResultBranch"):
+        real = getattr(en_mod, name)
+
+        def recording(*args, _real=real, **kwargs):
+            states.append(gc.isenabled())
+            if raise_on_first:
+                raise RuntimeError("injected failure while building results")
+            return _real(*args, **kwargs)
+
+        monkeypatch.setattr(en_mod, name, recording)
+    return states
+
+
+def test_result_rows_are_built_with_the_collector_paused(monkeypatch):
+    net = ring(30, F=3)
+    states = _record_gc_state(monkeypatch)
+    assert gc.isenabled()
+    gi.run_fault(net, "F")
+    assert states and not any(states)
+    assert gc.isenabled()
+
+
+def test_a_disabled_collector_stays_disabled():
+    net = ring(30, F=2)
+    gc.disable()
+    try:
+        gi.run_fault(net, "F")
+        assert not gc.isenabled()
+    finally:
+        gc.enable()
+
+
+def test_the_collector_is_restored_when_result_building_fails(monkeypatch):
+    net = ring(30, F=2)
+    _record_gc_state(monkeypatch, raise_on_first=True)
+    with pytest.raises(RuntimeError, match="injected failure"):
+        gi.run_fault(net, "F")
+    assert gc.isenabled()
+
+
+def test_the_gc_pause_nests_and_is_shared_between_threads():
+    """Nested and concurrent pauses: the collector comes back exactly once, when
+    the last pause ends, and only if it was enabled when the first began."""
+    pause = en_mod._gc_paused
+    assert gc.isenabled()
+    with pause():
+        assert not gc.isenabled()
+        with pause():
+            assert not gc.isenabled()
+        assert not gc.isenabled()
+    assert gc.isenabled()
+
+    inside = threading.Event()
+    release = threading.Event()
+
+    def worker():
+        with pause():
+            inside.set()
+            release.wait(5)
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    inside.wait(5)
+    with pause():
+        pass
+    assert not gc.isenabled()  # the worker still holds its pause
+    release.set()
+    thread.join(5)
+    assert gc.isenabled()
