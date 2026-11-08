@@ -94,6 +94,8 @@ from typing import Dict, List, Optional, Sequence, Union
 import numpy as np
 import polars as pl
 from pydantic import BaseModel, Field
+from scipy.sparse import csc_matrix
+from scipy.sparse.linalg import splu
 
 from groundinsight.models.core_models import Network
 from groundinsight.utils.earth_current import (
@@ -637,11 +639,6 @@ class BusResponse(BaseModel):
         )
 
 
-def _is_electrode(z: Optional[complex]) -> bool:
-    """``True`` for a resolved impedance that contributes a shunt to ``Y``."""
-    return z is not None and np.isfinite(z) and z != 0
-
-
 def _frame(rows: List[Dict[str, object]]) -> pl.DataFrame:
     """
     Build the evaluation frame with the nullable columns pinned to ``Float64``.
@@ -678,6 +675,40 @@ def _magnitude(z_bus: ElectrodeSpec) -> Optional[float]:
     if np.isinf(z.real) or np.isinf(z.imag):
         return None
     return float(abs(z))
+
+
+def _subtract_from_diagonal(matrix: csc_matrix, k: int, value: complex) -> csc_matrix:
+    """``matrix[k, k] -= value`` on a CSC matrix, in place where the entry exists.
+
+    Item assignment on a CSC matrix goes through SciPy's general indexing
+    machinery and warns when it changes the structure; the diagonal entry of
+    a bus with an electrode always exists, so the value is subtracted on the
+    data array directly.
+
+    Parameters
+    ----------
+    matrix : scipy.sparse.csc_matrix
+        The matrix to modify (a copy owned by the caller).
+    k : int
+        Row and column of the entry.
+    value : complex
+        The value to subtract.
+
+    Returns
+    -------
+    scipy.sparse.csc_matrix
+        The modified matrix (the same object unless the entry was absent).
+    """
+    start, stop = matrix.indptr[k], matrix.indptr[k + 1]
+    hits = np.flatnonzero(matrix.indices[start:stop] == k)
+    if hits.size:
+        matrix.data[start + hits[0]] -= value
+        return matrix
+    correction = csc_matrix(
+        (np.array([value], dtype=complex), (np.array([k]), np.array([k]))),
+        shape=matrix.shape,
+    )
+    return (matrix - correction).tocsc()
 
 
 def bus_response(
@@ -732,7 +763,7 @@ def bus_response(
             f"run_fault first."
         )
     electrical = network.electrical_network
-    if electrical is None or not electrical.Y_matrices:
+    if electrical is None or not getattr(electrical, "Y_sparse", None):
         raise ValueError(
             f"Network '{network.name}' carries no assembled electrical network. "
             f"Call run_fault before asking for a bus response."
@@ -784,30 +815,26 @@ def bus_response(
     fault_bus = network.faults[fault].bus
 
     for freq in frequencies:
-        Y = electrical.Y_matrices.get(freq)
+        Y = electrical.Y_sparse.get(freq)
         i_vector = electrical.i_vectors.get(freq)
         if Y is None or i_vector is None:
             continue
-        Y0 = np.array(Y, dtype=complex, copy=True)
 
-        # Resolve every bus impedance once for this frequency. The same values
-        # answer three questions below -- the shunt to remove, whether any other
-        # bus reaches earth, and the electrode currents -- and resolving them
-        # once per bus instead of three times per bus is where the frequency
-        # loop was spending its time.
-        resolved: Dict[str, Optional[complex]] = {
-            name: electrical._resolved_impedance(
-                network.buses[name].impedance.get(freq), freq
-            )
-            for name in order
-        }
+        # The resolved grounding impedance of every bus, and the admittance the
+        # assembly stamped for it, in one call. The same values answer three
+        # questions below -- the shunt to remove, whether any other bus
+        # reaches earth, and the electrode currents.
+        impedances, admittances = electrical._grounding_shunts(freq)
+        electrode = np.isfinite(impedances) & (impedances != 0)
 
-        # Take the bus's own shunt back out. The same rules as the assembly:
-        # a missing or infinite impedance never contributed one in the first
-        # place.
-        z_bus_now = resolved[target]
-        if _is_electrode(z_bus_now):
-            Y0[k, k] -= 1.0 / z_bus_now
+        # Take the bus's own shunt back out of a copy of the sparse matrix.
+        # The same rules as the assembly: a missing or infinite impedance
+        # never contributed one in the first place. The value subtracted is
+        # the one that was added, so an electrode that was the bus's only
+        # connection leaves an exact zero behind.
+        Y0 = Y.copy()
+        if electrode[k]:
+            Y0 = _subtract_from_diagonal(Y0, k, admittances[k])
 
         # The check is structural, not a tolerance: at least one *other* bus has
         # to carry a finite, non-zero grounding impedance once the target's
@@ -815,10 +842,9 @@ def bus_response(
         # measured on the exactly singular case, numpy returns a finite but
         # meaningless -2.25e15 instead of raising, the same inconsistency the
         # DC work found in scipy's splu.
-        earthed_elsewhere = any(
-            _is_electrode(z) for name, z in resolved.items() if name != target
-        )
-        if not earthed_elsewhere:
+        others = electrode.copy()
+        others[k] = False
+        if not others.any():
             raise ValueError(
                 f"With the electrode at bus '{target}' removed, no other bus of "
                 f"network '{network.name}' has a finite grounding impedance at "
@@ -834,18 +860,21 @@ def bus_response(
         # unit injection at the bus, and -- when the solve carried it -- the
         # same fault injection without the mutual Norton equivalents. The third
         # is what makes ``r_epr`` evaluable per electrode (it is the denominator
-        # of the reduction factor); asking numpy for all of them at once costs
-        # one triangular solve each on top of the single LU.
+        # of the reduction factor). The factorisation is a sparse LU of the
+        # assembled matrix (audit pass 19, P7): the dense solve on a copy of a
+        # dense ``Y`` was cubic in the number of buses -- 3.1 s on a 2000-bus
+        # ring at seven frequencies.
         i_no_mutual = electrical.i_vectors_no_mutual.get(freq)
         rhs = [np.asarray(i_vector, dtype=complex), unit]
         if i_no_mutual is not None:
             rhs.append(np.asarray(i_no_mutual, dtype=complex))
         try:
-            solved = np.linalg.solve(Y0, np.column_stack(rhs))
+            factor = splu(Y0)
+            solved = factor.solve(np.column_stack(rhs))
             u0 = solved[:, 0]
             z_col = solved[:, 1]
             u0_nm = solved[:, 2] if i_no_mutual is not None else None
-        except np.linalg.LinAlgError as exc:
+        except (np.linalg.LinAlgError, RuntimeError) as exc:
             raise ValueError(
                 f"The nodal system of network '{network.name}' is singular at "
                 f"{freq} Hz once the electrode at bus '{target}' is removed, "
@@ -861,21 +890,21 @@ def bus_response(
             )
 
         z_network[freq] = complex(z_col[k])
-        u_open[freq] = {name: complex(u0[index[name]]) for name in order}
-        z_column[freq] = {name: complex(z_col[index[name]]) for name in order}
+        u_open[freq] = dict(zip(order, u0.tolist()))
+        z_column[freq] = dict(zip(order, z_col.tolist()))
         if u0_nm is not None:
-            u_open_no_mutual[freq] = {
-                name: complex(u0_nm[index[name]]) for name in order
-            }
+            u_open_no_mutual[freq] = dict(zip(order, u0_nm.tolist()))
 
         other_impedance[freq] = {
-            name: z for name, z in resolved.items() if _is_electrode(z)
+            order[i]: complex(impedances[i]) for i in np.flatnonzero(electrode)
         }
 
         # The earthing network without the electrode at ``target`` and without
         # the Thevenin loop closures: three numbers make the fault-bus driving
         # point Z_E available for every electrode (fault_driving_point, F4).
-        earth_columns = _earthing_columns(electrical, Y0, k, index[fault_bus], freq)
+        earth_columns = _earthing_columns(
+            electrical, Y0, factor, k, index[fault_bus], freq
+        )
         if earth_columns is not None:
             z_fault_open[freq], z_fault_transfer[freq], z_bus_open[freq] = earth_columns
 
@@ -908,22 +937,29 @@ def bus_response(
     )
 
 
-def _earthing_columns(electrical, Y0: np.ndarray, bus_idx: int, fault_idx: int,
-                      freq: float):
+def _earthing_columns(electrical, Y0: csc_matrix, factor, bus_idx: int,
+                      fault_idx: int, freq: float):
     """
     ``(Z0_FF, Z0_Fb, Z0_bb)`` of the earthing network with one electrode removed.
 
     ``Y0`` is the solved matrix with the shunt at ``bus_idx`` taken out; the
     Thevenin loop closures of voltage sources are taken out as well, because
     they belong to the fault loop and not to the earthing network whose
-    driving point ``Z_E`` is (decision F4).
+    driving point ``Z_E`` is (decision F4). Without a voltage source that
+    matrix *is* ``Y0`` and the two unit columns come from the factorisation
+    the caller already holds; with one, the sparse earthing matrix
+    (:meth:`~groundinsight.electrical_network.ElectricalNetwork._remove_loop_closures`)
+    is factorised on its own. Both are sparse (audit pass 19, P7): a dense
+    copy and solve here would be cubic in the number of buses.
 
     Parameters
     ----------
     electrical : ElectricalNetwork
         The assembled system, for its Thevenin stamps.
-    Y0 : numpy.ndarray
+    Y0 : scipy.sparse.csc_matrix
         Solved matrix without the electrode at ``bus_idx``.
+    factor : scipy.sparse.linalg.SuperLU
+        The factorisation of ``Y0``.
     bus_idx, fault_idx : int
         Rows of the varied bus and of the fault bus.
     freq : float
@@ -935,18 +971,14 @@ def _earthing_columns(electrical, Y0: np.ndarray, bus_idx: int, fault_idx: int,
         ``None`` if the fault bus reaches remote earth through nothing but a
         Thevenin loop once the electrode is gone.
     """
-    Y_earth = np.array(Y0, dtype=complex, copy=True)
-    for src_idx, loop_idx, y_src in electrical.thevenin_loop_admittances(freq):
-        Y_earth[src_idx, src_idx] -= y_src
-        Y_earth[loop_idx, loop_idx] -= y_src
-        Y_earth[src_idx, loop_idx] += y_src
-        Y_earth[loop_idx, src_idx] += y_src
-    units = np.zeros((Y_earth.shape[0], 2), dtype=complex)
+    units = np.zeros((Y0.shape[0], 2), dtype=complex)
     units[bus_idx, 0] = 1.0
     units[fault_idx, 1] = 1.0
     try:
-        columns = np.linalg.solve(Y_earth, units)
-    except np.linalg.LinAlgError:
+        if electrical.thevenin_loop_admittances(freq):
+            factor = splu(electrical._remove_loop_closures(Y0, freq))
+        columns = factor.solve(units)
+    except (np.linalg.LinAlgError, RuntimeError):
         return None
     if not np.all(np.isfinite(columns)):
         return None

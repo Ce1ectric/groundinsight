@@ -126,7 +126,11 @@ def test_a_dc_short_is_not_read_as_an_open_circuit():
     analysis = gi.analyze_cuts(net, fault="F", cuts=_cuts())
 
     expected = _solver_driving_point(net, "F", 0.0)
-    assert analysis.z_driving_point[0.0] == pytest.approx(expected, rel=1e-9)
+    # The stand-in for the short makes this 0 Hz system condition-limited
+    # (kappa 2.3e8): the sparse LU used by the analysis and the dense solve
+    # here are 5.6e-9 and 3.3e-9 from the exact value and 2.3e-9 apart
+    # (audit pass 19, P13). An open-circuit reading would give 10 Ohm.
+    assert analysis.z_driving_point[0.0] == pytest.approx(expected, rel=1e-7)
     # The bus's own electrode is 10 Ohm; a driving point *below* it is what a
     # parallel network gives and an open one cannot.
     assert abs(analysis.z_driving_point[0.0]) < 9.0

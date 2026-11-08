@@ -985,3 +985,150 @@ def test_the_gc_pause_nests_and_is_shared_between_threads():
     release.set()
     thread.join(5)
     assert gc.isenabled()
+
+
+# ---------------------------------------------------------------------------
+# 6. P7: bus_response and analyze_cuts on the sparse matrices
+# ---------------------------------------------------------------------------
+
+
+def _resolved_bus_impedance(net, name, freq, ref):
+    z = net.buses[name].impedance.get(freq)
+    if z is None:
+        return None
+    value = complex(z.real, z.imag)
+    if freq == 0.0:
+        sub = oracle._dc_substitute(net, {b: i for i, b in enumerate(ref.bus_names)})
+        if sub is not None and oracle.is_short_circuit(value):
+            value = complex(sub, 0.0)
+    return value
+
+
+@pytest.mark.parametrize(
+    "name,builder,bus",
+    [
+        ("ring60", lambda: ring(60, F=3, n_sources=2), "B20"),
+        ("mesh8_fault", lambda: mesh(8, F=2, n_sources=2), None),
+        ("thevenin", lambda: thevenin_ring(40, F=2), "B5"),
+        ("dc_ring", lambda: dc_ring(30), "B3"),
+    ],
+)
+def test_bus_response_matches_a_dense_solve(name, builder, bus):
+    """P7: the closed-form response from the sparse factorisation equals a
+    dense solve of the independently assembled system without the shunt --
+    and the earthing columns behind ``fault_driving_point`` (PH4) equal a
+    dense solve of the independently assembled earthing network (no Thevenin
+    loop closures) without the shunt."""
+    net = builder()
+    reference = _solve_both(net)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        response = gi.bus_response(net, fault="F", bus=bus)
+    target = response.bus
+    k = reference.bus_names.index(target)
+    k_fault = reference.bus_names.index(net.faults["F"].bus)
+    model = oracle._Model(net, "F")
+    for j, f in enumerate(reference.frequencies):
+        Y = reference.Y[f].copy()
+        z = _resolved_bus_impedance(net, target, f, reference)
+        if z is not None and np.isfinite(z) and z != 0:
+            Y[k, k] -= 1.0 / z
+        unit = np.zeros(len(reference.bus_names), dtype=complex)
+        unit[k] = 1.0
+        rhs = np.column_stack(
+            [reference.i_vector[:, j], unit, reference.i_inj[:, j]]
+        )
+        solved = np.linalg.solve(Y, rhs)
+        # 1e-12, or the forward-error bound where the system is condition-
+        # limited (the 0 Hz bin with a DC stand-in, kappa ~ 1e10, see P13)
+        tol = max(TOL, float(np.linalg.cond(Y)) * np.finfo(float).eps)
+        u_scale = np.abs(solved[:, 0]).max()
+        z_scale = np.abs(solved[:, 1]).max()
+        got_u = np.array([response.u_open[f][b] for b in reference.bus_names])
+        got_z = np.array([response.z_column[f][b] for b in reference.bus_names])
+        got_nm = np.array(
+            [response.u_open_no_mutual[f][b] for b in reference.bus_names]
+        )
+        assert np.abs(got_u - solved[:, 0]).max() <= tol * u_scale, (f, tol)
+        assert np.abs(got_z - solved[:, 1]).max() <= tol * z_scale, (f, tol)
+        assert np.abs(got_nm - solved[:, 2]).max() <= tol * np.abs(solved[:, 2]).max()
+        assert abs(response.z_network[f] - solved[k, 1]) <= tol * abs(solved[k, 1])
+
+        earthing = model.nodal(f, "python")[3].dense()
+        if z is not None and np.isfinite(z) and z != 0:
+            earthing[k, k] -= 1.0 / z
+        units = np.zeros((len(reference.bus_names), 2), dtype=complex)
+        units[k, 0] = 1.0
+        units[k_fault, 1] = 1.0
+        columns = np.linalg.solve(earthing, units)
+        tol = max(TOL, float(np.linalg.cond(earthing)) * np.finfo(float).eps)
+        for got, want in (
+            (response.z_fault_open[f], columns[k_fault, 1]),
+            (response.z_fault_transfer[f], columns[k_fault, 0]),
+            (response.z_bus_open[f], columns[k, 0]),
+        ):
+            assert abs(got - want) <= tol * abs(want), (name, f, got, want)
+
+
+@pytest.mark.parametrize("solved", [True, False])
+def test_analyze_cuts_matches_a_dense_solve(solved):
+    """P7: driving point and side impedances from the sparse unit-injection
+    solve -- for the solver's matrix and for the fallback assembly."""
+    net = ring(50, F=3, n_sources=1)
+    fault_bus = net.faults["F"].bus
+    incident = sorted(
+        b.name for b in net.branches.values() if fault_bus in (b.from_bus, b.to_bus)
+    )
+    cuts = [gi.Cut(name="left", branches=[incident[0]]),
+            gi.Cut(name="right", branches=[incident[1]])]
+    reference = oracle.solve(net, "F")
+    if solved:
+        gi.run_fault(net, "F")
+    analysis = gi.analyze_cuts(net, fault="F", cuts=cuts)
+    k = reference.bus_names.index(fault_bus)
+    for f in reference.frequencies:
+        unit = np.zeros(len(reference.bus_names), dtype=complex)
+        unit[k] = 1.0
+        u = np.linalg.solve(reference.Y[f], unit)
+        z_dp = u[k]
+        assert abs(analysis.z_driving_point[f] - z_dp) <= TOL * abs(z_dp)
+        for cut in cuts:
+            branch = net.branches[cut.branches[0]]
+            other = branch.to_bus if branch.from_bus == fault_bus else branch.from_bus
+            z_self = branch.self_impedance[f]
+            i_cut = (z_dp - u[reference.bus_names.index(other)]) / complex(
+                z_self.real, z_self.imag
+            )
+            assert abs(analysis.z_side[cut.name][f] - z_dp / i_cut) <= TOL * abs(
+                z_dp / i_cut
+            )
+
+
+@pytest.mark.parametrize(
+    "builder",
+    [lambda: ring(600, F=2, n_sources=1), lambda: thevenin_ring(600, F=2)],
+    ids=["current sources", "Thevenin sources"],
+)
+def test_bus_response_and_analyze_cuts_build_no_dense_square_matrix(
+    monkeypatch, builder
+):
+    """P7: neither analysis densifies -- with Thevenin sources neither, where
+    the earthing columns of ``bus_response`` need the matrix without the loop
+    closures (PH4)."""
+    net = builder()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        gi.run_fault(net, "F")
+    fault_bus = net.faults["F"].bus
+    incident = sorted(
+        b.name for b in net.branches.values() if fault_bus in (b.from_bus, b.to_bus)
+    )
+    guard = _DenseGuard(monkeypatch)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        response = gi.bus_response(net, fault="F", bus="B10")
+        gi.analyze_cuts(
+            net, fault="F", cuts=[gi.Cut(name="left", branches=[incident[0]])]
+        )
+    assert guard.hits == []
+    assert set(response.z_fault_open) == set(net.frequencies)

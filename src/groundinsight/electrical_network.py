@@ -959,6 +959,9 @@ class ElectricalNetwork:
         # The model values of this assembly as arrays, gathered once (P6);
         # see :class:`_NetworkTables` and :meth:`_network_tables`.
         self._tables: Optional[_NetworkTables] = None
+        # The grounding admittance stamped on the diagonal per active bus and
+        # frequency, ``(n, F)``; see :meth:`_grounding_shunts`.
+        self._bus_admittance: Optional[np.ndarray] = None
 
         self._initialize()
         # The tables were gathered from this very state a moment ago; digest
@@ -1466,6 +1469,7 @@ class ElectricalNetwork:
         y_bus = _reciprocal(
             tables.bus_z, tables.bus_present & ~_open_mask(tables.bus_z)
         )
+        self._bus_admittance = y_bus
         z_grid = tables.self_z[grid]
         y_grid = _reciprocal(
             z_grid, tables.self_present[grid] & ~_open_mask(z_grid)
@@ -2182,6 +2186,37 @@ class ElectricalNetwork:
             self._tables = _NetworkTables(self)
             self._tables.resolve(self._dc_substitutes)
         return self._tables
+
+    def _grounding_shunts(self, freq: float) -> Tuple[np.ndarray, np.ndarray]:
+        """Grounding impedance of every active bus, and the admittance stamped.
+
+        The interface :func:`~groundinsight.analysis.response.bus_response`
+        uses to take one bus's electrode back out of the assembled matrix.
+        Subtracting exactly the value that was added -- rather than a
+        reciprocal recomputed with a different rounding -- leaves an exact
+        zero where the electrode was a bus's only connection, so such a
+        system is still recognised as singular.
+
+        Parameters
+        ----------
+        freq : float
+            A frequency of the network.
+
+        Returns
+        -------
+        impedance : numpy.ndarray
+            Resolved grounding impedance per bus in :attr:`bus_indices` order
+            (0 Hz stand-in applied; ``nan`` where none is stored).
+        admittance : numpy.ndarray
+            The admittance on the diagonal of :attr:`Y_sparse` for that
+            impedance; zero for a missing or open electrode.
+        """
+        tables = self._network_tables()
+        column = tables.column[float(freq)]
+        if self._bus_admittance is None:  # pragma: no cover -- set by the assembly
+            usable = tables.bus_present & ~_open_mask(tables.bus_z)
+            self._bus_admittance = _reciprocal(tables.bus_z, usable)
+        return tables.bus_z[:, column], self._bus_admittance[:, column]
 
     def _phase_admittances(
         self, tables: _NetworkTables, column: int

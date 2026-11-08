@@ -95,6 +95,8 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 import numpy as np
 import polars as pl
 from pydantic import BaseModel, Field, field_validator
+from scipy.sparse import csc_matrix
+from scipy.sparse.linalg import splu
 
 from groundinsight.models.core_models import Network
 
@@ -425,7 +427,7 @@ def _assembled_system(network: Network):
     Thevenin loop closure that existed in one system and not the other.
     """
     electrical = getattr(network, "electrical_network", None)
-    if electrical is None or not electrical.Y_matrices:
+    if electrical is None or not getattr(electrical, "Y_sparse", None):
         return None
     if not electrical.matches_network_state():
         logger.info(
@@ -476,20 +478,23 @@ def _unit_injection(
         Nodal voltages by bus name, or ``None`` when the system has no finite
         path to reference earth at this frequency.
     """
-    if electrical is not None and freq in electrical.Y_matrices:
+    if electrical is not None and freq in electrical.Y_sparse:
         index = dict(electrical.bus_indices)
         ordered = sorted(index, key=lambda name: index[name])
-        Y = np.array(electrical.Y_matrices[freq], dtype=complex, copy=True)
+        Y = electrical.Y_sparse[freq]
     else:
         ordered = sorted(name for name, bus in network.buses.items() if bus.active)
         index = {name: i for i, name in enumerate(ordered)}
-        n = len(ordered)
-        Y = np.zeros((n, n), dtype=complex)
+        rows: List[int] = []
+        cols: List[int] = []
+        values: List[complex] = []
 
         for name in ordered:
             z = _finite_impedance(network.buses[name].impedance.get(freq))
             if z is not None:
-                Y[index[name], index[name]] += 1.0 / z
+                rows.append(index[name])
+                cols.append(index[name])
+                values.append(1.0 / z)
 
         for branch in _active_branches(network):
             z = _finite_impedance(branch.self_impedance.get(freq))
@@ -497,22 +502,30 @@ def _unit_injection(
                 continue
             y = 1.0 / z
             i, j = index[branch.from_bus], index[branch.to_bus]
-            Y[i, i] += y
-            Y[j, j] += y
-            Y[i, j] -= y
-            Y[j, i] -= y
+            rows.extend((i, j, i, j))
+            cols.extend((i, j, j, i))
+            values.extend((y, y, -y, -y))
+        n = len(ordered)
+        # Duplicate entries are summed by the COO -> CSC conversion.
+        Y = csc_matrix(
+            (np.asarray(values, dtype=complex), (rows, cols)), shape=(n, n)
+        )
 
     if fault_bus not in index:
         return None
     i_vector = np.zeros(len(ordered), dtype=complex)
     i_vector[index[fault_bus]] = 1.0
+    # A sparse LU of the matrix (audit pass 19, P7): the dense solve on a copy
+    # of a dense ``Y`` was cubic in the number of buses -- 3.0 s on a
+    # 2000-bus ring at seven frequencies -- for a system with a handful of
+    # entries per row.
     try:
-        u = np.linalg.solve(Y, i_vector)
-    except np.linalg.LinAlgError:
+        u = splu(csc_matrix(Y)).solve(i_vector)
+    except (np.linalg.LinAlgError, RuntimeError):
         return None
     if not np.all(np.isfinite(u)):
         return None
-    return {name: complex(u[index[name]]) for name in ordered}
+    return dict(zip(ordered, u.tolist()))
 
 
 def _branch_current_out(
