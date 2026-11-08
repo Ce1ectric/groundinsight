@@ -1314,6 +1314,68 @@ migration checklist.
   methods that modules of the package share carry no underscore and say
   "Internal API" in their docstring; they are not exported and can change in
   any release. (ARC5)
+- **Eleven how-to guides, each with a runnable script and its stated
+  output.** Multi-frequency input, sweeps, outages, the inverse searches, the
+  pandapower importers, the thermal checks, transients, persistence,
+  performance, diagnostics and the service layer were covered by fragments in
+  the quickstart and prose on the API pages, mostly without an example that
+  runs or a result to compare with. The new pages under `docs/howto/` —
+  harmonics, sweeps, outage, inverse-rho, pandapower, thermal, transient,
+  persistence, performance, diagnostics, service-layer — include a script from
+  `docs/snippets/` by section, state what it prints and explain every
+  diagnostic code it shows. Among the contents: what a missing scaling and a
+  scaling of 0.0 mean (F7), which sources reach a frequency (F8), the 0 Hz
+  rules and the stand-in for an ideal bond; that the searches and sweeps scale
+  the bus resistivity only (PH11); the minimum pandapower data of an
+  earth-fault short-circuit case; that `derive_phase_impedance` gives
+  R₁ + jX₁ where the phase network wants `Z_red` — exact only for routes of
+  equal construction; that pandapower line switches are not evaluated, so a
+  ring operated open at a line switch is imported closed (with the
+  workaround); the measured numbers of the sparse kernel and of the study
+  sessions; the exit codes of `groundinsight run|check`. Every number is
+  recomputed a second way in the test suite — closed forms of a two-bus line,
+  a hand-merged DC chain, the independent reference solver, IEC 60909/60949 by
+  hand, the corner-to-corner path counts of grid graphs (2, 12, 184, 8512).
+  (DOC5, DOC6, DOC8, DOC10, DOC12, F7, F8, PH11)
+- **Reference "Result tables" and "Warnings and diagnostics".** Fifteen
+  result frames with column, dtype, unit and meaning — the names and dtypes
+  are generated at build time from the schema constants (`RES_FAULT_SCHEMA`
+  and the others) or from a probe solve, so they cannot drift. Both reduction
+  factors are named everywhere (`r_epr`/`reduction_factor` is the EPR ratio,
+  `r_current`/`reduction_factor_current` the `r` of EN 50522), and
+  `frequency_Hz` is a number with a null RMS row everywhere except in the
+  outage comparison frames, where it is text with `"RMS"`. All 63 diagnostic
+  codes with category, severity, elements, trigger and remedy; a test holds
+  the page to the codes in `src/` in both directions. (DOC6, DOC8, DOC10,
+  DOC12, GUI4)
+- **Every public name is on an API page.** 12 of the 104 names of
+  `groundinsight.__all__` and 2 of the 64 of `groundinsight.api` were rendered
+  nowhere — among them `migrate_database`, `needs_migration`,
+  `set_log_level`, `show_versions`, three warning classes and the thermal
+  catalogues. A new page "Top-level package" lists each name with the page
+  that documents it; the API overview links every API page. (DOC4)
+- **Seven false statements on the API pages corrected.** The electrode
+  currents of all buses sum to zero (not to r·I_F); the branch current is
+  counted positive from `from_bus` to `to_bus`; the electrical-network page
+  names both reduction factors and calls the bus electrode `Z_B`, keeping
+  `Z_E` for the earthing impedance of EN 50522; the reference-case table is
+  generated at build time; the importer example is the connected 20 kV level
+  of `example_simple()` with the bond switch as a branch (4 buses, 4
+  branches); the short-circuit example is a runnable script with the minimum
+  pandapower data; the voltage-level comparison is `math.isclose(...,
+  rel_tol=1e-9)`, as implemented, and the skip-reason table lists all twelve
+  reasons. Also: `create_paths` and `auto_parallel_coefficients` are no longer
+  taught as steps (DOC3); the EPR limit of the rho searches is not a
+  touch-voltage limit (DOC8); the steel default is 300 °C since 0.5.0, not
+  400 °C; the search status `"non_monotone"` is documented; a waveform
+  amplitude is a peak value, √2·1000 A for 1000 A RMS; the outage comparison
+  frames carry `frequency_Hz` as text and the averaging example leaves the RMS
+  rows out (DOC10); no reference to an ADR outside this repository (DOC9).
+  (DOC3, DOC7, DOC8, DOC9, DOC10)
+- **EN 50522 how-to reads the key figures from `res_fault`.** The symbol
+  table names the column for each quantity (`I_F_A` = 3I₀, `r_current` = r,
+  `I_E_A`, `Z_E_Ohm`, `U_E_V`) and the worked example reads all five in one
+  call, recomputed in the tests with the independent reference solver.
 
 ### Internal
 
@@ -1729,6 +1791,24 @@ migration checklist.
   `assemble_nodal_matrices`, `bus_admittances`, `rms_columns` and
   `stack_columns` in `groundinsight.electrical_network`, and
   `impedance_table` in `groundinsight.utils.impedance_calculator`.
+- **Every Python block of the documentation runs or is marked as a
+  fragment.** `tests/test_audit_pass19_docs_codeblocks.py` (runner
+  `tests/_docs_codeblocks.py`) executes the Python blocks of `docs/**/*.md`
+  page by page in one namespace, in a subprocess with a 120 s timeout per
+  block; a block whose first line is `# fragment` is an excerpt, `>>>`
+  sessions are `pycon` blocks, a snippet include runs the whole script once,
+  and blocks needing the pandapower extra are skipped without it except under
+  `GROUNDINSIGHT_CI=1`. Before, 12 pages failed this; now 119 blocks on 43
+  pages pass (21 inline, 69 snippet includes, 29 fragments). (DOC13)
+- **The docs CI job checks the built inventory.** After `mkdocs build
+  --strict`, `scripts/check_api_inventory.py site/objects.inv` fails the job
+  when a public name of `groundinsight` or `groundinsight.api` is not
+  rendered; `tests/test_audit_pass19_docs_api.py` checks the same statically
+  from the `:::` directives. (DOC4)
+- **Build hook for the result tables.** `docs/hooks/result_tables.py` replaces
+  `<!-- result-table: <key> -->` markers with tables generated from the code;
+  a column without a description stops the build. It is called from the
+  registered `docs/hooks/reference_cases.py` until `mkdocs.yml` lists it.
 
 ## [0.6.0] — 2026-09-01
 
