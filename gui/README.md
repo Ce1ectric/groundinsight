@@ -43,7 +43,7 @@ library suite's independent reference solver.
 From the repository root:
 
 ```bash
-pip install -e . -e ./gui pytest
+pip install -e . -e "./gui[test]"
 cd gui && python -m pytest
 ```
 

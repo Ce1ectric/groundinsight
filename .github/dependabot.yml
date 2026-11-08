@@ -50,6 +50,20 @@ updates:
         patterns:
           - "*"
 
+  # The GUI distribution (gui/pyproject.toml). NiceGUI is held to one minor
+  # release; a new one arrives as a pull request that the CI's GUI job tests.
+  # The pin of groundinsight is the release script's job: it always names
+  # the library released together with the GUI.
+  - package-ecosystem: "pip"
+    directory: "/gui"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "groundinsight"
+
   # The pinned pip-audit of the dependency audit workflow (audit pass 19,
   # SEC2). It lives in its own requirements file so Dependabot can see it;
   # a version written into the workflow's run: line would never move.

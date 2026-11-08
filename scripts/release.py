@@ -2,7 +2,9 @@
 
 This script bumps the project version in every location where it is
 recorded (``pyproject.toml``, ``src/groundinsight/__init__.py`` and
-``CITATION.cff``), rolls the ``[Unreleased]`` section of ``CHANGELOG.md``
+``CITATION.cff``, and for the GUI distribution released with the library
+``gui/pyproject.toml`` -- its version and its pin of the library -- and
+``gui/groundinsight_gui/__init__.py``), rolls the ``[Unreleased]`` section of ``CHANGELOG.md``
 into a new dated version section, creates a conventional-commit release
 commit, tags it as ``vX.Y.Z`` and pushes both the branch and the tag.
 The PyPI publishing itself is handled by the GitHub Actions workflow
@@ -187,6 +189,29 @@ def _version_locations(root: Path) -> list[VersionLocation]:
                 flags=re.MULTILINE,
             ),
             template='version: "{version}"',
+        ),
+        # The GUI distribution is released together with the library: same
+        # version, and it pins exactly the library it was released with.
+        VersionLocation(
+            path=root / "gui" / "pyproject.toml",
+            pattern=re.compile(
+                r'^version\s*=\s*"(?P<version>[^"]+)"',
+                flags=re.MULTILINE,
+            ),
+            template='version = "{version}"',
+        ),
+        VersionLocation(
+            path=root / "gui" / "pyproject.toml",
+            pattern=re.compile(r'"groundinsight==(?P<version>[^"]+)"'),
+            template='"groundinsight=={version}"',
+        ),
+        VersionLocation(
+            path=root / "gui" / "groundinsight_gui" / "__init__.py",
+            pattern=re.compile(
+                r'^__version__\s*=\s*"(?P<version>[^"]+)"',
+                flags=re.MULTILINE,
+            ),
+            template='__version__ = "{version}"',
         ),
     ]
 
@@ -838,10 +863,10 @@ def main(argv: list[str] | None = None) -> int:
     locations = _version_locations(root)
 
     # Consistency check: every location must report the same current version.
-    current_versions = {loc.path: _read_current_version(loc) for loc in locations}
-    distinct = set(current_versions.values())
+    current_versions = [(loc.path, _read_current_version(loc)) for loc in locations]
+    distinct = {version for _, version in current_versions}
     if len(distinct) != 1:
-        for path, version in current_versions.items():
+        for path, version in current_versions:
             logger.error("  %s: %s", path, version)
         logger.error("version drift detected; aborting")
         return 2
@@ -914,7 +939,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.dry_run:
             logger.info(
                 "[dry-run] would update %s: %s -> %s",
-                location.path.name,
+                location.path.relative_to(root),
                 current,
                 new_version,
             )
@@ -948,7 +973,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # Stage, commit, tag, push.
-    rel_paths = [str(loc.path.relative_to(root)) for loc in locations]
+    rel_paths = list(dict.fromkeys(str(loc.path.relative_to(root)) for loc in locations))
     if changelog_updated:
         rel_paths.append("CHANGELOG.md")
     _run_git(["add", *rel_paths], root=root, dry_run=args.dry_run)

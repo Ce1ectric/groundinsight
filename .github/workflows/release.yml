@@ -102,14 +102,19 @@ jobs:
           tag = os.environ["RELEASE_TAG"]
           expected = tag[1:] if tag.startswith("v") else tag
 
-          sources = {
-              "pyproject.toml": r'^version\s*=\s*"([^"]+)"',
-              "src/groundinsight/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
-              "CITATION.cff": r'^version:\s*"?([^"\s]+)"?',
-          }
+          # The GUI distribution (gui/) is released with the library: same
+          # version, and it pins exactly this library release.
+          sources = [
+              ("pyproject.toml", r'^version\s*=\s*"([^"]+)"'),
+              ("src/groundinsight/__init__.py", r'^__version__\s*=\s*"([^"]+)"'),
+              ("CITATION.cff", r'^version:\s*"?([^"\s]+)"?'),
+              ("gui/pyproject.toml", r'^version\s*=\s*"([^"]+)"'),
+              ("gui/pyproject.toml", r'"groundinsight==([^"]+)"'),
+              ("gui/groundinsight_gui/__init__.py", r'^__version__\s*=\s*"([^"]+)"'),
+          ]
 
           problems = []
-          for path, pattern in sources.items():
+          for path, pattern in sources:
               text = pathlib.Path(path).read_text(encoding="utf-8")
               match = re.search(pattern, text, re.MULTILINE)
               if match is None:

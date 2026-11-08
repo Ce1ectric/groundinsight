@@ -104,6 +104,37 @@ jobs:
           path: coverage.xml
           if-no-files-found: ignore
 
+  # The GUI distribution in gui/ (GUI phase 0): its own pyproject, the same
+  # version as the library, pinned to it. Its tests drive the NiceGUI app
+  # with NiceGUI's simulated user -- no browser, no display -- and check
+  # every displayed number against the library, so they run where the
+  # library suite runs, on the newest Python.
+  gui:
+    name: GUI tests (Python 3.14)
+    runs-on: ubuntu-latest
+    env:
+      MPLBACKEND: Agg
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      # One pip call with both: the GUI pins groundinsight to its own
+      # version, and pip satisfies that pin with the library of this commit
+      # instead of the release on PyPI.
+      - name: Install the library and the GUI from the checkout
+        run: python -m pip install ./ "./gui[test]"
+
+      - name: Run the GUI tests
+        working-directory: gui
+        run: python -m pytest
+
   docs:
     name: Docs build (strict)
     runs-on: ubuntu-latest

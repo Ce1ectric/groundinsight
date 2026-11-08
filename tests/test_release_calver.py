@@ -13,6 +13,7 @@ import datetime as dt
 import importlib.util
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -170,8 +171,25 @@ def _git(*args, cwd):
     ).stdout
 
 
-def _fake_repository(root: Path, version: str = "0.6.0") -> None:
+_GUI_PYPROJECT = """[project]
+name = "groundinsight-gui"
+version = "{version}"
+dependencies = [
+    "groundinsight=={pin}",
+    "nicegui>=4.0,<4.1",
+]
+"""
+
+
+def _fake_repository(root: Path, version: str = "0.6.0", gui_pin: str = None) -> None:
     (root / "src" / "groundinsight").mkdir(parents=True)
+    (root / "gui" / "groundinsight_gui").mkdir(parents=True)
+    (root / "gui" / "pyproject.toml").write_text(
+        _GUI_PYPROJECT.format(version=version, pin=gui_pin or version), encoding="utf-8"
+    )
+    (root / "gui" / "groundinsight_gui" / "__init__.py").write_text(
+        f'__version__ = "{version}"\n', encoding="utf-8"
+    )
     (root / "pyproject.toml").write_text(
         f'[tool.poetry]\nname = "groundinsight"\nversion = "{version}"\n',
         encoding="utf-8",
@@ -203,10 +221,32 @@ def test_release_end_to_end_in_a_temporary_repository(tmp_path, monkeypatch):
         ("CITATION.cff", 'version: "2026.11.0"'),
         ("CITATION.cff", 'date-released: "2026-11-20"'),
         ("CHANGELOG.md", "## [2026.11.0] — 2026-11-20"),
+        # The GUI distribution is released with the library: its version and
+        # its pin of the library move together with the library's version.
+        ("gui/pyproject.toml", 'version = "2026.11.0"'),
+        ("gui/pyproject.toml", '"groundinsight==2026.11.0"'),
+        ("gui/groundinsight_gui/__init__.py", '__version__ = "2026.11.0"'),
     ]:
         assert needle in (tmp_path / relative).read_text(encoding="utf-8")
+    # Second way: the rewritten GUI metadata as a TOML parser reads it.
+    gui = tomllib.loads((tmp_path / "gui" / "pyproject.toml").read_text(encoding="utf-8"))
+    assert gui["project"]["version"] == "2026.11.0"
+    assert gui["project"]["dependencies"] == ["groundinsight==2026.11.0", "nicegui>=4.0,<4.1"]
+    assert _git("status", "--porcelain", cwd=tmp_path) == ""  # all of it committed
     assert _git("tag", "--list", "v2026.11.0", cwd=tmp_path).strip() == "v2026.11.0"
     assert "chore(release): v2026.11.0" in _git("log", "-1", "--format=%s", cwd=tmp_path)
+
+
+def test_a_gui_pinned_to_another_library_version_stops_the_release(tmp_path, monkeypatch, caplog):
+    """The GUI pins the library it was released with; a drifted pin would
+    publish a GUI that installs a different library."""
+    _fake_repository(tmp_path, gui_pin="0.5.0")
+    monkeypatch.setattr(release, "_repo_root", lambda: tmp_path)
+    assert release.main(["--no-push", "--date", "2026-11-20"]) == 2
+    assert "version drift" in caplog.text
+    assert "0.5.0" in caplog.text
+    assert '"groundinsight==0.5.0"' in (tmp_path / "gui" / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'version = "0.6.0"' in (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
 
 
 def test_explicit_set_must_match_the_release_month(tmp_path, monkeypatch):
@@ -235,12 +275,23 @@ def test_repository_version_sources_agree_and_follow_the_scheme():
         "pyproject.toml": r'^version\s*=\s*"([^"]+)"',
         "src/groundinsight/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
         "CITATION.cff": r'^version:\s*"?([^"\s]+)"?',
+        "gui/pyproject.toml": r'^version\s*=\s*"([^"]+)"',
+        "gui/groundinsight_gui/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
     }
     found = {
         path: re.search(pattern, (ROOT / path).read_text(encoding="utf-8"), re.M).group(1)
         for path, pattern in sources.items()
     }
+    found["gui pin"] = re.search(
+        r'"groundinsight==([^"]+)"', (ROOT / "gui" / "pyproject.toml").read_text(encoding="utf-8")
+    ).group(1)
     assert len(set(found.values())) == 1, found
+    # The script keeps exactly these in lockstep.
+    locations = release._version_locations(ROOT)
+    assert {release._read_current_version(loc) for loc in locations} == set(found.values())
+    assert sorted(str(loc.path.relative_to(ROOT)) for loc in locations) == sorted(
+        [*sources, "gui/pyproject.toml"]
+    )
     version = next(iter(found.values()))
     # 0.6.0 is the last SemVer release; everything after it is CalVer.
     if version != "0.6.0":
