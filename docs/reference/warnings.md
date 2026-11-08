@@ -18,7 +18,7 @@ next to its message:
 |---|---|
 | `code` | stable upper-case identifier; programs branch on it, never on the message text |
 | `severity` | `info`, `warning` or `error` (only the pre-flight check produces `error`) |
-| `elements` | the network elements concerned, as `(kind, name)` pairs, e.g. `("branch", "K2")`; kinds are `bus`, `branch`, `source`, `fault`, `bus_type`, `branch_type` and `network` |
+| `elements` | the network elements concerned, as `(kind, name)` pairs, e.g. `("branch", "K2")`; kinds are `bus`, `branch`, `source`, `fault`, `bus_type`, `branch_type`, `network` and `switch` (a pandapower switch, by its import label) |
 
 Where you find them:
 
@@ -103,6 +103,7 @@ These are raised by the function named in the row; collect them with
 | `IMPORT_LINE_SKIPPED` | `InputWarning` | warning | the branch | A line is a self-loop, or its length cannot be imported. | Fix the line in pandapower. |
 | `IMPORT_LENGTH_DEFAULT` | `InputWarning` | warning | the branch | A line has no usable `length_km` and gets the fallback of 1 km. | Set `length_km`; every impedance of the branch scales with it. |
 | `IMPORT_SWITCH_NOT_IMPORTED` | `InputWarning` | warning | the buses the switches would bond | Closed bus-to-bus switches were not imported because `ImportDefaults.switch_branch_type` is not set; a bus behind such a switch is isolated and reads 0 V. | Set `switch_branch_type`. |
+| `IMPORT_LINE_SWITCH_OPEN` | `InputWarning` | info | the branch, the switches | `from_pandapower`: a line has an open line switch (`et="l"`) and is imported with an open phase conductor (`phase_impedance_formula = "nan"`); it carries no fault current, its screen stays connected at both ends. | Nothing, if the screen is bonded at both stations; set the branch inactive if it is interrupted as well. |
 | `IMPORT_ELEMENT_NOT_IMPORTED` | `InputWarning` | warning | – | Transformers and impedance elements are not modelled and were left out. | Check the preview; model the connection by hand if it matters. |
 | `IMPORT_VOLTAGE_LEVEL_MISMATCH` | `InputWarning` | warning | the bus type | The default bus type declares another voltage level than `voltage_level_kV`. | Use a bus type written for the imported level. |
 | `IMPORT_EMPTY` | `InputWarning` | warning | the network | The import produced no bus or no branch — usually a wrong `voltage_level_kV`. | Check `voltage_level_kV` against `net.bus.vn_kv`. |

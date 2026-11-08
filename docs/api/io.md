@@ -68,7 +68,9 @@ complete script and its output are in the how-to
 
 The import keeps 4 buses and 4 branches (`Line 2`, `Line 3`, `Line 4` and the
 bond `switch_bus_1`) and skips the three 110 kV buses, the 110 kV line, the
-other switches and the transformer.
+other switches and the transformer. `Line 3` is open at its line switch at
+`MV Bus 2`: it is imported with an open phase conductor and its screen
+(`IMPORT_LINE_SWITCH_OPEN`).
 
 The pandapower extra is optional; install with
 `pip install 'groundinsight[pandapower]'` (or
@@ -81,6 +83,9 @@ The pandapower extra is optional; install with
 skips the same rows and announces them as `InputWarning`s with a code
 (`IMPORT_BUS_SKIPPED`, `IMPORT_LINE_SKIPPED`, `IMPORT_SWITCH_NOT_IMPORTED`,
 `IMPORT_ELEMENT_NOT_IMPORTED`; see [Warnings and diagnostics](../reference/warnings.md)).
+One reason appears on kept rows: `line_switch_open`, on an open line switch
+and on the row of its line, which is imported with an open phase conductor
+(`IMPORT_LINE_SWITCH_OPEN`).
 
 | Reason | Element | Trigger |
 |---|---|---|
@@ -92,8 +97,11 @@ skips the same rows and announces them as `InputWarning`s with a code
 | `zero_length` | line | `length_km` is 0. `from_pandapower` refuses the import with a `ValueError`: a branch without series impedance would act as an open circuit, not as the short it represents. |
 | `negative_length` | line | `length_km` is negative; refused like `zero_length`. |
 | `no_switch_branch_type` | switch | A **closed** bus-to-bus switch, but no `ImportDefaults.switch_branch_type` to build it with. |
-| `switch_open` | switch | The switch is open — genuinely not a connection. |
-| `switch_not_bus_to_bus` | switch | `et != "b"`: the switching state of a line or transformer, not a bond. The line itself is imported with its screen and its phase conductor — see the how-to for a ring operated open at such a switch. |
+| `switch_open` | switch | An open bus-to-bus switch — not a connection. |
+| `line_switch_open` | switch, line (kept) | An open line switch (`et="l"`) of an imported line: the line is imported with an open phase conductor (`phase_impedance_formula = "nan"`), its screen stays connected at both ends. |
+| `line_switch_closed` | switch | A closed line switch — it changes nothing. |
+| `line_not_imported` | switch | A line switch whose line is not imported. |
+| `switch_not_bus_to_bus` | switch | A switch at a transformer terminal (`et="t"`, `"t3"`): the switching state of an element that is not modelled. |
 | `trafos_are_not_modelled` | trafo | `net.trafo` / `net.trafo3w`. |
 | `impedance_elements_are_not_modelled` | impedance | `net.impedance`. |
 

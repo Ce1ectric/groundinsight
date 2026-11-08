@@ -61,18 +61,26 @@ What decides the result:
   default). Without `switch_branch_type` it is left out — and a bus reached
   only through it is isolated and reads 0 V, the answer a grounding study must
   never get by accident. The import says so (`IMPORT_SWITCH_NOT_IMPORTED`);
-  the preview calls it `no_switch_branch_type`. An open switch is no
-  connection (`switch_open`).
-- **Line switches are not evaluated.** A switch at a line end (`et="l"`) is
-  the switching state of that line, not a bond (`switch_not_bus_to_bus`); the
-  line is imported with its screen and its phase conductor whatever the
-  switch says. That is right for the screen, which stays bonded at both
-  stations when the line switch is open, and wrong for the phase conductor of
-  a ring operated open at that switch. Open the phase conductor alone by
-  giving the line a type whose `phase_impedance_formula` is `"nan"` — see
-  [below](#a-ring-operated-open).
+  the preview calls it `no_switch_branch_type`. An open bus-to-bus switch is
+  no connection (`switch_open`).
+- **An open line switch opens the phase conductor, not the screen.** A
+  switch at a line end (`et="l"`) is the switching state of that line. Open,
+  it interrupts the phase conductor at that end; the screen is bonded to the
+  station earth independently of the switch and stays connected at both
+  stations — pandapower carries nothing that would say otherwise. The import
+  gives such a line `default_branch_type` with `phase_impedance_formula =
+  "nan"` (type `<name>_phase_open`): it carries no fault current, and its
+  screen stays in the earthing network. It names line and switch
+  (`IMPORT_LINE_SWITCH_OPEN`, severity `info`); the preview marks the switch
+  and its line `line_switch_open`, a closed line switch `line_switch_closed`
+  (it changes nothing). A ring operated open at a line switch therefore
+  arrives open — see [below](#a-ring-operated-open). If the screen is
+  interrupted as well, set the branch inactive. The legacy
+  `phase_current_mode="paths"` enumerates routes over every active branch
+  and does not see an open phase conductor; the default mode does.
 - **Transformers and impedance elements** are not modelled; they are listed
-  in the preview and announced (`IMPORT_ELEMENT_NOT_IMPORTED`).
+  in the preview and announced (`IMPORT_ELEMENT_NOT_IMPORTED`). A switch at a
+  transformer terminal changes nothing (`switch_not_bus_to_bus`).
 - **`in_service`** becomes `active`, so an element out of service is out of
   the solve as well.
 - **Lengths** come from `length_km`; a line without a usable length gets 1 km
@@ -114,9 +122,9 @@ cable geometry, which pandapower does not carry.
 ### A ring operated open
 
 `example_simple` has a ring `MV Main Bus` – `MV Bus 1` – `MV Bus 2` whose
-`Line 3` is open at a line switch. The import keeps the line; the script
-opens only its phase conductor and shows how the phase current then takes the
-remaining route:
+`Line 3` is open at its switch at `MV Bus 2`. The import opens the phase
+conductor of `Line 3`, so a fault at `MV Bus 2` is fed over `Line 4` alone;
+the same net with every switch closed shows the ring that is not operated:
 
 ```python
 --8<-- "docs/snippets/pandapower_topology.py:open_line"
@@ -125,18 +133,25 @@ remaining route:
 ```text title="Output of pandapower_topology.py"
 preview keep: 4 bus
 preview keep: 3 line
-preview keep: 1 switch
+preview keep: 2 switch
 preview skip: 3 bus
 preview skip: 1 line
-preview skip: 7 switch
+preview skip: 6 switch
 preview skip: 1 trafo
 imported: 4 buses, branches ['Line 2', 'Line 3', 'Line 4', 'switch_bus_1']
-import diagnostics: ['IMPORT_ELEMENT_NOT_IMPORTED']
-derived phase impedance of Line 3: (0.5939 + I * 0.372) * l
-without switch_branch_type: 3 branches, ['IMPORT_SWITCH_NOT_IMPORTED', 'IMPORT_ELEMENT_NOT_IMPORTED']
-phase current, ring closed: Line 2 129.9 A, Line 3 129.9 A, Line 4 871.6 A
-phase current, Line 3 phase open: Line 2 0.0 A, Line 3 0.0 A, Line 4 1000.0 A
+import diagnostics: ['IMPORT_LINE_SWITCH_OPEN', 'IMPORT_ELEMENT_NOT_IMPORTED']
+Line 3 imported as: 3x NA2XS(F)2Y 1x300RM/25 12/20 kV, trefoil_phase_open [('branch', 'Line 3'), ('switch', 'switch_bus_5')]
+derived phase impedance of Line 3, switch closed: (0.5939 + I * 0.372) * l
+without switch_branch_type: 3 branches, ['IMPORT_LINE_SWITCH_OPEN', 'IMPORT_SWITCH_NOT_IMPORTED', 'IMPORT_ELEMENT_NOT_IMPORTED']
+phase current, as imported (Line 3 open): Line 2 0.0 A, Line 3 0.0 A, Line 4 1000.0 A
+phase current, every switch closed: Line 2 129.9 A, Line 3 129.9 A, Line 4 871.6 A
 ```
+
+With one cable type on every line the switch state moves the phase and screen
+currents — what the thermal check reads — but not the EPR: every coupling EMF
+is $k\,I_p$ with the same $k = Z_m/Z_s$, which amounts to injecting
+$(1-k)\,I_F$ however the phase current divides. In a ring of mixed
+construction the EPR moves as well.
 
 The 110 kV buses, the 110 kV line and the transformer are skipped; the 20 kV
 level is imported with all four buses connected. Without `switch_branch_type`

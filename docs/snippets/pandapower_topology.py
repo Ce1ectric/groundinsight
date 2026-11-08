@@ -6,14 +6,17 @@ pandapower" and of the I/O page.
 ``pandapower.networks.example_simple()`` has a 110 kV and a 20 kV level joined
 by a transformer. The import keeps the 20 kV buses and lines, bonds the
 transformer's 20 kV bus to the main busbar through the closed bus-to-bus
-switch, and derives a phase-conductor impedance per line. The earthing side --
-station electrodes and cable screens -- is not in pandapower; it comes from the
-types passed in ``ImportDefaults`` (illustrative: the cable system of the
-data-sheet how-to for every line).
+switch, derives a phase-conductor impedance per line and opens the phase
+conductor of the line whose switch is open. The earthing side -- station
+electrodes and cable screens -- is not in pandapower; it comes from the types
+passed in ``ImportDefaults`` (illustrative: the cable system of the data-sheet
+how-to for every line).
 
 Needs the optional extra: ``pip install "groundinsight[pandapower]"``.
 Run it as a script: ``python docs/snippets/pandapower_topology.py``.
 """
+
+import copy
 
 import polars as pl
 import pandapower.networks as pn
@@ -71,15 +74,17 @@ with collecting() as records_without:
 gi.create_source(name="infeed", bus="MV Transformer Bus", values={50.0: 1000.0}, network=net)
 gi.create_fault(name="F", bus="MV Bus 2", network=net)
 gi.run_fault(net, "F")
-phase_currents_closed = dict(net.electrical_network.phase_currents[50.0])
-
-# pandapower operates the ring open at a line switch of "Line 3"; the import
-# keeps the line (and its screen). Open only its phase conductor:
-line_3 = net.branches["Line 3"].type
-net.update_branch("Line 3", type=line_3.model_copy(update={
-    "name": "Line 3, phase open", "phase_impedance_formula": "nan"}))
-gi.run_fault(net, "F")
 phase_currents_open = dict(net.electrical_network.phase_currents[50.0])
+
+# For comparison: the same pandapower net with every switch closed.
+net_pp_closed = copy.deepcopy(net_pp)
+net_pp_closed.switch["closed"] = True
+ring = gi.from_pandapower(net_pp_closed, defaults=defaults, voltage_level_kV=20.0)
+gi.create_source(name="infeed", bus="MV Transformer Bus", values={50.0: 1000.0}, network=ring)
+gi.create_fault(name="F", bus="MV Bus 2", network=ring)
+gi.run_fault(ring, "F")
+phase_currents_closed = dict(ring.electrical_network.phase_currents[50.0])
+line_3 = ring.branches["Line 3"].type
 # --8<-- [end:open_line]
 
 if __name__ == "__main__":
@@ -87,10 +92,12 @@ if __name__ == "__main__":
         print(f"preview {row['status']:>4}: {row['len']} {row['kind']}")
     print(f"imported: {len(net.buses)} buses, branches {sorted(net.branches)}")
     print("import diagnostics:", [r.code for r in records])
-    print("derived phase impedance of Line 3:", line_3.phase_impedance_formula)
+    opened = next(r for r in records if r.code == "IMPORT_LINE_SWITCH_OPEN")
+    print("Line 3 imported as:", net.branches["Line 3"].type.name, opened.elements)
+    print("derived phase impedance of Line 3, switch closed:", line_3.phase_impedance_formula)
     print(f"without switch_branch_type: {len(isolated.branches)} branches,",
           [r.code for r in records_without])
-    for label, currents in (("ring closed", phase_currents_closed),
-                            ("Line 3 phase open", phase_currents_open)):
+    for label, currents in (("as imported (Line 3 open)", phase_currents_open),
+                            ("every switch closed", phase_currents_closed)):
         shown = ", ".join(f"{b} {abs(currents[b]):.1f} A" for b in ("Line 2", "Line 3", "Line 4"))
         print(f"phase current, {label}: {shown}")

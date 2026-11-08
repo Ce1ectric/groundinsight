@@ -201,6 +201,7 @@ category and the function whose docstring describes the condition:
 | `IMPORT_EMPTY` | `InputWarning` | `from_pandapower`: no bus or no branch imported |
 | `IMPORT_LENGTH_DEFAULT` | `InputWarning` | `from_pandapower` / preview: a line without usable length got the fallback |
 | `IMPORT_LINE_SKIPPED` | `InputWarning` | `from_pandapower` / preview: a self-loop, or a length that cannot be imported |
+| `IMPORT_LINE_SWITCH_OPEN` | `InputWarning` | `from_pandapower`: a line imported with an open phase conductor because of an open line switch |
 | `IMPORT_SWITCH_NOT_IMPORTED` | `InputWarning` | `from_pandapower`: closed bus-to-bus switches without `switch_branch_type` |
 | `IMPORT_VOLTAGE_LEVEL_MISMATCH` | `InputWarning` | `from_pandapower`: the default bus type declares another voltage level |
 | `PARALLEL_COEFFICIENT_DEFAULT` | `ModelAssumptionWarning` | `run_fault(phase_current_mode="paths")`: parallel routes with default coefficients |
