@@ -14,7 +14,8 @@ unit, and ``gi.StudyCancelled`` (a ``RuntimeError``) on cancellation with the
 network restored to the exact state it had when the study was called --
 serialised form, stored results, active fault, paths and assembled system.
 The number of progress calls is checked against a second, independent count
-(the ``run_fault`` calls the study made, or the FFT bins of the result).
+(the solves the study made -- ``run_fault`` calls and the re-solves of its
+study session (P4) -- or the FFT bins of the result).
 
 ``run_sweep`` documents that it leaves the network "exactly as found,
 whatever happens"; it left the result and the assembled system of its last
@@ -123,8 +124,10 @@ class _Recorder:
 
 @pytest.fixture
 def run_fault_calls(monkeypatch):
-    """Count every ``run_fault`` a study makes -- the independent count the
-    progress calls are compared with."""
+    """Count every solve a study makes -- a ``run_fault``, or a re-solve of a
+    study session (P4) -- the independent count the progress calls are
+    compared with."""
+    import groundinsight.analysis._session as session
     import groundinsight.analysis.inverse_rho as inverse_rho
     import groundinsight.analysis.inverse_rho_f as inverse_rho_f
     import groundinsight.network_operations as network_operations
@@ -139,6 +142,16 @@ def run_fault_calls(monkeypatch):
 
     for module in (network_operations, sweep, inverse_rho, inverse_rho_f):
         monkeypatch.setattr(module, "run_fault", counting)
+
+    re_solve = session.BusImpedanceSession.potentials
+
+    def counting_re_solve(self, *args, **kwargs):
+        solved = re_solve(self, *args, **kwargs)
+        if solved is not None:  # ``None`` hands the trial to a run_fault
+            count["n"] += 1
+        return solved
+
+    monkeypatch.setattr(session.BusImpedanceSession, "potentials", counting_re_solve)
     return count
 
 

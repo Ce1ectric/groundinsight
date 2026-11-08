@@ -68,6 +68,7 @@ from ..models.core_models import Network
 from ..network_operations import run_fault
 from ..progress import StudyHooks
 from ..utils.compat import renamed_parameters
+from ._session import BusImpedanceSession, bus_impedance_at
 from ._bisection import (
     STATUS_BRACKET_FULLY_ADMISSIBLE,
     STATUS_MAX_ITER_REACHED,
@@ -252,8 +253,8 @@ def find_max_rho_scaling(
         Number of factors evaluated on a logarithmic grid across
         ``c_bounds`` *before* the bisection, to test the monotonicity
         the bisection assumes. Must be ``0`` (no scan) or at least 3;
-        defaults to ``9``. The scan is not free -- it costs one
-        ``run_fault`` per point -- but it pays part of itself back: on
+        defaults to ``9``. The scan is not free -- it costs one solve
+        per point -- but it pays part of itself back: on
         a monotone curve the bisection starts from the one grid
         interval the threshold falls in rather than from the whole
         bracket, which is worth ``log2(monotonicity_grid - 1)`` steps.
@@ -261,9 +262,8 @@ def find_max_rho_scaling(
         model (e.g. an impedance formula in which *every* term scales
         with ``rho``).
     run_fault_kwargs : dict, optional
-        Extra keyword arguments forwarded to :func:`run_fault` at every
-        step (e.g. ``{"auto_parallel_coefficients": True}``). Defaults to
-        ``None``.
+        Extra keyword arguments forwarded to :func:`run_fault` (e.g.
+        ``{"phase_current_mode": "paths"}``). Defaults to ``None``.
     progress : callable, optional
         ``progress(done, total, label)``, called after every solve (scan
         points and bisection steps alike) with the trial factor as label.
@@ -346,6 +346,18 @@ def find_max_rho_scaling(
     interval, and a lower bound on the true maximum rather than the maximum.
     Its resolution is the grid's.
 
+    **Cost.** Only the first trial is a full :func:`run_fault`. A trial
+    changes nothing but the grounding impedances of the selected buses, which
+    enter the nodal matrix on its diagonal only, so every later trial is
+    re-solved on what the first one assembled -- injection vectors, phase
+    currents, stamp pattern -- by re-assembling the matrix values and
+    factorising them (P4, :mod:`groundinsight.analysis._session`). The EPR of
+    a trial is bit for bit the one a full ``run_fault`` reports, so the
+    search takes the same steps; it is about seven times faster on a
+    1000-bus ring with every bus scaled. A trial the re-solve cannot answer
+    (a 0 Hz stand-in, a bus that gains or loses its electrode, a value the
+    model rejects) is a full ``run_fault`` again, with its errors.
+
     Examples
     --------
     >>> import groundinsight as gi  # doctest: +SKIP
@@ -406,20 +418,47 @@ def find_max_rho_scaling(
     # correct rather than merely conservative.
     electrical_backup = network.electrical_network
 
+    # A trial changes nothing but the grounding impedances of the selected
+    # buses, i.e. the diagonal of Y. The first trial is a full run_fault; the
+    # others are re-solved on what it assembled (P4, see analysis._session):
+    # the same matrix values, factorisation and RMS, so the same EPR bit for
+    # bit. A trial the session cannot answer is solved in full again, and the
+    # session then continues from that solve.
+    session_box: Dict[str, Optional[BusImpedanceSession]] = {"session": None}
+
+    def _session_epr(c: float) -> Optional[float]:
+        """The EPR of a trial from the session, or ``None`` for a full solve."""
+        session = session_box["session"]
+        if session is None:
+            return None
+        try:
+            impedances = {
+                b: bus_impedance_at(
+                    network.buses[b], c * rho_0[b], network.frequencies
+                )
+                for b in bus_names
+            }
+        except Exception:  # noqa: BLE001 -- the full solve raises it in its own words
+            return None
+        return session.epr_rms(impedances)
+
     def _epr_rms_at(c: float) -> float:
         """Evaluate the RMS EPR at the fault bus for a given scaling factor."""
         hooks.checkpoint()
-        for b in bus_names:
-            bus = network.buses[b]
-            bus.specific_earth_resistance = c * rho_0[b]
-            bus.calculate_impedance(network.frequencies)
-        run_fault(network, fault=fault, **rfk)
-        result_bus = next(
-            rb
-            for rb in network.results[fault].buses
-            if rb.name == fault_bus_name
-        )
-        epr = float(result_bus.uepr)
+        epr = _session_epr(c)
+        if epr is None:
+            for b in bus_names:
+                bus = network.buses[b]
+                bus.specific_earth_resistance = c * rho_0[b]
+                bus.calculate_impedance(network.frequencies)
+            run_fault(network, fault=fault, **rfk)
+            result_bus = next(
+                rb
+                for rb in network.results[fault].buses
+                if rb.name == fault_bus_name
+            )
+            epr = float(result_bus.uepr)
+            session_box["session"] = BusImpedanceSession.attach(network, fault)
         if not math.isfinite(epr):
             # A non-finite EPR cannot be compared against u_limit: every
             # comparison is False, so the bisection would take the same turn

@@ -91,7 +91,7 @@ from collections.abc import Mapping
 from contextlib import contextmanager
 
 import numpy as np
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, Iterator, List, NamedTuple, Optional, Tuple
 from scipy.sparse import csc_matrix, csr_matrix, issparse
 from scipy.sparse.csgraph import connected_components
 from scipy.sparse.linalg import splu
@@ -389,6 +389,137 @@ def _reciprocal(values: np.ndarray, usable: np.ndarray) -> np.ndarray:
     return out
 
 
+def bus_admittances(
+    bus_z: np.ndarray, present: np.ndarray
+) -> np.ndarray:
+    """The grounding admittance each bus stamps on the diagonal of ``Y``.
+
+    Internal API: also used by :mod:`groundinsight.analysis._session`; not
+    exported from ``groundinsight`` and free to change in any release.
+
+    The one rule for it, shared by the assembly and by the study sessions
+    that re-assemble ``Y`` for changed bus impedances (P4): ``1/Z`` where a
+    value is stored and not open, zero elsewhere.
+
+    Parameters
+    ----------
+    bus_z : numpy.ndarray
+        Resolved grounding impedances, ``(buses, F)``.
+    present : numpy.ndarray
+        Where a value is stored, same shape.
+
+    Returns
+    -------
+    numpy.ndarray
+        Complex admittances, same shape.
+    """
+    return _reciprocal(bus_z, present & ~_open_mask(bus_z))
+
+
+def rms_columns(values: np.ndarray) -> np.ndarray:
+    """RMS over the frequency columns, the convention of the result rows.
+
+    Internal API: also used by :mod:`groundinsight.analysis._session`; not
+    exported from ``groundinsight`` and free to change in any release.
+
+    ``sqrt(sum |x|**2)``, accumulated frequency by frequency (see
+    :meth:`ElectricalNetwork._calculate_rms`). The result rows and the study
+    sessions (P4) both take their RMS from here, so that a re-solved trial
+    reports bit for bit the value a full ``run_fault`` stores.
+
+    Parameters
+    ----------
+    values : numpy.ndarray
+        Complex array ``(elements, F)``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float array ``(elements,)``.
+    """
+    square = np.zeros(values.shape[0])
+    for j in range(values.shape[1]):
+        magnitude = np.abs(values[:, j])
+        square += magnitude * magnitude
+    return np.sqrt(square)
+
+
+def stack_columns(vectors: List[Optional[np.ndarray]], rows: int) -> np.ndarray:
+    """Per-frequency vectors as the columns of one ``(rows, F)`` array.
+
+    Internal API: also used by :mod:`groundinsight.analysis._session`; not
+    exported from ``groundinsight`` and free to change in any release.
+
+    Parameters
+    ----------
+    vectors : list of numpy.ndarray or None
+        One vector per frequency, in frequency order; ``None`` leaves the
+        column at zero.
+    rows : int
+        Length of every vector.
+
+    Returns
+    -------
+    numpy.ndarray
+        Complex array; column ``j`` is ``vectors[j]``.
+    """
+    out = np.zeros((rows, len(vectors)), dtype=complex)
+    for j, vector in enumerate(vectors):
+        if vector is not None:
+            out[:, j] = vector
+    return out
+
+
+def assemble_nodal_matrices(
+    pattern: "_StampPattern",
+    y_bus: np.ndarray,
+    y_grid: np.ndarray,
+    y_loop: np.ndarray,
+    frequencies: List[float],
+) -> Dict[float, csc_matrix]:
+    """The nodal matrices from the stamp pattern and the stamp admittances.
+
+    Internal API: also used by :mod:`groundinsight.analysis._session`; not
+    exported from ``groundinsight`` and free to change in any release.
+
+    The bus admittances are the first ``n`` stamps of the pattern; the four
+    stamps of every grounding branch and of every Thevenin loop closure
+    follow, in the order the former dense loops added them, and every entry
+    is summed in that order (:meth:`_StampPattern.matrix`). The assembly and
+    the study sessions that re-assemble ``Y`` for changed bus impedances
+    (P4) both go through here, so the same admittances give bit for bit the
+    same matrices.
+
+    Parameters
+    ----------
+    pattern : _StampPattern
+        Where every stamp lands.
+    y_bus : numpy.ndarray
+        Grounding admittance per active bus and frequency, ``(n, F)``.
+    y_grid : numpy.ndarray
+        Admittance per grounding branch and frequency.
+    y_loop : numpy.ndarray
+        Admittance per Thevenin loop closure and frequency.
+    frequencies : list of float
+        The network frequencies, one per column.
+
+    Returns
+    -------
+    dict of float to scipy.sparse.csc_matrix
+        One matrix per frequency.
+    """
+    matrices: Dict[float, csc_matrix] = {}
+    for j, freq in enumerate(frequencies):
+        y_g, y_l = y_grid[:, j], y_loop[:, j]
+        values = np.concatenate([
+            y_bus[:, j],
+            np.stack([-y_g, -y_g, y_g, y_g], axis=1).ravel(),
+            np.stack([y_l, y_l, -y_l, -y_l], axis=1).ravel(),
+        ])
+        matrices[freq] = pattern.matrix(values)
+    return matrices
+
+
 def component_labels(matrix) -> np.ndarray:
     """
     Connected groups of buses of a nodal matrix, from its off-diagonal entries.
@@ -568,6 +699,42 @@ def _assemble_csc(
         The assembled matrix with sorted indices.
     """
     return _StampPattern(rows, cols, size).matrix(values)
+
+
+class NodalParts(NamedTuple):
+    """
+    What a re-assembly of ``Y`` for other bus impedances needs from a solve.
+
+    Internal API: handed to :mod:`groundinsight.analysis._session` by
+    :meth:`ElectricalNetwork.nodal_parts`; not exported from
+    ``groundinsight`` and free to change in any release.
+
+    Attributes
+    ----------
+    pattern : _StampPattern
+        Where every stamp of ``Y`` lands.
+    bus_z : numpy.ndarray
+        Resolved grounding impedance per active bus and frequency, ``(n, F)``.
+    bus_present : numpy.ndarray
+        Where a bus impedance is stored, same shape.
+    grid_admittance : numpy.ndarray
+        Admittance per grounding branch and frequency.
+    loop_admittance : numpy.ndarray
+        Admittance per Thevenin loop closure and frequency.
+    i_vectors : list of numpy.ndarray
+        The injection vector per network frequency, in frequency order.
+    dc_substitute : bool
+        Whether a 0 Hz stand-in is in use (its size may follow a bus
+        impedance, so the parts do not describe ``Y`` for other ones).
+    """
+
+    pattern: "_StampPattern"
+    bus_z: np.ndarray
+    bus_present: np.ndarray
+    grid_admittance: np.ndarray
+    loop_admittance: np.ndarray
+    i_vectors: List[np.ndarray]
+    dc_substitute: bool
 
 
 class _DenseYView(Mapping):
@@ -1110,6 +1277,14 @@ class ElectricalNetwork:
         # The grounding admittance stamped on the diagonal per active bus and
         # frequency, ``(n, F)``; see :meth:`grounding_shunts`.
         self._bus_admittance: Optional[np.ndarray] = None
+        # Where every stamp of Y lands, and the admittances of the stamps
+        # that are not bus electrodes (grounding branches, Thevenin loop
+        # closures), ``(stamps, F)`` each. Kept so that Y can be re-assembled
+        # for other bus admittances without touching the model (P4); see
+        # :meth:`_assemble_nodal`.
+        self._stamp_pattern: Optional[_StampPattern] = None
+        self._grid_admittance: Optional[np.ndarray] = None
+        self._loop_admittance: Optional[np.ndarray] = None
 
         self._initialize()
         # The tables were gathered from this very state a moment ago; digest
@@ -1679,26 +1854,71 @@ class ElectricalNetwork:
             np.stack([g_to, g_from, g_from, g_to], axis=1).ravel(),
             np.stack([l_src, l_fault, l_fault, l_src], axis=1).ravel(),
         ])
-        pattern = _StampPattern(rows, cols, n)
+        self._stamp_pattern = _StampPattern(rows, cols, n)
 
-        y_bus = _reciprocal(
-            tables.bus_z, tables.bus_present & ~_open_mask(tables.bus_z)
-        )
+        y_bus = bus_admittances(tables.bus_z, tables.bus_present)
         self._bus_admittance = y_bus
         z_grid = tables.self_z[grid]
-        y_grid = _reciprocal(
+        self._grid_admittance = _reciprocal(
             z_grid, tables.self_present[grid] & ~_open_mask(z_grid)
         )
-        self.Y_sparse = {}
-        for j, freq in enumerate(frequencies):
-            y_g, y_l = y_grid[:, j], y_loop[:, j]
-            values = np.concatenate([
-                y_bus[:, j],
-                np.stack([-y_g, -y_g, y_g, y_g], axis=1).ravel(),
-                np.stack([y_l, y_l, -y_l, -y_l], axis=1).ravel(),
-            ])
-            self.Y_sparse[freq] = pattern.matrix(values)
+        self._loop_admittance = y_loop
+        self.Y_sparse = self._assemble_nodal(y_bus)
         self.Y_matrices = _DenseYView(self.Y_sparse)
+
+    def _assemble_nodal(self, y_bus: np.ndarray) -> Dict[float, csc_matrix]:
+        """
+        The nodal matrices for given bus admittances, all other stamps as built.
+
+        See :func:`assemble_nodal_matrices`; the grounding branches and
+        Thevenin loop closures keep the values computed when the network was
+        assembled.
+
+        Parameters
+        ----------
+        y_bus : numpy.ndarray
+            Grounding admittance per active bus and frequency, ``(n, F)``, as
+            :func:`bus_admittances` computes it.
+
+        Returns
+        -------
+        dict of float to scipy.sparse.csc_matrix
+            One matrix per network frequency.
+        """
+        return assemble_nodal_matrices(
+            self._stamp_pattern,
+            y_bus,
+            self._grid_admittance,
+            self._loop_admittance,
+            self.network.frequencies,
+        )
+
+    def nodal_parts(self) -> Optional[NodalParts]:
+        """
+        The parts of the assembled system a re-assembly of ``Y`` reads.
+
+        Internal API: used by the study sessions of
+        :mod:`groundinsight.analysis._session` (P4); not exported from
+        ``groundinsight`` and free to change in any release.
+
+        Returns
+        -------
+        NodalParts or None
+            ``None`` until the matrices are assembled. The arrays are those
+            of this assembly, not copies; a reader must not write to them.
+        """
+        if self._stamp_pattern is None:
+            return None
+        tables = self._network_tables()
+        return NodalParts(
+            pattern=self._stamp_pattern,
+            bus_z=tables.bus_z,
+            bus_present=tables.bus_present,
+            grid_admittance=self._grid_admittance,
+            loop_admittance=self._loop_admittance,
+            i_vectors=[self.i_vectors[freq] for freq in self.network.frequencies],
+            dc_substitute=bool(self._dc_substitutes),
+        )
 
     def thevenin_loop_admittances(self, freq: float) -> List[Tuple[int, int, complex]]:
         """
@@ -3360,13 +3580,10 @@ class ElectricalNetwork:
         numpy.ndarray
             Column ``j`` is the vector of ``network.frequencies[j]``.
         """
-        frequencies = self.network.frequencies
-        out = np.zeros((self.num_buses, len(frequencies)), dtype=complex)
-        for j, freq in enumerate(frequencies):
-            vector = vectors.get(freq)
-            if vector is not None:
-                out[:, j] = vector
-        return out
+        return stack_columns(
+            [vectors.get(freq) for freq in self.network.frequencies],
+            self.num_buses,
+        )
 
     def _result_rows(
         self,
@@ -3407,12 +3624,8 @@ class ElectricalNetwork:
         """
         prepared = []
         for key, values in columns.items():
-            square = np.zeros(values.shape[0])
-            for j in range(values.shape[1]):
-                magnitude = np.abs(values[:, j])
-                square += magnitude * magnitude
             prepared.append(
-                (key, np.sqrt(square).tolist(), values.real.tolist(),
+                (key, rms_columns(values).tolist(), values.real.tolist(),
                  values.imag.tolist())
             )
         rows = []
