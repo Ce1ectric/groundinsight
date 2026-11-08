@@ -132,7 +132,7 @@ def test_fault_added_after_first_solve_invalidates_the_path_set():
     gi.run_fault(net, "F1")                       # builds the paths for F1 only
     gi.create_fault(name="F2", bus="D", scalings={50.0: 1.0}, network=net)
 
-    assert net._needs_path_rebuild() is True
+    assert net.needs_path_rebuild() is True
 
     gi.run_fault(net, "F2")
     actual = _epr(net, "F2")
@@ -162,7 +162,7 @@ def test_source_added_after_first_solve_invalidates_the_path_set():
     gi.run_fault(net, "F")
     gi.create_source(name="S2", bus="D", values={50.0: 1000 + 0j}, network=net)
 
-    assert net._needs_path_rebuild() is True
+    assert net.needs_path_rebuild() is True
 
     gi.run_fault(net, "F")
     actual = _epr(net, "F")
@@ -281,7 +281,7 @@ def test_run_fault_rebuilds_paths_after_parallel_branch_rewiring():
 
     net.branches["L4"].to_bus = "B"
 
-    assert net._needs_path_rebuild() is True
+    assert net.needs_path_rebuild() is True
 
     gi.run_fault(net, "F")
     actual = _epr(net, "F")

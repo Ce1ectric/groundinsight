@@ -121,7 +121,7 @@ class _UnitInjectionProbe(ElectricalNetwork):
     waveform, not ``Source.values``, is the injection of a transient. The
     split is a property of the phase network alone, so it is taken from the
     very method ``run_fault(..., phase_current_mode="auto")`` uses,
-    :meth:`ElectricalNetwork._compute_phase_currents`, with every source
+    :meth:`ElectricalNetwork.compute_phase_currents`, with every source
     injecting exactly 1 A. Dividing the stationary result by the stationary
     source value would do the same, but fails for a source whose
     ``values`` miss ``f_eval`` or are zero there -- legitimate for a source
@@ -1633,7 +1633,7 @@ class TransientStudy:
         probe = _UnitInjectionProbe(network, self.fault_name)
         split: Dict[Tuple[str, str], complex] = {}
         for src_name in current_sources:
-            currents = probe._compute_phase_currents(f_eval, [src_name])
+            currents = probe.compute_phase_currents(f_eval, [src_name])
             for br_name in coupled:
                 value = complex(currents.get(br_name, 0.0))
                 if abs(value) > self._SPLIT_ZERO:
@@ -1706,7 +1706,7 @@ class TransientStudy:
             if freq <= 0.0 or freq == f_eval:
                 continue
             for src_name in sources:
-                currents = probe._compute_phase_currents(freq, [src_name])
+                currents = probe.compute_phase_currents(freq, [src_name])
                 for br_name in coupled:
                     delta = abs(
                         complex(currents.get(br_name, 0.0))

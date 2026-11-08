@@ -79,3 +79,22 @@ handlers. If you have separately called `logging.basicConfig()` at
 the root logger and observe duplicate output, set
 `logging.getLogger("groundinsight").propagate = False` after
 `set_log_level`.
+
+## Internal API
+
+Some functions and methods are shared between modules of the package but are
+not meant for application code: the matrix helpers of `ElectricalNetwork`
+that the response and decomposition analyses reuse (`resolved_impedance`,
+`grounding_shunts`, `earthed_buses`, `remove_loop_closures`,
+`compute_phase_currents`), the frequency rules that `gi.check_network`
+applies again (`validate_frequencies`), the bookkeeping of a network
+(`Fault.mark_active`, `Network.needs_path_rebuild`, `Network.input_digest`,
+`Network.path_cache`) and a few helpers of the importers and of the
+impedance checks. They carry no leading underscore, because another module of
+the package uses them, and their docstring starts its second paragraph with
+"Internal API". They are not exported from `groundinsight` and can change in
+any release without a deprecation period; application code uses the public
+functions they serve.
+
+Underscore names stay inside the module that defines them. A test scans the
+package and fails when one module uses an underscore name of another.

@@ -337,13 +337,13 @@ def _evaluate_max_epr_under_k(
         if active_fault_backup is None:
             network.active_fault = None
             for _flt in network.faults.values():
-                _flt._set_active(False)
+                _flt.mark_active(False)
         elif active_fault_backup in network.faults:
             network.set_active_fault(active_fault_backup, keep_results=True)
         else:  # pragma: no cover -- backup fault vanished
             network.active_fault = None
             for _flt in network.faults.values():
-                _flt._set_active(False)
+                _flt.mark_active(False)
         # Restore the assembled system last, so it agrees with the impedances,
         # results and active fault put back above.
         network.electrical_network = electrical_backup

@@ -131,6 +131,10 @@ class PathfinderCache:
     """
     The path-search memo of one network.
 
+    Internal API: a network hands it out through :meth:`Network.path_cache`;
+    configure the search with :class:`PathfinderSettings` instead; not exported
+    from ``groundinsight`` and free to change in any release.
+
     Three LRU tables keyed by the active topology of the network (see
     :meth:`PathFinder._compute_topology_key`): the adjacency graph, the
     enumerated paths per ``(source bus, fault bus)`` and the reachability

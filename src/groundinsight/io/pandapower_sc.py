@@ -92,16 +92,16 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
 import polars as pl
 
 from ..analysis.shortcircuit import (
-    _sources_feeding,
     iec60909_m,
     kappa_from_r_to_x,
     peak_short_circuit_current,
+    sources_feeding,
     thermal_equivalent_current,
 )
 from ..diagnostics import InputWarning, emit
 from ..models.core_models import ComplexNumber, Network
 from ..utils.compat import renamed_parameters
-from .pandapower_import import _bus_index_to_name, _require_pandapower
+from .pandapower_import import bus_index_to_name, require_pandapower
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -471,7 +471,7 @@ def read_shortcircuit_results(
     >>> sc.calc_sc(net, fault="1ph", case="max", tk_s=0.5)  # doctest: +SKIP
     >>> gi.read_shortcircuit_results(net).select("bus_name", "i_k_a", "kappa")  # doctest: +SKIP
     """
-    _require_pandapower()
+    require_pandapower()
 
     res = getattr(net, "res_bus_sc", None)
     if res is None or len(res) == 0:
@@ -499,7 +499,7 @@ def read_shortcircuit_results(
     # zero-sequence impedance is treated the same way.
     earth_fault = fault_type in _EARTH_FAULT_TYPES or "rk0_ohm" in res.columns
 
-    index_to_name = _bus_index_to_name(net)
+    index_to_name = bus_index_to_name(net)
 
     if buses is not None:
         wanted = [int(b) for b in buses]
@@ -793,7 +793,7 @@ def apply_shortcircuit_characteristics(
                 f"Unknown source(s) {unknown} in network {network.name!r}."
             )
     else:
-        names = _sources_feeding(network, fault)
+        names = sources_feeding(network, fault)
     if not names:
         raise ValueError(
             f"No sources are eligible for fault {fault!r}. Build the paths "

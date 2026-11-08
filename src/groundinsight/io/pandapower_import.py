@@ -99,9 +99,12 @@ _PREVIEW_SCHEMA: Dict[str, Any] = {
 }
 
 
-def _require_pandapower():
+def require_pandapower():
     """
     Import ``pandapower`` lazily and raise a clear error if it is missing.
+
+    Internal API: also used by :mod:`groundinsight.io.pandapower_sc`; not
+    exported from ``groundinsight`` and free to change in any release.
 
     Returns
     -------
@@ -145,10 +148,24 @@ def _line_label(row_name: Any, idx: int) -> str:
     return name
 
 
-def _bus_index_to_name(net) -> Dict[int, str]:
+def bus_index_to_name(net) -> Dict[int, str]:
     """
     Build the ``pp.bus.index -> stable name`` map used to resolve
     ``pp.line.from_bus`` / ``to_bus`` references.
+
+    Internal API: also used by :mod:`groundinsight.io.pandapower_sc`; not
+    exported from ``groundinsight`` and free to change in any release.
+
+    Parameters
+    ----------
+    net : pandapowerNet
+        The pandapower network.
+
+    Returns
+    -------
+    dict of int to str
+        Bus name per ``net.bus`` index; a repeated name gets the index
+        appended (``"<name>__<index>"``).
     """
     mapping: Dict[int, str] = {}
     seen: Dict[str, int] = {}
@@ -167,7 +184,7 @@ def _line_index_to_name(net) -> Dict[int, str]:
     Build the ``pp.line.index -> stable name`` map. pandapower does not enforce
     unique line names (CIM/CSV/DGS imports routinely carry blank or repeated
     names), so duplicates are disambiguated by appending the index -- mirroring
-    :func:`_bus_index_to_name`. Without this, two equally-named lines collide on
+    :func:`bus_index_to_name`. Without this, two equally-named lines collide on
     :meth:`Network.add_branch` and abort the whole import while the preview
     still reports both as ``keep``.
     """
@@ -972,7 +989,7 @@ def from_pandapower(
     ...     network_name="kerber_lv",
     ... )
     """
-    _require_pandapower()
+    require_pandapower()
 
     if include_trafos:
         raise NotImplementedError(
@@ -987,7 +1004,7 @@ def from_pandapower(
     name = network_name or getattr(net, "name", None) or "pandapower_import"
     network = Network(name=str(name), frequencies=list(defaults.frequencies))
 
-    bus_name_by_index = _bus_index_to_name(net)
+    bus_name_by_index = bus_index_to_name(net)
     line_name_by_index = _line_index_to_name(net)
     kept_bus_indices, _ = _classify_buses(net, voltage_level_kV)
     kept_bus_set = set(kept_bus_indices)
@@ -1162,7 +1179,7 @@ def preview_pandapower_import(
     NotImplementedError
         If ``include_trafos=True``.
     """
-    _require_pandapower()
+    require_pandapower()
 
     if include_trafos:
         raise NotImplementedError(
@@ -1171,7 +1188,7 @@ def preview_pandapower_import(
             "behaviour of from_pandapower()."
         )
 
-    bus_name_by_index = _bus_index_to_name(net)
+    bus_name_by_index = bus_index_to_name(net)
     line_name_by_index = _line_index_to_name(net)
     kept_bus_indices, skipped_buses = _classify_buses(net, voltage_level_kV)
     kept_bus_set = set(kept_bus_indices)

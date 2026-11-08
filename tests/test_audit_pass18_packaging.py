@@ -139,7 +139,7 @@ def test_restored_paths_survive_the_next_run_fault(simple_network):
 
     restored = gi.Network.model_validate_json(payload)
     assert restored.paths
-    assert restored._needs_path_rebuild() is False
+    assert restored.needs_path_rebuild() is False
 
     stored_names = {name: len(p.segments) for name, p in restored.paths.items()}
     gi.run_fault(restored, "F")
@@ -158,12 +158,12 @@ def test_restored_paths_are_rebuilt_when_the_topology_no_longer_matches(
 
     restored = gi.Network.model_validate_json(payload)
     restored.branches["BC"].to_bus = "D"
-    assert restored._needs_path_rebuild() is True
+    assert restored.needs_path_rebuild() is True
 
 
 def test_a_network_without_paths_is_unaffected(simple_network):
     assert simple_network.paths == {}
-    assert simple_network._needs_path_rebuild() is True
+    assert simple_network.needs_path_rebuild() is True
 
 
 # ---------------------------------------------------------------------------

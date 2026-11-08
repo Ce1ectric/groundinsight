@@ -925,10 +925,10 @@ def run_fault(
     # filtered out as well -- the result carries them either way.
     with collecting() as sink:
         if not auto_phase_currents:
-            if network._needs_path_rebuild():
+            if network.needs_path_rebuild():
                 network.invalidate_paths()
                 create_paths(network)
-        elif network.paths and network._needs_path_rebuild():
+        elif network.paths and network.needs_path_rebuild():
             network.invalidate_paths()
 
         # Warn only in the legacy mode, and only when the network around this
@@ -960,7 +960,7 @@ def run_fault(
     result.diagnostics = unique(sink)
     # Stamp the inputs the result was computed from; Network.stale_results
     # compares the stamp with the network's inputs at any later time (GUI3).
-    result.input_digest = network._input_digest(fault)
+    result.input_digest = network.input_digest(fault)
     return result
 
 

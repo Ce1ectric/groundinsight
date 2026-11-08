@@ -109,12 +109,12 @@ from groundinsight.models.core_models import (
     ResultReductionFactor,
 )
 from groundinsight.utils.impedance_calculator import (
-    _render_frequencies,
-    _short_circuit_mask,
     non_passive_mask,
     check_passive_impedance,
     dc_substitute_impedance,
     is_short_circuit,
+    render_frequencies,
+    short_circuit_mask,
 )
 
 
@@ -289,7 +289,7 @@ def _gather_impedances(
 
     Every vectorised step of the kernel starts here: the per-element
     dictionaries are read once per assembly, and from then on the kernel
-    works on arrays instead of calling :meth:`ElectricalNetwork._resolved_impedance`
+    works on arrays instead of calling :meth:`ElectricalNetwork.resolved_impedance`
     once per element and frequency.
 
     Parameters
@@ -389,9 +389,12 @@ def _reciprocal(values: np.ndarray, usable: np.ndarray) -> np.ndarray:
     return out
 
 
-def _component_labels(matrix) -> np.ndarray:
+def component_labels(matrix) -> np.ndarray:
     """
     Connected groups of buses of a nodal matrix, from its off-diagonal entries.
+
+    Internal API: also used by :mod:`groundinsight.analysis.response`; not
+    exported from ``groundinsight`` and free to change in any release.
 
     Two buses belong together when the matrix couples them: a shield with a
     non-zero admittance at that frequency, or -- in the solved matrix -- the
@@ -424,14 +427,17 @@ def _component_labels(matrix) -> np.ndarray:
     return labels
 
 
-def _restricted_columns(
+def restricted_columns(
     matrix, rows: np.ndarray, units: List[int]
 ) -> Optional[np.ndarray]:
     """
     Unit-injection columns of ``matrix``, solved on one group of buses only.
 
+    Internal API: also used by :mod:`groundinsight.analysis.response`; not
+    exported from ``groundinsight`` and free to change in any release.
+
     The buses outside ``rows`` are decoupled from it by construction (see
-    :func:`_component_labels`), so the columns inside the group do not
+    :func:`component_labels`), so the columns inside the group do not
     depend on them -- and a floating group elsewhere in the matrix cannot
     make this solve singular.
 
@@ -643,7 +649,7 @@ class _NetworkTables:
 
     A ``run_fault`` used to touch every bus and branch once per frequency and
     stage -- assembly, phase network, coupling terms, result rows -- each time
-    through a Python-level dictionary lookup and :meth:`ElectricalNetwork._resolved_impedance`.
+    through a Python-level dictionary lookup and :meth:`ElectricalNetwork.resolved_impedance`.
     On a 4000-bus ring at seven frequencies that was several hundred thousand
     calls before any linear algebra happened (finding P6). The tables are
     filled once per :class:`ElectricalNetwork` and every later stage indexes
@@ -699,7 +705,7 @@ class _NetworkTables:
         :func:`_extra_entries`. Only the fingerprint reads them.
     bus_z, self_z, phase_z, vs_z : numpy.ndarray
         The same values with the 0 Hz stand-in applied
-        (:meth:`ElectricalNetwork._resolved_impedance`, vectorised); filled
+        (:meth:`ElectricalNetwork.resolved_impedance`, vectorised); filled
         by :meth:`resolve`.
 
     Parameters
@@ -795,7 +801,7 @@ class _NetworkTables:
     def resolve(self, substitutes: Dict[float, float]) -> None:
         """Apply the 0 Hz stand-in to every impedance that is inverted.
 
-        Vectorised :meth:`ElectricalNetwork._resolved_impedance`: where a
+        Vectorised :meth:`ElectricalNetwork.resolved_impedance`: where a
         frequency has a substitute, every stored value that is a short circuit
         in the sense of :func:`~groundinsight.utils.impedance_calculator.is_short_circuit`
         is replaced by it. Mutual impedances are never inverted and stay raw.
@@ -835,7 +841,7 @@ class _NetworkTables:
         -------
         numpy.ndarray
             A copy in which every stored short circuit of a substituted
-            column (zero, or too small to invert; see ``_short_circuit_mask``)
+            column (zero, or too small to invert; see ``short_circuit_mask``)
             is replaced by the stand-in, or ``values`` itself when nothing is
             substituted.
         """
@@ -847,7 +853,7 @@ class _NetworkTables:
         out = values.copy()
         for j, substitute in columns:
             col = out[:, j]
-            shorted = _short_circuit_mask(col.real, col.imag) & present[:, j]
+            shorted = short_circuit_mask(col.real, col.imag) & present[:, j]
             col[shorted] = complex(substitute, 0.0)
         return out
 
@@ -1102,7 +1108,7 @@ class ElectricalNetwork:
         # see :class:`_NetworkTables` and :meth:`_network_tables`.
         self._tables: Optional[_NetworkTables] = None
         # The grounding admittance stamped on the diagonal per active bus and
-        # frequency, ``(n, F)``; see :meth:`_grounding_shunts`.
+        # frequency, ``(n, F)``; see :meth:`grounding_shunts`.
         self._bus_admittance: Optional[np.ndarray] = None
 
         self._initialize()
@@ -1292,11 +1298,11 @@ class ElectricalNetwork:
             return
 
         details = "; ".join(
-            f"{label} at {_render_frequencies(freqs)}" for label, freqs in missing
+            f"{label} at {render_frequencies(freqs)}" for label, freqs in missing
         )
         raise ValueError(
             "The network is being solved at "
-            f"{_render_frequencies(frequencies)}, but the following active "
+            f"{render_frequencies(frequencies)}, but the following active "
             f"elements carry no impedance there: {details}. Impedances are "
             "evaluated when an element is added to the network, not at solve "
             "time, so a frequency added to network.frequencies afterwards -- "
@@ -1501,8 +1507,11 @@ class ElectricalNetwork:
             magnitudes, shorted, context="steady-state solve"
         )
 
-    def _resolved_impedance(self, impedance, freq: float) -> Optional[complex]:
+    def resolved_impedance(self, impedance, freq: float) -> Optional[complex]:
         """Complex value of a stored impedance, with a 0 Hz short substituted.
+
+        Internal API: also used by :mod:`groundinsight.analysis.decomposition`;
+        not exported from ``groundinsight`` and free to change in any release.
 
         Every place that inverts an impedance has to see the *same* value,
         otherwise the admittance matrix and the currents derived from it would
@@ -1771,7 +1780,7 @@ class ElectricalNetwork:
     def _earthing_admittance_sparse(self, freq: float) -> csc_matrix:
         """
         :meth:`earthing_admittance_matrix` in CSC: ``Y_sparse[freq]`` minus
-        the Thevenin loop closures (see :meth:`_remove_loop_closures`).
+        the Thevenin loop closures (see :meth:`remove_loop_closures`).
 
         Parameters
         ----------
@@ -1783,11 +1792,14 @@ class ElectricalNetwork:
         scipy.sparse.csc_matrix
             A new matrix; ``Y_sparse[freq]`` is not modified.
         """
-        return self._remove_loop_closures(self.Y_sparse[freq], freq)
+        return self.remove_loop_closures(self.Y_sparse[freq], freq)
 
-    def _remove_loop_closures(self, matrix: csc_matrix, freq: float) -> csc_matrix:
+    def remove_loop_closures(self, matrix: csc_matrix, freq: float) -> csc_matrix:
         """
         ``matrix`` with the Thevenin loop-closure stamps of ``freq`` taken out.
+
+        Internal API: also used by :mod:`groundinsight.analysis.response`; not
+        exported from ``groundinsight`` and free to change in any release.
 
         The stamps of :meth:`thevenin_loop_admittances` are subtracted source
         by source, exactly as the dense definition of the earthing matrix
@@ -1829,7 +1841,7 @@ class ElectricalNetwork:
 
         For each frequency the source injections are placed at the source buses, the
         combined fault current is placed at the fault bus, the phase current per branch
-        is computed (see :meth:`_compute_phase_currents`) and the Norton-equivalent
+        is computed (see :meth:`compute_phase_currents`) and the Norton-equivalent
         mutual currents are added on top.
 
         Raises
@@ -1895,7 +1907,7 @@ class ElectricalNetwork:
             self.source_injections[freq] = i_vector.copy()
 
             # Phase currents per branch at this frequency
-            phase_currents = self._compute_phase_currents(freq, sources_with_path)
+            phase_currents = self.compute_phase_currents(freq, sources_with_path)
             self.phase_currents[freq] = phase_currents
 
             # Mutual Norton injections on top
@@ -1933,7 +1945,7 @@ class ElectricalNetwork:
                 f"Source '{name}' at bus '{source.bus}' reaches fault "
                 f"'{fault.name}' through the earthing network but has no "
                 f"phase-conductor connection to the fault bus '{fault.bus}' at "
-                f"{_render_frequencies(freqs)}, so it contributes no phase "
+                f"{render_frequencies(freqs)}, so it contributes no phase "
                 f"current and induces no coupling. Its current is still injected "
                 f"into the earthing system, as if it returned entirely through "
                 f"soil and shields (reduction factor 1 for its share, no "
@@ -1990,9 +2002,9 @@ class ElectricalNetwork:
                 raise ValueError(
                     f"Source '{name}' at bus '{source.bus}' reaches fault "
                     f"'{fault.name}' but carries values only at "
-                    f"{_render_frequencies(keys) if keys else 'no frequency at all'}"
+                    f"{render_frequencies(keys) if keys else 'no frequency at all'}"
                     f", none of the network frequencies "
-                    f"({_render_frequencies(frequencies)}). It would contribute "
+                    f"({render_frequencies(frequencies)}). It would contribute "
                     f"0 A at every solved frequency, and the run would report "
                     f"0 V at every bus as if that were a result. Give the source "
                     f"values at the network frequencies, or remove it."
@@ -2002,9 +2014,9 @@ class ElectricalNetwork:
                 emit(
                     InputWarning,
                     f"Source '{name}' at bus '{source.bus}' has no value at "
-                    f"{_render_frequencies(missing)} of the network frequencies "
+                    f"{render_frequencies(missing)} of the network frequencies "
                     f"and contributes 0 A there (fault '{fault.name}'). Covered: "
-                    f"{_render_frequencies([f for f in keys if f in solved])}.",
+                    f"{render_frequencies([f for f in keys if f in solved])}.",
                     code="SOURCE_FREQUENCY_GAP",
                     elements=[("source", name)],
                     stacklevel=5,
@@ -2037,7 +2049,7 @@ class ElectricalNetwork:
         emit(
             InputWarning,
             f"Fault '{fault.name}' gives no scaling at "
-            f"{_render_frequencies(missing)}; those frequencies are scaled with "
+            f"{render_frequencies(missing)}; those frequencies are scaled with "
             f"1.0 (full contribution). Add the key with 0.0 to exclude a "
             f"frequency from this fault, or with 1.0 to make the choice explicit.",
             code="SCALINGS_INCOMPLETE",
@@ -2091,7 +2103,7 @@ class ElectricalNetwork:
                 continue
             for freq in self.network.frequencies:
                 z_mutual = (branch.mutual_impedance or {}).get(freq)
-                z_self = self._resolved_impedance(
+                z_self = self.resolved_impedance(
                     (branch.self_impedance or {}).get(freq), freq
                 )
                 if z_mutual is None or z_self is None or _is_open_circuit(z_self):
@@ -2158,7 +2170,7 @@ class ElectricalNetwork:
         if source.voltage is None or source.source_impedance is None:
             return None
         u = source.voltage.get(freq)
-        Z_src_c = self._resolved_impedance(
+        Z_src_c = self.resolved_impedance(
             source.source_impedance.get(freq), freq
         )
         if u is None or Z_src_c is None:
@@ -2247,7 +2259,7 @@ class ElectricalNetwork:
         # them missing or stale. Silently reading an empty path set would
         # inject nothing at all and report 0 V at every bus, so rebuild --
         # the same choice the transient state-space solver makes.
-        if self.network._needs_path_rebuild():
+        if self.network.needs_path_rebuild():
             logger.warning(
                 "phase_current_mode='paths' derives the branch phase currents "
                 "from the enumerated source-to-fault paths, but the network's "
@@ -2265,11 +2277,14 @@ class ElectricalNetwork:
         # Preserve insertion order of self.network.sources for determinism
         return [s for s in self.network.sources.keys() if s in sources]
 
-    def _compute_phase_currents(
+    def compute_phase_currents(
         self, freq: float, sources_with_path
     ) -> Dict[str, complex]:
         """
         Compute the signed phase current per branch at a given frequency.
+
+        Internal API: also used by :mod:`groundinsight.simulation.transient`;
+        not exported from ``groundinsight`` and free to change in any release.
 
         In the path-based mode (``auto_phase_currents=False``) the contributions are
         accumulated from each source's paths to the active fault. Direction comes from
@@ -2393,8 +2408,11 @@ class ElectricalNetwork:
             self._tables.resolve(self._dc_substitutes)
         return self._tables
 
-    def _grounding_shunts(self, freq: float) -> Tuple[np.ndarray, np.ndarray]:
+    def grounding_shunts(self, freq: float) -> Tuple[np.ndarray, np.ndarray]:
         """Grounding impedance of every active bus, and the admittance stamped.
+
+        Internal API: also used by :mod:`groundinsight.analysis.response`; not
+        exported from ``groundinsight`` and free to change in any release.
 
         The interface :func:`~groundinsight.analysis.response.bus_response`
         uses to take one bus's electrode back out of the assembled matrix.
@@ -2424,9 +2442,12 @@ class ElectricalNetwork:
             self._bus_admittance = _reciprocal(tables.bus_z, usable)
         return tables.bus_z[:, column], self._bus_admittance[:, column]
 
-    def _earthed_buses(self, freq: float) -> np.ndarray:
+    def earthed_buses(self, freq: float) -> np.ndarray:
         """
         Buses with a path to remote earth of their own at ``freq``.
+
+        Internal API: also used by :mod:`groundinsight.analysis.response`; not
+        exported from ``groundinsight`` and free to change in any release.
 
         The admittance is the one the assembly stamped (0 Hz stand-in
         applied), so a missing, open (``"nan"``) or non-finite electrode does
@@ -2442,7 +2463,7 @@ class ElectricalNetwork:
         numpy.ndarray
             Boolean mask in :attr:`bus_indices` order.
         """
-        _, admittance = self._grounding_shunts(freq)
+        _, admittance = self.grounding_shunts(freq)
         return np.isfinite(admittance) & (admittance != 0)
 
     def _phase_admittances(
@@ -3082,9 +3103,9 @@ class ElectricalNetwork:
 
         A group is the set of buses coupled by the off-diagonal entries of
         ``matrix`` -- shields with a non-zero admittance and the loop closures
-        of voltage sources (:func:`_component_labels`); it reaches remote
+        of voltage sources (:func:`component_labels`); it reaches remote
         earth if one of its buses has a finite, non-zero electrode admittance
-        (:meth:`_earthed_buses`).
+        (:meth:`earthed_buses`).
 
         Parameters
         ----------
@@ -3099,9 +3120,9 @@ class ElectricalNetwork:
             The buses of every group without an electrode, in
             :attr:`bus_indices` order; empty when every group is earthed.
         """
-        labels = _component_labels(matrix)
+        labels = component_labels(matrix)
         earthed_groups = np.zeros(int(labels.max()) + 1, dtype=bool)
-        earthed_groups[labels[self._earthed_buses(freq)]] = True
+        earthed_groups[labels[self.earthed_buses(freq)]] = True
         names = list(self.bus_indices)
         return [names[i] for i in np.flatnonzero(~earthed_groups[labels])]
 
@@ -3279,7 +3300,7 @@ class ElectricalNetwork:
             # The same question for every group of buses the matrix couples:
             # one group without an electrode is enough to make Y singular, and
             # once it holds two or more buses only up to rounding -- splu then
-            # returns 1e18 V for it instead of raising (see _component_labels).
+            # returns 1e18 V for it instead of raising (see component_labels).
             floating = self._floating_buses(freq, Y_matrix)
             if floating:
                 raise ValueError(self._floating_group_message(freq, floating))
@@ -3794,7 +3815,7 @@ class ElectricalNetwork:
         are taken out (:meth:`_earthing_admittance_sparse`), and whether the
         bus still reaches remote earth is decided by structure: the group of
         buses connected to it through shields must hold an electrode
-        (:func:`_component_labels`). If it does, only that group is
+        (:func:`component_labels`). If it does, only that group is
         factorised, so a floating group elsewhere -- the bus of a voltage
         source without electrode, say -- does not make the value undefined.
         If it does not, the value is ``None``: the matrix of such a group is
@@ -3826,13 +3847,13 @@ class ElectricalNetwork:
                 values[freq] = self._solved_driving_point(freq, bus_idx)
                 continue
             earthing = self._earthing_admittance_sparse(freq)
-            labels = _component_labels(earthing)
+            labels = component_labels(earthing)
             group = labels == labels[bus_idx]
-            if not np.any(group & self._earthed_buses(freq)):
+            if not np.any(group & self.earthed_buses(freq)):
                 values[freq] = None
                 undefined[freq] = [names[i] for i in np.flatnonzero(group)]
                 continue
-            columns = _restricted_columns(earthing, group, [bus_idx])
+            columns = restricted_columns(earthing, group, [bus_idx])
             if columns is None:
                 values[freq] = None
                 undefined[freq] = []
@@ -3892,7 +3913,7 @@ class ElectricalNetwork:
             emit(
                 ModelAssumptionWarning,
                 f"Fault '{fault_name}': at "
-                f"{_render_frequencies(sorted(floating))} the fault bus "
+                f"{render_frequencies(sorted(floating))} the fault bus "
                 f"'{fault_bus}'{connected} carry no electrode, so the fault "
                 f"side reaches remote earth only through the loop closure of a "
                 f"voltage source. The earthing network alone presents an "
@@ -3906,7 +3927,7 @@ class ElectricalNetwork:
         if singular:
             emit(
                 ModelAssumptionWarning,
-                f"Fault '{fault_name}': at {_render_frequencies(singular)} the "
+                f"Fault '{fault_name}': at {render_frequencies(singular)} the "
                 f"earthing network around the fault bus '{fault_bus}' is "
                 f"numerically singular although it holds an electrode, so the "
                 f"earthing impedance Z_E is reported as None.",
@@ -4055,7 +4076,7 @@ class ElectricalNetwork:
 
             electrode_currents: Dict[str, complex] = {}
             for bus_name, idx in self.bus_indices.items():
-                Z_complex = self._resolved_impedance(
+                Z_complex = self.resolved_impedance(
                     self.network.buses[bus_name].impedance.get(freq), freq
                 )
                 if Z_complex is None or _is_open_circuit(Z_complex):

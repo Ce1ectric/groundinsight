@@ -69,10 +69,10 @@ from groundinsight.utils.validations import (
     validate_impedance_formula_value,
 )
 from groundinsight.utils.impedance_calculator import (
-    _render_frequencies,
     check_passive_impedance,
     compute_impedance,
     compute_real_value,
+    render_frequencies,
 )
 import polars as pl
 
@@ -2085,8 +2085,21 @@ class Fault(_NetworkElement):
         """Whether this fault is currently the active one in the network."""
         return self._active
 
-    def _set_active(self, value: bool):
-        """Set the active flag; called internally by ``Network.set_active_fault``."""
+    def mark_active(self, value: bool) -> None:
+        """
+        Set the flag behind :attr:`active`.
+
+        Internal API: used by :class:`Network`, the database loader and the
+        inverse-rho searches to keep the flag in step with
+        :attr:`Network.active_fault`; not exported from ``groundinsight`` and
+        free to change in any release. Application code activates a fault with
+        :meth:`Network.set_active_fault`.
+
+        Parameters
+        ----------
+        value : bool
+            Whether this fault is the active fault of its network.
+        """
         self._active = value
 
     def __str__(self):
@@ -2753,7 +2766,7 @@ class Path(BaseModel):
 _DIGEST_SCHEME = "gi1"
 
 #: The fields a stored result depends on, per model: what
-#: :meth:`Network._input_digest_common` and :meth:`Network._input_digest`
+#: :meth:`Network._input_digest_common` and :meth:`Network.input_digest`
 #: read. ``type`` of a branch stands for ``type.grounding_conductor``, the only
 #: type attribute the solver reads directly.
 _DIGEST_FIELDS: Dict[str, Tuple[str, ...]] = {
@@ -2860,6 +2873,104 @@ def _digest_update(digest: "hashlib._Hash", strings: List[str], floats: List[flo
     digest.update(packed.tobytes())
 
 
+def validate_frequencies(value: List[float], *, stacklevel: int = 1) -> List[float]:
+    """Reject empty / duplicate / non-finite / negative frequency lists.
+
+    Internal API: the rules of :attr:`Network.frequencies`, used by its field
+    validator and by :func:`groundinsight.check_network`, which re-checks a
+    list edited in place; not exported from ``groundinsight`` and free to
+    change in any release.
+
+    ``f = 0`` (DC) is **permitted** because the FFT transient solver
+    in :mod:`groundinsight.simulation.transient` uses the
+    zero-frequency bin to carry the steady-state offset.
+
+    Non-strictly-monotone-increasing inputs are accepted but trigger
+    a :class:`NetworkFrequencyOrderWarning` -- the transient solver
+    relies on the *order* of ``Network.frequencies`` to map to the
+    FFT spectral bins, so a shuffled or descending list almost
+    always indicates a user error.
+
+    Parameters
+    ----------
+    value : list of float
+        The frequencies in Hz.
+    stacklevel : int, default 1
+        Where the order warning points, counted from the caller of this
+        function: ``1`` is the caller itself, ``2`` its caller, and so on.
+
+    Returns
+    -------
+    list of float
+        ``value``, unchanged.
+
+    Raises
+    ------
+    ValueError
+        If the list is empty or holds a non-finite, negative or repeated
+        frequency.
+
+    Warns
+    -----
+    NetworkFrequencyOrderWarning
+        If the list is not strictly increasing.
+
+    Notes
+    -----
+    A duplicate frequency (e.g. ``[50.0, 50.0]``) silently doubles
+    the work in :func:`solve_network` *and* doubles the amplitude
+    of the corresponding spectral bin in the FFT transient solver.
+    ``nan`` / ``inf`` / ``< 0`` would propagate into the
+    impedance evaluation and surface as opaque
+    ``ValueError: domain error`` deep inside
+    :func:`utils.impedance_calculator.compute_impedance`.
+    Raising eagerly at construction time turns those silent
+    wrong-result bugs into a clear ``ValueError`` at the API
+    boundary; the order-warning makes the order-dependent FFT
+    pitfall observable.
+
+    Mirrors :class:`groundfield.solver.engine.EngineFrequencyOrderWarning`
+    in the sister ``groundfield`` package so the three
+    earthing-platform packages share one convention.
+    """
+    if not value:
+        raise ValueError(
+            "Network.frequencies must not be empty — at least one "
+            "frequency is required for the steady-state solve."
+        )
+    for f in value:
+        if not np.isfinite(f):
+            raise ValueError(
+                f"Network.frequencies contains a non-finite value: {f!r}."
+            )
+        if f < 0:
+            raise ValueError(
+                f"Network.frequencies must be >= 0; got {f!r} "
+                "(``f == 0`` for the DC bin is permitted)."
+            )
+    if len(set(value)) != len(value):
+        raise ValueError(
+            f"Network.frequencies contains duplicates: {value!r}. "
+            "Each frequency may appear at most once."
+        )
+    # Non-strictly-monotone-increasing input: warn but keep the
+    # user's order so a deliberate descending sweep is still
+    # possible. The FFT transient solver maps spectral bins by
+    # *position* in this list — a shuffled list almost always
+    # indicates a user error.
+    if any(value[i] >= value[i + 1] for i in range(len(value) - 1)):
+        warnings.warn(
+            "Network.frequencies is not strictly increasing "
+            f"({value!r}). The FFT transient solver maps spectral "
+            "bins by position; consider sorting the list with "
+            "``sorted(frequencies)`` unless a non-monotone order "
+            "is intentional.",
+            NetworkFrequencyOrderWarning,
+            stacklevel=stacklevel + 1,
+        )
+    return value
+
+
 class Network(ValidatedAssignmentModel):
     """
     Top-level container for an entire grounding network.
@@ -2941,75 +3052,10 @@ class Network(ValidatedAssignmentModel):
     @field_validator("frequencies", mode="after")
     @classmethod
     def _validate_frequencies(cls, value: List[float]) -> List[float]:
-        """Reject empty / duplicate / non-finite / negative frequency lists.
-
-        ``f = 0`` (DC) is **permitted** because the FFT transient solver
-        in :mod:`groundinsight.simulation.transient` uses the
-        zero-frequency bin to carry the steady-state offset.
-
-        Non-strictly-monotone-increasing inputs are accepted but trigger
-        a :class:`NetworkFrequencyOrderWarning` — the transient solver
-        relies on the *order* of ``Network.frequencies`` to map to the
-        FFT spectral bins, so a shuffled or descending list almost
-        always indicates a user error.
-
-        Rationale
-        ---------
-        A duplicate frequency (e.g. ``[50.0, 50.0]``) silently doubles
-        the work in :func:`solve_network` *and* doubles the amplitude
-        of the corresponding spectral bin in the FFT transient solver.
-        ``nan`` / ``inf`` / ``< 0`` would propagate into the
-        impedance evaluation and surface as opaque
-        ``ValueError: domain error`` deep inside
-        :func:`utils.impedance_calculator.compute_impedance`.
-
-        Raising eagerly at construction time turns those silent
-        wrong-result bugs into a clear ``ValueError`` at the API
-        boundary; the order-warning makes the order-dependent FFT
-        pitfall observable.
-
-        Notes
-        -----
-        Mirrors :class:`groundfield.solver.engine.EngineFrequencyOrderWarning`
-        in the sister ``groundfield`` package so the three
-        earthing-platform packages share one convention.
-        """
-        if not value:
-            raise ValueError(
-                "Network.frequencies must not be empty — at least one "
-                "frequency is required for the steady-state solve."
-            )
-        for f in value:
-            if not np.isfinite(f):
-                raise ValueError(
-                    f"Network.frequencies contains a non-finite value: {f!r}."
-                )
-            if f < 0:
-                raise ValueError(
-                    f"Network.frequencies must be >= 0; got {f!r} "
-                    "(``f == 0`` for the DC bin is permitted)."
-                )
-        if len(set(value)) != len(value):
-            raise ValueError(
-                f"Network.frequencies contains duplicates: {value!r}. "
-                "Each frequency may appear at most once."
-            )
-        # Non-strictly-monotone-increasing input: warn but keep the
-        # user's order so a deliberate descending sweep is still
-        # possible. The FFT transient solver maps spectral bins by
-        # *position* in this list — a shuffled list almost always
-        # indicates a user error.
-        if any(value[i] >= value[i + 1] for i in range(len(value) - 1)):
-            warnings.warn(
-                "Network.frequencies is not strictly increasing "
-                f"({value!r}). The FFT transient solver maps spectral "
-                "bins by position; consider sorting the list with "
-                "``sorted(frequencies)`` unless a non-monotone order "
-                "is intentional.",
-                NetworkFrequencyOrderWarning,
-                stacklevel=3,
-            )
-        return value
+        """Apply :func:`validate_frequencies` on construction and assignment."""
+        # Counted from this validator: pydantic's __init__ is the next frame,
+        # the code that builds the network the one after.
+        return validate_frequencies(value, stacklevel=3)
 
     @model_validator(mode="after")
     def _sync_active_fault_flag(self):
@@ -3022,7 +3068,7 @@ class Network(ValidatedAssignmentModel):
         """
         if self.active_fault is not None and self.active_fault in self.faults:
             for _name, _fault in self.faults.items():
-                _fault._set_active(_name == self.active_fault)
+                _fault.mark_active(_name == self.active_fault)
         self._adopt_loaded_paths()
         return self
 
@@ -3033,7 +3079,7 @@ class Network(ValidatedAssignmentModel):
         network -- and was then thrown away by the first
         :func:`~groundinsight.run_fault`: ``_paths_fingerprint`` is a
         ``PrivateAttr`` and is not serialised, so
-        :meth:`_needs_path_rebuild` saw ``None`` and re-enumerated the paths
+        :meth:`needs_path_rebuild` saw ``None`` and re-enumerated the paths
         from scratch. The stored data was pure overhead, twice over -- it cost
         a second ``Branch`` validation per segment on load and bought nothing.
 
@@ -3227,13 +3273,15 @@ class Network(ValidatedAssignmentModel):
 
     def path_cache(self) -> "PathfinderCache":
         """
-        The path-search memo of this network (internal API).
+        The path-search memo of this network.
 
-        Used by :class:`groundinsight.pathfinder.PathFinder`; exposed so that
-        no other module needs this network's private attributes. The memo is
-        created on first use. A shallow copy shares its original's private
-        attributes, so the cache is checked to belong to *this* network and
-        replaced by a fresh one otherwise.
+        Internal API: used by :class:`groundinsight.pathfinder.PathFinder`, so
+        that no other module needs this network's private attributes; not
+        exported from ``groundinsight`` and free to change in any release.
+
+        The memo is created on first use. A shallow copy shares its original's
+        private attributes, so the cache is checked to belong to *this*
+        network and replaced by a fresh one otherwise.
 
         Returns
         -------
@@ -3274,10 +3322,10 @@ class Network(ValidatedAssignmentModel):
 
         # Deactivate all faults
         for other in self.faults.values():
-            other._set_active(False)
+            other.mark_active(False)
 
         # Activate the specified fault
-        self.faults[fault]._set_active(True)
+        self.faults[fault].mark_active(True)
         self.active_fault = fault
 
         # Clear previous results for the fault unless the caller
@@ -3434,7 +3482,7 @@ class Network(ValidatedAssignmentModel):
            over-estimate the admissible soil resistivity by ~3000x.
 
         Two networks (or two states of one network) that differ in any of
-        these produce different fingerprints, so :meth:`_needs_path_rebuild`
+        these produce different fingerprints, so :meth:`needs_path_rebuild`
         catches all three cases.
         """
         active_buses = frozenset(
@@ -3459,9 +3507,21 @@ class Network(ValidatedAssignmentModel):
         )
         return (active_buses, connectivity, sources, faults)
 
-    def _needs_path_rebuild(self) -> bool:
-        """True if paths are missing or the active topology changed since the
-        paths were last built (see :meth:`_active_topology_fingerprint`)."""
+    def needs_path_rebuild(self) -> bool:
+        """
+        Whether the stored paths have to be enumerated again.
+
+        Internal API: used by :func:`groundinsight.run_fault` and the
+        electrical network; not exported from ``groundinsight`` and free to
+        change in any release.
+
+        Returns
+        -------
+        bool
+            ``True`` if there are no paths, or if the active topology changed
+            since the paths were last built (see
+            :meth:`_active_topology_fingerprint`).
+        """
         if not self.paths:
             return True
         return self._paths_fingerprint != self._active_topology_fingerprint()
@@ -3649,9 +3709,9 @@ class Network(ValidatedAssignmentModel):
         emit(
             InputWarning,
             f"Source '{source.name}' carries values at "
-            f"{_render_frequencies(outside)}, which are not among the network "
+            f"{render_frequencies(outside)}, which are not among the network "
             f"frequencies of '{self.name}' "
-            f"({_render_frequencies(sorted(solved))}); the solve ignores them.",
+            f"({render_frequencies(sorted(solved))}); the solve ignores them.",
             code="SOURCE_FREQUENCY_OUTSIDE_NETWORK",
             elements=[("source", source.name)],
             stacklevel=4,
@@ -3716,9 +3776,13 @@ class Network(ValidatedAssignmentModel):
         _digest_update(digest, strings, floats)
         return digest.digest()
 
-    def _input_digest(self, fault: str, common: Optional[bytes] = None) -> Optional[str]:
+    def input_digest(self, fault: str, common: Optional[bytes] = None) -> Optional[str]:
         """
         Digest of everything the result of ``fault`` depends on.
+
+        Internal API: used by :func:`groundinsight.run_fault` to stamp
+        :attr:`Result.input_digest`; not exported from ``groundinsight`` and
+        free to change in any release.
 
         Parameters
         ----------
@@ -3768,7 +3832,7 @@ class Network(ValidatedAssignmentModel):
             return True, common
         if common is None:
             common = self._input_digest_common()
-        return stamp != self._input_digest(fault, common), common
+        return stamp != self.input_digest(fault, common), common
 
     def stale_results(self) -> List[str]:
         """
@@ -4150,7 +4214,7 @@ class Network(ValidatedAssignmentModel):
         del self.faults[name]
         self.results.pop(name, None)
         if self.active_fault == name:
-            fault._set_active(False)
+            fault.mark_active(False)
             self.active_fault = None
         if any(path.fault == name for path in self.paths.values()):
             self.invalidate_paths()

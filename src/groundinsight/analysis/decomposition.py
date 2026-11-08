@@ -394,7 +394,7 @@ def _resolve(electrical, value, freq: float) -> Optional[complex]:
     circuit -- a 10 Ohm driving-point impedance where the solver has 2.5.
     """
     if electrical is not None:
-        value = electrical._resolved_impedance(value, freq)
+        value = electrical.resolved_impedance(value, freq)
     return _finite_impedance(value)
 
 

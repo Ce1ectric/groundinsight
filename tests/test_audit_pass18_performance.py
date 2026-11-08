@@ -165,18 +165,18 @@ def test_is_short_circuit_classification_is_unchanged(value, expected):
 
 
 def test_vectorised_short_circuit_mask_agrees_with_the_scalar_form():
-    from groundinsight.utils.impedance_calculator import _short_circuit_mask
+    from groundinsight.utils.impedance_calculator import short_circuit_mask
 
     values = [value for value, _ in _CLASSIFICATION_CASES]
     re = np.array([v.real for v in values])
     im = np.array([v.imag for v in values])
-    mask = _short_circuit_mask(re, im)
+    mask = short_circuit_mask(re, im)
     assert [bool(m) for m in mask] == [is_short_circuit(v) for v in values]
 
 
 def test_vectorised_short_circuit_mask_agrees_on_a_random_sweep():
     """Fuzz the boundary: the mask must never disagree with the scalar form."""
-    from groundinsight.utils.impedance_calculator import _short_circuit_mask
+    from groundinsight.utils.impedance_calculator import short_circuit_mask
 
     rng = np.random.default_rng(20260908)
     n = 5000
@@ -184,7 +184,7 @@ def test_vectorised_short_circuit_mask_agrees_on_a_random_sweep():
     re *= np.where(rng.random(n) < 0.5, -1.0, 1.0)
     im = (rng.random(n) * 9 + 1) * 10.0 ** rng.integers(-330, 10, n)
     im[rng.random(n) < 0.3] = 0.0
-    mask = _short_circuit_mask(re, im)
+    mask = short_circuit_mask(re, im)
     scalar = [is_short_circuit(complex(a, b)) for a, b in zip(re, im)]
     assert [bool(m) for m in mask] == scalar
 

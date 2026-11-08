@@ -403,9 +403,12 @@ def _source_injection_magnitude(source, freq: float, scaling: float) -> float:
     return abs(scaling * complex(u.real, u.imag) / z_c)
 
 
-def _sources_feeding(network: Network, fault_name: str) -> List[str]:
+def sources_feeding(network: Network, fault_name: str) -> List[str]:
     """
     Names of the sources that feed ``fault_name``.
+
+    Internal API: also used by :mod:`groundinsight.io.pandapower_sc`; not
+    exported from ``groundinsight`` and free to change in any release.
 
     Uses the enumerated paths when they are available, because they are what
     the legacy ``phase_current_mode="paths"`` solve actually superposes.
@@ -575,7 +578,7 @@ def resolve_fault_sc_characteristics(
     i_k_total = 0.0
     weight_without_kappa = 0.0
 
-    for source_name in _sources_feeding(network, fault):
+    for source_name in sources_feeding(network, fault):
         source = network.sources[source_name]
         weight = _source_injection_magnitude(source, frequency, scaling)
         kappa_i = _source_kappa(source)

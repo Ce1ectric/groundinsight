@@ -86,18 +86,18 @@ def test_a_uniform_impedance_scaling_is_correctly_not_flagged(monkeypatch):
     stay green. A case that went red here would be reacting to the mutation
     rather than to the physics.
     """
-    real_resolved = gi.electrical_network.ElectricalNetwork._resolved_impedance
+    real_resolved = gi.electrical_network.ElectricalNetwork.resolved_impedance
 
     def scaled(self, impedance, freq):
         value = real_resolved(self, impedance, freq)
         return None if value is None else value * 1.1
 
     monkeypatch.setattr(
-        gi.electrical_network.ElectricalNetwork, "_resolved_impedance", scaled
+        gi.electrical_network.ElectricalNetwork, "resolved_impedance", scaled
     )
     # Since audit pass 19 the assembly resolves the impedances as whole arrays
     # (``_NetworkTables.resolve``, the vectorised twin of
-    # ``_resolved_impedance``), so the uniform scaling has to reach that path
+    # ``resolved_impedance``), so the uniform scaling has to reach that path
     # as well -- scaling only one of the two would be an inconsistent model,
     # not a uniform one. Real and imaginary parts are scaled separately so an
     # open end stays ``inf + inf*j``.
@@ -189,7 +189,7 @@ def test_a_twenty_percent_bias_on_every_bus_admittance_is_caught(monkeypatch):
         for freq in list(self.Y_sparse):
             bias = np.zeros(self.num_buses, dtype=complex)
             for name, idx in self.bus_indices.items():
-                z = self._resolved_impedance(
+                z = self.resolved_impedance(
                     self.network.buses[name].impedance.get(freq), freq
                 )
                 if z is not None and np.isfinite(z) and z != 0:

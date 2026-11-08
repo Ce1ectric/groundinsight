@@ -233,7 +233,7 @@ def test_create_paths_still_enumerates_for_the_user():
     net = _grid(3, "p18_explicit")
     gi.create_paths(net)
     assert len(net.paths) > 1
-    fingerprint_ok = not net._needs_path_rebuild()
+    fingerprint_ok = not net.needs_path_rebuild()
     assert fingerprint_ok
 
 
@@ -330,13 +330,13 @@ def test_islanded_source_contributes_nothing_in_auto_mode():
 
 
 def test_shortcircuit_source_selection_still_excludes_an_isolated_source():
-    """``_sources_feeding`` used to fall back to *every* source on an active
+    """``sources_feeding`` used to fall back to *every* source on an active
     bus once ``network.paths`` was empty -- which is now the normal state in
     the default mode. It asks for reachability instead.
     """
-    from groundinsight.analysis.shortcircuit import _sources_feeding
+    from groundinsight.analysis.shortcircuit import sources_feeding
 
     net = _two_island_network("p18_sc_sources")
     gi.run_fault(net, "F1")
     assert net.paths == {}
-    assert _sources_feeding(net, "F1") == ["s1"]
+    assert sources_feeding(net, "F1") == ["s1"]

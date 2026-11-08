@@ -81,7 +81,7 @@ from groundinsight.simulation import waveforms
 from groundinsight.simulation.transient import TransientStudy
 from groundinsight.utils.impedance_calculator import (
     DCLimitWarning,
-    _render_frequencies,
+    render_frequencies,
     check_passive_impedance,
 )
 
@@ -756,7 +756,7 @@ def test_the_frequency_list_is_truncated_instead_of_flooding_the_message():
     """A transient study evaluates the same formula at several thousand FFT
     bins. An unbounded list would bury the sentence that explains the
     problem."""
-    rendered = _render_frequencies([float(i) for i in range(2048)])
+    rendered = render_frequencies([float(i) for i in range(2048)])
     assert rendered.startswith("0 Hz, 1 Hz, 2 Hz, 3 Hz, 4 Hz")
     assert "2048 frequencies in total" in rendered
     assert "2047 Hz" not in rendered

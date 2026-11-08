@@ -676,7 +676,7 @@ class FaultDB(Base):
             # instead of failing validation on None.
             n_factor=1.0 if self.n_factor is None else self.n_factor,
         )
-        fault._set_active(self.active)
+        fault.mark_active(self.active)
         return fault
 
     @classmethod

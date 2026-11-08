@@ -27,18 +27,27 @@ implementation with an independent oracle on random input -- connected
 components from ``scipy.sparse.csgraph``, and the four rules applied value
 by value with the scalar ``is_short_circuit`` -- and spy that every former
 copy now goes through it.
+
+ARC5: modules of the package used each other's underscore names
+(``electrical._resolved_impedance``, ``fault._set_active``,
+``network._needs_path_rebuild``, ...). What one module needs from another is
+now internal API -- no leading underscore, marked "Internal API" in its
+docstring, not exported. An AST scan of the package finds every remaining use
+of another module's underscore name; the allow-list for exceptions is empty.
 """
 
 import ast
 import copy
 import gc
+import importlib
+import inspect
+import math
 import pathlib
 import pickle
 import threading
 import warnings
 import weakref
-
-import math
+from typing import Dict, List, Set, Tuple
 
 import numpy as np
 import pytest
@@ -607,3 +616,317 @@ def test_every_former_copy_uses_the_one_classification(monkeypatch):
         warnings.simplefilter("ignore")
         gi.solve(_grid("passive"), "F")  # the kernel's fast path
     assert len(calls) > before
+
+
+# ---------------------------------------------------------------------------
+# ARC5 -- no module reaches into another module's underscore names
+# ---------------------------------------------------------------------------
+
+#: Uses of another module's underscore name that stay allowed, as
+#: ``"<file relative to the package>:<name>" -> reason``. Empty: whatever one
+#: module of the package needs from another is internal API.
+ALLOWED_PRIVATE_USES: Dict[str, str] = {}
+
+#: The internal API: shared between modules of the package, without a leading
+#: underscore, marked "Internal API" in its docstring and not exported from
+#: ``groundinsight``.
+INTERNAL_API = (
+    ("groundinsight.electrical_network", "ElectricalNetwork.resolved_impedance"),
+    ("groundinsight.electrical_network", "ElectricalNetwork.grounding_shunts"),
+    ("groundinsight.electrical_network", "ElectricalNetwork.earthed_buses"),
+    ("groundinsight.electrical_network", "ElectricalNetwork.remove_loop_closures"),
+    ("groundinsight.electrical_network", "ElectricalNetwork.compute_phase_currents"),
+    ("groundinsight.electrical_network", "component_labels"),
+    ("groundinsight.electrical_network", "restricted_columns"),
+    ("groundinsight.models.core_models", "Fault.mark_active"),
+    ("groundinsight.models.core_models", "Network.needs_path_rebuild"),
+    ("groundinsight.models.core_models", "Network.input_digest"),
+    ("groundinsight.models.core_models", "Network.path_cache"),
+    ("groundinsight.models.core_models", "validate_frequencies"),
+    ("groundinsight.pathfinder", "PathfinderCache"),
+    ("groundinsight.utils.impedance_calculator", "render_frequencies"),
+    ("groundinsight.utils.impedance_calculator", "short_circuit_mask"),
+    ("groundinsight.utils.impedance_calculator", "PassivityClasses"),
+    ("groundinsight.utils.impedance_calculator", "passivity_classes"),
+    ("groundinsight.utils.impedance_calculator", "non_passive_mask"),
+    ("groundinsight.analysis.shortcircuit", "sources_feeding"),
+    ("groundinsight.io.pandapower_import", "bus_index_to_name"),
+    ("groundinsight.io.pandapower_import", "require_pandapower"),
+)
+
+
+def _is_private(name: str) -> bool:
+    """
+    Whether ``name`` is an underscore name (a dunder name is not).
+
+    Parameters
+    ----------
+    name : str
+        An identifier.
+
+    Returns
+    -------
+    bool
+        ``True`` for ``_name``, ``False`` for ``name`` and ``__name__``.
+    """
+    return name.startswith("_") and not (name.startswith("__") and name.endswith("__"))
+
+
+def _module_name(path: pathlib.Path, root: pathlib.Path) -> str:
+    """
+    Dotted name of the module in ``path``, for the package rooted at ``root``.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        A ``.py`` file below ``root``.
+    root : pathlib.Path
+        The package directory.
+
+    Returns
+    -------
+    str
+        For example ``groundinsight.analysis.response``; a package's
+        ``__init__.py`` gives the package name.
+    """
+    parts = list(path.relative_to(root.parent).with_suffix("").parts)
+    if parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts)
+
+
+def _defined_names(tree: ast.Module) -> Set[str]:
+    """
+    Names a module defines for others to reach.
+
+    Functions, classes and assignment targets outside function bodies (at
+    module level, also inside ``if``/``try``/``with``, and in class bodies --
+    fields and private attributes included), and every attribute the module
+    assigns on ``self`` or ``cls``.
+
+    Parameters
+    ----------
+    tree : ast.Module
+        The parsed module.
+
+    Returns
+    -------
+    set of str
+        The defined names.
+    """
+    names: Set[str] = set()
+
+    def scope(statements: List[ast.stmt]) -> None:
+        for node in statements:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.add(node.name)
+                if isinstance(node, ast.ClassDef):
+                    scope(node.body)
+                continue
+            if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    names.update(n.id for n in ast.walk(target) if isinstance(n, ast.Name))
+            for field in ("body", "orelse", "finalbody"):
+                scope(getattr(node, field, None) or [])
+            for handler in getattr(node, "handlers", None) or []:
+                scope(handler.body)
+
+    scope(tree.body)
+    names.update(
+        node.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.ctx, ast.Store)
+        and isinstance(node.value, ast.Name)
+        and node.value.id in ("self", "cls")
+    )
+    return names
+
+
+def _import_source(node: ast.ImportFrom, package: str) -> str:
+    """
+    Absolute name of the module a ``from ... import`` reads from.
+
+    Parameters
+    ----------
+    node : ast.ImportFrom
+        The import statement.
+    package : str
+        The package the importing module belongs to.
+
+    Returns
+    -------
+    str
+        The dotted module name.
+    """
+    if node.level == 0:
+        return node.module or ""
+    parts = package.split(".")
+    base = parts[: len(parts) - (node.level - 1)]
+    return ".".join(base + ([node.module] if node.module else []))
+
+
+def _private_uses(root: pathlib.Path) -> List[Tuple[str, str, int, str]]:
+    """
+    Every use of an underscore name another module of the package defines.
+
+    Three kinds of use count: ``from <module> import _name`` from another
+    module of the package (a private *module* such as ``_state`` may be
+    imported -- the underscore of a module means "internal to the package");
+    ``obj._name`` on anything but ``self``/``cls``; and ``getattr``,
+    ``setattr``, ``hasattr``, ``delattr`` and ``object.__setattr__`` with a
+    constant underscore name. An attribute counts only if another module
+    defines that name and the using module does not (see
+    :func:`_defined_names`) -- attributes of third-party objects, such as
+    pandapower's ``net._options``, are not the package's business.
+
+    Parameters
+    ----------
+    root : pathlib.Path
+        The package directory.
+
+    Returns
+    -------
+    list of tuple
+        ``(file relative to root, name, line, kind of use)``, sorted.
+    """
+    trees = {
+        path: ast.parse(path.read_text(encoding="utf-8"))
+        for path in sorted(root.rglob("*.py"))
+    }
+    modules = {_module_name(path, root): path for path in trees}
+    defined = {path: _defined_names(tree) for path, tree in trees.items()}
+    uses: List[Tuple[str, str, int, str]] = []
+    for path, tree in trees.items():
+        own = defined[path]
+        elsewhere = set().union(*(names for p, names in defined.items() if p != path))
+        relative = path.relative_to(root).as_posix()
+        module = _module_name(path, root)
+        package = module if path.name == "__init__.py" else module.rpartition(".")[0]
+
+        def reaches(obj: ast.expr, name: str) -> bool:
+            if not _is_private(name) or name in own or name not in elsewhere:
+                return False
+            return not (isinstance(obj, ast.Name) and obj.id in ("self", "cls"))
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                source = _import_source(node, package)
+                if source.split(".")[0] != root.name or source == module:
+                    continue
+                for alias in node.names:
+                    if _is_private(alias.name) and f"{source}.{alias.name}" not in modules:
+                        uses.append((relative, alias.name, node.lineno, f"import from {source}"))
+            elif isinstance(node, ast.Attribute):
+                if reaches(node.value, node.attr):
+                    uses.append((relative, node.attr, node.lineno, "attribute"))
+            elif isinstance(node, ast.Call) and len(node.args) >= 2:
+                func = node.func
+                by_name = isinstance(func, ast.Name) and func.id in (
+                    "getattr", "setattr", "hasattr", "delattr"
+                )
+                by_object = isinstance(func, ast.Attribute) and func.attr in (
+                    "__setattr__", "__getattribute__", "__delattr__"
+                )
+                name = node.args[1]
+                if (by_name or by_object) and isinstance(name, ast.Constant) and isinstance(name.value, str):
+                    if reaches(node.args[0], name.value):
+                        uses.append((relative, name.value, node.lineno, ast.unparse(func)))
+    return sorted(uses)
+
+
+def test_the_scanner_finds_every_kind_of_use(tmp_path):
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "_internal.py").write_text("X = 1\n", encoding="utf-8")
+    (package / "a.py").write_text(
+        "def _helper():\n"
+        "    return 1\n"
+        "\n"
+        "\n"
+        "class A:\n"
+        "    _flag = False\n"
+        "\n"
+        "    def __init__(self):\n"
+        "        self._state = 1\n"
+        "\n"
+        "    def _method(self):\n"
+        "        return self._state\n",
+        encoding="utf-8",
+    )
+    (package / "b.py").write_text(
+        "from .a import _helper, A\n"
+        "from . import _internal\n"
+        "from pkg._internal import X\n"
+        "\n"
+        "\n"
+        "def use(obj, other):\n"
+        "    other._own = 1\n"
+        "    obj._method()\n"
+        "    getattr(obj, '_state')\n"
+        "    object.__setattr__(obj, '_flag', True)\n"
+        "    obj.__dict__\n"
+        "    return obj._unknown\n"
+        "\n"
+        "\n"
+        "class B:\n"
+        "    def __init__(self):\n"
+        "        self._own = 2\n"
+        "\n"
+        "    def run(self, a):\n"
+        "        return self._own + a._flag\n",
+        encoding="utf-8",
+    )
+    assert _private_uses(package) == [
+        ("b.py", "_flag", 10, "object.__setattr__"),
+        ("b.py", "_flag", 20, "attribute"),
+        ("b.py", "_helper", 1, "import from pkg.a"),
+        ("b.py", "_method", 8, "attribute"),
+        ("b.py", "_state", 9, "getattr"),
+    ]
+
+
+def test_no_module_uses_another_modules_underscore_names():
+    found = [
+        f"{file}:{line} {name} ({kind})"
+        for file, name, line, kind in _private_uses(SRC)
+        if f"{file}:{name}" not in ALLOWED_PRIVATE_USES
+    ]
+    assert found == []
+
+
+def test_every_allowed_use_is_still_needed():
+    found = {f"{file}:{name}" for file, name, _, _ in _private_uses(SRC)}
+    assert set(ALLOWED_PRIVATE_USES) <= found
+
+
+@pytest.mark.parametrize("module, qualname", INTERNAL_API)
+def test_internal_api_is_marked_and_not_exported(module, qualname):
+    obj = importlib.import_module(module)
+    for part in qualname.split("."):
+        obj = getattr(obj, part)
+    leaf = qualname.rsplit(".", 1)[-1]
+    assert not leaf.startswith("_")
+    paragraphs = (inspect.getdoc(obj) or "").split("\n\n")
+    assert paragraphs[1].startswith("Internal API: ")  # after the summary
+    assert leaf not in gi.__all__ and not hasattr(gi, leaf)
+
+
+def test_the_frequency_order_warning_points_at_the_caller():
+    with pytest.warns(gi.NetworkFrequencyOrderWarning) as caught:
+        gi.Network(name="unordered", frequencies=[100.0, 50.0])
+    assert [w.filename for w in caught] == [__file__]
+
+
+def test_check_network_applies_the_same_frequency_rules():
+    from groundinsight.models.core_models import validate_frequencies
+
+    net = gi.create_network(name="edited", frequencies=[50.0, 150.0])
+    net.frequencies.append(50.0)  # in place: bypasses the field validator
+    with pytest.raises(ValueError) as rule:
+        validate_frequencies(list(net.frequencies))
+    report = gi.check_network(net)
+    codes = {d.code: d.message for d in report}
+    assert codes["FREQUENCIES_INVALID"] == str(rule.value)

@@ -58,7 +58,14 @@ import math
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from .diagnostics import Diagnostic, collecting, unique
-from .models.core_models import Branch, Bus, Fault, Network, Source
+from .models.core_models import (
+    Branch,
+    Bus,
+    Fault,
+    Network,
+    Source,
+    validate_frequencies,
+)
 from .utils.impedance_calculator import check_passive_impedance
 
 logger = logging.getLogger(__name__)
@@ -313,16 +320,17 @@ def _check_elements(report: _Report) -> None:
 
 def _check_frequencies(report: _Report) -> None:
     """
-    Re-run the ``Network.frequencies`` validator on the stored list.
+    Re-check the stored list against the rules of ``Network.frequencies``.
 
-    The validator guards construction and assignment, but an in-place edit
+    The rules (:func:`~groundinsight.models.core_models.validate_frequencies`)
+    guard construction and assignment, but an in-place edit
     (``net.frequencies.append(50.0)``, ``.clear()``) bypasses it. The usable
     part of the list -- finite, non-negative, first occurrence -- is kept for
     the frequency-dependent checks either way.
     """
     raw = list(getattr(report.network, "frequencies", None) or [])
     try:
-        type(report.network)._validate_frequencies(list(raw))
+        validate_frequencies(list(raw))
     except (ValueError, TypeError) as exc:
         report.add("FREQUENCIES_INVALID", str(exc), [("network", report.name)])
     usable: List[float] = []

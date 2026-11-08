@@ -1242,8 +1242,11 @@ def is_short_circuit(z: complex) -> bool:
     return not (np.isfinite(admittance.real) and np.isfinite(admittance.imag))
 
 
-def _short_circuit_mask(re: np.ndarray, im: np.ndarray) -> np.ndarray:
+def short_circuit_mask(re: np.ndarray, im: np.ndarray) -> np.ndarray:
     """Vectorised :func:`is_short_circuit` over two component arrays.
+
+    Internal API: also used by the electrical network; not exported from
+    ``groundinsight`` and free to change in any release.
 
     Same classification, one pass over the whole frequency grid instead of
     one Python call per bin. ``check_passive_impedance`` runs this for every
@@ -1495,6 +1498,9 @@ class PassivityClasses(NamedTuple):
     """
     The four ways an impedance can fail to be a usable admittance.
 
+    Internal API: the result type of :func:`passivity_classes`; not exported
+    from ``groundinsight`` and free to change in any release.
+
     Boolean masks of a common (broadcast) shape, as returned by
     :func:`passivity_classes`. Their union is :func:`non_passive_mask`.
 
@@ -1522,6 +1528,9 @@ def passivity_classes(
     """
     Classify impedances against the four passivity rules (the one copy).
 
+    Internal API: the one implementation of the passivity rules; not exported
+    from ``groundinsight`` and free to change in any release.
+
     The rules are explained in :func:`check_passive_impedance`. This is their
     only implementation: the dictionary checker, the array checker of the
     transient solver and the vectorised pass/fail of the stationary kernel
@@ -1547,7 +1556,7 @@ def passivity_classes(
     im = np.asarray(im, dtype=float)
     above_dc = np.asarray(frequencies, dtype=float) != 0.0
     finite = np.isfinite(re) & np.isfinite(im)
-    short = _short_circuit_mask(re, im)
+    short = short_circuit_mask(re, im)
     exact_zero = (re == 0.0) & (im == 0.0) & finite
     return PassivityClasses(
         zero=exact_zero & above_dc,
@@ -1561,7 +1570,11 @@ def passivity_classes(
 
 def non_passive_mask(values: np.ndarray, frequencies: np.ndarray) -> np.ndarray:
     """
-    Where impedances violate a passivity rule (internal API).
+    Where impedances violate a passivity rule.
+
+    Internal API: used by the electrical network for its vectorised pass/fail
+    check; not exported from ``groundinsight`` and free to change in any
+    release.
 
     Parameters
     ----------
@@ -1640,7 +1653,7 @@ def _raise_if_not_passive(
     if zeros:
         parts.append(
             "It is exactly zero at "
-            + _render_frequencies(zeros)
+            + render_frequencies(zeros)
             + ". Zero is not an ideal earth in this model and never was -- an "
             "element with no impedance has no admittance either, so it drops "
             "out of the nodal system and reports the opposite of the "
@@ -1658,7 +1671,7 @@ def _raise_if_not_passive(
         )
 
     if too_small:
-        shown = _render_frequencies([freq for freq, _ in too_small])
+        shown = render_frequencies([freq for freq, _ in too_small])
         magnitude = min(mag for _, mag in too_small)
         parts.append(
             f"Its magnitude is {magnitude:g} Ohm at {shown}, which is too "
@@ -1669,7 +1682,7 @@ def _raise_if_not_passive(
         )
 
     if negative:
-        shown = _render_frequencies([freq for freq, _ in negative])
+        shown = render_frequencies([freq for freq, _ in negative])
         worst = min(real for _, real in negative)
         parts.append(
             f"Its real part is negative ({worst:g} Ohm) at {shown}. An earth "
@@ -1685,7 +1698,7 @@ def _raise_if_not_passive(
     if minus_infinite:
         parts.append(
             "Its real part is minus infinity at "
-            + _render_frequencies(minus_infinite)
+            + render_frequencies(minus_infinite)
             + ". That is not an open circuit -- an open circuit is plus "
             "infinity, e.g. the formula 'nan' -- but the limit of a negative "
             "resistance, and passing it on would disconnect the element "
@@ -1702,8 +1715,11 @@ def _raise_if_not_passive(
     raise ValueError(" ".join(parts) + origin)
 
 
-def _render_frequencies(freqs: List[float], limit: int = 5) -> str:
+def render_frequencies(freqs: List[float], limit: int = 5) -> str:
     """Render a frequency list for an error message without flooding it.
+
+    Internal API: also used by the electrical network and the core models; not
+    exported from ``groundinsight`` and free to change in any release.
 
     A transient study evaluates the same formula at several thousand FFT bins,
     so an unbounded list would bury the sentence that explains the problem.

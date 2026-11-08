@@ -531,7 +531,7 @@ def find_max_rho_scaling(
         if active_fault_backup is None:
             network.active_fault = None
             for _flt in network.faults.values():
-                _flt._set_active(False)
+                _flt.mark_active(False)
         elif active_fault_backup in network.faults:
             network.set_active_fault(active_fault_backup, keep_results=True)
         # Restore the assembled system last: it has to agree with the rho,

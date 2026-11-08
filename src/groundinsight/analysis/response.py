@@ -97,7 +97,7 @@ from pydantic import BaseModel, Field
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import splu
 
-from groundinsight.electrical_network import _component_labels, _restricted_columns
+from groundinsight.electrical_network import component_labels, restricted_columns
 from groundinsight.models.core_models import Network
 from groundinsight.utils.compat import renamed_parameters
 from groundinsight.utils.earth_current import (
@@ -906,7 +906,7 @@ def bus_response(
         # assembly stamped for it, in one call. The same values answer three
         # questions below -- the shunt to remove, whether any other bus
         # reaches earth, and the electrode currents.
-        impedances, admittances = electrical._grounding_shunts(freq)
+        impedances, admittances = electrical.grounding_shunts(freq)
         electrode = np.isfinite(impedances) & (impedances != 0)
 
         # Take the bus's own shunt back out of a copy of the sparse matrix.
@@ -929,7 +929,7 @@ def bus_response(
         # network does not help a group that is not connected to it.
         others = electrode.copy()
         others[k] = False
-        labels = _component_labels(Y0)
+        labels = component_labels(Y0)
         if not np.any(others & (labels == labels[k])):
             raise ValueError(
                 f"With the electrode at bus '{target}' removed, no other bus of "
@@ -1040,7 +1040,7 @@ def _earthing_columns(electrical, Y0: csc_matrix, factor, bus_idx: int,
     driving point ``Z_E`` is (decision F4). Whether that network still earths
     the fault side is decided by structure, not by the solver: the group of
     buses connected to the fault bus through shields
-    (:func:`~groundinsight.electrical_network._component_labels`) has to hold
+    (:func:`~groundinsight.electrical_network.component_labels`) has to hold
     an electrode other than the one at ``bus_idx``. Its matrix is singular
     only up to rounding otherwise, and a solve returns about 1e15 Ohm.
 
@@ -1048,7 +1048,7 @@ def _earthing_columns(electrical, Y0: csc_matrix, factor, bus_idx: int,
       ``(Z0_FF, Z0_Fb, Z0_bb)`` of the Möbius form. Without a voltage source
       ``Y0`` is that network, and the two unit columns come from the
       factorisation the caller holds; with one, only the groups involved are
-      factorised (:func:`~groundinsight.electrical_network._restricted_columns`),
+      factorised (:func:`~groundinsight.electrical_network.restricted_columns`),
       so a floating group elsewhere -- a source bus without electrode --
       cannot spoil them.
     * The electrode at ``bus_idx`` is the group's only one: the driving point
@@ -1078,10 +1078,10 @@ def _earthing_columns(electrical, Y0: csc_matrix, factor, bus_idx: int,
         group's matrix is numerically singular).
     """
     loops = electrical.thevenin_loop_admittances(freq)
-    earthing = electrical._remove_loop_closures(Y0, freq) if loops else Y0
-    labels = _component_labels(earthing)
+    earthing = electrical.remove_loop_closures(Y0, freq) if loops else Y0
+    labels = component_labels(earthing)
     fault_group = labels == labels[fault_idx]
-    earthed = electrical._earthed_buses(freq).copy()
+    earthed = electrical.earthed_buses(freq).copy()
     earthed[bus_idx] = False
 
     if not np.any(fault_group & earthed):
@@ -1091,7 +1091,7 @@ def _earthing_columns(electrical, Y0: csc_matrix, factor, bus_idx: int,
             return ("ideal", 0.0 + 0.0j)
         grounded_at_bus = fault_group.copy()
         grounded_at_bus[bus_idx] = False
-        columns = _restricted_columns(earthing, grounded_at_bus, [fault_idx])
+        columns = restricted_columns(earthing, grounded_at_bus, [fault_idx])
         if columns is None:
             return None
         return ("ideal", complex(columns[fault_idx, 0]))
@@ -1113,7 +1113,7 @@ def _earthing_columns(electrical, Y0: csc_matrix, factor, bus_idx: int,
         ))
 
     if fault_group[bus_idx]:
-        columns = _restricted_columns(earthing, fault_group, [bus_idx, fault_idx])
+        columns = restricted_columns(earthing, fault_group, [bus_idx, fault_idx])
         if columns is None:
             return None
         return ("open", (
@@ -1124,13 +1124,13 @@ def _earthing_columns(electrical, Y0: csc_matrix, factor, bus_idx: int,
     # The varied bus lies outside the fault side: its electrode cannot change
     # Z_E (Z0_Fb = 0). Z0_bb is its own group's driving point -- infinite
     # where that group floats without the electrode.
-    fault_column = _restricted_columns(earthing, fault_group, [fault_idx])
+    fault_column = restricted_columns(earthing, fault_group, [fault_idx])
     if fault_column is None:
         return None
     bus_group = labels == labels[bus_idx]
     z_bus = complex(np.inf, 0.0)
     if np.any(bus_group & earthed):
-        bus_column = _restricted_columns(earthing, bus_group, [bus_idx])
+        bus_column = restricted_columns(earthing, bus_group, [bus_idx])
         if bus_column is not None:
             z_bus = complex(bus_column[bus_idx, 0])
     return ("open", (complex(fault_column[fault_idx, 0]), 0.0 + 0.0j, z_bus))
