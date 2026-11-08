@@ -352,7 +352,7 @@ def _line_network():
     names = ["A", "B", "C", "D"]
     for name in names:
         gi.create_bus(name=name, type=station, network=net)
-    for a, b in zip(names[:-1], names[1:]):
+    for a, b in zip(names[:-1], names[1:], strict=True):
         gi.create_branch(name=a + b, type=cable, from_bus=a, to_bus=b, length=1.5, network=net)
     gi.create_source(name="Q1", bus="A", values={50.0: 1000.0, 250.0: 80.0}, network=net)
     gi.create_source(name="Q2", bus="D", values={50.0: 300.0, 250.0: 20.0}, network=net)
@@ -377,7 +377,7 @@ def test_electrode_currents_sum_to_zero_three_ways():
         rows = frame.filter(pl.col("frequency_Hz") == f)
         by_frame = sum(
             cmath.rect(a, cmath.pi * d / 180.0)
-            for a, d in zip(rows["I_bus_A"], rows["I_bus_degree"])
+            for a, d in zip(rows["I_bus_A"], rows["I_bus_degree"], strict=True)
         )
         solution = ref.solve_oneway(ref.reference_network(net, f, "F"))
         by_reference = sum(solution["I_a"].values())
@@ -466,7 +466,7 @@ def test_io_voltage_level_comparison_behaves_as_stated():
     kept = pp.create_bus(net_pp, vn_kv=20.0 * (1 + 4e-10), name="near")
     dropped = pp.create_bus(net_pp, vn_kv=20.0 * (1 + 4e-9), name="off")
     preview = gi.preview_pandapower_import(net_pp, voltage_level_kV=20.0)
-    status = dict(zip(preview["pp_index"], preview["status"]))
+    status = dict(zip(preview["pp_index"], preview["status"], strict=True))
     assert status[kept] == "keep" and status[dropped] == "skip"
 
 

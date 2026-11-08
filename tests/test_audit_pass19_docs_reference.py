@@ -204,7 +204,7 @@ def scan_codes():
                             category = "Diagnostic"
                         codes.setdefault(keyword.value.value, set()).add(category)
             elif isinstance(node, ast.Dict):
-                for key, value in zip(node.keys, node.values):
+                for key, value in zip(node.keys, node.values, strict=True):
                     if (
                         isinstance(key, ast.Constant) and key.value == "code"
                         and isinstance(value, ast.Constant) and isinstance(value.value, str)

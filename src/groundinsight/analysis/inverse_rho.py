@@ -507,7 +507,7 @@ def find_max_rho_scaling(
         # Monotone: the scan also narrows the bracket to the one grid interval
         # the threshold falls in, which pays back part of its own cost --
         # every interval skipped is a bisection step not taken.
-        for value, epr in zip(grid, grid_eprs):
+        for value, epr in zip(grid, grid_eprs, strict=True):
             if epr <= u_limit:
                 c_lo, epr_lo = value, epr
             else:

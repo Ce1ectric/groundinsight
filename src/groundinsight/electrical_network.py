@@ -1969,6 +1969,7 @@ class ElectricalNetwork:
             for src_idx, y_src in zip(
                 tables.vs_bus[loops][stamped].tolist(),
                 admittance[stamped, column].tolist(),
+                strict=True,
             )
         ]
 
@@ -2908,7 +2909,7 @@ class ElectricalNetwork:
         if proxied_mask.any() and not self._phase_proxy_warned:
             self._warn_phase_impedance_proxy(
                 [names[b] for b in rows[proxied_mask]],
-                dict(zip((names[b] for b in rows), y.tolist())),
+                dict(zip((names[b] for b in rows), y.tolist(), strict=True)),
                 set(np.flatnonzero(in_component).tolist()),
                 [names[b] for b in rows[broken_mask]],
             )
@@ -2972,7 +2973,7 @@ class ElectricalNetwork:
         total = np.zeros(rows.size, dtype=complex)
         for col in range(len(columns)):
             total += (potentials[from_idx, col] - potentials[to_idx, col]) * y
-        for name, value in zip((names[b] for b in rows), total.tolist()):
+        for name, value in zip((names[b] for b in rows), total.tolist(), strict=True):
             phase_currents[name] = value
         return phase_currents
 
@@ -3211,9 +3212,9 @@ class ElectricalNetwork:
         stored = self.i_mutuals[freq]
         values = (-i_mut).tolist()
         if not stored:
-            stored.update(zip((names[b] for b in coupled), values))
+            stored.update(zip((names[b] for b in coupled), values, strict=True))
         else:
-            for b, value in zip(coupled, values):
+            for b, value in zip(coupled, values, strict=True):
                 name = names[b]
                 if name in stored:
                     stored[name] += value
@@ -4347,6 +4348,7 @@ class ElectricalNetwork:
                 zip(
                     [names[row] for row in rows.tolist()],
                     currents[rows, column].tolist(),
+                    strict=True,
                 )
             )
 

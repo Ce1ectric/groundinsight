@@ -57,7 +57,7 @@ gi.create_bus(name="UW", type=substation, specific_earth_resistance=100.0, netwo
 for name in STATIONS:
     gi.create_bus(name=name, type=station, specific_earth_resistance=100.0, network=net)
 names = ["UW"] + STATIONS
-for i, (a, b) in enumerate(zip(names[:-1], names[1:]), start=1):
+for i, (a, b) in enumerate(zip(names[:-1], names[1:], strict=True), start=1):
     gi.create_branch(name=f"K{i}", type=cable_system, from_bus=a, to_bus=b, length=1.2,
                      specific_earth_resistance=100.0, network=net)
 gi.create_source(name="infeed", bus="UW", values={50.0: 1000.0}, r_to_x=R_TO_X, network=net)

@@ -229,7 +229,7 @@ def test_packing_takes_every_double_unchanged():
                   complex(np.inf, -np.inf), complex(np.nan, 1.0), -1e-320j]
     freqs = np.arange(values.size, dtype=float)
     packed = ic.impedance_table(freqs, values)
-    for (freq, number), value in zip(packed.items(), values):
+    for (freq, number), value in zip(packed.items(), values, strict=True):
         reference = ComplexNumber(real=float(value.real), imag=float(value.imag))
         assert _bits(number.real) == _bits(reference.real)
         assert _bits(number.imag) == _bits(reference.imag)
@@ -251,7 +251,7 @@ def test_the_passivity_check_of_the_arrays_is_that_of_the_dictionary(case, with_
     values = np.array(BAD[case], dtype=complex)
     freqs = np.arange(values.size, dtype=float) * 50.0 + (0.0 if with_dc else 50.0)
     table = {float(f): ComplexNumber(real=v.real, imag=v.imag)
-             for f, v in zip(freqs.tolist(), values.tolist())}
+             for f, v in zip(freqs.tolist(), values.tolist(), strict=True)}
     outcomes = []
     for check in (
         lambda: ic.check_passive_impedance(table, element="x", formula_str="z",
@@ -272,7 +272,7 @@ def test_good_values_pass_both_passivity_checks():
     freqs = np.array([0.0, 50.0, 150.0, 250.0])
     ic.check_passive_impedance_array(values, freqs, element="x")
     ic.check_passive_impedance(
-        {float(f): complex(v) for f, v in zip(freqs, values)}, element="x"
+        {float(f): complex(v) for f, v in zip(freqs, values, strict=True)}, element="x"
     )
 
 

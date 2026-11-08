@@ -340,7 +340,7 @@ def split_earth_currents(
         magnitudes = np.abs(values)
         keep = magnitudes > noise_rel * float(magnitudes.max())
         if not keep.all():
-            names = [n for n, kept in zip(names, keep) if kept]
+            names = [n for n, kept in zip(names, keep, strict=True) if kept]
             values = values[keep]
     total_magnitude = float(np.abs(values).sum())
 

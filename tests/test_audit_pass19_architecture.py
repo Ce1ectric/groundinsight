@@ -560,7 +560,7 @@ def test_one_passivity_classification_matches_the_rules(seed):
     from groundinsight.utils.impedance_calculator import non_passive_mask
 
     values, frequencies = _sample(seed)
-    expected = [_rule_by_rule(complex(v), float(f)) for v, f in zip(values, frequencies)]
+    expected = [_rule_by_rule(complex(v), float(f)) for v, f in zip(values, frequencies, strict=True)]
     assert non_passive_mask(values, frequencies).tolist() == expected
     # Broadcast form of the kernel: elements x frequencies.
     grid = non_passive_mask(np.vstack([values, values]), frequencies)

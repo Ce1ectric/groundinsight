@@ -23,6 +23,8 @@ Analytical reference (see module docstring of ``electrical_network.py``):
 
 import cmath
 import math
+from itertools import pairwise
+
 import pytest
 
 import groundinsight as gi
@@ -427,11 +429,11 @@ def test_reduction_factor_sweep_single_cable_converges_to_zero():
     assert rs[0] == pytest.approx(R_REF, rel=1e-6)
 
     # Monotonically decreasing across the entire sweep.
-    for prev, curr in zip(rs, rs[1:]):
+    for prev, curr in pairwise(rs):
         assert curr < prev, f"r is not monotonically decreasing: {rs}"
 
     # Each value matches the closed-form expression r = R / sqrt(R^2+(wL)^2).
-    for f, r in zip(_SWEEP_FREQS, rs):
+    for f, r in zip(_SWEEP_FREQS, rs, strict=True):
         assert r == pytest.approx(_r_analytical_single_cable(f), rel=1e-3)
 
     # By 5 kHz the reduction factor is well below 5 % -- clear convergence
@@ -478,7 +480,7 @@ def test_reduction_factor_sweep_20_bus_ring_converges_to_zero():
     assert rs[0] == pytest.approx(R_REF, rel=1e-3)
 
     # Monotonically decreasing across the entire sweep.
-    for prev, curr in zip(rs, rs[1:]):
+    for prev, curr in pairwise(rs):
         assert curr < prev, f"r on ring is not monotonically decreasing: {rs}"
 
     # Strict convergence towards 0 at high frequency.

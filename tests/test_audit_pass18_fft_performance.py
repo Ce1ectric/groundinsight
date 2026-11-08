@@ -107,7 +107,7 @@ def test_passivity_array_check_raises_the_same_message(values):
         check_passive_impedance_array(array, np.array(FREQS), **kwargs)
     with pytest.raises(ValueError) as from_dict:
         check_passive_impedance(
-            {f: v for f, v in zip(FREQS, array)}, **kwargs
+            {f: v for f, v in zip(FREQS, array, strict=True)}, **kwargs
         )
     assert str(from_array.value) == str(from_dict.value)
 
@@ -237,7 +237,7 @@ def _naive_to_polars(result: ResultTransient) -> pl.DataFrame:
         ("source", result.source_t),
     ):
         for name, series in table.items():
-            for t, v in zip(result.time_s, series):
+            for t, v in zip(result.time_s, series, strict=True):
                 rows.append(
                     {"time_s": t, "signal_kind": kind, "name": name, "value": v}
                 )

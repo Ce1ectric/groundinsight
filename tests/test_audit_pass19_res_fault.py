@@ -271,7 +271,7 @@ def test_the_rms_row_is_the_root_sum_of_squares_and_matches_res_buses(kind):
         expected = math.sqrt(sum(row[column] ** 2 for row in per_frequency.values()))
         assert rms[column] == pytest.approx(expected, rel=TOL), column
     buses = net.res_buses(fault="F1").filter(pl.col("is_rms"))
-    by_bus = dict(zip(buses["bus_name"], buses["EPR_V"]))
+    by_bus = dict(zip(buses["bus_name"], buses["EPR_V"], strict=True))
     assert rms["EPR_fault_V"] == by_bus[net.faults["F1"].bus]
     assert rms["EPR_max_V"] == max(by_bus.values())
     assert by_bus[rms["EPR_max_bus"]] == rms["EPR_max_V"]

@@ -373,7 +373,7 @@ class _PhasorColumn:
             values = [np.nan if v is None else v for v in self.rms_values]
             magnitude[rms_rows] = np.asarray(values, dtype=float)
             rms_null = [
-                row for row, v in zip(self.rms_rows, self.rms_values) if v is None
+                row for row, v in zip(self.rms_rows, self.rms_values, strict=True) if v is None
             ]
         magnitude_series = pl.Series(magnitude_key, magnitude, dtype=pl.Float64)
         angle_series = pl.Series(angle_key, angle, dtype=pl.Float64)

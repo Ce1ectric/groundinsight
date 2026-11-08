@@ -750,7 +750,7 @@ def _validate_impedance_formula_uncached(value: str) -> str:
         # Define known symbols used in the formulas
         known_symbols = ["R", "X", "M", "N"]
         syms = symbols(" ".join(known_symbols))
-        locals_dict = dict(zip(known_symbols, syms))
+        locals_dict = dict(zip(known_symbols, syms, strict=True))
         # Map 'j' to the imaginary unit 'I'
         locals_dict["j"] = I
         # Sympify the formula with the local variables

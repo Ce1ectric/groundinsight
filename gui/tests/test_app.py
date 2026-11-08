@@ -176,8 +176,8 @@ async def test_running_a_fault_shows_the_numbers_of_the_library(user: User):
     key_grid = _element(user, "grid-key_figures")
     assert key_grid.options["rowData"] == _frame_rows(twin.res_fault("F1"))
     chart = _element(user, "epr-chart")
-    shown = dict(zip(chart.options["xAxis"]["data"],
-                     [point["value"] for point in chart.options["series"][0]["data"]]))
+    values = [point["value"] for point in chart.options["series"][0]["data"]]
+    shown = dict(zip(chart.options["xAxis"]["data"], values, strict=True))
     buses = twin.res_buses("F1").to_dicts()
     assert shown == {r["bus_name"]: r["EPR_V"] for r in buses if r["is_rms"]}
 

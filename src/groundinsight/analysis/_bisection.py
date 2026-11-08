@@ -52,6 +52,7 @@ non-finite ``c_bounds``
 """
 
 import math
+from itertools import pairwise
 from typing import Any, Dict, Tuple
 
 
@@ -325,7 +326,7 @@ def is_monotone(values: Tuple[float, ...], rel_tol: float = 1e-6) -> bool:
     -------
     bool
     """
-    for previous, current in zip(values, values[1:]):
+    for previous, current in pairwise(values):
         if current < previous * (1.0 - rel_tol):
             return False
     return True

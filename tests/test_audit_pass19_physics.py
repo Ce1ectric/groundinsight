@@ -16,7 +16,8 @@ from __future__ import annotations
 import logging
 import random
 import warnings
-from typing import Dict, List, Optional
+from itertools import pairwise
+from typing import Dict, Optional
 
 import numpy as np
 import pytest
@@ -936,8 +937,8 @@ def test_ph13_the_driving_point_is_monotone_only_for_a_resistive_electrode():
     z_net = response.z_network[50.0]
     resistive = [response.driving_point(1.0 / g, 50.0) for g in (1e-3, 0.1, 0.5, 1, 2, 5, 20, 100)]
     magnitudes = [abs(z) for z in resistive]
-    assert all(b < a for a, b in zip(magnitudes, magnitudes[1:]))
-    for g, z in zip((1e-3, 0.1, 0.5, 1, 2, 5, 20, 100), resistive):
+    assert all(b < a for a, b in pairwise(magnitudes))
+    for g, z in zip((1e-3, 0.1, 0.5, 1, 2, 5, 20, 100), resistive, strict=True):
         assert abs(z - 1.0 / (g + 1.0 / z_net)) <= 1e-12 * abs(z)
     y_reactive = complex(0.0, -(1.0 / z_net).imag)
     z_reactive = response.driving_point(1.0 / y_reactive, 50.0)
@@ -962,7 +963,7 @@ def test_ph13_monotone_if_and_only_if_the_electrode_is_within_90_degrees_of_the_
         direction = np.exp(1j * np.radians(phi_deg))
         ts = np.geomspace(1e-4, 1e4, 400)
         magnitudes = [abs(response.driving_point(1.0 / (t * direction), 50.0)) for t in ts]
-        falls_everywhere = all(b < a for a, b in zip(magnitudes, magnitudes[1:]))
+        falls_everywhere = all(b < a for a, b in pairwise(magnitudes))
         assert falls_everywhere == (np.cos(np.radians(phi_deg) - np.angle(y_net)) >= 0.0), phi_deg
     assert np.degrees(np.angle(z_net)) == pytest.approx(50.33, abs=0.01)
     bound = 1.0 / y_net.real

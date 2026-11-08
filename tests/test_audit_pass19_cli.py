@@ -133,7 +133,7 @@ def test_run_csv_has_the_res_fault_columns_and_values(capsys, quickstart_file):
     parsed = list(reader)
     library = _library_rows(quickstart_file, "fault_at_remote_bus")
     assert len(parsed) == len(library) == 6
-    for text_row, row in zip(parsed, library):
+    for text_row, row in zip(parsed, library, strict=True):
         for column, value in row.items():
             if isinstance(value, bool):
                 assert text_row[column] == ("true" if value else "false"), column

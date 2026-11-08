@@ -301,7 +301,7 @@ def _evaluate_max_epr_under_k(
 
         # Sweep: each fault once. The first call populates ``network.paths``
         # for every (source, fault) pair; subsequent calls reuse the cache.
-        for b, fname in zip(solved_buses, sweep_fault_names):
+        for b, fname in zip(solved_buses, sweep_fault_names, strict=True):
             if hooks is not None:
                 hooks.checkpoint()
             run_fault(network, fault=fname, **rfk)

@@ -148,7 +148,7 @@ def _random_sets(count: int, seed: int):
         pinned = None
         if rng.random() < 0.15:
             pinned = [nm for nm in names if rng.random() < 0.4]
-        yield dict(zip(names, values)), reference, pinned
+        yield dict(zip(names, values, strict=True)), reference, pinned
 
 
 # ---------------------------------------------------------------------------

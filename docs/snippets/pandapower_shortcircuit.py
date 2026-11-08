@@ -32,7 +32,7 @@ pp.create_ext_grid(net_pp, index["UW"],
                    rx_max=0.1,           # R/X, positive sequence
                    x0x_max=1.0,          # X0/X1
                    r0x0_max=11.0)        # R0/X0 -- low-resistance earthing
-for i, (a, b) in enumerate(zip(names[:-1], names[1:]), start=1):
+for i, (a, b) in enumerate(zip(names[:-1], names[1:], strict=True), start=1):
     pp.create_line_from_parameters(
         net_pp, index[a], index[b], length_km=1.2, name=f"K{i}",
         r_ohm_per_km=0.100, x_ohm_per_km=0.110, c_nf_per_km=400.0, max_i_ka=0.5,

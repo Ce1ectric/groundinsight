@@ -577,7 +577,7 @@ def _read_rows(conn: sqlite3.Connection, table: str) -> Dict[str, Dict[str, Any]
     out: Dict[str, Dict[str, Any]] = {}
     # B608 not exploitable: the only caller passes one of five literal element-table names.
     for row in conn.execute(f'SELECT * FROM "{table}" ORDER BY rowid'):  # nosec B608
-        record = dict(zip(columns, row))
+        record = dict(zip(columns, row, strict=True))
         out[record["name"]] = record
     return out
 
@@ -746,7 +746,7 @@ def _rebuild_from_legacy(
             columns = _column_names(source, table)
             # B608 not exploitable: table iterates the constant _GLOBAL_TABLES, never a name from the file.
             records = [
-                dict(zip(columns, row))
+                dict(zip(columns, row, strict=True))
                 for row in source.execute(f'SELECT * FROM "{table}" ORDER BY rowid')  # nosec B608
             ]
             _insert(target, table, records, report)
@@ -754,7 +754,7 @@ def _rebuild_from_legacy(
         # --- networks -----------------------------------------------------
         network_columns = _column_names(source, "networks")
         network_records = [
-            dict(zip(network_columns, row))
+            dict(zip(network_columns, row, strict=True))
             for row in source.execute("SELECT * FROM networks ORDER BY rowid")
         ]
         report.networks = [record["name"] for record in network_records]

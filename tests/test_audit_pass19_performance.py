@@ -382,7 +382,7 @@ def _condition_limited_bins(net, reference, frequencies, label):
         assert np.abs(pkg["u"][:, cols]).max() == 0.0, label
         return
     eps = np.finfo(float).eps
-    for f, col in zip(frequencies, cols):
+    for f, col in zip(frequencies, cols, strict=True):
         bound = max(float(np.linalg.cond(reference.Y[f])) * eps, TOL)
         for key, scale, tol in (("u", u_scale, bound), ("ia", i_scale, bound),
                                 ("i_shield", i_scale, bound),

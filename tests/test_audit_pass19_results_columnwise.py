@@ -190,7 +190,7 @@ def test_numpy_abs_of_a_complex_array_is_not_python_abs():
     rng = np.random.default_rng(7)
     re = rng.normal(size=20000) * 10.0 ** rng.integers(-6, 6, size=20000)
     im = rng.normal(size=20000) * 10.0 ** rng.integers(-6, 6, size=20000)
-    python = np.array([abs(complex(a, b)) for a, b in zip(re.tolist(), im.tolist())])
+    python = np.array([abs(complex(a, b)) for a, b in zip(re.tolist(), im.tolist(), strict=True)])
     assert np.array_equal(np.hypot(re, im), python)
 
 

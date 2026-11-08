@@ -14,6 +14,8 @@ otherwise one bad parameter combination silently poisons every later point.
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 import polars as pl
 import pytest
 
@@ -89,7 +91,7 @@ def test_the_rho_f_characteristic_actually_reaches_the_solver():
         .sort("k1")
     )
     eprs = frame["EPR_V"].to_list()
-    assert all(a < b for a, b in zip(eprs, eprs[1:]))
+    assert all(a < b for a, b in pairwise(eprs))
     # k1 = 0.01 -> 1 Ohm, k1 = 0.10 -> 10 Ohm at rho = 100: a tenfold electrode
     # is damped by the parallel network to a threefold potential rise.
     assert eprs[-1] / eprs[0] > 3.0
@@ -215,7 +217,7 @@ def test_both_reduction_factors_travel_in_the_impedance_frame():
     # Blind to the fault bus by construction ...
     assert r_epr == pytest.approx([r_epr[0]] * len(r_epr), rel=1e-9)
     # ... while the current-based one is strictly ordered by the electrode.
-    assert all(a > b for a, b in zip(r_current, r_current[1:]))
+    assert all(a > b for a, b in pairwise(r_current))
 
 
 # --- statistics --------------------------------------------------------------

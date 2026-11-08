@@ -977,10 +977,10 @@ def bus_response(
             )
 
         z_network[freq] = complex(z_col[k])
-        u_open[freq] = dict(zip(order, u0.tolist()))
-        z_column[freq] = dict(zip(order, z_col.tolist()))
+        u_open[freq] = dict(zip(order, u0.tolist(), strict=True))
+        z_column[freq] = dict(zip(order, z_col.tolist(), strict=True))
         if u0_nm is not None:
-            u_open_no_mutual[freq] = dict(zip(order, u0_nm.tolist()))
+            u_open_no_mutual[freq] = dict(zip(order, u0_nm.tolist(), strict=True))
 
         other_impedance[freq] = {
             order[i]: complex(impedances[i]) for i in np.flatnonzero(electrode)

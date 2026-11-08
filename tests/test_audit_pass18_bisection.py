@@ -28,6 +28,7 @@ with the fault at F. ``EPR(c)`` then runs 1.096 / 1.032 / 1.012 / 1.091 /
 from __future__ import annotations
 
 import logging
+from itertools import pairwise
 
 import pytest
 
@@ -169,7 +170,7 @@ def test_the_grid_is_geometric_and_hits_both_ends():
     assert len(grid) == 7
     assert grid[0] == pytest.approx(1e-3)
     assert grid[-1] == pytest.approx(1e3)
-    ratios = [b / a for a, b in zip(grid, grid[1:])]
+    ratios = [b / a for a, b in pairwise(grid)]
     assert ratios == pytest.approx([ratios[0]] * len(ratios), rel=1e-12)
 
 

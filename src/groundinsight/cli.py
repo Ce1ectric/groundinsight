@@ -150,7 +150,7 @@ def _columns(rows: List[List[str]]) -> str:
     widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
     lines = []
     for index, row in enumerate(rows):
-        lines.append("  ".join(cell.rjust(width) for cell, width in zip(row, widths)))
+        lines.append("  ".join(cell.rjust(width) for cell, width in zip(row, widths, strict=True)))
         if index == 0:
             lines.append("  ".join("-" * width for width in widths))
     return "\n".join(lines) + "\n"

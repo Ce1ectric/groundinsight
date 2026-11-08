@@ -185,7 +185,7 @@ def test_vectorised_short_circuit_mask_agrees_on_a_random_sweep():
     im = (rng.random(n) * 9 + 1) * 10.0 ** rng.integers(-330, 10, n)
     im[rng.random(n) < 0.3] = 0.0
     mask = short_circuit_mask(re, im)
-    scalar = [is_short_circuit(complex(a, b)) for a, b in zip(re, im)]
+    scalar = [is_short_circuit(complex(a, b)) for a, b in zip(re, im, strict=True)]
     assert [bool(m) for m in mask] == scalar
 
 

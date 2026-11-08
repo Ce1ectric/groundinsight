@@ -18,6 +18,7 @@ takes the edges from the caller, who can cite them.
 
 from __future__ import annotations
 
+from itertools import pairwise
 from typing import Optional, Sequence
 
 import polars as pl
@@ -199,7 +200,7 @@ def classify(
             "classify needs at least one edge; with none there is only one "
             "class and nothing to decide."
         )
-    if any(b <= a for a, b in zip(edges, edges[1:])):
+    if any(b <= a for a, b in pairwise(edges)):
         raise ValueError(
             f"Edges must be strictly increasing, got {edges}. Overlapping or "
             f"repeated edges would make the class assignment ambiguous."
@@ -207,7 +208,7 @@ def classify(
 
     if labels is None:
         labels = [f"<= {edges[0]:g}"]
-        labels += [f"{a:g} - {b:g}" for a, b in zip(edges, edges[1:])]
+        labels += [f"{a:g} - {b:g}" for a, b in pairwise(edges)]
         labels.append(f"> {edges[-1]:g}")
     labels = list(labels)
     if len(labels) != len(edges) + 1:
@@ -220,7 +221,8 @@ def classify(
     if frame.schema[value].is_float():
         unassessable = unassessable | pl.col(value).is_nan()
     expression = pl.when(unassessable).then(None)
-    for edge, label in zip(edges, labels):
+    # One label per edge; the last label is the class above every edge.
+    for edge, label in zip(edges, labels[:-1], strict=True):
         expression = expression.when(pl.col(value) <= edge).then(pl.lit(label))
     expression = expression.otherwise(pl.lit(labels[-1]))
     return frame.with_columns(expression.alias(name))

@@ -322,7 +322,7 @@ class BusImpedanceSession:
             if factors is None:
                 return None
         solved: Dict[float, np.ndarray] = {}
-        for freq, i_vector, lu in zip(self._frequencies, self._i_vectors, factors):
+        for freq, i_vector, lu in zip(self._frequencies, self._i_vectors, factors, strict=True):
             u_vector = lu.solve(i_vector)
             if not np.all(np.isfinite(u_vector)):
                 return None

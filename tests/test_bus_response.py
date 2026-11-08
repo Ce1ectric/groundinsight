@@ -17,6 +17,8 @@ invariance the sensitivity study runs into, here derived from the algebra.
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 import numpy as np
 import polars as pl
 import pytest
@@ -218,7 +220,7 @@ def test_the_current_reduction_factor_is_ordered_by_the_electrode():
         pl.col("frequency_Hz") == 50.0
     )
     values = frame["r_current"].to_list()
-    assert all(a < b for a, b in zip(values, values[1:]))
+    assert all(a < b for a, b in pairwise(values))
 
 
 def test_an_ideal_electrode_at_the_fault_raises_the_potential_elsewhere():

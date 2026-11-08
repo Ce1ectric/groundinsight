@@ -485,15 +485,15 @@ class _Model:
         y_loop = _reciprocals([z for _, z in loops], division)
 
         grid_only = _Assembler(self.n)
-        for (k, _), y in zip(usable_bus, y_bus):
+        for (k, _), y in zip(usable_bus, y_bus, strict=True):
             grid_only.stamp(k, k, y)
-        for (_, a, c, _), y in zip(grid, y_grid):
+        for (_, a, c, _), y in zip(grid, y_grid, strict=True):
             grid_only.branch(a, c, y)
         full = _Assembler(self.n)
         full.rows, full.cols, full.vals = (
             list(grid_only.rows), list(grid_only.cols), list(grid_only.vals)
         )
-        for (s_idx, _), y in zip(loops, y_loop):
+        for (s_idx, _), y in zip(loops, y_loop, strict=True):
             full.stamp(s_idx, s_idx, y)
             full.stamp(k_fault, k_fault, y)
             full.stamp(s_idx, k_fault, -y)
@@ -654,7 +654,7 @@ def solve(
                         branch.length if branch.length and branch.length > 0 else 1.0
                     )
                     y_phase[b] = complex(1.0 / length, 0.0)
-        for (b, _), y in zip(raw, _reciprocals([z for _, z in raw], division)):
+        for (b, _), y in zip(raw, _reciprocals([z for _, z in raw], division), strict=True):
             y_phase[b] = y
         order = sorted(y_phase)  # network order of the branches
 
@@ -748,7 +748,7 @@ def solve(
         electrode.append(currents)
 
         i_shield = np.zeros(m, dtype=dtype)
-        for (b, a, c, _), y in zip(grid, y_grid):
+        for (b, a, c, _), y in zip(grid, y_grid, strict=True):
             i_shield[b] = (u[c] - u[a]) * np.asarray(y, dtype=dtype) + stored[b]
         IS[:, j] = i_shield
 
@@ -962,7 +962,7 @@ def compare(
 
     # EPR-based reduction factor, where its denominator is not noise.
     r_dev = 0.0
-    for j, f in zip(cols, freqs):
+    for j, f in zip(cols, freqs, strict=True):
         u_max = np.abs(oracle.u[:, j]).max() if oracle.u.size else 0.0
         denom = abs(oracle.u_no_mutual[k_fault, j])
         if degenerate or not denom > 1e-9 * u_max:
@@ -977,7 +977,7 @@ def compare(
     membership_ok = True
     z_scale = 0.0
     z_pairs: List[Tuple[complex, complex]] = []
-    for j, f in zip(cols, freqs):
+    for j, f in zip(cols, freqs, strict=True):
         if degenerate:
             continue
         currents = oracle.electrode[j]
@@ -1037,7 +1037,7 @@ def compare(
     if has_group_fields:
         # Z_E = Z_dp(F) (decision F4) is a property of the earthing network
         # and defined whether or not an earth group exists: every bin.
-        for j, f in zip(cols, freqs):
+        for j, f in zip(cols, freqs, strict=True):
             expected_z = complex(oracle.z_dp[j])
             if not (math.isfinite(expected_z.real) and math.isfinite(expected_z.imag)):
                 continue

@@ -27,6 +27,7 @@ P5  superposing the linear RMS currents and then applying a
 from __future__ import annotations
 
 import math
+from itertools import pairwise
 
 import pytest
 
@@ -95,7 +96,7 @@ def _gi_net(cross_section_mm2=50.0, buses=("HV", "MV1", "MV2")):
     )
     for name in buses:
         gi.create_bus(name=name, type=bt, network=net)
-    for a, b in zip(buses, buses[1:]):
+    for a, b in pairwise(buses):
         gi.create_branch(name=f"{a}-{b}", type=ct, from_bus=a, to_bus=b,
                          length=1.0, network=net)
     gi.create_source(name="src", bus=buses[0], values={50.0: 1000.0}, network=net)
@@ -202,7 +203,7 @@ def test_p4_m_is_continuous_and_tends_to_two():
     """pandapower zeroes m for kappa > 1.99; the analytic limit is 2."""
     f, t_k = 50.0, 1.0
     m_values = [iec60909_m(k, f, t_k) for k in (1.99, 1.995, 1.999, 2.0)]
-    assert all(b >= a for a, b in zip(m_values, m_values[1:])), m_values
+    assert all(b >= a for a, b in pairwise(m_values)), m_values
     assert m_values[-1] == pytest.approx(2.0)
     # No collapse: the value just below the limit stays close to it.
     assert iec60909_m(1.999, f, t_k) > 1.0

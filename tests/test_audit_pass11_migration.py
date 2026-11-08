@@ -881,7 +881,7 @@ def test_membership_order_wins_over_element_table_order(tmp_path):
         # Rewrite the element table in a different physical order ...
         rows = conn.execute("SELECT * FROM buses").fetchall()
         columns = [row[1] for row in conn.execute('PRAGMA table_info("buses")')]
-        by_name = {dict(zip(columns, row))["name"]: row for row in rows}
+        by_name = {dict(zip(columns, row, strict=True))["name"]: row for row in rows}
         conn.execute("DELETE FROM buses")
         placeholders = ", ".join("?" for _ in columns)
         for bus_name in ("C", "A", "B"):

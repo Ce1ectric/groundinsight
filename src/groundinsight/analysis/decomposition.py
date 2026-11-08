@@ -525,7 +525,7 @@ def _unit_injection(
         return None
     if not np.all(np.isfinite(u)):
         return None
-    return dict(zip(ordered, u.tolist()))
+    return dict(zip(ordered, u.tolist(), strict=True))
 
 
 def _branch_current_out(

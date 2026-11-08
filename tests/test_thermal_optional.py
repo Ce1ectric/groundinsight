@@ -167,12 +167,12 @@ def test_thermal_fields_do_not_change_the_electrical_result():
     bare = _chain(_bare_bus_type(), _bare_branch_type(), name="bare")
     full = _chain(_full_bus_type(), _full_branch_type(), name="full")
 
-    for rb_bare, rb_full in zip(bare.results["F"].buses, full.results["F"].buses):
+    for rb_bare, rb_full in zip(bare.results["F"].buses, full.results["F"].buses, strict=True):
         assert rb_bare.name == rb_full.name
         assert rb_bare.uepr == rb_full.uepr
         assert rb_bare.ia == rb_full.ia
         assert rb_bare.i_inj == rb_full.i_inj
-    for br_bare, br_full in zip(bare.results["F"].branches, full.results["F"].branches):
+    for br_bare, br_full in zip(bare.results["F"].branches, full.results["F"].branches, strict=True):
         assert br_bare.name == br_full.name
         assert br_bare.i_s == br_full.i_s
 
@@ -227,7 +227,7 @@ def test_an_unassessable_frame_keeps_its_dtypes():
     """
     net = _chain(_bare_bus_type(), _bare_branch_type())
     for df in (gi.check_conductor_limits(net, "F"), gi.check_node_limits(net, "F")):
-        schema = dict(zip(df.columns, df.dtypes))
+        schema = dict(zip(df.columns, df.dtypes, strict=True))
         assert schema["within_limit"] == pl.Boolean
         assert schema["utilization"] == pl.Float64
         assert schema["I_admissible_A"] == pl.Float64

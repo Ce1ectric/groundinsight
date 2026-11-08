@@ -16,6 +16,7 @@ argued:
 from __future__ import annotations
 
 import logging
+from itertools import pairwise
 
 import numpy as np
 import polars as pl
@@ -194,7 +195,7 @@ def test_r_epr_is_blind_to_the_fault_bus_while_r_current_is_not():
     # Strictly decreasing: a better electrode at the faulted station takes a
     # larger share of the current straight into the local soil, so more of the
     # fault current returns through earth.
-    assert all(a > b for a, b in zip(r_current, r_current[1:]))
+    assert all(a > b for a, b in pairwise(r_current))
     assert r_current[0] / r_current[-1] > 1.5
     # I_E is a sum over every bus that feeds the soil, so it stays finite even
     # when the faulted station has no electrode at all -- the neighbours carry
@@ -215,7 +216,7 @@ def test_the_side_impedances_are_a_property_of_the_network_alone():
         if reference is None:
             reference = values
         else:
-            for got, expected in zip(values, reference):
+            for got, expected in zip(values, reference, strict=True):
                 assert got == pytest.approx(expected, rel=1e-12)
 
 

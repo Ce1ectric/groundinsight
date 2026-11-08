@@ -108,7 +108,7 @@ print(json.dumps({"before": before,
     assert report["figure"] == "Figure"
     # Second route to the same numbers: the result frame of the solve.
     assert len(report["heights"]) == len(report["expected"]) == 3
-    for height, value in zip(report["heights"], report["expected"]):
+    for height, value in zip(report["heights"], report["expected"], strict=True):
         assert abs(height - value) <= 1e-9 * max(1.0, abs(value))
 
 

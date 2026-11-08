@@ -278,7 +278,7 @@ def test_sweeps_statistics_by_hand(sweeps):
         ns["LABELS"][1]: sum(edges[0] < v <= edges[1] for v in values),
         ns["LABELS"][2]: sum(v > edges[1] for v in values),
     }
-    got = dict(zip(counts["class"], counts["count"]))
+    got = dict(zip(counts["class"], counts["count"], strict=True))
     assert {k: v for k, v in expected.items() if v} == got
 
 

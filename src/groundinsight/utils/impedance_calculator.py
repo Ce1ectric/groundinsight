@@ -377,7 +377,7 @@ def _compile_formula(formula_str: str, param_names: Tuple[str, ...]):
         # A name the caller declared as a parameter *is* a parameter. Names
         # that are not declared keep their SymPy meaning, so ``sqrt``, ``log``,
         # ``exp`` and ``pi`` continue to work as functions and constants.
-        local_symbols: Dict[str, sp.Symbol] = dict(zip(param_names, sym_params))
+        local_symbols: Dict[str, sp.Symbol] = dict(zip(param_names, sym_params, strict=True))
         local_symbols["f"] = sym_f
 
         expr = sp.sympify(formula_str, locals=local_symbols)
@@ -884,7 +884,7 @@ def impedance_table(freqs_arr: np.ndarray, values: np.ndarray) -> Dict[float, An
     return {
         freq: ComplexNumber(real=real, imag=imag)
         for freq, real, imag in zip(
-            freqs_arr.tolist(), values.real.tolist(), values.imag.tolist()
+            freqs_arr.tolist(), values.real.tolist(), values.imag.tolist(), strict=True
         )
     }
 
@@ -1702,10 +1702,11 @@ def _raise_if_not_passive(
         zip(
             freqs[classes.too_small].tolist(),
             np.hypot(re[classes.too_small], im[classes.too_small]).tolist(),
+            strict=True,
         )
     )
     negative: List[Tuple[float, float]] = list(
-        zip(freqs[classes.negative].tolist(), re[classes.negative].tolist())
+        zip(freqs[classes.negative].tolist(), re[classes.negative].tolist(), strict=True)
     )
     minus_infinite: List[float] = freqs[classes.minus_infinite].tolist()
 
