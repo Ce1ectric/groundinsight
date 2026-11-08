@@ -1068,3 +1068,90 @@ def test_license_page_shows_the_license_and_the_scope_of_the_results():
     text = (DOCS / "project" / "license.md").read_text(encoding="utf-8")
     assert '--8<-- "LICENSE"' in text
     assert LIABILITY_NOTE in " ".join(line.strip() for line in text.splitlines())
+
+
+# --------------------------------------------------------------------------
+# README -- quickstart, links, scope note
+# --------------------------------------------------------------------------
+
+README = ROOT / "README.md"
+SITE = "https://ce1ectric.github.io/groundinsight/"
+
+#: What the README must not say any more, with the reason.
+STALE_README_TEXT = {
+    "black": "the project lints and does not reformat (CONTRIBUTING.md)",
+    "Z_G": "the earthing impedance is Z_E",
+    "fault_name": "the keyword is fault=",
+    "auto_parallel_coefficients": "deprecated; phase_current_mode is the switch",
+    "/concepts/": "the page was split into Understanding the model",
+    "/quickstart/": "the page was replaced by Getting started",
+    f"{SITE}installation/": "the page moved to getting-started/installation/",
+}
+
+
+def _readme_section(heading):
+    """
+    One ``##`` section of the README.
+
+    Parameters
+    ----------
+    heading : str
+        The heading text.
+
+    Returns
+    -------
+    str
+        The section without its heading.
+    """
+    text = README.read_text(encoding="utf-8")
+    return text.split(f"\n## {heading}\n", 1)[1].split("\n## ", 1)[0]
+
+
+def test_readme_quickstart_prints_what_the_readme_shows(monkeypatch, tmp_path, capsys):
+    """The quickstart runs as shown, prints the block below it, and the
+    numbers are the closed forms of a single line (the first tutorial)."""
+    import runpy
+
+    section = _readme_section("Quickstart")
+    code = re.search(r"```python\n(.*?)```", section, re.S).group(1)
+    shown = re.search(r"```text\n(.*?)```", section, re.S).group(1).strip().splitlines()
+    script = tmp_path / "readme_quickstart.py"
+    script.write_text(code, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    runpy.run_path(str(script), run_name="__main__")
+    printed = [line.rstrip() for line in capsys.readouterr().out.splitlines()]
+    assert printed == shown
+
+    z_b, z_s, z_m, current = 1.0 + 0.1j, (0.25 + 0.6j) * 5.0, 0.6j * 5.0, 1000.0
+    i_earth = current * (z_s - z_m) / (z_s + 2 * z_b)
+    z_e = z_b * (z_s + z_b) / (2 * z_b + z_s)
+    assert shown[0] == (
+        f"U_E = {abs(z_b * i_earth):.2f} V, Z_E = {abs(z_e):.4f} Ohm, "
+        f"r = {abs(i_earth) / current:.6f}, EPR ratio = {abs(1 - z_m / z_s):.6f}"
+    )
+
+
+def test_readme_links_the_contribution_guide_and_the_new_structure():
+    text = README.read_text(encoding="utf-8")
+    assert "CONTRIBUTING.md" in _readme_section("Contributing")
+    assert (ROOT / "CONTRIBUTING.md").is_file()
+    broken = []
+    for link in re.findall(r"\]\((https://ce1ectric\.github\.io/groundinsight/[^)\s]*)\)", text):
+        path, _, anchor = link[len(SITE):].partition("#")
+        if _site_page(path) is None:
+            broken.append(link)
+    assert broken == []
+    for section in ("getting-started/", "howto/", "explanation/", "examples/", "reference/"):
+        assert f"{SITE}{section}" in text, section
+
+
+def test_readme_states_the_scope_of_the_results():
+    """D10: the liability note, verbatim."""
+    text = " ".join(line.lstrip("> ").strip() for line in README.read_text(encoding="utf-8").splitlines())
+    assert LIABILITY_NOTE in text
+
+
+def test_readme_holds_no_stale_advice_or_names():
+    text = README.read_text(encoding="utf-8")
+    found = [(phrase, reason) for phrase, reason in STALE_README_TEXT.items() if phrase in text]
+    assert found == []
