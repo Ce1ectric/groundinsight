@@ -276,6 +276,10 @@ class ElectricalNetwork:
         # One-shot latch so the phase-impedance proxy warning is emitted once
         # per network, not once per frequency of the sweep.
         self._phase_proxy_warned = False
+        # Sources that reach the fault through the earthing network but not
+        # through the phase network, with the frequencies concerned; reported
+        # once per source after the frequency loop (PH9).
+        self._sources_without_phase_path: Dict[str, List[float]] = {}
         # Substitute impedance per frequency for elements that are a short
         # circuit there. Only 0 Hz can have an entry, and only when the network
         # actually contains such an element. See _dc_substitute_at.
@@ -916,6 +920,50 @@ class ElectricalNetwork:
             self.i_vectors[freq] = i_vector
             self.u_vectors[freq] = u_vector
 
+        self._report_sources_without_phase_path(fault)
+
+    def _report_sources_without_phase_path(self, fault: Fault) -> None:
+        """
+        Say what a source without phase-conductor path to the fault still does.
+
+        Such a source reaches the fault through the earthing network -- which
+        is why it was considered at all -- but the phase conductor between
+        them is interrupted (an inactive branch, a phase conductor declared
+        open). No phase current flows from it, so it induces no coupling, yet
+        its current is still injected into the earthing system at its bus and
+        drawn out at the fault bus: it is treated as if it returned entirely
+        through soil and shields, reduction factor 1 for its share. That is the
+        conservative reading of its share -- no coupling relief -- and is kept;
+        the message makes it explicit (PH9). Physically such a source cannot
+        feed the fault at all.
+
+        Parameters
+        ----------
+        fault : Fault
+            The active fault.
+        """
+        for name, freqs in self._sources_without_phase_path.items():
+            source = self.network.sources[name]
+            emit(
+                ModelAssumptionWarning,
+                f"Source '{name}' at bus '{source.bus}' reaches fault "
+                f"'{fault.name}' through the earthing network but has no "
+                f"phase-conductor connection to the fault bus '{fault.bus}' at "
+                f"{_render_frequencies(freqs)}, so it contributes no phase "
+                f"current and induces no coupling. Its current is still injected "
+                f"into the earthing system, as if it returned entirely through "
+                f"soil and shields (reduction factor 1 for its share, no "
+                f"coupling relief) -- conservative for its share, although "
+                f"physically the source cannot feed this fault at all. Check "
+                f"whether a branch that should "
+                f"carry the phase conductor is inactive or declared open "
+                f"(phase_impedance_formula 'nan').",
+                code="SOURCE_WITHOUT_PHASE_PATH",
+                elements=[("source", name), ("fault", fault.name)],
+                stacklevel=5,
+            )
+        self._sources_without_phase_path = {}
+
     def _check_source_coverage(self, sources_with_path, fault: Fault) -> None:
         """
         Refuse a source that covers no solved frequency, announce a partial one.
@@ -1478,18 +1526,10 @@ class ElectricalNetwork:
                 # The source bus is not galvanically connected to the fault bus
                 # through the phase network, so no phase current can flow between
                 # them. That is a legitimate result -- but it is also the exact
-                # situation that used to be swallowed, so it is named out loud.
-                logger.warning(
-                    "Source '%s' at bus '%s' has no phase-conductor connection to "
-                    "the fault bus '%s' at %s Hz, so it contributes no phase "
-                    "current and no mutual coupling. A path to the fault exists "
-                    "in the grounding network, which is why the source was "
-                    "considered at all -- check whether a branch that should "
-                    "carry the phase conductor is inactive or open-circuited.",
-                    source_name,
-                    source.bus,
-                    fault.bus,
-                    freq,
+                # situation that used to be swallowed, so it is named out loud,
+                # once per source and run (PH9, see _construct_vectors).
+                self._sources_without_phase_path.setdefault(source_name, []).append(
+                    freq
                 )
                 continue
 

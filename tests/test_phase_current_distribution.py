@@ -322,7 +322,7 @@ def test_an_island_no_longer_discards_the_whole_source_contribution():
     assert r == pytest.approx(REDUCTION_FACTOR, rel=1e-9)
 
 
-def test_a_source_cut_off_from_the_fault_is_named_not_silently_dropped(caplog):
+def test_a_source_cut_off_from_the_fault_is_named_not_silently_dropped():
     """
     An intact shield with an interrupted phase conductor.
 
@@ -336,12 +336,13 @@ def test_a_source_cut_off_from_the_fault_is_named_not_silently_dropped(caplog):
     net = _network(
         RADIAL, ["S", "A", "F"], branch_types={"AF": open_phase}
     )
-    with caplog.at_level(logging.WARNING, logger="groundinsight"):
+    # A structured ModelAssumptionWarning since audit pass 19 (PH9), which
+    # also says that the source current still enters the earthing system.
+    with pytest.warns(gi.ModelAssumptionWarning, match="no phase-conductor connection"):
         epr, r, _ = _solve(net)
-    assert any(
-        "no phase-conductor connection" in record.getMessage()
-        for record in caplog.records
-    )
+    assert "SOURCE_WITHOUT_PHASE_PATH" in [
+        d.code for d in net.results["F"].diagnostics
+    ]
     # No phase current means no mutual injection: r collapses to 1 because the
     # solution with and without coupling are the same solution.
     assert r == pytest.approx(1.0, rel=1e-9)

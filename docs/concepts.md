@@ -509,13 +509,20 @@ the solver itself will not accept because a zero impedance cannot be inverted).
 `.extremes()` returns the bracket, `.evaluate(z)` a single electrode and
 `.sweep([...])` any number of them.
 
-The driving-point impedance is exactly `Z_dp = 1/(Y_B + 1/Z_net)`, running
-monotonically from `Z_net` down to zero as the electrode improves. Over all
-*passive* electrodes the largest attainable magnitude is not quite at the open
-end: a purely reactive `Y_B = -j·Im(1/Z_net)` cancels the network's susceptance
-and gives `|Z_dp| = 1/Re(1/Z_net)`. In a cable network that is a fraction of a
-percent above `|Z_net|`, but it is the honest bound and `.extremes()` reports it
-as the `worst_passive` row.
+The driving-point impedance is exactly `Z_dp = 1/(Y_B + 1/Z_net)`. Its magnitude
+falls monotonically from `|Z_net|` to zero as the electrode improves only for an
+electrode whose admittance lies within 90° of `1/Z_net`: along
+`Y_B = t·e^{jφ}`, `|Z_dp|` decreases for every `t` if and only if
+`cos(φ − arg(1/Z_net)) ≥ 0`. A resistive electrode (real `Y_B ≥ 0`) always
+qualifies, since `Re(1/Z_net) ≥ 0` in a passive network. A reactive electrode of
+the opposite sign to the network's susceptance first *raises* `|Z_dp|` above
+`|Z_net|`; the largest magnitude over all passive electrodes is reached at
+`Y_B = -j·Im(1/Z_net)`, which cancels that susceptance and gives
+`|Z_dp| = 1/Re(1/Z_net) = |Z_net|/cos(arg Z_net)`. That is 0.08 % above
+`|Z_net|` where the network seen from the bus is nearly resistive
+(`arg Z_net` = 2.2°), but 57 % at the far end of a four-bus cable chain
+(`arg Z_net` = 50°). `.extremes()` therefore reports it as the `worst_passive`
+row instead of assuming it away.
 
 The closed form also *derives* the invariance of the EPR-based reduction factor
 that the sensitivity work runs into: `u_b(Y_B) = u_{0,b}/(1 + Y_B Z_net)` holds

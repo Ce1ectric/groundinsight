@@ -861,3 +861,121 @@ def test_pq_ph6_an_incomplete_mapping_is_announced_once_per_run():
     with warnings.catch_warnings():
         warnings.simplefilter("error", InputWarning)
         gi.run_fault(net, "F_full")
+
+
+# ---------------------------------------------------------------------------
+# PH9 -- a source without phase path still feeds the earthing system
+# ---------------------------------------------------------------------------
+
+
+def test_ph9_a_source_without_phase_path_is_announced_with_what_it_still_does():
+    """A source the earthing network connects to the fault while the phase
+    conductor between them is open (declared ``"nan"``) induces no coupling
+    -- but its current is still injected into the earthing system, as if it
+    returned entirely through soil and shields (r = 1 for its share). That is
+    kept (conservative) and now said once per source and run as a
+    SOURCE_WITHOUT_PHASE_PATH ModelAssumptionWarning. Second way: the
+    reference solver, which drops the open phase conductor the same way."""
+    spec = dict(
+        freqs=[50.0, 150.0],
+        buses={"S": ("0.3", 100.0), "A": ("2.0", 100.0), "F": ("1.5", 100.0)},
+        branches={"L1": br("S", "A", 1.2, CAB), "L2": br("A", "F", 0.8, CAB, zp="nan")},
+        sources={"src": dict(kind="current", bus="S", I={50.0: 1000.0, 150.0: 100.0})},
+        faults={"F1": ("F", {50.0: 1.0, 150.0: 1.0})},
+    )
+    net = build(spec, "ph9")
+    with pytest.warns(ModelAssumptionWarning, match="still injected") as record:
+        result = gi.run_fault(net, "F1")
+    notes = [w.message for w in record if getattr(w.message, "code", None) == "SOURCE_WITHOUT_PHASE_PATH"]
+    assert len(notes) == 1
+    assert ("source", "src") in notes[0].elements
+    assert "50 Hz" in str(notes[0]) and "150 Hz" in str(notes[0])
+    for f in spec["freqs"]:
+        assert result.reduction_factor.value[f] == pytest.approx(1.0, rel=1e-12)
+        rd = ref.reference_network(net, f, "F1")
+        mapped = ref.to_package_frame(ref.solve_oneway(rd, thevenin_phase="norton"))
+        assert ref.max_relative_deviation(package_vectors(result, f)["u"], mapped["u"]) <= TOL
+
+
+# ---------------------------------------------------------------------------
+# PH13 -- the driving point is monotone only for an in-phase electrode
+# ---------------------------------------------------------------------------
+
+
+def test_ph13_the_module_documentation_states_the_condition():
+    """The bus_response module documentation used to say that the driving
+    point runs monotonically from Z_net to zero for every electrode."""
+    from groundinsight.analysis import response
+
+    doc = " ".join(response.__doc__.split())
+    assert "runs monotonically from ``Z_net`` down to zero" not in doc
+    assert "if and only if" in doc and "A resistive electrode" in doc
+    assert "first *raises* ``|Z_dp|`` above ``|Z_net|``" in doc
+
+
+def test_ph13_the_driving_point_is_monotone_only_for_a_resistive_electrode():
+    """|Z_dp(Y_B)| = 1/|Y_B + 1/Z_net| falls monotonically for a resistive
+    electrode (real Y_B >= 0), but a reactive one first raises it above
+    |Z_net| -- the worst_passive case. Checked on bus_response against the
+    closed form 1/(Y_B + 1/Z_net) computed here."""
+    net = build(STRUCTURAL_CASES["chain"], "ph13")
+    solve(net)
+    response = gi.bus_response(net, fault="F1", bus="F")
+    z_net = response.z_network[50.0]
+    resistive = [response.driving_point(1.0 / g, 50.0) for g in (1e-3, 0.1, 0.5, 1, 2, 5, 20, 100)]
+    magnitudes = [abs(z) for z in resistive]
+    assert all(b < a for a, b in zip(magnitudes, magnitudes[1:]))
+    for g, z in zip((1e-3, 0.1, 0.5, 1, 2, 5, 20, 100), resistive):
+        assert abs(z - 1.0 / (g + 1.0 / z_net)) <= 1e-12 * abs(z)
+    y_reactive = complex(0.0, -(1.0 / z_net).imag)
+    z_reactive = response.driving_point(1.0 / y_reactive, 50.0)
+    assert abs(z_reactive) > abs(z_net)
+    assert abs(z_reactive) == pytest.approx(1.0 / (1.0 / z_net).real, rel=1e-12)
+
+
+def test_ph13_monotone_if_and_only_if_the_electrode_is_within_90_degrees_of_the_network():
+    """Along Y_B = t e^{j phi}: |Z_dp| falls for every t exactly when
+    cos(phi - arg(1/Z_net)) >= 0, otherwise it first rises. The bound
+    1/Re(1/Z_net) = |Z_net|/cos(arg Z_net) is 57 % above |Z_net| at the far
+    end of the cable chain (arg Z_net = 50 deg) and 0.08 % on a nearly
+    resistive site (arg Z_net = 2.2 deg). Second way for the bound: a real
+    solve with that reactive electrode installed, read by the reference
+    solver's driving point and by ResultReductionFactor.z_earthing."""
+    net = build(STRUCTURAL_CASES["chain"], "ph13_ray")
+    solve(net)
+    response = gi.bus_response(net, fault="F1", bus="F")
+    z_net = response.z_network[50.0]
+    y_net = 1.0 / z_net
+    for phi_deg in range(-90, 91, 15):
+        direction = np.exp(1j * np.radians(phi_deg))
+        ts = np.geomspace(1e-4, 1e4, 400)
+        magnitudes = [abs(response.driving_point(1.0 / (t * direction), 50.0)) for t in ts]
+        falls_everywhere = all(b < a for a, b in zip(magnitudes, magnitudes[1:]))
+        assert falls_everywhere == (np.cos(np.radians(phi_deg) - np.angle(y_net)) >= 0.0), phi_deg
+    assert np.degrees(np.angle(z_net)) == pytest.approx(50.33, abs=0.01)
+    bound = 1.0 / y_net.real
+    assert bound / abs(z_net) == pytest.approx(1.0 / np.cos(np.angle(z_net)), rel=1e-12)
+    assert bound / abs(z_net) == pytest.approx(1.5665, abs=1e-4)
+
+    z_b = 1.0 / complex(0.0, -y_net.imag)
+    spec = dict(STRUCTURAL_CASES["chain"])
+    spec["buses"] = dict(spec["buses"], F=(f"({z_b.real!r})+({z_b.imag!r})*j", 100.0))
+    installed = build(spec, "ph13_installed")
+    result = solve(installed)
+    oracle = ref.driving_point_impedance(ref.reference_network(installed, 50.0, "F1"), "F")
+    assert abs(oracle) == pytest.approx(bound, rel=1e-12)
+    assert complex(result.reduction_factor.z_earthing[50.0]) == pytest.approx(oracle, rel=1e-12)
+
+    resistive_site = dict(
+        freqs=[50.0],
+        buses={n: ("10", 100.0) for n in ("S", "A", "F", "R1")},
+        branches={n: br(a, b, 1.0, dict(zs="(0.1+0.2*j)*l", zm="(0.05+0.1*j)*l"))
+                  for n, a, b in (("SA", "S", "A"), ("AF", "A", "F"), ("FR1", "F", "R1"))},
+        sources={"src": dict(kind="current", bus="S", I=at50(1000.0))},
+        faults={"F1": ("F", {50.0: 1.0})},
+    )
+    site = build(resistive_site, "ph13_site")
+    solve(site)
+    z_site = gi.bus_response(site, fault="F1", bus="F").z_network[50.0]
+    assert np.degrees(np.angle(z_site)) == pytest.approx(2.23, abs=0.01)
+    assert (1.0 / (1.0 / z_site).real) / abs(z_site) == pytest.approx(1.00076, abs=1e-5)

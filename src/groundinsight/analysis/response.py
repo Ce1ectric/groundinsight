@@ -42,13 +42,22 @@ that curve and both are exact limits, not numerical stand-ins -- the ideal
 electrode in particular, which the solver itself rejects because a zero impedance
 is not a passive value it can invert.
 
-The driving-point impedance is exactly ``Z_dp(Y_B) = 1/(Y_B + 1/Z_net)``, so it
-runs monotonically from ``Z_net`` down to zero as the electrode improves. Over
-*all* passive electrodes the largest attainable magnitude is not quite at the
-open end: a purely reactive ``Y_B = -j\\,Im(1/Z_net)`` cancels the network's
-susceptance and gives ``|Z_dp| = 1/Re(1/Z_net)``. It exceeds ``|Z_net|`` by very
-little in a typical cable network -- 0.1 % in the verification case -- but it is
-the honest bound and is reported next to the two endpoints.
+The driving-point impedance is exactly ``Z_dp(Y_B) = 1/(Y_B + 1/Z_net)``. Whether
+its magnitude falls as the electrode improves depends on the electrode's phase.
+Along ``Y_B = t e^{j\\varphi}`` with ``t`` growing,
+``d|Y_B + 1/Z_net|^2/dt = 2t + 2\\,Re(e^{j\\varphi}\\,\\overline{1/Z_net})``, so
+``|Z_dp|`` falls monotonically from ``|Z_net|`` to zero if and only if
+``cos(\\varphi - arg(1/Z_net)) >= 0``. A resistive electrode (real ``Y_B >= 0``)
+always qualifies, because ``Re(1/Z_net) >= 0`` in a passive network, and so does
+one in phase with ``1/Z_net``. A reactive electrode of the opposite sign to the
+network's susceptance does not: it first *raises* ``|Z_dp|`` above ``|Z_net|``.
+The largest magnitude over all passive electrodes is reached at
+``Y_B = -j\\,Im(1/Z_net)``, which cancels the network's susceptance and gives
+``|Z_dp| = 1/Re(1/Z_net) = |Z_net|/cos(arg Z_net)``. That is 0.08 % above
+``|Z_net|`` where the network seen from the bus is nearly resistive
+(``arg Z_net`` = 2.2°) but 57 % at the far end of a four-bus cable chain
+(``arg Z_net`` = 50°), so it is reported next to the two endpoints rather than
+assumed to be negligible.
 
 The EPR-based reduction factor
 ------------------------------

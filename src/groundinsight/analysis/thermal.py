@@ -70,6 +70,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 import polars as pl
 
+from ..diagnostics import ModelAssumptionWarning, emit
 from ..models.core_models import Network
 from ._guards import require_complete_results
 from .shortcircuit import (
@@ -332,6 +333,85 @@ def _warn_half_declared(
         "or neither -- rows with 'within_limit = None' are unassessed, not "
         "passed.",
         len(incomplete), kind, fault_name, detail,
+    )
+
+
+def _warn_dc_excluded(
+    rows: Sequence[Dict[str, Any]],
+    fault_name: str,
+    element_key: str,
+    element_kind: str,
+) -> None:
+    """
+    Say that a direct current was left out of the adiabatic check (PH10).
+
+    :func:`_split_dc` takes the 0 Hz bin out of ``I_th``, because ``m``
+    already carries the DC content of an *alternating* fault current. A
+    direct current that genuinely flows during ``T_k`` -- a DC railway, a
+    cathodic-protection rectifier -- is then missing: it adds about
+    ``I_dc**2`` to ``I_th**2``, and the check is unconservative in that
+    case. Said once per call, with the largest increase of ``I_th`` that
+    ``I_th**2 = I_ac**2 * (m + n) + I_dc**2`` gives.
+
+    Notes
+    -----
+    The Joule integral of ``I_dc + i_ac(t)`` over ``T_k`` is
+    ``T_k * (I_ac**2 * (m + n) + I_dc**2)`` plus the cross term
+    ``2 * I_dc * integral(i_ac dt)``. The periodic part of ``i_ac`` integrates
+    to nothing over whole cycles, the decaying DC offset does not: with full
+    offset the cross term is ``+-2 * sqrt(2) * I_dc * I_ac * tau *
+    (1 - exp(-T_k/tau))``, of either sign depending on the switching
+    instant. The quoted increase leaves it out and is therefore indicative:
+    for 1000 A AC, 700 A DC, R/X = 0.1, 50 Hz and ``T_k`` = 0.5 s the
+    numerically integrated current with full offset gives an ``I_th`` 3.7 %
+    above or 4.4 % below the formula, and the cross term itself agrees with
+    the closed form above.
+
+    Parameters
+    ----------
+    rows : sequence of dict
+        The rows of the check, with ``I_dc_A``, ``I_ac_rms_A``, ``m``, ``n``
+        and ``I_th_A``.
+    fault_name : str
+        The checked fault.
+    element_key : str
+        Row key naming the element (``"branch_name"`` or ``"bus_name"``).
+    element_kind : str
+        Diagnostic element kind (``"branch"`` or ``"bus"``).
+    """
+    with_dc = [row for row in rows if row["I_dc_A"]]
+    if not with_dc:
+        return
+    increases = [
+        math.sqrt(row["I_ac_rms_A"] ** 2 * (row["m"] + row["n"]) + row["I_dc_A"] ** 2)
+        / row["I_th_A"]
+        - 1.0
+        for row in with_dc
+        if row["I_th_A"]
+    ]
+    largest_dc = max(row["I_dc_A"] for row in with_dc)
+    names = list(dict.fromkeys(row[element_key] for row in with_dc))
+    increase_text = (
+        f" -- here up to {100.0 * max(increases):.1f} % more I_th"
+        if increases
+        else ""
+    )
+    emit(
+        ModelAssumptionWarning,
+        f"Fault '{fault_name}': the 0 Hz component (up to {largest_dc:.4g} A, on "
+        f"{len(names)} {element_kind}(es): {', '.join(names[:5])}"
+        f"{', ...' if len(names) > 5 else ''}) is excluded from the adiabatic "
+        f"short-time check, because I_th = I_ac * sqrt(m + n) already carries "
+        f"the DC content of an alternating fault current through m. If a "
+        f"genuine direct current flows during T_k (a DC railway, a rectifier) "
+        f"it adds about I_dc**2 to I_th**2 (I_th**2 = I_ac**2 * (m + n) + "
+        f"I_dc**2, leaving out a cross term with the decaying DC offset of "
+        f"either sign){increase_text} -- and the check as reported is then "
+        f"unconservative. It is reported in the I_dc_A column for the "
+        f"continuous rating.",
+        code="THERMAL_DC_EXCLUDED",
+        elements=[(element_kind, name) for name in names] + [("fault", fault_name)],
+        stacklevel=3,
     )
 
 
@@ -652,7 +732,11 @@ def check_conductor_limits(
        from a measured zero), and ``I_ac_rms_A`` carries the RMS the check
        is built on. A standing direct current is a real thermal load, but a
        continuous one: it belongs in the conductor's continuous rating, not
-       in an adiabatic short-time check.
+       in an adiabatic short-time check. Where a direct current is present
+       the check says so with a ``ModelAssumptionWarning``
+       ``THERMAL_DC_EXCLUDED``: if it flows *during* ``T_k`` it adds about
+       ``I_dc**2`` to ``I_th**2`` and the reported check is unconservative
+       (PH10).
 
     All three IEC 60909 inputs — ``t_k``, ``kappa`` and ``n`` — can either
     be passed explicitly or be left to the network data:
@@ -801,6 +885,7 @@ def check_conductor_limits(
         )
 
     _warn_half_declared(incomplete, fault_name, "branch(es)")
+    _warn_dc_excluded(rows, fault_name, "branch_name", "branch")
 
     violations = [r["branch_name"] for r in rows if r["within_limit"] is False]
     if violations:
@@ -885,7 +970,10 @@ def check_node_limits(
        and ``sqrt(m + n)`` already carries the DC content through ``m``, so
        a study with a 0 Hz bin counted its direct current twice. It is
        reported in ``I_dc_A`` instead (``None`` without a 0 Hz bin), and
-       ``I_ac_rms_A`` is what ``I_th`` and ``i_p`` are built on.
+       ``I_ac_rms_A`` is what ``I_th`` and ``i_p`` are built on. Where a
+       direct current is present the same ``ModelAssumptionWarning``
+       ``THERMAL_DC_EXCLUDED`` is raised as in
+       :func:`check_conductor_limits` (PH10).
 
     Current split
     -------------
@@ -1090,6 +1178,7 @@ def check_node_limits(
             )
 
     _warn_half_declared(incomplete, fault_name, "node element(s)")
+    _warn_dc_excluded(rows, fault_name, "bus_name", "bus")
 
     violations = [
         f"{r['bus_name']}/{r['element']}" for r in rows if r["within_limit"] is False
