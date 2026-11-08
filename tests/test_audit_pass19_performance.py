@@ -43,6 +43,7 @@ import gc
 import math
 import random
 import threading
+import time
 import tracemalloc
 import warnings
 from typing import Dict, List
@@ -896,6 +897,28 @@ def test_the_fingerprint_detects_every_change_of_the_assembled_system(mutation):
     assert not en.matches_network_state()
 
 
+def test_the_build_fingerprint_reuses_the_assembly_tables(monkeypatch):
+    """P6: building the network takes no second pass over the model.
+
+    The fingerprint of a build is digested from the tables the assembly has
+    gathered; ``state_fingerprint`` -- which reads the model afresh -- is only
+    for the later staleness check. The two must agree.
+    """
+    net = thevenin_ring(12, F=2)
+    calls = []
+    real = en_mod.ElectricalNetwork.state_fingerprint
+
+    def counting(self):
+        calls.append(self)
+        return real(self)
+
+    monkeypatch.setattr(en_mod.ElectricalNetwork, "state_fingerprint", counting)
+    gi.run_fault(net, "F")
+    assert calls == []
+    en = net.electrical_network
+    assert en._build_fingerprint == real(en)
+
+
 def test_the_fingerprint_ignores_what_the_assembly_does_not_read():
     """Source values and mutual impedances never enter ``Y``."""
     net = thevenin_ring(12, F=2)
@@ -1132,3 +1155,67 @@ def test_bus_response_and_analyze_cuts_build_no_dense_square_matrix(
         )
     assert guard.hits == []
     assert set(response.z_fault_open) == set(net.frequencies)
+
+
+# ---------------------------------------------------------------------------
+# 7. performance acceptance (slow)
+# ---------------------------------------------------------------------------
+
+
+def _cpu_seconds(func) -> float:
+    start = time.process_time()
+    func()
+    return time.process_time() - start
+
+
+@pytest.fixture(scope="module")
+def ring4000():
+    return ring(4000, F=7)
+
+
+@pytest.mark.slow
+def test_ring_4000_at_seven_frequencies_runs_in_seconds(ring4000):
+    """PQ-P2: 28 s with the dense kernel (and 2.3 GB, below)."""
+    seconds = _cpu_seconds(lambda: gi.run_fault(ring4000, "F"))
+    assert seconds < 3.0, f"{seconds:.2f} s"
+
+
+@pytest.mark.slow
+def test_ring_4000_at_seven_frequencies_stays_below_400_mb(ring4000):
+    """PQ-P2: the dense kernel peaked at 2.3 GB here (seven n x n matrices
+    plus two copies of the phase network); what is left is linear in n."""
+    peak = _peak_bytes(lambda: gi.run_fault(ring4000, "F"))
+    assert peak < 400e6, f"{peak / 1e6:.0f} MB"
+
+
+@pytest.mark.slow
+def test_radial_4000_with_three_sources_runs_in_seconds():
+    """143 s with the dense kernel: the phase solve was repeated per source."""
+    net = radial(4000, F=7, n_sources=3)
+    seconds = _cpu_seconds(lambda: gi.run_fault(net, "F"))
+    assert seconds < 3.0, f"{seconds:.2f} s"
+
+
+@pytest.mark.slow
+def test_mesh_50x50_with_four_sources_runs_in_seconds():
+    """26.9 s with the dense kernel."""
+    net = mesh(50, F=7, n_sources=4)
+    seconds = _cpu_seconds(lambda: gi.run_fault(net, "F"))
+    assert seconds < 3.0, f"{seconds:.2f} s"
+
+
+@pytest.mark.slow
+def test_bus_response_and_cuts_on_large_rings_run_in_fractions_of_a_second():
+    """PQ-P7: 3.1 s / 3.0 s on a 2000-bus ring with the dense solves."""
+    net = ring(2000, F=7)
+    gi.run_fault(net, "F")
+    fault_bus = net.faults["F"].bus
+    incident = sorted(
+        b.name for b in net.branches.values() if fault_bus in (b.from_bus, b.to_bus)
+    )
+    cuts = [gi.Cut(name="left", branches=[incident[0]]),
+            gi.Cut(name="right", branches=[incident[1]])]
+    t_cuts = _cpu_seconds(lambda: gi.analyze_cuts(net, fault="F", cuts=cuts))
+    t_resp = _cpu_seconds(lambda: gi.bus_response(net, fault="F", bus="B100"))
+    assert t_cuts < 0.5, f"analyze_cuts {t_cuts:.2f} s"
+    assert t_resp < 1.0, f"bus_response {t_resp:.2f} s"

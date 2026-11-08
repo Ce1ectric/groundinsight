@@ -589,9 +589,17 @@ class _NetworkTables:
         The same values with the 0 Hz stand-in applied
         (:meth:`ElectricalNetwork._resolved_impedance`, vectorised); filled
         by :meth:`resolve`.
+
+    Parameters
+    ----------
+    electrical : ElectricalNetwork
+        The network being assembled; its :attr:`~ElectricalNetwork.bus_indices`
+        must be assigned.
+    fingerprint_only : bool, optional
+        Skip the mutual and phase impedances, which only the solve reads.
     """
 
-    def __init__(self, electrical: "ElectricalNetwork"):
+    def __init__(self, electrical: "ElectricalNetwork", fingerprint_only: bool = False):
         network = electrical.network
         index = electrical.bus_indices
         self.frequencies = [float(f) for f in network.frequencies]
@@ -640,15 +648,18 @@ class _NetworkTables:
         self_impedances = [b.self_impedance for b in branches]
         self.self_raw, self.self_present = _gather_impedances(self_impedances, freqs)
         self.self_extras = _extra_entries(self_impedances, freqs, self.self_present)
+        # The fingerprint does not read the mutual and phase impedances --
+        # they never enter Y -- so a fingerprint-only gather skips them.
+        coupling = [] if fingerprint_only else branches
         self.mutual, self.mutual_present = _gather_impedances(
-            [b.mutual_impedance for b in branches], freqs
+            [b.mutual_impedance for b in coupling], freqs
         )
         self.phase_declared = np.fromiter(
-            (b.phase_impedance is not None for b in branches), dtype=bool,
-            count=count,
+            (b.phase_impedance is not None for b in coupling), dtype=bool,
+            count=len(coupling),
         )
         self.phase_raw, self.phase_present = _gather_impedances(
-            [b.phase_impedance for b in branches], freqs
+            [b.phase_impedance for b in coupling], freqs
         )
         self.proxy_length = np.fromiter(
             (b.length if b.length and b.length > 0 else 1.0 for b in branches),
@@ -764,10 +775,12 @@ class _NetworkTables:
         frequencies outside the solved ones -- with elements ordered by name,
         so the insertion order of the model does not matter. The values enter
         a BLAKE2 digest as raw bytes instead of a tuple of Python floats with
-        one entry per element and frequency, which on a 4000-bus ring at seven
-        frequencies took 0.26 s on every build (finding P6). Negative zeros
-        are folded into zeros first, so that ``0.0`` and ``-0.0`` compare
-        equal as they did in the tuple.
+        one entry per element and frequency. Built from tables the assembly
+        has gathered anyway, the digest costs 5 ms on a 4000-bus ring at
+        seven frequencies, where the separate pass over the model that built
+        the tuple took 27 ms on every build (finding P6). Negative zeros are
+        folded into zeros first, so that ``0.0`` and ``-0.0`` compare equal as
+        they did in the tuple.
 
         Parameters
         ----------
@@ -995,12 +1008,16 @@ class ElectricalNetwork:
         The model is read afresh into arrays (:class:`_NetworkTables`) and
         digested with BLAKE2 (:meth:`_NetworkTables.fingerprint`). Up to pass
         18 this was a nested tuple with one Python float triple per element
-        and frequency, rebuilt on every assembly -- 0.26 s per build of a
-        4000-bus ring at seven frequencies (finding P6). The coverage is the
-        same, including values stored at frequencies the network is not
-        solved at; the build fingerprint reuses the tables of the assembly.
+        and frequency, built in a separate pass over the model on every
+        assembly (finding P6). The coverage is the same, including values
+        stored at frequencies the network is not solved at. A call here reads
+        the model afresh and costs about what the tuple did (38 ms against
+        27 ms on a 4000-bus ring at seven frequencies); the fingerprint of a
+        build reuses the tables of the assembly and costs 5 ms.
         """
-        return _NetworkTables(self).fingerprint(self.network.active_fault)
+        return _NetworkTables(self, fingerprint_only=True).fingerprint(
+            self.network.active_fault
+        )
 
     def matches_network_state(self) -> bool:
         """
