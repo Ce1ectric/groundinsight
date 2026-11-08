@@ -574,6 +574,83 @@ def clear_formula_cache() -> None:
     _compile_formula.cache_clear()
 
 
+def _repair_non_finite(
+    compiled_func,
+    freqs_arr: np.ndarray,
+    param_values: Tuple[Any, ...],
+    result_arr: np.ndarray,
+) -> np.ndarray:
+    """Repair the non-finite values of a real-axis evaluation.
+
+    The two steps :func:`_impedance_array` applies to a raw evaluation before
+    the 0 Hz treatment: NaN is re-evaluated on the complex plane, and the
+    ``inf+nan*j`` of a complex division by zero is cleared to a clean
+    infinity. Both only act on non-finite values, so the caller skips this
+    function when every value is finite (P10).
+
+    Parameters
+    ----------
+    compiled_func : callable
+        The compiled formula, see :func:`_compile_formula`.
+    freqs_arr : numpy.ndarray
+        Frequencies in Hz.
+    param_values : tuple
+        The parameter values in the order of the compiled signature.
+    result_arr : numpy.ndarray
+        The values of the real-axis evaluation.
+
+    Returns
+    -------
+    numpy.ndarray
+        The repaired values; ``result_arr`` itself where nothing needed it.
+    """
+    # NumPy picks the branch of ``sqrt`` and ``log`` from the *dtype* of
+    # its argument, not from the value: ``np.sqrt(-0.5625)`` is ``nan``
+    # while ``np.sqrt(-0.5625+0j)`` is ``0.75j``. With a real frequency
+    # array every formula whose argument goes negative therefore collapses
+    # to NaN without a word -- and it goes negative in ordinary use,
+    # because 0 Hz is a routine entry in ``scalings`` and ``sqrt(f - f0)``
+    # or ``log(f/f0)`` is a routine dispersion term.
+    #
+    # Only SymPy's own answer (``sqrt(1-(50/40)**2) == 0.75*I``) is both
+    # the documented semantics and physically meaningful for an impedance,
+    # so re-evaluate on the complex plane -- but only at the positions that
+    # came back NaN. Every value the real evaluation produced is kept
+    # bit-for-bit, which is what keeps ``Abs``, ``Max`` and comparisons on
+    # existing formulas working and costs nothing in the common case.
+    nan_mask = np.isnan(result_arr.real) | np.isnan(result_arr.imag)
+    if nan_mask.any():
+        retry_arr = _evaluate(
+            compiled_func,
+            freqs_arr.astype(complex),
+            tuple(_as_complex(value) for value in param_values),
+        )
+        result_arr = np.where(nan_mask, retry_arr, result_arr)
+
+    # IEEE 754 complex division by zero returns ``inf+nan*j``, not a clean
+    # infinity: ``1/(j*2*pi*f*C)`` at 0 Hz -- a capacitive branch at DC,
+    # which is an ordinary thing to model -- comes back as ``inf+nan*j``.
+    # The NaN there is an artefact of the division algorithm's bookkeeping,
+    # not a failed computation: the magnitude is unambiguously infinite,
+    # and that is the only part that carries downstream (the admittance
+    # 1/Z is zero either way). IEEE 754 cannot represent the *direction* of
+    # a complex infinity, so the artefact is cleared to zero rather than
+    # guessed at.
+    half_infinite = (
+        np.isinf(result_arr.real) | np.isinf(result_arr.imag)
+    ) & (np.isnan(result_arr.real) | np.isnan(result_arr.imag))
+    if half_infinite.any():
+        # Written component-wise on purpose. Rebuilding the value as
+        # ``real + 1j*imag`` would put the NaN straight back, because
+        # ``1j * inf`` is ``nan+inf*j`` -- the real part comes out of
+        # ``0 * inf``.
+        cleaned = result_arr.copy()
+        cleaned.real[half_infinite & np.isnan(cleaned.real)] = 0.0
+        cleaned.imag[half_infinite & np.isnan(cleaned.imag)] = 0.0
+        result_arr = cleaned
+    return result_arr
+
+
 def _impedance_array(
     formula_str: str,
     frequencies: List[float],
@@ -653,51 +730,13 @@ def _impedance_array(
     # matching the contract documented in the public API.
     try:
         result_arr = _evaluate(compiled_func, freqs_arr, param_values)
-
-        # NumPy picks the branch of ``sqrt`` and ``log`` from the *dtype* of
-        # its argument, not from the value: ``np.sqrt(-0.5625)`` is ``nan``
-        # while ``np.sqrt(-0.5625+0j)`` is ``0.75j``. With a real frequency
-        # array every formula whose argument goes negative therefore collapses
-        # to NaN without a word -- and it goes negative in ordinary use,
-        # because 0 Hz is a routine entry in ``scalings`` and ``sqrt(f - f0)``
-        # or ``log(f/f0)`` is a routine dispersion term.
-        #
-        # Only SymPy's own answer (``sqrt(1-(50/40)**2) == 0.75*I``) is both
-        # the documented semantics and physically meaningful for an impedance,
-        # so re-evaluate on the complex plane -- but only at the positions that
-        # came back NaN. Every value the real evaluation produced is kept
-        # bit-for-bit, which is what keeps ``Abs``, ``Max`` and comparisons on
-        # existing formulas working and costs nothing in the common case.
-        nan_mask = np.isnan(result_arr.real) | np.isnan(result_arr.imag)
-        if nan_mask.any():
-            retry_arr = _evaluate(
-                compiled_func,
-                freqs_arr.astype(complex),
-                tuple(_as_complex(value) for value in param_values),
+        # The repairs only ever touch non-finite values. A grid that came
+        # back finite everywhere -- every ordinary formula -- skips their
+        # masks (P10); the values are the same either way.
+        if not np.isfinite(result_arr).all():
+            result_arr = _repair_non_finite(
+                compiled_func, freqs_arr, param_values, result_arr
             )
-            result_arr = np.where(nan_mask, retry_arr, result_arr)
-
-        # IEEE 754 complex division by zero returns ``inf+nan*j``, not a clean
-        # infinity: ``1/(j*2*pi*f*C)`` at 0 Hz -- a capacitive branch at DC,
-        # which is an ordinary thing to model -- comes back as ``inf+nan*j``.
-        # The NaN there is an artefact of the division algorithm's bookkeeping,
-        # not a failed computation: the magnitude is unambiguously infinite,
-        # and that is the only part that carries downstream (the admittance
-        # 1/Z is zero either way). IEEE 754 cannot represent the *direction* of
-        # a complex infinity, so the artefact is cleared to zero rather than
-        # guessed at.
-        half_infinite = (
-            np.isinf(result_arr.real) | np.isinf(result_arr.imag)
-        ) & (np.isnan(result_arr.real) | np.isnan(result_arr.imag))
-        if half_infinite.any():
-            # Written component-wise on purpose. Rebuilding the value as
-            # ``real + 1j*imag`` would put the NaN straight back, because
-            # ``1j * inf`` is ``nan+inf*j`` -- the real part comes out of
-            # ``0 * inf``.
-            cleaned = result_arr.copy()
-            cleaned.real[half_infinite & np.isnan(cleaned.real)] = 0.0
-            cleaned.imag[half_infinite & np.isnan(cleaned.imag)] = 0.0
-            result_arr = cleaned
     except ValueError:
         raise
     except Exception as e:
@@ -816,6 +855,40 @@ def _impedance_array(
     return freqs_arr, result_arr
 
 
+def impedance_table(freqs_arr: np.ndarray, values: np.ndarray) -> Dict[float, Any]:
+    """Pack evaluated impedances into the ``{frequency: ComplexNumber}`` form.
+
+    Internal API: used by the element derivation in
+    :mod:`groundinsight.models.core_models`; not exported from
+    ``groundinsight`` and free to change in any release.
+
+    The table :func:`compute_impedance` returns, from the arrays of
+    :func:`compute_impedance_array`. The parts are taken out of the array with
+    one ``tolist()`` each rather than value by value through NumPy scalars;
+    the doubles are the same (P10).
+
+    Parameters
+    ----------
+    freqs_arr : numpy.ndarray
+        Frequencies in Hz.
+    values : numpy.ndarray
+        Complex impedances, one per frequency.
+
+    Returns
+    -------
+    dict of float to ComplexNumber
+        The table the models store.
+    """
+    from groundinsight.models.core_models import ComplexNumber
+
+    return {
+        freq: ComplexNumber(real=real, imag=imag)
+        for freq, real, imag in zip(
+            freqs_arr.tolist(), values.real.tolist(), values.imag.tolist()
+        )
+    }
+
+
 def compute_impedance(
     formula_str: str,
     frequencies: List[float],
@@ -901,19 +974,11 @@ def compute_impedance(
         poorly resolved limit, or a divergent approach treated as an open
         circuit.
     """
-    from groundinsight.models.core_models import ComplexNumber
-
     freqs_arr, result_arr = _impedance_array(
         formula_str, frequencies, params, dc_real_fallback=dc_real_fallback
     )
 
-    impedance_dict: Dict[float, ComplexNumber] = {}
-    for freq, value in zip(freqs_arr.tolist(), result_arr):
-        impedance_dict[float(freq)] = ComplexNumber(
-            real=float(value.real), imag=float(value.imag)
-        )
-
-    return impedance_dict
+    return impedance_table(freqs_arr, result_arr)
 
 
 def compute_impedance_array(

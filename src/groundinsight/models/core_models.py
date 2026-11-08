@@ -69,9 +69,11 @@ from groundinsight.utils.validations import (
     validate_impedance_formula_value,
 )
 from groundinsight.utils.impedance_calculator import (
-    check_passive_impedance,
+    check_passive_impedance_array,
     compute_impedance,
+    compute_impedance_array,
     compute_real_value,
+    impedance_table,
     render_frequencies,
 )
 import polars as pl
@@ -710,6 +712,38 @@ class _NetworkElement(ValidatedAssignmentModel):
     _BUS_REFERENCES: ClassVar[Tuple[str, ...]] = ()
 
     _network_link: _NetworkLink = PrivateAttr(default_factory=_NetworkLink)
+    #: Derived fields that hold a ``{frequency: ComplexNumber}`` table.
+    _DERIVED_TABLES: ClassVar[FrozenSet[str]] = frozenset()
+
+    def _store_derived(self, derived: Dict[str, Any]) -> None:
+        """
+        Write values computed by ``_derive``.
+
+        A derived impedance table is stored as the validated assignment would
+        store it -- a dictionary of its own holding the very
+        :class:`ComplexNumber` instances -- without validating every value a
+        second time: each one was validated when the calculator packed it
+        (P10). The field validators of the tables only convert the keys to
+        ``float`` and pass instances through, and the assignment hooks do
+        nothing for a derived field, so the stored state is the same. Every
+        other value, and a table that becomes ``None``, goes through the
+        validated assignment.
+
+        Parameters
+        ----------
+        derived : Dict[str, Any]
+            Field name to value, as returned by ``_derive``.
+        """
+        for field, value in derived.items():
+            # ``None`` over ``None`` is the common case for the optional
+            # fields; skipping it saves a validated assignment per field.
+            if value is None and self.__dict__.get(field) is None:
+                continue
+            if value is not None and field in self._DERIVED_TABLES:
+                self.__dict__[field] = dict(value)
+                self.__pydantic_fields_set__.add(field)
+                continue
+            setattr(self, field, value)
 
     def _owning_network(self) -> Optional["Network"]:
         """
@@ -1381,6 +1415,7 @@ class Bus(_NetworkElement):
     #: Fields that :meth:`calculate_impedance` computes from ``type``,
     #: ``specific_earth_resistance`` and the network frequencies.
     DERIVED_FIELDS: ClassVar[Tuple[str, ...]] = ("impedance", "R", "L", "C")
+    _DERIVED_TABLES: ClassVar[FrozenSet[str]] = frozenset({"impedance"})
 
     def calculate_impedance(self, frequencies: List[float]):
         """
@@ -1435,21 +1470,23 @@ class Bus(_NetworkElement):
         _check_type_symbols(self.type, "BusType", BUS_FORMULA_SYMBOLS, f"bus {self.name!r}")
 
         # Mandatory frequency-domain impedance.
-        impedance = compute_impedance(
-            formula_str=self.type.impedance_formula,
-            frequencies=frequencies,
-            params=params,
+        values = compute_impedance_array(
+            self.type.impedance_formula, frequencies, params
         )
+        freqs_arr = np.asarray(frequencies, dtype=float)
         # The grounding impedance is inverted into a diagonal admittance, so a
         # value that cannot become an admittance has to be rejected here rather
-        # than silently dropped by the solver. See check_passive_impedance.
-        check_passive_impedance(
-            impedance,
+        # than silently dropped by the solver. See check_passive_impedance;
+        # the same rules and message run on the evaluated array, before it is
+        # packed (P10).
+        check_passive_impedance_array(
+            values,
+            freqs_arr,
             element=f"bus '{self.name}' (grounding impedance)",
             formula_str=self.type.impedance_formula,
             params=params,
         )
-        derived: Dict[str, Any] = {"impedance": impedance}
+        derived: Dict[str, Any] = {"impedance": impedance_table(freqs_arr, values)}
 
         # Optional lumped RLC -- None when the type declares no formula.
         for field, formula in (
@@ -1475,12 +1512,7 @@ class Bus(_NetworkElement):
         derived : Dict[str, Any]
             Field name to value, as returned by :meth:`_derive`.
         """
-        for field, value in derived.items():
-            # ``None`` over ``None`` is the common case for the optional
-            # fields; skipping it saves a validated assignment per field.
-            if value is None and self.__dict__.get(field) is None:
-                continue
-            setattr(self, field, value)
+        self._store_derived(derived)
 
     def _params(self) -> Dict[str, float]:
         """Formula parameters of this bus: the specific earth resistance ``rho``."""
@@ -1720,6 +1752,9 @@ class Branch(_NetworkElement):
         "R_mutual",
         "M_mutual",
     )
+    _DERIVED_TABLES: ClassVar[FrozenSet[str]] = frozenset(
+        {"self_impedance", "mutual_impedance", "phase_impedance"}
+    )
 
     def calculate_impedance(self, frequencies: List[float]):
         """
@@ -1794,12 +1829,7 @@ class Branch(_NetworkElement):
         derived : Dict[str, Any]
             Field name to value, as returned by :meth:`_derive`.
         """
-        for field, value in derived.items():
-            # ``None`` over ``None`` is the common case for the optional
-            # fields; skipping it saves a validated assignment per field.
-            if value is None and self.__dict__.get(field) is None:
-                continue
-            setattr(self, field, value)
+        self._store_derived(derived)
 
     def _calculate_phase_impedance(
         self, frequencies: List[float]
@@ -1890,20 +1920,21 @@ class Branch(_NetworkElement):
         """
         formula = self.type.self_impedance_formula
         params = self._params()
-        self_impedance = compute_impedance(
-            formula_str=formula, frequencies=frequencies, params=params
-        )
+        values = compute_impedance_array(formula, frequencies, params)
+        freqs_arr = np.asarray(frequencies, dtype=float)
         # Only a grounding conductor has its self impedance inverted into an
         # admittance; for a branch without one the self impedance never reaches
-        # a division and any value is harmless.
+        # a division and any value is harmless. The rules run on the evaluated
+        # array, before it is packed (P10).
         if self.type.grounding_conductor:
-            check_passive_impedance(
-                self_impedance,
+            check_passive_impedance_array(
+                values,
+                freqs_arr,
                 element=f"branch '{self.name}' (self impedance)",
                 formula_str=formula,
                 params=params,
             )
-        return self_impedance
+        return impedance_table(freqs_arr, values)
 
     def _calculate_mutual_impedance(
         self, frequencies: List[float]

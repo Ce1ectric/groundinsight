@@ -651,6 +651,7 @@ INTERNAL_API = (
     ("groundinsight.models.core_models", "validate_frequencies"),
     ("groundinsight.pathfinder", "PathfinderCache"),
     ("groundinsight.utils.impedance_calculator", "render_frequencies"),
+    ("groundinsight.utils.impedance_calculator", "impedance_table"),
     ("groundinsight.utils.impedance_calculator", "short_circuit_mask"),
     ("groundinsight.utils.impedance_calculator", "PassivityClasses"),
     ("groundinsight.utils.impedance_calculator", "passivity_classes"),
