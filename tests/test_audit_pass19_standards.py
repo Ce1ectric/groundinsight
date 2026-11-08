@@ -18,10 +18,15 @@ CI job.
 
 from __future__ import annotations
 
+import importlib
+import inspect
 import re
 import tomllib
+import warnings
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterator, List, Set, Tuple
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
@@ -137,3 +142,146 @@ def test_the_lock_holds_the_pinned_linter_versions():
     locked = _locked_versions()
     for tool in (*LINTERS, "radon"):
         assert locked.get(tool) == [dev[tool]], (tool, locked.get(tool), dev[tool])
+
+
+# ---------------------------------------------------------------------------
+# STD1 -- the fields of the public models are documented
+# ---------------------------------------------------------------------------
+
+#: Modules whose ``__all__`` is the public surface: the package and the
+#: service layer for front ends.
+PUBLIC_MODULES = ("groundinsight", "groundinsight.api")
+
+
+def _public_classes() -> Iterator[Tuple[str, type]]:
+    """
+    Every class of the public surface, with its package base classes.
+
+    Yields
+    ------
+    tuple of (str, type)
+        Dotted name and class; each class once.
+    """
+    seen: Set[type] = set()
+    for module_name in PUBLIC_MODULES:
+        module = importlib.import_module(module_name)
+        for name in module.__all__:
+            obj = getattr(module, name)
+            if not inspect.isclass(obj):
+                continue
+            for klass in obj.__mro__:
+                if klass in seen or not klass.__module__.startswith("groundinsight"):
+                    continue
+                seen.add(klass)
+                yield f"{klass.__module__}.{klass.__qualname__}", klass
+
+
+def _model_fields(klass: type) -> Set[str]:
+    """
+    The pydantic or dataclass fields of ``klass``, inherited ones included.
+
+    Parameters
+    ----------
+    klass : type
+        Any class.
+
+    Returns
+    -------
+    set of str
+        Field names; empty for a class that is neither.
+    """
+    if hasattr(klass, "model_fields"):
+        return set(klass.model_fields)
+    if hasattr(klass, "__dataclass_fields__"):
+        return set(klass.__dataclass_fields__)
+    return set()
+
+
+def _declared_fields(klass: type) -> Set[str]:
+    """
+    The fields ``klass`` adds to those of its bases.
+
+    A field is documented on the class that introduces it; a subclass that
+    only narrows an inherited field (a ``Literal`` discriminator, say) relies
+    on the base's entry.
+
+    Parameters
+    ----------
+    klass : type
+        A pydantic model or dataclass.
+
+    Returns
+    -------
+    set of str
+        The new field names.
+    """
+    inherited: Set[str] = set()
+    for base in klass.__bases__:
+        inherited |= _model_fields(base)
+    return _model_fields(klass) - inherited
+
+
+def _documented_names(klass: type) -> Set[str]:
+    """
+    Names listed under ``Parameters``, ``Attributes`` or ``Other Parameters``.
+
+    Parameters
+    ----------
+    klass : type
+        The class whose docstring is read.
+
+    Returns
+    -------
+    set of str
+        Every documented name; ``a, b : str`` counts for both.
+    """
+    from numpydoc.docscrape import ClassDoc
+
+    with warnings.catch_warnings():
+        # Custom sections are allowed in prose; docscrape only warns.
+        warnings.simplefilter("ignore", UserWarning)
+        doc = ClassDoc(klass, config={"show_class_members": False})
+    names: Set[str] = set()
+    for section in ("Parameters", "Attributes", "Other Parameters"):
+        for entry in doc[section]:
+            for name in entry.name.split(":")[0].split(","):
+                names.add(name.strip().lstrip("*"))
+    return names
+
+
+def _field_documentation_gaps() -> Dict[str, List[str]]:
+    """
+    Public model classes with fields their docstring does not name.
+
+    Returns
+    -------
+    dict of str to list of str
+        Dotted class name to the undocumented fields it declares.
+    """
+    pytest.importorskip("numpydoc")
+    gaps: Dict[str, List[str]] = {}
+    for name, klass in _public_classes():
+        missing = sorted(_declared_fields(klass) - _documented_names(klass))
+        if missing:
+            gaps[name] = missing
+    return gaps
+
+
+def test_public_model_fields_are_documented():
+    """Every pydantic or dataclass field of the public surface is listed
+    under ``Attributes`` (or ``Parameters``) of the class that declares it."""
+    gaps = _field_documentation_gaps()
+    assert not gaps, gaps
+
+
+def test_the_field_check_sees_the_models():
+    """Second method: the check is not vacuous -- it walks the core models
+    and the DTOs, and their declared fields add up to the model fields."""
+    import groundinsight as gi
+    from groundinsight.api import schemas
+
+    names = dict(_public_classes())
+    assert {"groundinsight.models.core_models.Bus", "groundinsight.api.schemas.BaseDTO"} <= set(names)
+    assert _declared_fields(gi.Bus) == _model_fields(gi.Bus)
+    assert "dto_schema_version" in _declared_fields(schemas.BaseDTO)
+    assert "dto_schema_version" not in _declared_fields(schemas.KeyFigureRowDTO)

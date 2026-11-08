@@ -509,6 +509,37 @@ class KeyFigureRowDTO(BaseDTO):
     the same names, order and meaning; see that method for the definitions.
     ``frequency_Hz`` is ``None`` on the RMS row (``is_rms`` true), and every
     number the result marks as undefined is ``None``.
+
+    Attributes
+    ----------
+    fault, fault_bus : str
+        The fault and the bus the result was computed for.
+    frequency_Hz : float or None
+        The frequency of the row; ``None`` on the RMS row.
+    is_rms : bool
+        Whether this is the RMS row over all frequencies.
+    I_F_A, I_F_degree : float or None
+        The fault current ``I_F``: magnitude in A, angle in degrees.
+    EPR_fault_V, EPR_fault_degree : float or None
+        The EPR at the fault bus: magnitude in V, angle in degrees.
+    EPR_max_V : float or None
+        The largest EPR in the network, in V.
+    EPR_max_bus : str or None
+        The bus it occurs at.
+    r_epr, r_current : float or None
+        The EPR-based reduction factor and the current-based one,
+        ``|I_E| / |I_F|``.
+    I_E_A : float or None
+        The earth-return current ``|I_E|``, in A.
+    U_E_V : float or None
+        The earthing voltage ``|U_E|`` of EN 50522 (the EPR at the fault
+        bus), in V.
+    Z_E_Ohm, Z_E_degree : float or None
+        The earthing impedance ``Z_E``, the driving-point impedance of the
+        earthing network at the fault bus: magnitude in ohms, angle in
+        degrees.
+    n_diagnostics : int
+        The number of diagnostics of the result, the same on every row.
     """
 
     fault: str

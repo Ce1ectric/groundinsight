@@ -217,7 +217,14 @@ class MigrationReport(BaseModel):
 
     @property
     def needs_attention(self) -> bool:
-        """``True`` if the migration had to guess or drop something."""
+        """
+        ``True`` if the migration had to guess or drop something.
+
+        Returns
+        -------
+        bool
+            Whether the report lists shared, dropped or unloadable elements.
+        """
         return bool(
             self.shared_elements
             or self.orphaned

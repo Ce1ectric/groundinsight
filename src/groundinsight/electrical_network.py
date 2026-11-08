@@ -1148,6 +1148,29 @@ class ElectricalNetwork:
     and performs network analysis to compute results such as bus voltages, branch currents,
     reduction factors, and grounding impedances.
 
+    Parameters
+    ----------
+    network : Network
+        The Network instance containing buses, branches, sources, and faults.
+    auto_phase_currents : bool, optional
+        If True the phase current through each
+        branch is computed by solving a reduced phase-only network (Variant B).
+        If False (default) the phase current is derived from the enumerated
+        source-to-fault paths using each branch's ``parallel_coefficient``
+        (Variant A). Defaults to False.
+    input_checks : bool, optional
+        Run the input checks of :func:`~groundinsight.run_fault` while the
+        vectors are assembled: a source that reaches the fault with a
+        value at none of the network frequencies raises ``ValueError``
+        (USE3/F8); partial source coverage, an incomplete
+        ``Fault.scalings`` (F7) and a Thevenin source driving coupled
+        branches (F5) are announced. :func:`~groundinsight.build_electrical_network`,
+        the step ``run_fault`` uses, turns them on. Other users of the
+        assembly leave them off -- the phase-split probe of the transient
+        solver injects 1 A per source whatever its stationary values, and
+        a source that only carries a transient waveform is legitimate
+        there. Defaults to False.
+
     Notes
     -----
     An instance is copied and pickled together with the :class:`Network` it
@@ -1198,30 +1221,8 @@ class ElectricalNetwork:
         """
         Initialize the ElectricalNetwork with a given Network model.
 
-        Sets up necessary data structures and initializes the network calculations.
-
-        Parameters
-        ----------
-        network : Network
-            The Network instance containing buses, branches, sources, and faults.
-        auto_phase_currents : bool, optional
-            If True the phase current through each
-            branch is computed by solving a reduced phase-only network (Variant B).
-            If False (default) the phase current is derived from the enumerated
-            source-to-fault paths using each branch's ``parallel_coefficient``
-            (Variant A). Defaults to False.
-        input_checks : bool, optional
-            Run the input checks of :func:`~groundinsight.run_fault` while the
-            vectors are assembled: a source that reaches the fault with a
-            value at none of the network frequencies raises ``ValueError``
-            (USE3/F8); partial source coverage, an incomplete
-            ``Fault.scalings`` (F7) and a Thevenin source driving coupled
-            branches (F5) are announced. :func:`~groundinsight.build_electrical_network`,
-            the step ``run_fault`` uses, turns them on. Other users of the
-            assembly leave them off -- the phase-split probe of the transient
-            solver injects 1 A per source whatever its stationary values, and
-            a source that only carries a transient waveform is legitimate
-            there. Defaults to False.
+        Sets up necessary data structures and initializes the network
+        calculations; the parameters are documented on the class.
         """
         self.network = network
         self.auto_phase_currents = auto_phase_currents
@@ -1337,6 +1338,12 @@ class ElectricalNetwork:
         ``True`` while the assembled matrices still describe ``self.network``.
 
         See :meth:`state_fingerprint` for what "still describe" covers.
+
+        Returns
+        -------
+        bool
+            Whether the network's state fingerprint equals the one recorded
+            when the matrices were built.
         """
         if self._build_fingerprint is None:  # pragma: no cover -- mid-assembly
             return True
@@ -2577,8 +2584,8 @@ class ElectricalNetwork:
         Returns
         -------
         Dict[str, complex]
-            Mapping from branch name to signed phase current
-        (positive when the current flows from ``from_bus`` to ``to_bus``).
+            Mapping from branch name to signed phase current (positive when
+            the current flows from ``from_bus`` to ``to_bus``).
         """
         if self.auto_phase_currents:
             return self._compute_phase_currents_auto(freq, sources_with_path)

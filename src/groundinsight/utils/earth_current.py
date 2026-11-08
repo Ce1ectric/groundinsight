@@ -119,7 +119,7 @@ class EarthCurrentSplit:
     """
     Result of :func:`split_earth_currents`.
 
-    Attributes
+    Parameters
     ----------
     i_earth : complex
         The earth-return current: the sum of the electrode currents of the buses
@@ -133,6 +133,11 @@ class EarthCurrentSplit:
         the phasors within each group are in phase; well below one means the
         electrode currents are spread in angle and a single scalar earth-return
         current is a coarser description than it looks.
+
+    Attributes
+    ----------
+    i_earth, feeding_buses, returning_buses, separation
+        The constructor arguments of the same name.
     """
 
     __slots__ = ("i_earth", "feeding_buses", "returning_buses", "separation")

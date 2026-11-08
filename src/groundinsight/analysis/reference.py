@@ -76,7 +76,7 @@ class ReferenceCase:
     """
     One closed-form case and the model run that has to match it.
 
-    Attributes
+    Parameters
     ----------
     name : str
         Short identifier, used as the row key.
@@ -88,6 +88,14 @@ class ReferenceCase:
         was not met -- the second is the more common finding.
     tolerance : float
         Relative deviation still counted as agreement.
+    run : callable
+        ``run() -> (closed_form, model)``: builds the case's network, solves
+        it and returns both numbers.
+
+    Attributes
+    ----------
+    name, quantity, conditions, tolerance
+        The constructor arguments of the same name.
     """
 
     __slots__ = ("name", "quantity", "conditions", "tolerance", "_run")
@@ -107,7 +115,16 @@ class ReferenceCase:
         self._run = run
 
     def evaluate(self) -> Dict[str, object]:
-        """Run the case and return its row."""
+        """
+        Run the case and return its row.
+
+        Returns
+        -------
+        dict
+            The row of :func:`run_reference_cases`: ``case``, ``quantity``,
+            ``conditions``, ``closed_form``, ``model``, ``rel_deviation``,
+            ``tolerance`` and ``agrees``.
+        """
         closed_form, model = self._run()
         reference = abs(closed_form)
         deviation = (

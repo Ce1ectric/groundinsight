@@ -1524,6 +1524,7 @@ class Bus(_NetworkElement):
 
     @field_validator("impedance", mode="before")
     def validate_impedance(cls, value):
+        """Coerce the keys to ``float`` and every value to a ``ComplexNumber``."""
         if not isinstance(value, dict):
             raise TypeError(
                 "Impedance must be a dictionary of frequency to impedance values."
@@ -1601,6 +1602,18 @@ class BranchType(_ReadOnlyType):
     M_mutual_formula : str, optional
         Per-branch mutual inductance in Henry. Used only by the transient
         solvers.
+    conductor_material : {'Cu', 'Al', 'Steel'}, optional
+        Material of the shield or earth wire, for the adiabatic thermal check
+        of :func:`groundinsight.check_conductor_limits`.
+    cross_section_mm2 : float, optional
+        Cross-section of that conductor in mm². A branch is assessed only
+        when both the material and the cross-section are given.
+    theta_initial_C : float
+        Initial conductor temperature in °C. Defaults to ``20.0``.
+    theta_final_C : float, optional
+        Maximum permissible conductor temperature in °C. Defaults to the
+        material value in
+        :data:`groundinsight.analysis.thermal.IEC60949_MATERIALS`.
 
     Notes
     -----
@@ -1713,6 +1726,20 @@ class Branch(_NetworkElement):
         traversing it are dropped, and its branch current in the result
         is forced to zero. Defaults to ``True``. Used by the outage /
         what-if machinery in :mod:`groundinsight.simulation.outage`.
+    phase_impedance : dict of float to ComplexNumber, optional
+        Phase-conductor impedance per frequency, evaluated from
+        ``BranchType.phase_impedance_formula``; ``None`` without that
+        formula. Read by the phase-current solve (``phase_current_mode=
+        "auto"``).
+    R_self, L_self, C_self : dict of float to float, optional
+        Series resistance (Ohm), series inductance (H) and shunt capacitance
+        to remote earth (F) per frequency, from the matching ``*_formula``
+        of the type; ``None`` without it. Read only by the state-space
+        transient solver.
+    R_mutual, M_mutual : dict of float to float, optional
+        Mutual resistance (Ohm) and mutual inductance (H) per frequency, from
+        the matching ``*_formula`` of the type; ``None`` without it. Read
+        only by the state-space transient solver.
     """
 
     model_config = ConfigDict(
@@ -2006,6 +2033,7 @@ class Branch(_NetworkElement):
 
     @field_validator("self_impedance", mode="before")
     def validate_self_impedance(cls, value):
+        """Coerce the keys to ``float`` and every value to a ``ComplexNumber``."""
         if not isinstance(value, dict):
             raise TypeError(
                 "Impedance must be a dictionary of frequency to impedance values."
@@ -2018,6 +2046,7 @@ class Branch(_NetworkElement):
 
     @field_validator("mutual_impedance", mode="before")
     def validate_mutual_impedance(cls, value):
+        """Coerce the keys to ``float`` and every value to a ``ComplexNumber``."""
         if not isinstance(value, dict):
             raise TypeError(
                 "Impedance must be a dictionary of frequency to impedance values."
@@ -2241,7 +2270,14 @@ class Fault(_NetworkElement):
     @computed_field()
     @property
     def active(self) -> bool:
-        """Whether this fault is currently the active one in the network."""
+        """
+        Whether this fault is currently the active one in the network.
+
+        Returns
+        -------
+        bool
+            ``True`` while ``Network.active_fault`` names this fault.
+        """
         return self._active
 
     def mark_active(self, value: bool) -> None:
@@ -3377,10 +3413,29 @@ class Network(ValidatedAssignmentModel):
 
     @property
     def electrical_network(self):
+        """
+        The solver workspace of the last build, or ``None``.
+
+        Returns
+        -------
+        ElectricalNetwork or None
+            The :class:`~groundinsight.electrical_network.ElectricalNetwork`
+            that :func:`~groundinsight.build_electrical_network` (and so
+            :func:`~groundinsight.run_fault`) attached; never saved with the
+            network.
+        """
         return self._electrical_network
 
     @electrical_network.setter
     def electrical_network(self, value):
+        """
+        Attach a solver workspace (the getter's docstring is the public one).
+
+        Parameters
+        ----------
+        value : ElectricalNetwork or None
+            The workspace, or ``None`` to drop it.
+        """
         self._electrical_network = value
 
     @property
@@ -3419,6 +3474,19 @@ class Network(ValidatedAssignmentModel):
 
     @pathfinder_settings.setter
     def pathfinder_settings(self, value: Optional["PathfinderSettings"]) -> None:
+        """
+        Set the path-search settings (the getter's docstring is the public one).
+
+        Parameters
+        ----------
+        value : PathfinderSettings or None
+            The settings; ``None`` returns to the process-wide default.
+
+        Raises
+        ------
+        TypeError
+            If ``value`` is neither a ``PathfinderSettings`` nor ``None``.
+        """
         from groundinsight.pathfinder import PathfinderSettings
 
         if value is not None and not isinstance(value, PathfinderSettings):

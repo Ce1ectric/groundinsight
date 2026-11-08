@@ -736,7 +736,8 @@ def check_conductor_limits(
        its currents (``I_s_rms_A``, ``i_p_A``, ``I_th_A``) and only the
        judgement columns are ``None``. Declaring *half* of it
        (a material without a cross-section or the reverse) is the one case
-       that is announced with a ``logging.WARNING``, because such a row is
+       that is announced, with an ``InputWarning``
+       (``THERMAL_DATA_INCOMPLETE``), because such a row is
        indistinguishable from a passing one at a glance.
 
     .. note::
@@ -993,9 +994,9 @@ def check_node_limits(
        still solves and is still reported here — every active bus appears
        with its currents and only the judgement columns are ``None``.
        Declaring *half* of it (a material without a cross-section or the
-       reverse) is the one case that is announced with a
-       ``logging.WARNING``, because such a row is indistinguishable from a
-       passing one at a glance.
+       reverse) is the one case that is announced, with an ``InputWarning``
+       (``THERMAL_DATA_INCOMPLETE``), because such a row is
+       indistinguishable from a passing one at a glance.
 
     .. note::
        **The 0 Hz bin is taken out of** ``I_th``, exactly as in
@@ -1008,35 +1009,6 @@ def check_node_limits(
        direct current is present the same ``ModelAssumptionWarning``
        ``THERMAL_DC_EXCLUDED`` is raised as in
        :func:`check_conductor_limits` (PH10).
-
-    Current split
-    -------------
-    Each element carries a free factor ``current_split`` in ``(0, 1]``
-    (``BusType.earthing_conductor_current_split`` /
-    ``BusType.electrode_current_split``), applied as
-    ``I_conductor = I_rms * current_split``. It expresses how the bus
-    current divides between physically parallel paths that the nodal model
-    lumps into one:
-
-    * ``1.0`` (default) — one conductor / one electrode carries everything.
-    * ``1/N`` — ``N`` equal parallel paths, e.g. ``0.25`` for four
-      down-conductors from a substation steelwork to the grid.
-    * ``0.5`` — a ring electrode fed at a single point: the current splits
-      into the two halves of the ring.
-    * any IEEE Std 80 style split / division factor, entered directly.
-
-    The factor is deliberately *not* derived automatically: the split
-    depends on the physical arrangement inside the substation, which the
-    nodal grounding model does not resolve. Values above ``1`` are rejected
-    at the model level — more current than the bus carries is an error, not
-    a split.
-
-    Superposition
-    -------------
-    Identical to the branch check: the frequency-domain solve superposes
-    the *linear* AC RMS currents, and the *non-linear* IEC 60909 factors
-    ``kappa`` / ``m`` are applied once to the aggregate. ``i_p`` and
-    ``I_th`` are never superposed directly.
 
     Parameters
     ----------
@@ -1105,6 +1077,31 @@ def check_node_limits(
 
     Notes
     -----
+    **Current split.** Each element carries a free factor ``current_split``
+    in ``(0, 1]`` (``BusType.earthing_conductor_current_split`` /
+    ``BusType.electrode_current_split``), applied as
+    ``I_conductor = I_rms * current_split``. It expresses how the bus
+    current divides between physically parallel paths that the nodal model
+    lumps into one:
+
+    * ``1.0`` (default) — one conductor / one electrode carries everything.
+    * ``1/N`` — ``N`` equal parallel paths, e.g. ``0.25`` for four
+      down-conductors from a substation steelwork to the grid.
+    * ``0.5`` — a ring electrode fed at a single point: the current splits
+      into the two halves of the ring.
+    * any IEEE Std 80 style split / division factor, entered directly.
+
+    The factor is deliberately *not* derived automatically: the split
+    depends on the physical arrangement inside the substation, which the
+    nodal grounding model does not resolve. Values above ``1`` are rejected
+    at the model level — more current than the bus carries is an error, not
+    a split.
+
+    **Superposition.** Identical to the branch check: the frequency-domain
+    solve superposes the *linear* AC RMS currents, and the *non-linear*
+    IEC 60909 factors ``kappa`` / ``m`` are applied once to the aggregate.
+    ``i_p`` and ``I_th`` are never superposed directly.
+
     A bus that is *both* the fault bus and the only source bus gets
     ``i_inj = 0``: the current never enters the grounding system, it
     circulates in the phase conductor. That is physically correct and not

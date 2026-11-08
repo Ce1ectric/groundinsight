@@ -62,6 +62,12 @@ def summarize(
         Sorted by the grouping columns so repeated runs produce identical
         output.
 
+    Raises
+    ------
+    ValueError
+        If a named column is missing, if the value column is not numeric, or if
+        a quantile lies outside ``[0, 1]``.
+
     Notes
     -----
     **Read ``n_nan`` before the statistics.** Polars counts a NaN as a
@@ -73,12 +79,6 @@ def summarize(
     failed under ``on_error="record"`` writes NaN into the value column.
     ``n_nan`` is the column that says how many, and it is ``0`` for an integer
     column, which cannot carry one.
-
-    Raises
-    ------
-    ValueError
-        If a named column is missing, if the value column is not numeric, or if
-        a quantile lies outside ``[0, 1]``.
 
     Examples
     --------

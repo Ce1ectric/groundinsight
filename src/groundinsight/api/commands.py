@@ -405,7 +405,14 @@ class Command(BaseDTO):
 
     @property
     def label(self) -> str:
-        """Human-readable description for the undo history."""
+        """
+        Human-readable description for the undo history.
+
+        Returns
+        -------
+        str
+            The operation name; a concrete command names its element as well.
+        """
         return self.op
 
     def apply(self, context: CommandContext) -> None:
@@ -524,7 +531,14 @@ class AddBus(Command):
 
     @property
     def label(self) -> str:
-        """``add bus '<name>'``."""
+        """
+        ``add bus '<name>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
         return f"add bus '{self.name}'"
 
     def _apply(self, context: CommandContext) -> None:
@@ -580,7 +594,14 @@ class RemoveBus(Command):
 
     @property
     def label(self) -> str:
-        """``remove bus '<name>'``."""
+        """
+        ``remove bus '<name>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
         return f"remove bus '{self.name}'"
 
     def _apply(self, context: CommandContext) -> None:
@@ -627,7 +648,14 @@ class AddBranch(Command):
 
     @property
     def label(self) -> str:
-        """``add branch '<name>'``."""
+        """
+        ``add branch '<name>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
         return f"add branch '{self.name}'"
 
     def _apply(self, context: CommandContext) -> None:
@@ -688,7 +716,14 @@ class RemoveBranch(Command):
 
     @property
     def label(self) -> str:
-        """``remove branch '<name>'``."""
+        """
+        ``remove branch '<name>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
         return f"remove branch '{self.name}'"
 
     def _apply(self, context: CommandContext) -> None:
@@ -848,7 +883,14 @@ class AddSource(Command):
 
     @property
     def label(self) -> str:
-        """``add source '<name>'``."""
+        """
+        ``add source '<name>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
         return f"add source '{self.name}'"
 
     def _apply(self, context: CommandContext) -> None:
@@ -934,7 +976,14 @@ class RemoveSource(Command):
 
     @property
     def label(self) -> str:
-        """``remove source '<name>'``."""
+        """
+        ``remove source '<name>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
         return f"remove source '{self.name}'"
 
     def _apply(self, context: CommandContext) -> None:
@@ -980,7 +1029,14 @@ class AddFault(Command):
 
     @property
     def label(self) -> str:
-        """``add fault '<name>'``."""
+        """
+        ``add fault '<name>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
         return f"add fault '{self.name}'"
 
     def _apply(self, context: CommandContext) -> None:
@@ -1074,7 +1130,14 @@ class RemoveFault(Command):
 
     @property
     def label(self) -> str:
-        """``remove fault '<name>'``."""
+        """
+        ``remove fault '<name>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
         return f"remove fault '{self.name}'"
 
     def _apply(self, context: CommandContext) -> None:
@@ -1392,7 +1455,14 @@ class SetFrequencies(Command):
 
     @property
     def label(self) -> str:
-        """``set frequencies: [...]``."""
+        """
+        ``set frequencies: [...]``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
         return f"set frequencies: {self.frequencies!r}"
 
     def _apply(self, context: CommandContext) -> None:

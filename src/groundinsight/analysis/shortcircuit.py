@@ -142,17 +142,6 @@ def iec60909_m(kappa: float, frequency: float, t_k_s: float) -> float:
     offset) gives ``m -> 0``; ``kappa -> 2`` (non-decaying DC, ``X/R -> inf``)
     gives ``m -> 2``.
 
-    Notes
-    -----
-    The ``kappa -> 2`` limit is worth spelling out because it is easy to get
-    backwards. Substituting ``a = ln(kappa - 1) -> 0`` and expanding,
-    ``(exp(4 f Tk a) - 1) / (2 f Tk a) -> 4 f Tk a / (2 f Tk a) = 2``. A
-    vanishing-resistance fault therefore carries the *maximum* DC heat, not
-    none. pandapower's ``_calc_ith`` sets ``m = 0`` for ``kappa > 1.99``,
-    which is why :func:`groundinsight.io.pandapower_sc.read_shortcircuit_results`
-    recomputes ``I_th`` with this function instead of copying pandapower's
-    ``ith_ka``.
-
     Parameters
     ----------
     kappa : float
@@ -173,6 +162,17 @@ def iec60909_m(kappa: float, frequency: float, t_k_s: float) -> float:
     ------
     ValueError
         If ``t_k_s`` or ``frequency`` is not strictly positive.
+
+    Notes
+    -----
+    The ``kappa -> 2`` limit is worth spelling out because it is easy to get
+    backwards. Substituting ``a = ln(kappa - 1) -> 0`` and expanding,
+    ``(exp(4 f Tk a) - 1) / (2 f Tk a) -> 4 f Tk a / (2 f Tk a) = 2``. A
+    vanishing-resistance fault therefore carries the *maximum* DC heat, not
+    none. pandapower's ``_calc_ith`` sets ``m = 0`` for ``kappa > 1.99``,
+    which is why :func:`groundinsight.io.pandapower_sc.read_shortcircuit_results`
+    recomputes ``I_th`` with this function instead of copying pandapower's
+    ``ith_ka``.
 
     Examples
     --------
@@ -479,28 +479,6 @@ def resolve_fault_sc_characteristics(
     solve, and one effective ``kappa`` is resolved here so that the
     *non-linear* 60909 factors are applied exactly once, to the aggregate.
 
-    What the aggregation actually does, stated exactly
-    --------------------------------------------------
-    The two returned quantities are not taken over the same set of sources,
-    and it matters:
-
-    * ``kappa`` is the weighted mean over the sources that **carry** 60909
-      data (``kappa`` or ``r_to_x``). Sources without it cannot contribute a
-      value and are left out; they are listed in ``sources_without_kappa``.
-    * ``i_k_a`` is the sum over **all** feeding sources, those included.
-
-    A consumer that then forms ``i_p = kappa * sqrt(2) * i_k_a`` -- which is
-    what :func:`~groundinsight.check_conductor_limits` and
-    :func:`~groundinsight.check_node_limits` do -- therefore applies the peak
-    factor of one subset to the current of the whole. Where every source
-    carries data the subsets coincide and the result is exact; where they do
-    not, the answer is an approximation whose quality is the share of the
-    current the data covers. That share is reported in the ``logging.WARNING``
-    this function emits, and above half of the current the message says
-    outright that ``i_p`` rests mostly on an assumption. The alternative --
-    dropping the undocumented sources from ``i_k_a`` as well -- would
-    understate the current, which is the unsafe direction.
-
     Parameters
     ----------
     network : Network
@@ -542,6 +520,29 @@ def resolve_fault_sc_characteristics(
         data and the fault) when part of the current comes from sources that
         carry no ``r_to_x`` or ``kappa``: ``kappa_eff`` then describes only
         the remaining share and ``i_p`` applies it to the whole current.
+
+    Notes
+    -----
+    **What the aggregation actually does, stated exactly.** The two returned
+    quantities are not taken over the same set of sources, and it matters:
+
+    * ``kappa`` is the weighted mean over the sources that **carry** 60909
+      data (``kappa`` or ``r_to_x``). Sources without it cannot contribute a
+      value and are left out; they are listed in ``sources_without_kappa``.
+    * ``i_k_a`` is the sum over **all** feeding sources, those included.
+
+    A consumer that then forms ``i_p = kappa * sqrt(2) * i_k_a`` -- which is
+    what :func:`~groundinsight.check_conductor_limits` and
+    :func:`~groundinsight.check_node_limits` do -- therefore applies the peak
+    factor of one subset to the current of the whole. Where every source
+    carries data the subsets coincide and the result is exact; where they do
+    not, the answer is an approximation whose quality is the share of the
+    current the data covers. That share is reported in the ``InputWarning``
+    (``SC_DATA_INCOMPLETE``) this function emits, and above half of the
+    current the message says outright that ``i_p`` rests mostly on an
+    assumption. The alternative -- dropping the undocumented sources from
+    ``i_k_a`` as well -- would understate the current, which is the unsafe
+    direction.
 
     Examples
     --------

@@ -171,7 +171,24 @@ class MemoryStore(ProjectStore):
         self._lock = threading.Lock()
 
     def load(self, key: str) -> gi.Network:
-        """See :meth:`ProjectStore.load`."""
+        """
+        Load the network stored under ``key`` (see :meth:`ProjectStore.load`).
+
+        Parameters
+        ----------
+        key : str
+            The project key.
+
+        Returns
+        -------
+        Network
+            A fresh network object, parsed from the stored JSON.
+
+        Raises
+        ------
+        KeyError
+            If no project is stored under ``key``.
+        """
         with self._lock:
             text = self._projects.get(key)
         if text is None:
@@ -179,13 +196,29 @@ class MemoryStore(ProjectStore):
         return gi.Network.model_validate_json(text)
 
     def save(self, key: str, network: gi.Network) -> None:
-        """See :meth:`ProjectStore.save`."""
+        """
+        Store ``network`` under ``key`` (see :meth:`ProjectStore.save`).
+
+        Parameters
+        ----------
+        key : str
+            The project key; a project stored under it is replaced.
+        network : Network
+            The network, kept as its JSON form.
+        """
         text = network.model_dump_json()
         with self._lock:
             self._projects[key] = text
 
     def keys(self) -> List[str]:
-        """See :meth:`ProjectStore.keys`."""
+        """
+        The stored project keys (see :meth:`ProjectStore.keys`).
+
+        Returns
+        -------
+        list of str
+            Sorted keys.
+        """
         with self._lock:
             return sorted(self._projects)
 
@@ -210,13 +243,38 @@ class DatabaseStore(ProjectStore):
         self.database = database
 
     def load(self, key: str) -> gi.Network:
-        """See :meth:`ProjectStore.load`."""
+        """
+        Load the network named ``key`` (see :meth:`ProjectStore.load`).
+
+        Parameters
+        ----------
+        key : str
+            The network name.
+
+        Returns
+        -------
+        Network
+            A fresh network object, loaded from the database.
+
+        Raises
+        ------
+        KeyError
+            If the database holds no network of that name.
+        """
         if key not in self.database.list_networks():
             raise KeyError(f"no network '{key}' in {self.database.path}")
         return self.database.load_network(key)
 
     def save(self, key: str, network: gi.Network) -> None:
-        """See :meth:`ProjectStore.save`.
+        """
+        Store ``network`` under its name (see :meth:`ProjectStore.save`).
+
+        Parameters
+        ----------
+        key : str
+            The network name; it has to equal ``network.name``.
+        network : Network
+            The network; a stored network of that name is replaced.
 
         Raises
         ------
@@ -231,7 +289,14 @@ class DatabaseStore(ProjectStore):
         self.database.save_network(network, overwrite=True)
 
     def keys(self) -> List[str]:
-        """See :meth:`ProjectStore.keys`."""
+        """
+        The names of the stored networks (see :meth:`ProjectStore.keys`).
+
+        Returns
+        -------
+        list of str
+            The network names, in the database's order.
+        """
         return list(self.database.list_networks())
 
 
@@ -569,44 +634,99 @@ class ProjectSession:
 
         Front ends use the DTO methods; every change goes through
         :meth:`apply`.
+
+        Returns
+        -------
+        Network
+            The session's working network (not a copy).
         """
         return self._network
 
     @property
     def revision(self) -> int:
-        """Identifier of the current input state (see the module docstring)."""
+        """
+        Identifier of the current input state (see the module docstring).
+
+        Returns
+        -------
+        int
+            The revision; it changes with every applied, undone or redone command.
+        """
         return self._revision
 
     @property
     def dirty(self) -> bool:
-        """``True`` when the network differs from the last opened or saved state."""
+        """
+        ``True`` when the network differs from the last opened or saved state.
+
+        Returns
+        -------
+        bool
+            Whether there are unsaved changes.
+        """
         return self._revision != self._saved_revision
 
     @property
     def limits(self) -> SessionLimitsDTO:
-        """The session's resource limits."""
+        """
+        The session's resource limits.
+
+        Returns
+        -------
+        SessionLimitsDTO
+            The limits the session was opened with.
+        """
         return self._limits
 
     @property
     def location(self) -> Optional[str]:
-        """The project file path, ``"<scheme>:<key>"`` for a store, or ``None``."""
+        """
+        Where the project is stored.
+
+        Returns
+        -------
+        str or None
+            The project file path, ``"<scheme>:<key>"`` for a store, or
+            ``None`` for a project that was never saved.
+        """
         if self._store is not None:
             return f"{self._store.scheme}:{self._key}"
         return self._path
 
     @property
     def can_undo(self) -> bool:
-        """Whether :meth:`undo` would do something."""
+        """
+        Whether :meth:`undo` would do something.
+
+        Returns
+        -------
+        bool
+            ``True`` when there is a command to undo.
+        """
         return bool(self._done)
 
     @property
     def can_redo(self) -> bool:
-        """Whether :meth:`redo` would do something."""
+        """
+        Whether :meth:`redo` would do something.
+
+        Returns
+        -------
+        bool
+            ``True`` when there is an undone command to redo.
+        """
         return bool(self._undone)
 
     @property
     def runner(self) -> JobRunner:
-        """The job runner (created on first use when none was given)."""
+        """
+        The job runner (created on first use when none was given).
+
+        Returns
+        -------
+        JobRunner
+            The runner that executes the session's jobs.
+        """
         with self._lock:
             if self._runner is None:
                 self._runner = JobRunner(backend="thread", max_workers=1)

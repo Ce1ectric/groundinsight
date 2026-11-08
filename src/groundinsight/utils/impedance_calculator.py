@@ -1137,8 +1137,8 @@ def compute_real_value(
     Returns
     -------
     Dict[float, float]
-        Mapping of frequency to the real value of the
-    formula at that frequency.
+        Mapping of frequency to the real value of the formula at that
+        frequency.
 
     Raises
     ------

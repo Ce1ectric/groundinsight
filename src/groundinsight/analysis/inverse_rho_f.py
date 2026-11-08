@@ -696,50 +696,48 @@ def select_rho_f_from_catalog(
 
     Parameters
     ----------
-    network
+    network : Network
         The simulation network. Sources, branches and the buses
         to be swept must already be configured.
-    bus_names
+    bus_names : list of str
         Buses whose impedance is parameterised by every
         candidate ``k`` and which are swept as fault locations.
-    u_limit
+    u_limit : float
         Upper bound on the RMS EPR (in volts) at any swept bus.
         Must be strictly positive.
-    candidates
+    candidates : dict of str to tuple of float
         Mapping ``{name: (k1, k2, k3, k4, k5)}`` of the
         candidate rho-f characteristics. Names must be unique
         (Python dict guarantees that), tuples must each have length
         5. May be empty -- the result is then an empty DataFrame
         with the documented schema.
-    fault_scalings
+    fault_scalings : dict of float to float, optional
         Frequency-resolved scalings for any fault that
         has to be created on the fly. See
         :func:`evaluate_max_epr_under_k`.
-    run_fault_kwargs
+    run_fault_kwargs : dict, optional
         Forwarded to :func:`run_fault`.
-    sort_by
+    sort_by : {"max_epr_asc", "max_epr_desc", "name"}, optional
         How to sort the result rows.
 
         - ``"max_epr_asc"`` (default): admissible candidates first,
-        tightest-EPR-margin candidates at the top.
+          tightest-EPR-margin candidates at the top.
         - ``"max_epr_desc"``: largest EPR first; useful to inspect
-        the worst-case candidates.
+          the worst-case candidates.
         - ``"name"``: lexicographic by candidate name.
 
     Returns
     -------
-    A Polars DataFrame with one row per candidate and the columns
+    pl.DataFrame
+        One row per candidate, with the columns
 
-    - ``"name"`` (str)
-    - ``"k1", "k2", "k3", "k4", "k5"`` (float)
-    - ``"max_epr_rms_V"`` (float)
-        maximum RMS EPR across the bus
-        sweep, in volts.
-    - ``"admissible"`` (bool)
-        ``True`` iff
-        ``max_epr_rms_V <= u_limit``.
-    - one ``"epr_<bus>_V"`` column per swept bus, holding the RMS
-        EPR at that bus when it is the active fault, in volts.
+        - ``"name"`` (str);
+        - ``"k1"`` ... ``"k5"`` (float);
+        - ``"max_epr_rms_V"`` (float): the maximum RMS EPR across the bus
+          sweep, in volts;
+        - ``"admissible"`` (bool): ``True`` iff ``max_epr_rms_V <= u_limit``;
+        - one ``"epr_<bus>_V"`` column per swept bus: the RMS EPR at that
+          bus when it is the active fault, in volts.
 
     Raises
     ------

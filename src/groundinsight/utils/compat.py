@@ -189,6 +189,25 @@ def renamed_parameters(**renames: str) -> Callable[[F], F]:
         raise TypeError("renamed_parameters() needs at least one old='new' pair.")
 
     def decorate(func: F) -> F:
+        """
+        Wrap ``func`` so that its old keyword names keep working.
+
+        Parameters
+        ----------
+        func : callable
+            The function whose parameters were renamed.
+
+        Returns
+        -------
+        callable
+            The wrapper described in :func:`renamed_parameters`.
+
+        Raises
+        ------
+        TypeError
+            If a new name is not a parameter of ``func`` or an old name still
+            is one.
+        """
         parameters = inspect.signature(func).parameters
         display = _display_name(func)
         for old, new in renames.items():
@@ -212,6 +231,27 @@ def renamed_parameters(**renames: str) -> Callable[[F], F]:
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
+            """
+            Call ``func`` with every old keyword passed under its new name.
+
+            ``functools.wraps`` replaces this docstring with ``func``'s at
+            runtime; it documents the wrapper for the reader of this module.
+
+            Parameters
+            ----------
+            *args, **kwargs
+                The arguments of ``func``.
+
+            Returns
+            -------
+            object
+                What ``func`` returns.
+
+            Raises
+            ------
+            TypeError
+                If a value is passed under a new name and under its old name.
+            """
             for old, new in renames.items():
                 if old not in kwargs:
                     continue

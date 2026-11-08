@@ -81,10 +81,31 @@ class ComplexNumberDB(Base):
     value = Column(JSON, nullable=False)
 
     def to_pydantic(self):
+        """
+        Convert the row back into a Pydantic :class:`ComplexNumber`.
+
+        Returns
+        -------
+        ComplexNumber
+            A fresh model object.
+        """
         return ComplexNumber(**self.value)
 
     @classmethod
     def from_pydantic(cls, complex_number: ComplexNumber):
+        """
+        Build a ``ComplexNumberDB`` row from a Pydantic :class:`ComplexNumber`.
+
+        Parameters
+        ----------
+        complex_number : ComplexNumber
+            The model to convert.
+
+        Returns
+        -------
+        ComplexNumberDB
+            The unattached database row.
+        """
         return cls(
             value={
                 "real": json_safe_float(complex_number.real),
@@ -128,6 +149,14 @@ class BusTypeDB(Base):
     electrode_current_split = Column(Float, nullable=True)
 
     def to_pydantic(self):
+        """
+        Convert the row back into a Pydantic :class:`BusType`.
+
+        Returns
+        -------
+        BusType
+            A fresh model object.
+        """
         # The scalar-with-default columns are stored nullable so that rows
         # written before these fields existed still load; ``None`` therefore
         # has to be mapped back onto the pydantic default rather than passed
@@ -171,6 +200,19 @@ class BusTypeDB(Base):
 
     @classmethod
     def from_pydantic(cls, bus_type: BusType):
+        """
+        Build a ``BusTypeDB`` row from a Pydantic :class:`BusType`.
+
+        Parameters
+        ----------
+        bus_type : BusType
+            The model to convert.
+
+        Returns
+        -------
+        BusTypeDB
+            The unattached database row.
+        """
         return cls(
             name=bus_type.name,
             description=bus_type.description,
@@ -398,6 +440,14 @@ class BranchTypeDB(Base):
     theta_final_C = Column(Float, nullable=True)
 
     def to_pydantic(self):
+        """
+        Convert the row back into a Pydantic :class:`BranchType`.
+
+        Returns
+        -------
+        BranchType
+            A fresh model object.
+        """
         return BranchType(
             name=self.name,
             description=self.description,
@@ -418,6 +468,19 @@ class BranchTypeDB(Base):
 
     @classmethod
     def from_pydantic(cls, branch_type: BranchType):
+        """
+        Build a ``BranchTypeDB`` row from a Pydantic :class:`BranchType`.
+
+        Parameters
+        ----------
+        branch_type : BranchType
+            The model to convert.
+
+        Returns
+        -------
+        BranchTypeDB
+            The unattached database row.
+        """
         return cls(
             name=branch_type.name,
             description=branch_type.description,
@@ -673,6 +736,14 @@ class FaultDB(Base):
     network = relationship("NetworkDB", back_populates="faults")
 
     def to_pydantic(self):
+        """
+        Convert the row back into a Pydantic :class:`Fault`.
+
+        Returns
+        -------
+        Fault
+            A fresh model object.
+        """
         # Convert scalings JSON to Dict[float, float]
         scalings = {float(freq): scale for freq, scale in self.scalings.items()}
 
@@ -804,6 +875,14 @@ class SourceDB(Base):
         return out
 
     def to_pydantic(self):
+        """
+        Convert the row back into a Pydantic :class:`Source`.
+
+        Returns
+        -------
+        Source
+            A fresh model object.
+        """
         source_type = self.source_type or "current"
         return Source(
             name=self.name,
@@ -1074,6 +1153,17 @@ class NetworkDB(Base):
     )
 
     def to_pydantic(self):
+        """
+        Convert the row back into a Pydantic :class:`Network`.
+
+        Buses, branches, faults, sources, paths and stored results are
+        converted with it.
+
+        Returns
+        -------
+        Network
+            A fresh model object.
+        """
         return Network(
             name=self.name,
             description=self.description,
@@ -1089,6 +1179,19 @@ class NetworkDB(Base):
 
     @classmethod
     def from_pydantic(cls, network: Network):
+        """
+        Build a ``NetworkDB`` row from a Pydantic :class:`Network`.
+
+        Parameters
+        ----------
+        network : Network
+            The model to convert.
+
+        Returns
+        -------
+        NetworkDB
+            The unattached database row.
+        """
         return cls(
             name=network.name,
             description=network.description,

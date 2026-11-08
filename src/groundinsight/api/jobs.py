@@ -90,6 +90,15 @@ class JobFailed(RuntimeError):  # noqa: N818 -- published name (groundinsight.ap
     The original exception is the ``__cause__`` where it is available
     (thread backend).
 
+    Parameters
+    ----------
+    message : str
+        The exception message.
+    error_type : str, optional
+        Class name of the original exception.
+    error_message : str, optional
+        Its message.
+
     Attributes
     ----------
     error_type : str
@@ -147,6 +156,21 @@ class JobHandle:
 
     Created by :meth:`JobRunner.submit`; thread-safe.
 
+    Parameters
+    ----------
+    job_id : str
+        Identifier, unique within the runner.
+    request : BaseModel
+        The job request; its ``task`` names the task.
+    backend : {"thread", "process"}
+        Where the job runs.
+    revision : int or None
+        Session revision of the job's input.
+    max_runtime_s : float or None
+        Runtime limit; ``None`` for none.
+    label : str
+        Human-readable description of the job.
+
     Attributes
     ----------
     job_id : str
@@ -159,6 +183,10 @@ class JobHandle:
         Session revision of the job's input.
     backend : {"thread", "process"}
         Where the job runs.
+    max_runtime_s : float, optional
+        Runtime limit.
+    label : str
+        Human-readable description of the job.
     """
 
     def __init__(
@@ -192,13 +220,27 @@ class JobHandle:
 
     @property
     def state(self) -> str:
-        """``"queued"``, ``"running"``, ``"done"``, ``"failed"``, ``"cancelled"`` or ``"timeout"``."""
+        """
+        The job's state.
+
+        Returns
+        -------
+        {"queued", "running", "done", "failed", "cancelled", "timeout"}
+            The current state; the last four are final.
+        """
         with self._lock:
             return self._state
 
     @property
     def done(self) -> bool:
-        """``True`` once the job has ended, in whatever state."""
+        """
+        ``True`` once the job has ended, in whatever state.
+
+        Returns
+        -------
+        bool
+            Whether the state is one of :data:`FINAL_STATES`.
+        """
         return self._ended.is_set()
 
     def status(self) -> JobStatusDTO:

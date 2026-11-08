@@ -134,6 +134,9 @@ class BusResponse(BaseModel):
         feeding the soil when the earth-return current is split.
     frequencies : list of float
         Frequencies covered.
+    bus_names : list of str
+        The active buses of the network, in the order of the nodal system;
+        the keys of the voltage dictionaries.
     z_network : dict of float to complex
         Driving-point impedance at ``bus`` with the local electrode removed --
         the parallel impedance the rest of the network offers at that location.
@@ -146,6 +149,10 @@ class BusResponse(BaseModel):
         It is what makes the EPR-based reduction factor evaluable per electrode
         instead of assumed invariant. Empty when the solve carried no mutual-free
         vector, in which case :meth:`evaluate` falls back to :attr:`r_epr`.
+    other_impedance : dict of float to dict of str to complex
+        Per frequency, the electrode impedance of every bus that carries one,
+        the response bus included; what splits the earth-return current
+        between the electrodes.
     z_column : dict of float to dict of str to complex
         Voltage at every bus per ampere injected at ``bus``, source-free.
     r_epr : dict of float to float or None
@@ -205,6 +212,17 @@ class BusResponse(BaseModel):
         (``Y_B = 0``); a zero impedance means an *ideal* one and is returned as
         ``inf``, which :meth:`voltages` handles as a limit rather than a
         division.
+
+        Parameters
+        ----------
+        z_bus : complex, float or None
+            The electrode impedance in ohms; ``None`` for no electrode.
+
+        Returns
+        -------
+        complex
+            The shunt admittance ``Y_B = 1 / z_bus`` in siemens: ``0`` without
+            an electrode, ``inf`` for an ideal one.
 
         Notes
         -----
@@ -662,6 +680,11 @@ class BusResponse(BaseModel):
         ``"worst_passive"``. The first two are the endpoints of the curve; the
         third is the reactive electrode that maximises the driving-point
         magnitude (see :meth:`worst_case_electrode`).
+
+        Returns
+        -------
+        pl.DataFrame
+            The rows of :meth:`evaluate` for the three cases, stacked.
         """
         frames = [
             self.evaluate(None, label="open"),
@@ -689,6 +712,12 @@ class BusResponse(BaseModel):
             Electrodes, in the spellings :meth:`evaluate` accepts.
         labels : sequence of str, optional
             One label per value. Defaults to a rendering of each value.
+
+        Returns
+        -------
+        pl.DataFrame
+            The rows of :meth:`evaluate` for every electrode, stacked in the
+            order of ``z_values``.
 
         Raises
         ------
@@ -823,6 +852,8 @@ def bus_response(
     Returns
     -------
     BusResponse
+        The response of the network to the electrode at ``bus``; evaluating
+        it for any electrode costs no further solve.
 
     Raises
     ------

@@ -208,20 +208,40 @@ class Database:
 
     @property
     def path(self) -> str:
-        """The database file as given to the constructor (``str``)."""
+        """
+        The database file as given to the constructor (``str``).
+
+        Returns
+        -------
+        str
+            The path of the SQLite file.
+        """
         return self._path
 
     @property
     def closed(self) -> bool:
-        """Whether :meth:`close` has run (``bool``)."""
+        """
+        Whether :meth:`close` has run (``bool``).
+
+        Returns
+        -------
+        bool
+            ``True`` after :meth:`close`.
+        """
         return self._closed
 
     @property
     def engine(self) -> Engine:
-        """The SQLAlchemy engine this database owns.
+        """
+        The SQLAlchemy engine this database owns.
 
         For direct SQL access. Prefer :meth:`session` for ORM work; do not
         dispose the engine yourself -- :meth:`close` does that.
+
+        Returns
+        -------
+        sqlalchemy.engine.Engine
+            The engine of the SQLite file.
         """
         return self._engine
 

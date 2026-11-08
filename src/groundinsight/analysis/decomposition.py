@@ -281,7 +281,14 @@ class CutAnalysis(BaseModel):
 
     @property
     def has_currents(self) -> bool:
-        """``True`` when a solved fault result was available."""
+        """
+        ``True`` when a solved fault result was available.
+
+        Returns
+        -------
+        bool
+            Whether the current columns of :meth:`to_polars` are filled.
+        """
         return bool(self.i_shield)
 
     def to_polars(self) -> pl.DataFrame:
@@ -290,18 +297,16 @@ class CutAnalysis(BaseModel):
 
         One row per direction and frequency.
 
-        Columns
-        -------
-        fault, fault_bus, cut, side_buses, n_side_buses, branches,
-        sides_are_disjoint, frequency_Hz, Z_side_Ohm, Z_side_deg, Z_local_Ohm,
-        Z_parallel_Ohm, Z_driving_point_Ohm, identity_residual, I_fault_A,
-        I_local_A, I_shield_A, I_shield_deg, current_share, I_earth_A,
-        I_total_A, r_side, kcl_residual
-
         Returns
         -------
         pl.DataFrame
-            One row per (cut, frequency), with a pinned schema.
+            One row per (cut, frequency), with a pinned schema and the
+            columns fault, fault_bus, cut, side_buses, n_side_buses,
+            branches, sides_are_disjoint, frequency_Hz, Z_side_Ohm,
+            Z_side_deg, Z_local_Ohm, Z_parallel_Ohm, Z_driving_point_Ohm,
+            identity_residual, I_fault_A, I_local_A, I_shield_A,
+            I_shield_deg, current_share, I_earth_A, I_total_A, r_side,
+            kcl_residual.
 
         Notes
         -----

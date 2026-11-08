@@ -144,15 +144,39 @@ class SweepResult(BaseModel):
     _cuts: Optional[pl.DataFrame] = None
 
     def buses(self) -> pl.DataFrame:
-        """Per-bus results of every point, stacked."""
+        """
+        Per-bus results of every point, stacked.
+
+        Returns
+        -------
+        pl.DataFrame
+            The ``res_buses`` frames of the points with a ``point`` column first;
+            empty when no point produced a result.
+        """
         return _or_empty(self._buses)
 
     def branches(self) -> pl.DataFrame:
-        """Per-branch results of every point, stacked."""
+        """
+        Per-branch results of every point, stacked.
+
+        Returns
+        -------
+        pl.DataFrame
+            The ``res_branches`` frames of the points with a ``point`` column
+            first; empty unless the sweep was run with ``collect_branches=True``.
+        """
         return _or_empty(self._branches)
 
     def impedances(self) -> pl.DataFrame:
-        """``Z_G`` and both reduction factors of every point, stacked."""
+        """
+        ``Z_G`` and both reduction factors of every point, stacked.
+
+        Returns
+        -------
+        pl.DataFrame
+            The ``res_all_impedances`` frames of the points with a ``point``
+            column first.
+        """
         return _or_empty(self._impedances)
 
     def cuts(self) -> pl.DataFrame:
@@ -160,6 +184,13 @@ class SweepResult(BaseModel):
         Side impedances and side reduction factors, stacked.
 
         Empty when the sweep was run without cuts.
+
+        Returns
+        -------
+        pl.DataFrame
+            The :meth:`CutAnalysis.to_polars
+            <groundinsight.CutAnalysis.to_polars>` frames of the points with a
+            ``point`` column first.
         """
         return _or_empty(self._cuts)
 
@@ -204,6 +235,7 @@ def rho_f_points(
     Returns
     -------
     list of SweepPoint
+        One point per catalogue entry, labelled with its key.
 
     Raises
     ------
@@ -441,6 +473,8 @@ def run_sweep(
     Returns
     -------
     SweepResult
+        The stacked results of every point and the failures of the points
+        that did not solve.
 
     Raises
     ------
