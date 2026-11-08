@@ -255,6 +255,21 @@ it — the substitution is accurate to the digits above and needs no change to
 the model. Giving the bond a small but honest resistance works equally well and
 removes the warning.
 
+**Phase conductors follow the same rule.** A `phase_impedance_formula` without
+a resistive part is an ideal short at 0 Hz as well. When the phase network is
+solved (`phase_current_mode="auto"`), such a conductor receives the same
+stand-in, announced by the same `DCLimitWarning`; $Z_{\min}$ stays the smallest
+impedance of the earthing network, so the earthing results of a network with a
+DC short do not move because its phase conductors are declared. Above 0 Hz a
+phase impedance that is zero, too small to invert or has a negative real part
+is refused with a `ValueError` naming the branch, as for every other element.
+One consequence is worth knowing: where *all* parallel routes of the phase
+network are ideal shorts at DC, the model has no DC split of its own, and every
+conductor carrying the same stand-in splits the current as if all of them had
+one and the same impedance, whatever their lengths. Declare the DC resistance
+in `phase_impedance_formula` (e.g. `R*l + j*2*pi*f*L*l`) when the DC split
+between routes matters.
+
 ### Every transient study contains DC
 
 An `rfft` frequency grid always contains a 0 Hz bin, so *every* transient run

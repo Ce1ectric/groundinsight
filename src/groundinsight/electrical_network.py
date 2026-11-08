@@ -1321,9 +1321,14 @@ class ElectricalNetwork:
 
         Only the impedances that are actually inverted are checked: active
         buses, the self impedance of active grounding-conductor branches
-        between two active buses, and the source impedance of voltage sources.
+        between two active buses, the source impedance of voltage sources and,
+        when the phase network is solved (``auto_phase_currents``), the
+        declared phase impedance of active branches between two active buses.
         Mutual impedances are never inverted and are deliberately left alone --
-        zero mutual coupling is the normal case.
+        zero mutual coupling is the normal case. A phase impedance that is zero
+        *at 0 Hz* is accepted like any other element's and replaced by the DC
+        stand-in (:meth:`_dc_substitute_at`); above 0 Hz the phase-network
+        solve used to invert it and raise a bare ``ZeroDivisionError``.
 
         Raises
         ------
@@ -1367,6 +1372,38 @@ class ElectricalNetwork:
                 element=f"source '{source.name}' (source impedance)",
             )
 
+        for branch in self._branches_with_inverted_phase_impedance():
+            check_passive_impedance(
+                self._relevant(branch.phase_impedance),
+                element=f"branch '{branch.name}' (phase impedance)",
+                formula_str=branch.type.phase_impedance_formula,
+            )
+
+    def _branches_with_inverted_phase_impedance(self) -> List[Branch]:
+        """
+        Branches whose declared phase impedance the phase-network solve inverts.
+
+        Active branches between two active buses with a declared
+        ``phase_impedance``, and only when the phase network is solved
+        (``auto_phase_currents``); in the path mode the phase current comes
+        from the enumerated paths and no phase impedance is inverted.
+
+        Returns
+        -------
+        list of Branch
+            In network order.
+        """
+        if not self.auto_phase_currents:
+            return []
+        return [
+            branch
+            for branch in self.network.branches.values()
+            if branch.active
+            and branch.phase_impedance is not None
+            and branch.from_bus in self.bus_indices
+            and branch.to_bus in self.bus_indices
+        ]
+
     def _dc_substitute_at(self, freq: float) -> Optional[float]:
         """Size the stand-in for elements that are a short circuit at 0 Hz.
 
@@ -1378,10 +1415,19 @@ class ElectricalNetwork:
         :func:`~groundinsight.utils.impedance_calculator.dc_substitute_impedance`
         can scale the substitute to the network.
 
-        The scan covers exactly the impedances that are inverted in
-        :meth:`_construct_Y_matrices`: active buses, the self impedance of
-        active grounding-conductor branches between two active buses, and the
-        impedance of voltage sources. Mutual impedances are never inverted.
+        The scan covers exactly the impedances that are inverted: in
+        :meth:`_construct_Y_matrices` active buses, the self impedance of
+        active grounding-conductor branches between two active buses and the
+        impedance of voltage sources; in the phase-network solve the declared
+        phase impedances (:meth:`_branches_with_inverted_phase_impedance`).
+        A phase conductor modelled as ``j*2*pi*f*L*l`` is an ideal short at
+        DC like an inductive shield, and without it in the scan a network
+        whose only DC short was a phase conductor got no stand-in and
+        ``run_fault`` raised ``ZeroDivisionError``. A shorted phase conductor
+        triggers the stand-in and receives it; the stand-in itself stays
+        scaled to the smallest usable impedance of the earthing network, so
+        the earthing results of a network with a DC short are unchanged.
+        Mutual impedances are never inverted.
 
         Parameters
         ----------
@@ -1400,13 +1446,13 @@ class ElectricalNetwork:
         shorted: List[str] = []
         magnitudes: List[float] = []
 
-        def classify(impedance, label: str) -> None:
+        def classify(impedance, label: str, scale: bool = True) -> None:
             if impedance is None:
                 return
             value = complex(impedance.real, impedance.imag)
             if is_short_circuit(value):
                 shorted.append(label)
-            else:
+            elif scale:
                 magnitudes.append(abs(value))
 
         for bus_name, bus in self.network.buses.items():
@@ -1434,6 +1480,18 @@ class ElectricalNetwork:
                 continue
             classify(
                 source.source_impedance.get(freq), f"source '{source.name}'"
+            )
+
+        # A shorted phase conductor needs the stand-in as well, but the
+        # stand-in stays scaled to the earthing network's elements: it is the
+        # one value every shorted element of either system gets, and the
+        # earthing results of a network with a DC short do not move because
+        # its phase conductors are declared.
+        for branch in self._branches_with_inverted_phase_impedance():
+            classify(
+                branch.phase_impedance.get(freq),
+                f"branch '{branch.name}' (phase conductor)",
+                scale=False,
             )
 
         if not shorted:
@@ -1479,8 +1537,9 @@ class ElectricalNetwork:
         -- exactly zero above 0 Hz, too small to invert above 0 Hz, negative
         real part and real part of minus infinity at any frequency -- over the
         same elements (active buses, grounding-conductor branches between
-        active buses, voltage sources on an active bus) and the same
-        frequencies, evaluated on whole arrays.
+        active buses, voltage sources on an active bus, and the declared phase
+        impedances the phase-network solve inverts) and the same frequencies,
+        evaluated on whole arrays.
         Calling the element-wise check for every element cost 0.19 s on a
         4000-bus ring (finding P6) although it almost never finds anything;
         when this check does fail, the element-wise one runs and raises with
@@ -1516,10 +1575,16 @@ class ElectricalNetwork:
 
         grid = tables.branch_in_net & tables.branch_grounding
         on_bus = tables.vs_bus >= 0
+        # The declared phase impedances the phase-network solve inverts
+        # (see _branches_with_inverted_phase_impedance).
+        phase = tables.branch_in_net & tables.phase_declared
+        if not self.auto_phase_currents:
+            phase = np.zeros_like(phase)
         return (
             passes(tables.bus_z_raw, tables.bus_present)
             and passes(tables.self_raw[grid], tables.self_present[grid])
             and passes(tables.vs_z_raw[on_bus], tables.vs_present[on_bus])
+            and passes(tables.phase_raw[phase], tables.phase_present[phase])
         )
 
     def _construct_Y_matrices(self):
@@ -2422,11 +2487,12 @@ class ElectricalNetwork:
 
         Raises
         ------
-        ZeroDivisionError
-            If a declared phase impedance is exactly zero. The scalar
-            implementation inverted it with Python's complex division and
-            raised; that behaviour is kept rather than silently turned into an
-            infinite admittance.
+        ValueError
+            If a declared phase impedance is still exactly zero here. It
+            cannot be: the passivity check refuses it above 0 Hz and the 0 Hz
+            scan replaces it with the DC stand-in. The guard stays so that an
+            unforeseen path ends in a message naming the branch rather than in
+            an infinite admittance or a bare ``ZeroDivisionError``.
         """
         rows = np.flatnonzero(tables.branch_in_net)
         z_phase = tables.phase_z[rows, column]
@@ -2436,8 +2502,12 @@ class ElectricalNetwork:
         invert = declared & ~_open_mask(z_phase)
         zero = invert & (z_phase.real == 0.0) & (z_phase.imag == 0.0)
         if zero.any():
-            # Same exception, same message as the scalar ``1.0 / Z_phase``.
-            1.0 / complex(z_phase[zero][0])
+            branch = tables.branch_names[rows[np.flatnonzero(zero)[0]]]
+            raise ValueError(
+                f"Branch '{branch}' has a phase impedance of exactly zero at "
+                f"{tables.frequencies[column]} Hz, which the phase-network "
+                f"solve cannot invert."
+            )
         admittance[invert] = _reciprocal(z_phase[invert], np.ones(invert.sum(), bool))
 
         proxied = ~declared
