@@ -112,9 +112,8 @@ and as the maximum over the network — the FFT answer is conservative there:
 77.6 V against 49.2 V in the steady state of a coupled two-bus cable link,
 i.e. $1/|1 - Z_m/Z_s|$ for one coupled branch, and +44 % on the peak of a
 fully offset fault current. A bus away from the fault can come out lower.
-Since 0.6.1 the solver raises a `TransientModelWarning` (code
-`TRANSIENT_MODEL`, the coupled branches as elements) as soon as it meets a
-coupled branch, so the difference is visible rather than inferred from this
+The solver raises a `TransientModelWarning` (code `TRANSIENT_MODEL`, the
+coupled branches as elements) as soon as it meets a coupled branch, so the difference is visible rather than inferred from this
 page. Use `solver="state_space"`, which does model the coupling for current
 sources (see [Mutual coupling](#mutual-coupling) below), or accept the FFT
 answer as a self-impedance-only result.
@@ -166,8 +165,8 @@ reconstruction.
   bus with a fault pulse at $0.1\,\mathrm{s}$ and a $0.4\,\mathrm{s}$
   window: an EPR of $45.9\,\mathrm{V}$ at $t = 0$, i.e. *before* the fault,
   and a post-fault peak 37 % below the state-space answer. Choose
-  $t_{\text{end}} \gg \tau_{\text{slowest}}$ in practice. Since 0.6.1 the
-  solver checks the last sample of the window against the peak and raises a
+  $t_{\text{end}} \gg \tau_{\text{slowest}}$ in practice. The solver checks
+  the last sample of the window against the peak and raises a
   `TransientModelWarning` when it is above 1 %, and `solve(..., zero_pad=True)`
   solves on a window twice as long and reports only its first half — the
   same trace at twice the solve cost, with the wrap pushed out of the
@@ -358,17 +357,13 @@ Two cases:
 
 The state-space model carries one set of `R` / `L` / `C` values and treats
 them as frequency-independent, so one entry of `network.frequencies` has to
-be chosen as the operating point. Up to 0.6.0 that was `frequencies[0]` — a
-*list position*, not a physical choice. With `frequencies=[0, 50]` the model
-was parameterised at DC, where $L_{\text{src}} = \mathrm{Im}\,Z_{\text{src}} / \omega$
-is not defined and silently came out as zero; the EPR of the reference case
-moved from $0.24\,\mathrm{V}$ to $161\,\mathrm{V}$ purely by prepending a DC
-bin to the list.
-
-Since 0.6.1 the default is the **smallest strictly positive** frequency in
-the list, and `solve(..., f_eval=...)` selects a different one explicitly
-(it must be one of `network.frequencies`, because that is where the lumped
-tables are stored). A reactive $Z_{\text{src}}$ combined with
+be chosen as the operating point. The default is the **smallest strictly
+positive** frequency in the list, and `solve(..., f_eval=...)` selects a
+different one explicitly (it must be one of `network.frequencies`, because
+that is where the lumped tables are stored). A list position such as
+`frequencies[0]` would not be a physical choice: with `frequencies=[0, 50]`
+it would parameterise the model at DC, where
+$L_{\text{src}} = \mathrm{Im}\,Z_{\text{src}} / \omega$ is not defined. A reactive $Z_{\text{src}}$ combined with
 $f_{\text{eval}} = 0$ is rejected with a `ValueError` rather than turned
 into a purely resistive source.
 
@@ -486,10 +481,9 @@ the LTI case this is a strict win over a generic ODE solver.
   source waveform is the injection. A fault carrying scalings other than 1
   raises a `TransientModelWarning`.
 - **Passivity is checked, not repaired.** A negative `R_self`, `L_self`,
-  `C_self`, bus `L` or bus `C` is rejected with a `ValueError`; up to 0.6.0
-  the positivity guards dropped such an element, which reads as a lossless
-  and therefore never-decaying network rather than as the formula error it
-  is. A mutual inductance above the branch's own `L_self` is not realisable
+  `C_self`, bus `L` or bus `C` is rejected with a `ValueError`. Dropping
+  such an element instead would read as a lossless and therefore
+  never-decaying network rather than as the formula error it is. A mutual inductance above the branch's own `L_self` is not realisable
   for two coupled conductors and raises a `TransientModelWarning` (it is
   almost always a mH/H unit slip, worth a factor of 1000 on the coupled EPR).
 

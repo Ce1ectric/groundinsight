@@ -14,20 +14,21 @@ and the test suite checks both on every change.
 
 ## Tasks after the tutorials
 
-| Task | Described in |
+| Task | How-to guide |
 |---|---|
 | Derive bus and branch types from cable and electrode data | [Bus and branch types from data sheets](../howto/types-from-datasheets.md) |
+| Several frequencies, fault scalings, direct current | [Harmonics, fault scalings and DC](../howto/harmonics.md) |
 | Compare the results with the limits of EN 50522 | [Compare results with EN 50522 limits](../howto/en50522-check.md) |
-| Several frequencies, fault scalings, direct current | [Frequencies, source values and fault scalings](../reference/conventions.md#frequencies-source-values-and-fault-scalings), [Direct current](../explanation/dc.md) <!-- howto: howto/harmonics.md --> |
-| Vary soil resistivity or electrodes over many cases | [Parameter sweeps](../api/sweep.md), [Statistics and classification](../api/statistics.md) <!-- howto: howto/sweeps.md --> |
-| Take branches or stations out of service | [Outage studies](../api/outage.md#example) <!-- howto: howto/outage.md --> |
-| Find the largest admissible soil resistivity | [Analysis](../api/analysis.md#example) <!-- howto: howto/inverse-rho.md --> |
-| Import a network and its short-circuit results from pandapower | [I/O — network importers](../api/io.md#example) <!-- howto: howto/pandapower.md --> |
-| Check earthing conductors and electrodes thermally | [Conductor thermal limits](../api/analysis.md#conductor-thermal-limits-iec-60949-iec-60909-0) <!-- howto: howto/thermal.md --> |
-| Study the fault current in time: DC offset, switching | [Transient simulation](../transient.md), [API](../api/transient.md#example) <!-- howto: howto/transient.md --> |
-| Save, load and migrate networks and type libraries | [Project files (JSON)](../api/io.md#project-files-json), [Database](../api/database.md#the-database-object) <!-- howto: howto/persistence.md --> |
-| Large and meshed networks | [Enumerated paths and the legacy mode](../explanation/phase-currents.md#path-finding) <!-- howto: howto/performance.md --> |
-| Warnings, diagnostics and logging | [Diagnostic codes](../api/service.md#diagnostic-codes), [Logging](../api/index.md#logging) <!-- howto: howto/diagnostics.md --> |
+| Vary soil resistivity or electrodes over many cases | [Parameter sweeps and statistics](../howto/sweeps.md) |
+| Take branches or stations out of service | [Outage and what-if studies](../howto/outage.md) |
+| Find the largest admissible soil resistivity | [Admissible soil resistivity](../howto/inverse-rho.md) |
+| Import a network and its short-circuit results from pandapower | [Import from pandapower](../howto/pandapower.md) |
+| Check earthing conductors and electrodes thermally | [Thermal limits of earthing conductors](../howto/thermal.md) |
+| Study the fault current in time: DC offset, switching | [Transient studies](../howto/transient.md) |
+| Save, load and migrate networks and type libraries | [Save, load and migrate](../howto/persistence.md) |
+| Large and meshed networks | [Large and meshed networks](../howto/performance.md) |
+| Warnings, diagnostics and logging | [Diagnostics, logging and warnings](../howto/diagnostics.md) |
+| Drive a study from another program or the command line | [Service layer and command line](../howto/service-layer.md) |
 
 ## Where the sections of the former Quickstart went
 
@@ -43,9 +44,9 @@ and each of its section links lands on the matching row below.
 | [5. Create paths and solve](first-calculation.md#step-5-solve){ #5-create-paths-and-solve } | Your first fault calculation, step 5 — no paths needed |
 | [6. Inspect the results](first-calculation.md#step-6-read-the-results){ #6-inspect-the-results } | Your first fault calculation, step 6 |
 | [7. Plot](first-calculation.md#step-8-plot-and-save){ #7-plot } | Your first fault calculation, step 8; [Figure ownership](../api/plotting.md#figure-ownership) |
-| [8. Save and load](first-calculation.md#step-8-plot-and-save){ #8-save-and-load } | Your first fault calculation, step 8; [Project files (JSON)](../api/io.md#project-files-json) |
-| [9. Optional: outage / what-if studies](../api/outage.md#example){ #9-optional-outage-what-if-studies } | Outage studies |
-| [10. Optional: inverse rho analysis](../api/analysis.md#example){ #10-optional-inverse-rho-analysis } | Analysis |
-| [11. Optional: import from pandapower](../api/io.md#example){ #11-optional-import-from-pandapower } | I/O — network importers |
-| [12. Optional: transient simulation](../transient.md){ #12-optional-transient-simulation } | Transient simulation |
-| [13. Logging and silencing output](../api/index.md#logging){ #13-logging-and-silencing-output } | API overview, logging |
+| [8. Save and load](first-calculation.md#step-8-plot-and-save){ #8-save-and-load } | Your first fault calculation, step 8; [Save, load and migrate](../howto/persistence.md) |
+| [9. Optional: outage / what-if studies](../howto/outage.md){ #9-optional-outage-what-if-studies } | Outage and what-if studies |
+| [10. Optional: inverse rho analysis](../howto/inverse-rho.md){ #10-optional-inverse-rho-analysis } | Admissible soil resistivity |
+| [11. Optional: import from pandapower](../howto/pandapower.md){ #11-optional-import-from-pandapower } | Import from pandapower |
+| [12. Optional: transient simulation](../howto/transient.md){ #12-optional-transient-simulation } | Transient studies; [Transient simulation](../transient.md) explains the solvers |
+| [13. Logging and silencing output](../howto/diagnostics.md){ #13-logging-and-silencing-output } | Diagnostics, logging and warnings |

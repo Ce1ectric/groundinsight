@@ -120,9 +120,12 @@ plugins:
 # Build hooks. reference_cases.py writes the table of the closed-form
 # reference cases into explanation/verification.md from REFERENCE_CASES and
 # one run of gi.run_reference_cases(), so the table cannot go stale.
-# notebooks.py prepares the environment the example notebooks run in.
+# result_tables.py writes the column tables of reference/results.md from the
+# schema constants and a probe solve. notebooks.py prepares the environment
+# the example notebooks run in.
 hooks:
   - docs/hooks/reference_cases.py
+  - docs/hooks/result_tables.py
   - docs/hooks/notebooks.py
 
 # The hooks are build code, not pages or downloads.
@@ -169,7 +172,18 @@ nav:
       - From a line to a ring: getting-started/ring.md
   - How-to guides:
       - Bus and branch types from data sheets: howto/types-from-datasheets.md
+      - Harmonics, fault scalings and DC: howto/harmonics.md
       - Compare results with EN 50522 limits: howto/en50522-check.md
+      - Parameter sweeps and statistics: howto/sweeps.md
+      - Outage and what-if studies: howto/outage.md
+      - Admissible soil resistivity: howto/inverse-rho.md
+      - Import from pandapower: howto/pandapower.md
+      - Thermal limits of earthing conductors: howto/thermal.md
+      - Transient studies: howto/transient.md
+      - Save, load and migrate: howto/persistence.md
+      - Large and meshed networks: howto/performance.md
+      - Diagnostics, logging and warnings: howto/diagnostics.md
+      - Service layer and command line: howto/service-layer.md
   - Understanding the model:
       - explanation/index.md
       - Model and assumptions: explanation/theory.md
@@ -195,11 +209,14 @@ nav:
       - Direct-current studies: examples/dc_studies.ipynb
       - Thermal limits: examples/thermal_limits.ipynb
   - Reference:
+      - Result tables: reference/results.md
       - Conventions and units: reference/conventions.md
       - Formula syntax: reference/formula-syntax.md
+      - Warnings and diagnostics: reference/warnings.md
       - Glossary and symbols: reference/glossary.md
       - API:
           - Overview: api/index.md
+          - Top-level package: api/toplevel.md
           - Network operations: api/network_operations.md
           - Service functions: api/service.md
           - Core models: api/core_models.md
