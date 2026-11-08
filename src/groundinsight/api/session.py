@@ -46,12 +46,12 @@ that is current with one that is stale.
 import itertools
 import logging
 import threading
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 import groundinsight as gi
 from groundinsight.diagnostics import collecting, unique
 
-from .commands import Command, CommandContext, parse_command
+from .commands import Command, CommandContext, parse_command, rejection_reason
 from .examples import EXAMPLES
 from .jobs import JobHandle, JobRunner, snapshot_network
 from .tasks import TaskOutcome, run_task
@@ -451,11 +451,11 @@ class ProjectSession:
         try:
             network = gi.load_network_from_json(path)
         except (OSError, ValueError) as exc:
-            raise ProjectError(f"cannot open '{path}': {exc}") from exc
+            raise ProjectError(f"cannot open '{path}': {rejection_reason(exc)}") from exc
         try:
             return cls(network, path=path, **options)
         except ValueError as exc:
-            raise ProjectError(f"cannot open '{path}': {exc}") from exc
+            raise ProjectError(f"cannot open '{path}': {rejection_reason(exc)}") from exc
 
     @classmethod
     def from_store(cls, store: ProjectStore, key: str, **options: Any) -> "ProjectSession":
@@ -486,11 +486,11 @@ class ProjectSession:
         try:
             network = store.load(key)
         except (KeyError, OSError, ValueError, RuntimeError) as exc:
-            raise ProjectError(f"cannot open '{location}': {exc}") from exc
+            raise ProjectError(f"cannot open '{location}': {rejection_reason(exc)}") from exc
         try:
             return cls(network, store=store, key=key, **options)
         except ValueError as exc:
-            raise ProjectError(f"cannot open '{location}': {exc}") from exc
+            raise ProjectError(f"cannot open '{location}': {rejection_reason(exc)}") from exc
 
     @classmethod
     def from_example(cls, name: str, **options: Any) -> "ProjectSession":
@@ -652,7 +652,7 @@ class ProjectSession:
                 try:
                     gi.save_network_to_json(view, target)
                 except (OSError, ValueError) as exc:
-                    raise ProjectError(f"cannot save '{target}': {exc}") from exc
+                    raise ProjectError(f"cannot save '{target}': {rejection_reason(exc)}") from exc
                 self._path, self._store, self._key = target, None, None
             else:
                 self._save_to_store(self._store, self._key, view)
@@ -693,7 +693,7 @@ class ProjectSession:
         try:
             store.save(key, network)
         except (OSError, ValueError, RuntimeError) as exc:
-            raise ProjectError(f"cannot save '{store.scheme}:{key}': {exc}") from exc
+            raise ProjectError(f"cannot save '{store.scheme}:{key}': {rejection_reason(exc)}") from exc
 
     # -- edits ------------------------------------------------------------------
 

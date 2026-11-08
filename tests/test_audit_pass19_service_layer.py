@@ -186,6 +186,7 @@ def test_the_public_names_live_in_the_api_package_not_the_top_level():
 #: public (the package's internal-API convention, ARC5).
 SERVICE_INTERNAL_API = (
     ("groundinsight.api.schemas", "BaseDTO"),
+    ("groundinsight.api.commands", "rejection_reason"),
 )
 
 
@@ -590,7 +591,7 @@ def _command_catalogue() -> List[Any]:
 
 
 def test_every_command_applies_and_undo_redo_restore_the_network_exactly():
-    api = _api()
+    _api()  # the service layer exists
     session = _session("quickstart")
     try:
         with warnings.catch_warnings():
@@ -677,6 +678,58 @@ def test_a_rejected_command_leaves_everything_unchanged(index, quickstart):
     after = (quickstart.network.model_dump_json(), quickstart.revision,
              quickstart.history(), quickstart.can_redo, quickstart.tables())
     assert after == before
+
+
+def test_a_rejected_command_says_why_in_the_words_of_the_library(quickstart):
+    """A front end shows the reason verbatim, so it carries the library's
+    message without pydantic's report frame ("1 validation error for ...",
+    the input echo, the documentation link). Second way: the error the
+    library raises for the same change on a twin."""
+    api = _api()
+    with pytest.raises(api.CommandError) as caught:
+        quickstart.apply(api.UpdateBranch(name="cable_1", fields={"length": -1.0}))
+    message = str(caught.value)
+    twin = api.EXAMPLES["quickstart"]()
+    with pytest.raises(ValueError) as direct:
+        twin.update_branch("cable_1", length=-1.0)
+    reasons = [error["msg"].removeprefix("Value error, ") for error in direct.value.errors()]
+    assert reasons and all(reason in message for reason in reasons)
+    assert message.startswith("update branch 'cable_1': length=-1.0: ")
+    for frame in ("validation error for", "errors.pydantic.dev", "input_value", "Value error, "):
+        assert frame not in message, frame
+    # The same for every rejection of the catalogue and for a malformed command.
+    for command in _rejected_commands():
+        with pytest.raises(api.CommandError) as caught:
+            quickstart.apply(command)
+        assert "errors.pydantic.dev" not in str(caught.value), command.label
+    with pytest.raises(api.CommandError) as caught:
+        api.parse_command({"op": "update_bus", "name": "b", "fields": "not a mapping"})
+    assert str(caught.value).startswith("invalid 'update_bus' command: ")
+    assert "errors.pydantic.dev" not in str(caught.value)
+    assert "fields" in str(caught.value)
+
+
+def test_a_project_file_that_does_not_validate_says_where(tmp_path):
+    """Opening reports the library's reason and the element it concerns.
+    Second way: the library's own error for the same file."""
+    api = _api()
+    path = tmp_path / "broken.json"
+    gi.save_network_to_json(api.EXAMPLES["quickstart"](), path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["branches"]["cable_1"]["length"] = -1.0
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(api.ProjectError) as caught:
+        api.ProjectSession.from_file(str(path))
+    message = str(caught.value)
+    with pytest.raises(ValueError) as direct:
+        gi.load_network_from_json(path)
+    errors = direct.value.errors()
+    assert errors
+    for error in errors:
+        assert error["msg"].removeprefix("Value error, ") in message
+        assert ".".join(str(part) for part in error["loc"]) in message  # branches.cable_1.length
+    assert message.startswith(f"cannot open '{path}': ")
+    assert "errors.pydantic.dev" not in message and "validation error for" not in message
 
 
 def test_a_type_update_swaps_every_user_atomically():
@@ -887,7 +940,7 @@ def _sweep_request(n_points: int, fault: str = "F1"):
 
 
 def test_a_solve_job_reports_progress_and_binds_its_result(quickstart):
-    api = _api()
+    _api()  # the service layer exists
     handle = quickstart.submit_solve("fault_at_remote_bus")
     dto = handle.result(timeout=60)
     status = handle.status()

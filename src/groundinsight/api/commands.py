@@ -204,6 +204,39 @@ def _field_text(fields: Dict[str, Any]) -> str:
     return ", ".join(f"{key}={value!r}" for key, value in fields.items())
 
 
+def rejection_reason(exc: BaseException) -> str:
+    """
+    The library's reason for a rejection, as a front end shows it.
+
+    Internal API: the session words its project errors with it, too; not
+    exported, may change in any release.
+
+    A pydantic ``ValidationError`` renders as a multi-line report (error
+    count, model name, input echo, a link to pydantic's documentation) around
+    the one sentence the library wrote. Front ends show the reason verbatim,
+    so only the messages are kept, each with its field when the message does
+    not name it already.
+
+    Parameters
+    ----------
+    exc : BaseException
+        The exception the library raised.
+
+    Returns
+    -------
+    str
+        One line per message, joined with ``"; "``.
+    """
+    if not isinstance(exc, ValidationError):
+        return str(exc)
+    parts = []
+    for error in exc.errors(include_url=False):
+        message = str(error.get("msg", "")).removeprefix("Value error, ")
+        location = ".".join(str(part) for part in error.get("loc", ()))
+        parts.append(f"{location}: {message}" if location and location not in message else message)
+    return "; ".join(parts) or str(exc)
+
+
 def _derived(element) -> Dict[str, Any]:
     """
     The derived fields of a bus or branch (impedance tables, RLC values).
@@ -394,7 +427,7 @@ class Command(BaseDTO):
         except CommandError:
             raise
         except (ValueError, TypeError, KeyError, AttributeError) as exc:
-            raise CommandError(f"{self.label}: {exc}") from exc
+            raise CommandError(f"{self.label}: {rejection_reason(exc)}") from exc
 
     def revert(self, context: CommandContext) -> None:
         """
@@ -1451,4 +1484,4 @@ def parse_command(data: Any) -> Command:
     try:
         return COMMAND_ADAPTER.validate_python(data)
     except ValidationError as exc:
-        raise CommandError(f"invalid '{op}' command: {exc}") from exc
+        raise CommandError(f"invalid '{op}' command: {rejection_reason(exc)}") from exc
