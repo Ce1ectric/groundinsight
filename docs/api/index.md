@@ -33,7 +33,8 @@ classes and their signatures.
   pandapower topology importer (`from_pandapower`,
   `preview_pandapower_import`) and the short-circuit result import
   (`read_shortcircuit_results`,
-  `apply_shortcircuit_characteristics`).
+  `apply_shortcircuit_characteristics`), and networks as tables
+  (`network_from_tables`, `Network.to_tables`) for spreadsheets and CSV.
 - [Outage studies](outage.md) — what-if API on top of the `active` flag
   (`Outage`, `outage_context`, `run_outage_study`).
 - [Analysis](analysis.md) — higher-level routines on top of `run_fault`:

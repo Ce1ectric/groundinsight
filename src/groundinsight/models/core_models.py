@@ -4134,5 +4134,36 @@ class Network(ValidatedAssignmentModel):
                 )
         return pl.DataFrame(data, schema=RES_ALL_IMPEDANCES_SCHEMA)
 
+    def to_tables(self) -> Dict[str, pl.DataFrame]:
+        """
+        Export the network as the tables :func:`groundinsight.network_from_tables` reads.
+
+        Returns
+        -------
+        dict of str to polars.DataFrame
+            One frame per table of
+            :data:`groundinsight.io.tables.TABLE_SCHEMAS`, with that schema.
+
+        Raises
+        ------
+        ValueError
+            If two different bus types, or branch types, share a name.
+
+        Notes
+        -----
+        Thin wrapper around :func:`groundinsight.io.tables.network_to_tables`;
+        see there for what the tables hold and what is recomputed.
+
+        Examples
+        --------
+        >>> import groundinsight as gi
+        >>> net = gi.create_network(name="demo", frequencies=[50.0])
+        >>> list(net.to_tables())[:3]
+        ['network', 'frequencies', 'bus_types']
+        """
+        from groundinsight.io.tables import network_to_tables  # avoids a cycle
+
+        return network_to_tables(self)
+
     def __str__(self):
         return f"Network(name={self.name})"

@@ -116,6 +116,7 @@ from .io import (
     preview_pandapower_import,
     read_shortcircuit_results,
     apply_shortcircuit_characteristics,
+    network_from_tables,
 )
 from .io.project_file import (
     load_network_from_json,
@@ -230,6 +231,9 @@ __all__ = [
     "preview_pandapower_import",
     "read_shortcircuit_results",
     "apply_shortcircuit_characteristics",
+    # Networks as tables (Polars frames / CSV), pinned schema; the export is
+    # Network.to_tables().
+    "network_from_tables",
     "Cut",
     "CutAnalysis",
     "analyze_cuts",

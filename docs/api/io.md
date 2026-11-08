@@ -232,6 +232,64 @@ too *small* — the unsafe direction for a limit check — and precisely
 in the high-$\kappa$, DC-dominated cases where the thermal stress is
 worst.
 
+## Networks as tables
+
+`gi.network_from_tables(...)` builds a network from ten tables — Polars
+frames, CSV files or a directory of `<table>.csv` files — and
+`Network.to_tables()` exports one in exactly that form. The schema is pinned
+in `groundinsight.io.TABLE_SCHEMAS` (column order and dtype); required
+columns are in bold, every other column may be absent or empty, which means
+the model default (`None` where the field accepts it).
+
+- `network`: **`name`**, `description`, `active_fault` — one row.
+- `frequencies`: **`frequency_Hz`** — one row per frequency, in solve order.
+- `bus_types`: **`name`**, `description`, **`system_type`**, **`voltage_level`**, **`impedance_formula`**, `R_formula`, `L_formula`, `C_formula`, `earthing_conductor_material`, `earthing_conductor_cross_section_mm2`, `earthing_conductor_theta_initial_C`, `earthing_conductor_theta_final_C`, `earthing_conductor_current_split`, `electrode_material`, `electrode_cross_section_mm2`, `electrode_theta_initial_C`, `electrode_theta_final_C`, `electrode_current_split`
+- `branch_types`: **`name`**, `description`, **`grounding_conductor`**, **`self_impedance_formula`**, **`mutual_impedance_formula`**, `phase_impedance_formula`, `R_self_formula`, `L_self_formula`, `C_self_formula`, `R_mutual_formula`, `M_mutual_formula`, `conductor_material`, `cross_section_mm2`, `theta_initial_C`, `theta_final_C`
+- `buses`: **`name`**, **`type`** (a `bus_types` name), `specific_earth_resistance` (Ω·m), `active`, `description`
+- `branches`: **`name`**, **`type`** (a `branch_types` name), **`from_bus`**, **`to_bus`**, **`length`** (km), `specific_earth_resistance`, `parallel_coefficient`, `active`, `description`
+- `sources`: **`name`**, **`bus`**, `source_type` (`current` or `voltage`), `i_k_a`, `r_to_x`, `kappa`, `description`
+- `source_values`: **`source`**, **`quantity`**, **`frequency_Hz`**, **`real`**, `imag` — long format, one row per source, quantity and frequency; `quantity` is `current` for a current source and `voltage` / `impedance` for a Thevenin source; the values are RMS phasors in A, V or Ω.
+- `faults`: **`name`**, **`bus`**, `t_k_s`, `n_factor`, `description`
+- `fault_scalings`: **`fault`**, **`frequency_Hz`**, **`scaling`** — long format; a fault without rows scales every frequency with 1.0.
+
+Only `frequencies`, `bus_types` and `buses` are required. The tables hold
+*input* only: the impedance dictionaries are evaluated from the type
+formulas on the way in — through the same `Network.add_*` path as
+`create_bus` / `create_branch`, so every formula passes the formula guard —
+and results and enumerated paths are not exported. A network whose
+impedances follow from its types therefore survives the round trip
+unchanged; one whose impedance dictionaries were overwritten by hand keeps
+the formula, not the overwritten values.
+
+```python
+import groundinsight as gi
+from pathlib import Path
+
+folder = Path("ring_tables")
+folder.mkdir(exist_ok=True)
+for name, frame in net.to_tables().items():
+    frame.write_csv(folder / f"{name}.csv")       # one CSV per table, UTF-8
+
+same = gi.network_from_tables(folder)               # or a dict of frames / paths
+```
+
+Malformed tables raise **one** `ValueError` that lists every problem with
+its table, row (counted from 1, header excluded) and column: missing tables
+or columns, unknown columns (a typo such as `lenght` would otherwise drop
+the value silently — pass `ignore_extra_columns=True` for sheets with
+comment columns), cells that are not a number (a decimal comma is named as
+such) or a boolean, duplicate names, references to buses, types, sources or
+faults that do not exist, and every model validation error. Problems of a
+well-formed network — a source that reaches no fault, partial scalings — are
+what [`gi.check_network`](service.md#pre-flight-check) reports afterwards.
+
+**Excel.** Polars reads `.xlsx` through the optional engine `fastexcel`,
+which groundinsight does not depend on. With it installed,
+`pl.read_excel("network.xlsx", sheet_id=0)` returns a dict of sheet name to
+frame — one sheet per table — which `gi.network_from_tables` takes as it
+is. Integer columns from a spreadsheet are accepted where floats are
+expected.
+
 ## Walkthrough notebook
 
 The end-to-end example for the pandapower importer is shipped as

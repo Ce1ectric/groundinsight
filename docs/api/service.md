@@ -10,6 +10,7 @@ during a calculation without the side effects of the interactive API:
 | What would `run_fault` return — without touching my network? | [`gi.solve`](#solve-without-side-effects) |
 | What is wrong with this network, all at once, as data? | [`gi.check_network`](#pre-flight-check) |
 | How far is this study, and can I stop it? | [`progress` / `should_cancel`](#progress-and-cancellation) |
+| How do I get a network from a spreadsheet, and back? | [`gi.network_from_tables` / `Network.to_tables`](io.md#networks-as-tables) |
 | Which spelling of a parameter is the current one? | [canonical names](#canonical-parameter-names) |
 
 ## Solve without side effects

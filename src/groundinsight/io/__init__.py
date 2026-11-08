@@ -23,6 +23,10 @@ Public API:
 - :func:`groundinsight.io.pandapower_import.preview_pandapower_import`
 - :func:`groundinsight.io.pandapower_sc.read_shortcircuit_results`
 - :func:`groundinsight.io.pandapower_sc.apply_shortcircuit_characteristics`
+- :func:`groundinsight.io.tables.network_from_tables` and
+  :func:`groundinsight.io.tables.network_to_tables` -- networks as Polars
+  tables or CSV files, with the pinned schema
+  :data:`groundinsight.io.tables.TABLE_SCHEMAS`
 
 The importers themselves live in tool-specific submodules so that the
 optional third-party dependency is loaded lazily.
@@ -34,6 +38,7 @@ from .pandapower_sc import (
     apply_shortcircuit_characteristics,
     read_shortcircuit_results,
 )
+from .tables import TABLE_SCHEMAS, network_from_tables, network_to_tables
 
 __all__ = [
     "ImportDefaults",
@@ -41,4 +46,7 @@ __all__ = [
     "preview_pandapower_import",
     "read_shortcircuit_results",
     "apply_shortcircuit_characteristics",
+    "network_from_tables",
+    "network_to_tables",
+    "TABLE_SCHEMAS",
 ]
