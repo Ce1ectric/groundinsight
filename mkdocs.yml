@@ -54,7 +54,12 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  # Example code lives in docs/snippets/*.py and is included with
+  # ``--8<-- "docs/snippets/<file>.py:<section>"``; the test suite runs the
+  # same files (DOC13). check_paths turns a missing snippet into a build
+  # error instead of an empty block.
+  - pymdownx.snippets:
+      check_paths: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -89,6 +94,10 @@ plugins:
   - mkdocs-jupyter:
       execute: false
       include_source: true
+      # Notebooks only. The plugin's default also converts every *.py file
+      # under docs/ into a notebook page; the scripts in docs/snippets/ are
+      # example code that is included into pages and published as files.
+      include: ["*.ipynb"]
 
 extra_javascript:
   - javascripts/mathjax.js
@@ -109,6 +118,8 @@ nav:
   - Concepts: concepts.md
   - Transient simulation: transient.md
   - Audit log: audit-log.md
+  - How-to guides:
+      - Bus and branch types from data sheets: howto/types-from-datasheets.md
   - Examples:
       - Overview: examples/index.md
       - Minimal example: examples/minimal.ipynb
@@ -131,6 +142,10 @@ nav:
   # reach a CI checkout in the first place. Curated notebooks belong in
   # ``docs/examples/`` (see the Examples section above); the research
   # notebooks stay a local working artefact.
+  - Reference:
+      - Conventions and units: reference/conventions.md
+      - Formula syntax: reference/formula-syntax.md
+      - Glossary and symbols: reference/glossary.md
   - API reference:
       - Overview: api/index.md
       - Network operations: api/network_operations.md
