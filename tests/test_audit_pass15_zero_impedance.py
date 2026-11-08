@@ -349,7 +349,7 @@ def test_the_remedy_quoted_in_the_message_is_accurate():
 )
 def test_every_further_decade_buys_another_digit(exponent, digits):
     """The second half of the same promise, in the docstring and in
-    ``docs/concepts.md``: the convergence is first order, so the accuracy is
+    ``docs/explanation/formulas.md``: the convergence is first order, so the accuracy is
     a straight line in the exponent with no floor before double precision
     runs out. Measured relative errors: 9.09e-5, 9.09e-8, 9.09e-11,
     9.10e-14."""

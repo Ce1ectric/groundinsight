@@ -4532,9 +4532,9 @@ class ElectricalNetwork:
 
         The quotient ``U_E / I_E`` over the earth group is not used for
         ``Z_E`` (it is kept as ``z_earthing_group``): on a long homogeneous
-        chain it comes out 45 % below the driving-point impedance.
-        ``docs/concepts.md`` and ``docs/api/electrical_network.md`` state the
-        same definition.
+        chain it comes out 44.5 % below the driving-point impedance.
+        ``docs/explanation/reduction-factors.md`` and
+        ``docs/api/electrical_network.md`` state the same definition.
 
         The results are stored in the network's results object.
         """

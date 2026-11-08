@@ -69,11 +69,6 @@ DOCS = ROOT / "docs"
 API = DOCS / "api"
 SCRIPT = ROOT / "scripts" / "check_api_inventory.py"
 
-#: Pages another documentation package replaces in the same release (see
-#: tests/test_audit_pass19_docs_codeblocks.py); not scanned while they exist.
-RESTRUCTURED_ELSEWHERE = ("concepts.md", "quickstart.md")
-
-
 def _page(relative):
     """Text of a documentation page."""
     return (DOCS / relative).read_text(encoding="utf-8")
@@ -594,7 +589,7 @@ STALE_PATTERNS = {
 def _doc_pages():
     for path in sorted(DOCS.rglob("*.md")):
         relative = path.relative_to(DOCS).as_posix()
-        if relative in RESTRUCTURED_ELSEWHERE or relative == "audit-log.md":
+        if relative == "audit-log.md":
             continue
         yield relative, path.read_text(encoding="utf-8")
 

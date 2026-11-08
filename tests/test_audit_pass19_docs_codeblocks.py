@@ -44,15 +44,6 @@ RUNNER = Path(blocks.__file__).resolve()
 #: Seconds one block may take before the runner stops it.
 BLOCK_TIMEOUT_S = 120
 
-#: Pages another documentation package replaces in the same release. While a
-#: page exists here, its blocks are not run -- the replacement pages carry the
-#: content and follow the convention. An entry has no effect once the page is
-#: gone; remove it then.
-RESTRUCTURED_ELSEWHERE = {
-    "concepts.md": "split into explanation/*.md by the structure package (DOC12)",
-    "quickstart.md": "replaced by getting-started/*.md and the how-to guides (DOC5)",
-}
-
 #: Python modules of optional extras, mapped to the extra that installs them.
 OPTIONAL_MODULES = {"pandapower": "pandapower"}
 
@@ -134,8 +125,6 @@ def page_results(tmp_path_factory):
     """Outcomes of every page that can run here, from one runner process."""
     runnable = []
     for page in PAGES:
-        if page in RESTRUCTURED_ELSEWHERE:
-            continue
         if any(not _module_available(m) for m in _optional_modules(page)):
             continue
         runnable.append(page)
@@ -147,8 +136,6 @@ def page_results(tmp_path_factory):
 @pytest.mark.parametrize("page", PAGES)
 def test_python_blocks_run_or_are_marked(page, page_results):
     """Every unmarked Python block of a page runs, in page order (DOC13)."""
-    if page in RESTRUCTURED_ELSEWHERE:
-        pytest.skip(f"{page}: {RESTRUCTURED_ELSEWHERE[page]}")
     for module in _optional_modules(page):
         pytest.importorskip(module, reason=f"{page} needs the '{OPTIONAL_MODULES[module]}' extra")
     key = f"docs/{page}"
@@ -270,11 +257,3 @@ def test_runner_stops_a_block_that_hangs(tmp_path):
     assert proc.returncode != 0
     assert (tmp_path / "out.progress").read_text(encoding="utf-8") == "docs/slow.md:1"
     assert "Timeout" in proc.stderr
-
-
-def test_restructured_pages_are_only_skipped_while_they_exist():
-    """The transitional skip list names real pages or nothing at all."""
-    for page, reason in RESTRUCTURED_ELSEWHERE.items():
-        assert reason
-        if (DOCS / page).exists():
-            assert page in PAGES or not blocks.python_blocks((DOCS / page).read_text(encoding="utf-8"))

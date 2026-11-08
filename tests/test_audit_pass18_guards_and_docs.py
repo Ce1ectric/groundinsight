@@ -237,7 +237,7 @@ def test_grounding_impedance_docstring_names_the_current_definition():
     # release changed the definition is CHANGELOG material (decision D4).
     doc = ElectricalNetwork.compute_grounding_impedance.__doc__
     assert "Z_G = Z_E = Z_dp(F)" in doc
-    assert "z_earthing_group" in doc and "45 %" in doc
+    assert "z_earthing_group" in doc and "44.5 %" in doc
 
 
 def test_the_rms_convention_is_written_down_where_it_is_defined():

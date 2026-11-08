@@ -805,9 +805,11 @@ def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
         f"reach fault '{active_fault}' over more than one path while "
         "parallel_coefficient is still 1.0 or None. In phase_current_mode="
         "'paths' every one of those paths carries the FULL source current, so "
-        "the current is multiplied instead of split -- a symmetric ring "
-        "collapses to EPR = 0, r = 0 and Z_G = None. Use the default "
-        "phase_current_mode='auto', or set parallel_coefficient per branch.",
+        "the current is multiplied instead of split -- in a symmetric ring of "
+        "two routes the coupled injections add up to (1 - 2k) I instead of "
+        "(1 - k) I, which collapses the EPR to 0 for k = Z_m/Z_s = 0.5. Use "
+        "the default phase_current_mode='auto', or set parallel_coefficient "
+        "per branch.",
         code="PARALLEL_COEFFICIENT_DEFAULT",
         elements=[("source", s) for s in sorted(parallel_sources)],
         stacklevel=3,
@@ -856,10 +858,13 @@ def run_fault(
         ``"paths"``: every branch on any enumerated source-to-fault path
         receives the *full* source current scaled by its
         ``parallel_coefficient``. In a meshed network that multiplies the
-        current instead of splitting it -- with the default coefficient of
-        1.0 a symmetric ring collapses to ``EPR = 0``. Kept for reproducing
-        studies made with this scheme and for networks where the split is
-        known from measurement and set by hand.
+        current instead of splitting it: in a symmetric ring of two routes,
+        at the default coefficient of 1.0, the coupled injections add up to
+        ``(1 - 2k) I`` instead of ``(1 - k) I`` (``k = Z_m / Z_s``). That
+        collapses the EPR to 0 for ``k = 0.5`` and, where ``|1 - 2k| = 1``,
+        reports it as if the shields did not couple at all. Kept for
+        reproducing studies made with this scheme and for networks where the
+        split is known from measurement and set by hand.
 
     Returns
     -------
