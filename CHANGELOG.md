@@ -1125,6 +1125,7 @@ migration checklist.
 - **A fault on the bus of every source that feeds it now says why its reduction factors are empty.** Source and fault put `+I` and `-I` on the same row, so nothing is injected into the earthing network: the EPR and the earth-return current are zero and both reduction factors are `None` by definition. The run was silent about it; it now records the info diagnostic `FAULT_AT_FEEDING_BUS` (elements: the fault and its bus) on the result. `U_E` is 0 V, `Z_E` remains the driving-point impedance.
 - **`run_outage_study(auto_parallel_coefficients=...)` warns at its caller.** The deprecated keyword was forwarded to `run_fault`, whose `DeprecationWarning` then pointed at a line inside the package, where Python's default filters hide it. The study resolves the alias itself; the old argument still wins when given.
 - **Warning texts name limitations, not internal audit identifiers** (`THEVENIN_COUPLING`).
+- **`res_fault` names the bus of the largest EPR the same way on every platform.** With a strict comparison, two buses with the same EPR magnitude -- both ends of a symmetric line -- were told apart by the last bit of the solution, which differs between the BLAS/LAPACK builds of Linux, macOS and Windows. Magnitudes within `1e-9` of the largest now count as a tie, and a tie names the fault bus if it is part of it, otherwise the first tied bus in result order.
 
 ### Security
 
@@ -1990,6 +1991,7 @@ migration checklist.
   complexity ratchet: the 80 functions above radon complexity 10 are listed
   in `tests/data/complexity_ratchet.toml` and none may become more complex.
   (STD1, STD2, STD3, STD5, STD7, STD10, STD11)
+- **The test suite runs on macOS and Windows.** The first CI run on those systems found assertions that measured the platform: a doctest printing a float to its last digit, a child process read as UTF-8 on Windows, platform path separators, a refined reference that needs the 80-bit extended long double of x86-64 Linux (skipped with that reason elsewhere), Poetry's lock check on Windows runners (runs on Linux and macOS), and an absolute timing bound (now relative to the solve on the same machine).
 
 ## [0.6.0] — 2026-09-01
 
