@@ -736,6 +736,62 @@ migration checklist.
   went into the shared dictionaries, keyed on `id(overlay)`, and had to be
   removed again so that a later object at the same address could not find
   them. Different networks can now be solved from different threads. (ARC2)
+- **The inverse searches re-solve their trials on the assembly of their first
+  solve.** `find_max_rho_scaling` and `find_max_rho_f_scaling` evaluate the
+  same fault for twenty or more trial values of the bus grounding
+  impedances, and every trial used to be a complete `run_fault`. A trial
+  changes nothing but the diagonal of the nodal matrix, so only the first
+  trial per fault location is a full solve now; every later one
+  re-assembles the matrix values with the kernel's own assembly (same
+  summation order), factorises them and solves the injection vector of the
+  first solve. Matrix, factorisation and EPR are bit for bit those of a full
+  `run_fault`, so the searches take the same steps and return identical
+  dictionaries (checked against the same searches with the re-solve switched
+  off). Where the re-solve cannot answer — a 0 Hz stand-in, a bus that gains
+  or loses its electrode, an open, NaN, zero or non-passive value, a failing
+  factorisation — the trial is a full `run_fault` again, with its errors and
+  messages. `find_max_rho_f_scaling` also shares one factorisation per trial
+  between fault locations whose nodal matrix is the same. Progress reports
+  still count one unit per solve, and the network is still left as found.
+  Measured interleaved in one process (CPU, median of three): 1000-bus ring
+  with every bus scaled 5.47 s → 0.59 s, with five buses 2.91 s → 0.21 s,
+  40×40 mesh 11.3 s → 1.86 s; rho-f search on a 300-bus ring over five fault
+  locations 3.79 s → 0.26 s, on a 1000-bus ring over ten 23.9 s → 1.42 s.
+  (P4)
+- **`Network.res_buses` and `Network.res_branches` are built column-wise.**
+  They built one Python dictionary per row and took magnitude and angle of
+  every phasor one NumPy scalar at a time; on a 4000-bus ring at seven
+  frequencies the frame took a quarter of the solve that produced it. The
+  frames are unchanged bit for bit (rows, order, schema, `null` for a missing
+  entry; compared with the former construction with `check_exact=True`).
+  Magnitudes come from `numpy.hypot`, which agrees with Python's `abs` of a
+  complex number in every bit; `numpy.abs` of a complex array does not.
+  `res_buses`: 0.044 s → 0.010 s at 1000 buses, 0.21 s → 0.035 s at 4000,
+  0.96 s → 0.18 s at 20 000; `res_branches` 4–6× likewise. (P11)
+- **The earth-return current is the split of exactly the electrode currents
+  the result reports.** `I_E` and the earth group of the current-based
+  reduction factor were computed from electrode currents recomputed bus by
+  bus with Python's complex division, while `ResultBus.ia` comes from the
+  array division of the solve; the two could differ in the last bit, so
+  `I_E` was not always exactly the sum of the reported currents of its group.
+  The split now reads the reported currents (52 → 17 ms on a 4000-bus
+  ring), and the check behind the `THEVENIN_COUPLING` diagnostic reads the
+  gathered impedance arrays instead of resolving every branch at every
+  frequency (9.2 → 0.65 ms). (P6)
+- **Building a network validates each derived impedance once.** Every
+  `create_bus`/`create_branch` (and every re-derivation) packed each value of
+  a derived impedance table into a validated `ComplexNumber` and then
+  validated it a second time when the table was assigned to the element.
+  Derived tables are now stored as the validated assignment stores them,
+  without the second pass; the passivity check runs on the evaluated array
+  before it is packed (same rules and message as the dictionary check), and
+  a formula whose values all came back finite skips the masks of the NaN and
+  `inf+nan*j` repairs. The stored model is unchanged bit for bit (the JSON of
+  a built and re-derived 5000-bus ring is byte-identical; the edit invariants
+  — re-derivation on assignment, roll-back, `input_digest` — are untouched).
+  Building a 5000-bus ring 2.02 s → 1.51 s, a 50 000-bus ring 22.9 s →
+  16.7 s; `Branch.calculate_impedance` 155 → 111 µs,
+  `Bus.calculate_impedance` 73 → 50 µs. (P10)
 
 ### Deprecated
 
@@ -1668,6 +1724,11 @@ migration checklist.
   with `OrderedDict mutated during iteration` (4 threads × 150 solves: 7 of 600
   raised); the per-network memo of ARC2 removes the shared state, and the new
   tests keep it that way (results bit-identical to solo solves).
+- New internal API (not exported, see `docs/api/index.md`):
+  `ElectricalNetwork.nodal_parts()` with the `NodalParts` tuple,
+  `assemble_nodal_matrices`, `bus_admittances`, `rms_columns` and
+  `stack_columns` in `groundinsight.electrical_network`, and
+  `impedance_table` in `groundinsight.utils.impedance_calculator`.
 
 ## [0.6.0] — 2026-09-01
 
