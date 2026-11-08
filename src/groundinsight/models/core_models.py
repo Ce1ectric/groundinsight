@@ -53,7 +53,12 @@ from pydantic import (
     model_validator,
 )
 from typing import Any, ClassVar, Dict, FrozenSet, List, Literal, Optional, Tuple, Union
-from groundinsight.diagnostics import Diagnostic, GroundinsightWarning
+from groundinsight.diagnostics import (
+    Diagnostic,
+    GroundinsightWarning,
+    InputWarning,
+    emit,
+)
 from groundinsight.utils.validations import (
     BRANCH_FORMULA_SYMBOLS,
     BUS_FORMULA_SYMBOLS,
@@ -61,6 +66,7 @@ from groundinsight.utils.validations import (
     validate_impedance_formula_value,
 )
 from groundinsight.utils.impedance_calculator import (
+    _render_frequencies,
     check_passive_impedance,
     compute_impedance,
     compute_real_value,
@@ -3293,6 +3299,13 @@ class Network(ValidatedAssignmentModel):
         ------
         ValueError
             If a source with the same name already exists, or if the associated bus is not in the network.
+
+        Warns
+        -----
+        InputWarning
+            ``SOURCE_FREQUENCY_OUTSIDE_NETWORK`` if the source carries values
+            at frequencies the network is not solved at; the solve ignores
+            them (USE3, decision F8).
         """
         if source.bus not in self.buses:
             raise ValueError(f"bus '{source.bus}' is not in the network '{self.name}'")
@@ -3303,6 +3316,9 @@ class Network(ValidatedAssignmentModel):
                 f"Source with name '{source.name}' already exists in the network '{self.name}'. If you want to overwrite, set overwrite=True."
             )
         self._claim(source)
+        # Said before the source is inserted, so that the warning turned into
+        # an error (``-W error``) leaves the network unchanged (ARC9).
+        self._warn_source_frequencies_outside(source)
         self.sources[source.name] = source
         self._adopt(source)
         if replacing:
@@ -3310,6 +3326,35 @@ class Network(ValidatedAssignmentModel):
                 "Source '%s' already exists in the network. Overwriting.",
                 source.name,
             )
+
+    def _warn_source_frequencies_outside(self, source: "Source") -> None:
+        """
+        Announce source values at frequencies the network is not solved at.
+
+        They are not an error -- a source table may cover more harmonics than
+        a given study solves -- but they are ignored by the solve, which a
+        mistyped key (``60`` in a 50 Hz network) makes worth saying.
+
+        Parameters
+        ----------
+        source : Source
+            The source about to be added.
+        """
+        table = source.values if source.source_type == "current" else source.voltage
+        solved = {float(f) for f in self.frequencies}
+        outside = sorted(float(k) for k in (table or {}) if float(k) not in solved)
+        if not outside:
+            return
+        emit(
+            InputWarning,
+            f"Source '{source.name}' carries values at "
+            f"{_render_frequencies(outside)}, which are not among the network "
+            f"frequencies of '{self.name}' "
+            f"({_render_frequencies(sorted(solved))}); the solve ignores them.",
+            code="SOURCE_FREQUENCY_OUTSIDE_NETWORK",
+            elements=[("source", source.name)],
+            stacklevel=4,
+        )
 
     def add_path(self, path: Path):
         """

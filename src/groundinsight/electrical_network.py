@@ -95,7 +95,7 @@ def _shortlist(names, limit: int = 5) -> str:
     return f"{shown}, ... ({len(names)} in total)"
 
 
-from groundinsight.diagnostics import ModelAssumptionWarning, emit
+from groundinsight.diagnostics import InputWarning, ModelAssumptionWarning, emit
 from groundinsight.utils.earth_current import (
     NOISE_REL,
     earth_current_vanishes,
@@ -867,6 +867,7 @@ class ElectricalNetwork:
         # Set of source names that actually have at least one path to the active
         # fault; sources without a path do not contribute to the injection.
         sources_with_path = self._sources_with_path_to_active_fault()
+        self._check_source_coverage(sources_with_path, fault)
         self._warn_thevenin_coupling(sources_with_path, fault)
 
         for freq in frequencies:
@@ -913,6 +914,68 @@ class ElectricalNetwork:
 
             self.i_vectors[freq] = i_vector
             self.u_vectors[freq] = u_vector
+
+    def _check_source_coverage(self, sources_with_path, fault: Fault) -> None:
+        """
+        Refuse a source that covers no solved frequency, announce a partial one.
+
+        A source contributes at a frequency only if it carries a value there
+        (``values`` for a current source, ``voltage`` for a Thevenin source).
+        One whose keys match *none* of the network frequencies therefore
+        contributed 0 A everywhere, and the run came back with 0 V at every
+        bus -- a plausible-looking result rather than an error (USE3). Partial
+        coverage is legitimate (a harmonic present only in some sources) but
+        changes the result at the uncovered frequencies, so it is said once
+        per source and run (decision F8).
+
+        Only sources that matter for this fault are checked: they reach the
+        fault and sit on an active bus.
+
+        Parameters
+        ----------
+        sources_with_path : iterable of str
+            Sources that reach the active fault.
+        fault : Fault
+            The active fault.
+
+        Raises
+        ------
+        ValueError
+            If such a source has a value at none of the network frequencies.
+        """
+        frequencies = [float(f) for f in self.network.frequencies]
+        solved = set(frequencies)
+        for name in sources_with_path:
+            source = self.network.sources[name]
+            if source.bus not in self.bus_indices:
+                continue
+            table = source.values if source.source_type == "current" else source.voltage
+            keys = sorted(float(k) for k in (table or {}))
+            key_set = set(keys)
+            covered = [f for f in frequencies if f in key_set]
+            if not covered:
+                raise ValueError(
+                    f"Source '{name}' at bus '{source.bus}' reaches fault "
+                    f"'{fault.name}' but carries values only at "
+                    f"{_render_frequencies(keys) if keys else 'no frequency at all'}"
+                    f", none of the network frequencies "
+                    f"({_render_frequencies(frequencies)}). It would contribute "
+                    f"0 A at every solved frequency, and the run would report "
+                    f"0 V at every bus as if that were a result. Give the source "
+                    f"values at the network frequencies, or remove it."
+                )
+            missing = [f for f in frequencies if f not in key_set]
+            if missing:
+                emit(
+                    InputWarning,
+                    f"Source '{name}' at bus '{source.bus}' has no value at "
+                    f"{_render_frequencies(missing)} of the network frequencies "
+                    f"and contributes 0 A there (fault '{fault.name}'). Covered: "
+                    f"{_render_frequencies([f for f in keys if f in solved])}.",
+                    code="SOURCE_FREQUENCY_GAP",
+                    elements=[("source", name)],
+                    stacklevel=5,
+                )
 
     def _warn_thevenin_coupling(self, sources_with_path, fault: Fault) -> None:
         """
