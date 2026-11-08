@@ -243,11 +243,15 @@ def test_the_tag_check_happens_before_any_file_is_rewritten():
 # ---------------------------------------------------------------------------
 
 
-def test_scripts_are_not_packaged_and_install_no_console_commands():
+def test_scripts_are_not_packaged_and_install_no_maintainer_commands():
+    """M13. Audit pass 19 added the package's own command line, named after the
+    package; no maintainer command (``release``, ...) may come back."""
     data = _pyproject()
     packages = data["tool"]["poetry"]["packages"]
     assert all(entry.get("include") != "scripts" for entry in packages)
-    assert "scripts" not in data["tool"]["poetry"]
+    assert data["tool"]["poetry"].get("scripts", {}) == {
+        "groundinsight": "groundinsight.cli:main"
+    }
 
 
 def test_python_floor_matches_the_ci_matrix():

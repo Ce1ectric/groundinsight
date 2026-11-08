@@ -71,15 +71,18 @@ mkdocstrings = { extras = ["python"], version = ">=0.26.1,<1.1.0" }
 pymdown-extensions = ">=10.9,<13.0"
 mkdocs-jupyter = ">=0.25,<0.27"
 
-# No [tool.poetry.scripts] block on purpose. The two maintainer commands used
-# to install executables named ``release`` and
+# One console script only: the package's own command line, named after the
+# package (audit pass 19), so it shadows nothing a user already has. The two
+# maintainer commands used to install executables named ``release`` and
 # ``generate-third-party-licenses`` into the PATH of every user who installs
 # groundinsight -- a name as generic as ``release`` shadowing whatever else
 # the user has is not something a library should do. Run them from the
 # repository root instead:
 #
-#     poetry run python scripts/release.py patch
+#     poetry run python scripts/release.py
 #     poetry run python scripts/generate_third_party_licenses.py
+[tool.poetry.scripts]
+groundinsight = "groundinsight.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "src/groundinsight"]
