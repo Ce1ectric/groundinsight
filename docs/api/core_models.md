@@ -274,6 +274,37 @@ because it is. The digest is saved with the result to JSON and to the
 database; results written by an older version carry none and are never
 reported stale.
 
+## Formula symbols and resource limits
+
+A formula of a `BusType` is evaluated with `f` (frequency in Hz) and `rho`
+(specific earth resistance in Ohm·m), a formula of a `BranchType` with
+`f`, `rho` and `l` (length in km). `j` and `I` (imaginary unit), `pi` and
+`E` are available in both, together with the functions `sqrt`, `exp`,
+`log`/`ln`, `Abs`, `sign`, `conjugate`, `re`, `im`, `arg`, the
+trigonometric and hyperbolic functions and their inverses, `Min`, `Max`,
+`floor` and `ceiling`. Any other name is rejected when the type is
+created, with the case-insensitive match as a suggestion (`L` → `l`).
+
+SymPy computes with the numbers of a formula exactly while it parses it,
+so a short string could cost unbounded CPU time. The formula guard
+therefore bounds the work before SymPy runs:
+
+| Limit | Value |
+|---|---|
+| digits of a number literal | 100 (decimal notation only) |
+| exponent of a power, written out or computed | 12 |
+| digits of an exact intermediate result | 10 000 |
+| digits of the integer `floor`/`ceiling` builds | 100 |
+| magnitude of an argument of `exp`, `sinh`, `cosh` | 1e100 |
+| terms (numbers, names, operations, calls) | 512 |
+| function calls / arguments per call | 8 / 3 |
+
+The largest formula in this documentation uses 6 digits, exponent 2,
+27 terms and 2 calls. Write very small or large factors with an exponent
+part — `1e-15` rather than `10**-15`.
+
+::: groundinsight.utils.validations.check_formula_symbols
+
 Field-level validation guards are documented inline (frequency
 duplicate / NaN / negative rejection on `Network.frequencies`,
 int-vs-float key coercion on `Fault.scalings`, …). See the
