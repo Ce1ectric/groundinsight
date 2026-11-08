@@ -32,12 +32,18 @@ version section when a release is cut.
   `scripts/refresh_graphify.sh`.** The Python script existed only because
   `graphify` 0.7.x stopped emitting `graphify-out/GRAPH_REPORT.md` while the
   `CLAUDE.md` hook still pointed at it. Verified against `graphifyy` 0.9.53:
-  the report is written again, by `cluster-only` rather than by `extract`
-  (`extract --code-only` alone leaves none). The shell script runs both passes
-  in order, pins the DeepSeek backend to `deepseek-v4-flash` with an explicit
+  the report is written again — but by `cluster-only`, never by `extract`, in
+  **either** variant. `extract` writes `graph.json` and leaves the communities
+  as `Community N` placeholders; skipping the second pass leaves a stale
+  report sitting next to a fresh graph without anything failing, which is the
+  same silent drift the removed workaround was papering over. The shell script
+  runs both passes in order, pins the DeepSeek backend to `deepseek-v4-flash` with an explicit
   `--model` rather than relying on the backend default, prompts for
   `DEEPSEEK_API_KEY` rather than storing it, and falls back to a local
-  AST-only run when none is given. Development tooling only —
+  AST-only run when none is given. It also checks up front that graphify's
+  environment has the `openai` package — DeepSeek has no extra of its own and
+  is reached through the OpenAI-compatible client, so without it the AST pass
+  completes and *then* every semantic chunk fails. Development tooling only —
   `graphify-out/` is gitignored and the package does not depend on any of it.
 - **Dependabot** for GitHub Actions and Python dependencies
   (`.github/dependabot.yml`), monthly, grouped into one pull request per
