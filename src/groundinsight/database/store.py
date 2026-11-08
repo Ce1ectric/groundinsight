@@ -208,17 +208,17 @@ class Database:
 
     @property
     def path(self) -> str:
-        """str : The database file as given to the constructor."""
+        """The database file as given to the constructor (``str``)."""
         return self._path
 
     @property
     def closed(self) -> bool:
-        """bool : ``True`` once :meth:`close` has run."""
+        """Whether :meth:`close` has run (``bool``)."""
         return self._closed
 
     @property
     def engine(self) -> Engine:
-        """sqlalchemy.engine.Engine : The engine this database owns.
+        """The SQLAlchemy engine this database owns.
 
         For direct SQL access. Prefer :meth:`session` for ORM work; do not
         dispose the engine yourself -- :meth:`close` does that.
@@ -443,7 +443,7 @@ class Database:
 
         See Also
         --------
-        groundinsight.database.crud.save_network : the transaction itself.
+        groundinsight.database.crud.save_network : The transaction itself.
         """
         with self.session() as session:
             if session.get(NetworkDB, network.name) is not None and not overwrite:
