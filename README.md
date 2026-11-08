@@ -152,7 +152,7 @@ gi.create_fault(
     scalings={50: 1.0}, network=net,
 )
 
-gi.run_fault(network=net, fault_name="fault1")
+gi.run_fault(network=net, fault="fault1")
 print(net.res_all_impedances())
 ```
 

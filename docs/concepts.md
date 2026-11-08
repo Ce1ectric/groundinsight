@@ -128,7 +128,7 @@ net = gi.create_network(name="dc_return", frequencies=[0.0])
 # ... buses and branches ...
 gi.create_source(name="electrode", bus="A", values={0.0: 1000.0}, network=net)
 gi.create_fault(name="F", bus="C", scalings={0.0: 1.0}, network=net)
-gi.run_fault(network=net, fault_name="F")
+gi.run_fault(network=net, fault="F")
 ```
 
 DC needs a section of its own not because the solver is special there but
@@ -891,7 +891,7 @@ gi.create_source(name="src", bus="b0",
 gi.create_fault(name="F1", bus="b1",
                 scalings={50.0: 1.0, 250.0: 1.0}, network=net)
 
-gi.run_fault(network=net, fault_name="F1")
+gi.run_fault(network=net, fault="F1")
 print(net.res_all_impedances())   # Z_G and r per frequency
 ```
 
@@ -902,7 +902,7 @@ The `Network` API hides every step listed in the next section behind
 
 ## Summary of the calculation pipeline
 
-`run_fault(network, fault_name)` executes the following steps (see
+`run_fault(network, fault)` executes the following steps (see
 `network_operations.run_fault` and `ElectricalNetwork` for details):
 
 1. `set_active_fault` — select the target fault.

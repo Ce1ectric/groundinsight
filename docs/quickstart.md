@@ -100,7 +100,7 @@ If you skip `create_paths`, `run_fault` calls it implicitly.
 
 ```python
 gi.create_paths(network=net)
-gi.run_fault(network=net, fault_name="fault_at_remote_bus")
+gi.run_fault(network=net, fault="fault_at_remote_bus")
 ```
 
 Both steps require the network to have at least one source **and** at least one
@@ -230,9 +230,9 @@ that still satisfies it:
 ```python
 result = gi.find_max_rho_scaling(
     network=net,
-    fault_name="fault_at_remote_bus",
+    fault="fault_at_remote_bus",
     bus_names=["bus_source", "bus_fault"],
-    u_max=200.0,            # touch-voltage limit in volts (RMS)
+    u_limit=200.0,          # touch-voltage limit in volts (RMS)
     c_bounds=(0.1, 100.0),
     tol_rel=1e-3,
 )
@@ -292,7 +292,7 @@ re-uses the existing `impedance_formula` of every `BusType` and
 fields instead.
 
 ```python
-study = gi.TransientStudy(network=net, fault_name="fault_at_remote_bus")
+study = gi.TransientStudy(network=net, fault="fault_at_remote_bus")
 study.set_source_waveform(
     "substation_infeed",
     gi.waveforms.sinusoidal_with_dc_offset(

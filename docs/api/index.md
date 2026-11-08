@@ -54,7 +54,7 @@ gi.create_bus(...)
 gi.create_branch(...)
 gi.create_fault(...)
 gi.create_source(...)
-gi.run_fault(network=net, fault_name="...")
+gi.run_fault(network=net, fault="...")
 ```
 
 Top-level helpers and persistence factories (`gi.set_log_level`,

@@ -64,6 +64,7 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from ..models.core_models import Network
+from ..utils.compat import renamed_parameters
 
 
 logger = logging.getLogger(__name__)
@@ -130,7 +131,8 @@ def kappa_from_r_to_x(r_to_x: float) -> float:
     return 1.02 + 0.98 * math.exp(-3.0 * r_to_x)
 
 
-def iec60909_m(kappa: float, f: float, t_k: float) -> float:
+@renamed_parameters(f="frequency", t_k="t_k_s")
+def iec60909_m(kappa: float, frequency: float, t_k_s: float) -> float:
     """
     Heat-effect factor ``m`` of the aperiodic (DC) short-circuit component.
 
@@ -154,10 +156,12 @@ def iec60909_m(kappa: float, f: float, t_k: float) -> float:
     ----------
     kappa : float
         Peak factor ``kappa`` in ``(1, 2]`` (see :func:`kappa_from_r_to_x`).
-    f : float
-        System frequency in Hz (50 or 60).
-    t_k : float
-        Fault duration ``T_k`` in seconds. Must be strictly positive.
+    frequency : float
+        System frequency ``f`` in Hz (50 or 60). The former keyword ``f`` is
+        accepted as a deprecated alias.
+    t_k_s : float
+        Fault duration ``T_k`` in seconds. Must be strictly positive. The
+        former keyword ``t_k`` is accepted as a deprecated alias.
 
     Returns
     -------
@@ -167,7 +171,7 @@ def iec60909_m(kappa: float, f: float, t_k: float) -> float:
     Raises
     ------
     ValueError
-        If ``t_k`` or ``f`` is not strictly positive.
+        If ``t_k_s`` or ``frequency`` is not strictly positive.
 
     Examples
     --------
@@ -176,19 +180,19 @@ def iec60909_m(kappa: float, f: float, t_k: float) -> float:
     >>> iec60909_m(2.0, 50.0, 0.5)
     2.0
     """
-    if t_k <= 0:
-        raise ValueError(f"t_k must be strictly positive, got {t_k!r}.")
-    if f <= 0:
-        raise ValueError(f"f must be strictly positive, got {f!r}.")
+    if t_k_s <= 0:
+        raise ValueError(f"t_k_s must be strictly positive, got {t_k_s!r}.")
+    if frequency <= 0:
+        raise ValueError(f"frequency must be strictly positive, got {frequency!r}.")
     if kappa <= 1.0:
         return 0.0
     if kappa >= 2.0:
         return 2.0
     a = math.log(kappa - 1.0)  # negative for 1 < kappa < 2
-    denom = 2.0 * f * t_k * a
+    denom = 2.0 * frequency * t_k_s * a
     if abs(denom) < 1e-12:  # kappa extremely close to 2 -> non-decaying DC
         return 2.0
-    return (math.exp(4.0 * f * t_k * a) - 1.0) / denom
+    return (math.exp(4.0 * frequency * t_k_s * a) - 1.0) / denom
 
 
 def peak_short_circuit_current(i_k: float, kappa: float) -> float:
@@ -227,7 +231,10 @@ def peak_short_circuit_current(i_k: float, kappa: float) -> float:
     return kappa * math.sqrt(2.0) * i_k
 
 
-def thermal_equivalent_current(i_k: float, m: float, n: float = 1.0) -> float:
+@renamed_parameters(n="n_factor")
+def thermal_equivalent_current(
+    i_k: float, m: float, n_factor: float = 1.0
+) -> float:
     """
     Thermally equivalent short-time current ``I_th = I_k'' * sqrt(m + n)``.
 
@@ -239,10 +246,11 @@ def thermal_equivalent_current(i_k: float, m: float, n: float = 1.0) -> float:
     m : float
         DC heat-effect factor from :func:`iec60909_m`. Must be
         non-negative.
-    n : float
-        AC-decay heat factor in ``(0, 1]``. ``1.0`` for the
+    n_factor : float
+        AC-decay heat factor ``n`` in ``(0, 1]``. ``1.0`` for the
         far-from-generator faults typical of distribution grounding
-        studies.
+        studies. The former keyword ``n`` is accepted as a deprecated
+        alias.
 
     Returns
     -------
@@ -252,7 +260,7 @@ def thermal_equivalent_current(i_k: float, m: float, n: float = 1.0) -> float:
     Raises
     ------
     ValueError
-        If ``i_k`` or ``m`` is negative, or ``n`` is not in ``(0, 1]``.
+        If ``i_k`` or ``m`` is negative, or ``n_factor`` is not in ``(0, 1]``.
 
     Notes
     -----
@@ -272,9 +280,9 @@ def thermal_equivalent_current(i_k: float, m: float, n: float = 1.0) -> float:
         raise ValueError(f"i_k must be non-negative, got {i_k!r}.")
     if m < 0:
         raise ValueError(f"m must be non-negative, got {m!r}.")
-    if not 0.0 < n <= 1.0:
-        raise ValueError(f"n must lie in (0, 1], got {n!r}.")
-    return i_k * math.sqrt(m + n)
+    if not 0.0 < n_factor <= 1.0:
+        raise ValueError(f"n_factor must lie in (0, 1], got {n_factor!r}.")
+    return i_k * math.sqrt(m + n_factor)
 
 
 # ---------------------------------------------------------------------------
@@ -447,9 +455,10 @@ def _sources_feeding(network: Network, fault_name: str) -> List[str]:
     return result
 
 
+@renamed_parameters(fault_name="fault")
 def resolve_fault_sc_characteristics(
     network: Network,
-    fault_name: str,
+    fault: str,
     *,
     frequency: Optional[float] = None,
     aggregation: str = "weighted",
@@ -489,8 +498,9 @@ def resolve_fault_sc_characteristics(
     ----------
     network : Network
         The network holding the fault and its sources.
-    fault_name : str
-        Name of the fault to resolve.
+    fault : str
+        Name of the fault to resolve. The former keyword ``fault_name`` is
+        accepted as a deprecated alias.
     frequency : float, optional
         Frequency in Hz at which the source injections are weighted.
         Defaults to the lowest positive frequency of ``network`` (the power
@@ -511,7 +521,7 @@ def resolve_fault_sc_characteristics(
     Raises
     ------
     ValueError
-        If ``fault_name`` is unknown or ``aggregation`` is not one of the
+        If ``fault`` is unknown or ``aggregation`` is not one of the
         supported modes.
 
     Examples
@@ -533,17 +543,17 @@ def resolve_fault_sc_characteristics(
         raise ValueError(
             f"aggregation must be 'weighted' or 'max', got {aggregation!r}."
         )
-    fault = network.faults.get(fault_name)
-    if fault is None:
+    fault_obj = network.faults.get(fault)
+    if fault_obj is None:
         raise ValueError(
-            f"Unknown fault {fault_name!r}. Known faults: "
+            f"Unknown fault {fault!r}. Known faults: "
             f"{sorted(network.faults)}."
         )
 
     if frequency is None:
         frequency = next((float(x) for x in network.frequencies if x > 0), 50.0)
     frequency = float(frequency)
-    scaling = fault.scaling_at(frequency)
+    scaling = fault_obj.scaling_at(frequency)
 
     weights: Dict[str, float] = {}
     kappas: Dict[str, float] = {}
@@ -552,7 +562,7 @@ def resolve_fault_sc_characteristics(
     i_k_total = 0.0
     weight_without_kappa = 0.0
 
-    for source_name in _sources_feeding(network, fault_name):
+    for source_name in _sources_feeding(network, fault):
         source = network.sources[source_name]
         weight = _source_injection_magnitude(source, frequency, scaling)
         kappa_i = _source_kappa(source)
@@ -574,8 +584,8 @@ def resolve_fault_sc_characteristics(
             r_values.append(float(r_to_x_i))
         i_k_total += weight
 
-    n_factor = float(getattr(fault, "n_factor", 1.0) or 1.0)
-    t_k_s = getattr(fault, "t_k_s", None)
+    n_factor = float(getattr(fault_obj, "n_factor", 1.0) or 1.0)
+    t_k_s = getattr(fault_obj, "t_k_s", None)
     t_k_s = None if t_k_s is None else float(t_k_s)
 
     if not kappas:
@@ -583,11 +593,11 @@ def resolve_fault_sc_characteristics(
             logger.debug(
                 "Fault %r: none of the feeding sources (%s) carries IEC 60909 "
                 "data; kappa stays unresolved.",
-                fault_name,
+                fault,
                 ", ".join(without_kappa),
             )
         return FaultShortCircuitData(
-            fault_name=fault_name,
+            fault_name=fault,
             frequency=frequency,
             t_k_s=t_k_s,
             n_factor=n_factor,
@@ -616,7 +626,7 @@ def resolve_fault_sc_characteristics(
             "%.4f and %.4f). The non-linear IEC 60909 factors are applied "
             "once, with the %s kappa = %.4f. Use the transient solver for an "
             "exact mixed-R/X result.",
-            fault_name,
+            fault,
             min(kappa_list),
             max(kappa_list),
             aggregation,
@@ -630,7 +640,7 @@ def resolve_fault_sc_characteristics(
             "aggregation and included in i_k_a, so kappa_eff = %.4f is the "
             "figure of the remaining %.0f %% and i_p applies it to the whole "
             "current.%s",
-            fault_name,
+            fault,
             ", ".join(without_kappa),
             100.0 * share,
             frequency,
@@ -654,7 +664,7 @@ def resolve_fault_sc_characteristics(
         m = iec60909_m(kappa_eff, frequency, t_k_s)
 
     return FaultShortCircuitData(
-        fault_name=fault_name,
+        fault_name=fault,
         frequency=frequency,
         kappa=kappa_eff,
         r_to_x=r_to_x_eff,

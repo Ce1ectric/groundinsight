@@ -56,7 +56,7 @@ NumPy / SciPy working arrays used by the LU solver.
 import groundinsight as gi
 
 # Assume `net` was built via gi.create_* factories with a fault `f1`.
-gi.run_fault(network=net, fault_name="f1")  # populates net._enet under the hood
+gi.run_fault(network=net, fault="f1")  # populates net._enet under the hood
 
 # Inspect derived quantities through the public Network accessors:
 df_bus = net.res_buses()           # EPR per bus

@@ -14,6 +14,7 @@ import warnings
 
 from .diagnostics import collecting, unique
 from .models.core_models import Network, Bus, BusType, Branch, BranchType, Fault, Source
+from .utils.compat import renamed_parameters
 from typing import Optional, List, Dict
 
 
@@ -329,10 +330,11 @@ def create_fault(
     return fault
 
 
+@renamed_parameters(fault_name="fault")
 def set_active_fault(
-    network: Network, fault_name: str, keep_results: bool = False
+    network: Network, fault: str, keep_results: bool = False
 ) -> None:
-    """Activate ``fault_name`` on ``network`` and deactivate the others.
+    """Activate ``fault`` on ``network`` and deactivate the others.
 
     Thin wrapper around :meth:`Network.set_active_fault` so the
     ``keep_results=`` keyword is reachable from the public top-level
@@ -344,11 +346,12 @@ def set_active_fault(
     ----------
     network : Network
         The network to operate on.
-    fault_name : str
-        The name of the fault to activate.
+    fault : str
+        The name of the fault to activate. The former keyword
+        ``fault_name`` is accepted as a deprecated alias.
     keep_results : bool, default ``False``
         Forwarded to :meth:`Network.set_active_fault`. If ``True``,
-        any previously cached :class:`Result` for ``fault_name`` is
+        any previously cached :class:`Result` for ``fault`` is
         preserved so a notebook can re-plot the existing solve
         without recomputing it.
 
@@ -367,7 +370,7 @@ def set_active_fault(
     >>> import groundinsight as gi  # doctest: +SKIP
     >>> gi.set_active_fault(net, "F1", keep_results=True)  # doctest: +SKIP
     """
-    network.set_active_fault(fault_name, keep_results=keep_results)
+    network.set_active_fault(fault, keep_results=keep_results)
 
 
 def create_source(
@@ -784,9 +787,10 @@ def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
     )
 
 
+@renamed_parameters(fault_name="fault")
 def run_fault(
     network: Network,
-    fault_name: str,
+    fault: str,
     auto_parallel_coefficients: Optional[bool] = None,
     *,
     phase_current_mode: str = "auto",
@@ -797,15 +801,17 @@ def run_fault(
     Sets the named fault as the active fault, builds the electrical
     network, solves the per-frequency nodal system, computes branch
     currents, reduction factors and grounding impedance. The results are
-    stored on ``network.results[fault_name]``.
+    stored on ``network.results[fault]``. :func:`groundinsight.solve` runs the
+    same pipeline without writing anything into ``network``.
 
     Parameters
     ----------
     network : Network
         The network instance on which the fault calculations are to be
         performed.
-    fault_name : str
-        The name of the fault to activate and run calculations for.
+    fault : str
+        The name of the fault to activate and run calculations for. The
+        former keyword ``fault_name`` is accepted as a deprecated alias.
     auto_parallel_coefficients : bool, optional
         Deprecated alias for ``phase_current_mode``. ``True`` maps to
         ``"auto"``, ``False`` to ``"paths"``. When given it wins over
@@ -832,7 +838,7 @@ def run_fault(
     -------
     Result
         The result of the run -- the same object that is stored as
-        ``network.results[fault_name]``. Its ``diagnostics`` list holds every
+        ``network.results[fault]``. Its ``diagnostics`` list holds every
         package warning raised during the run, with code and element
         references (see :mod:`groundinsight.diagnostics`).
 
@@ -862,14 +868,14 @@ def run_fault(
     Examples
     --------
     >>> import groundinsight as gi  # doctest: +SKIP
-    >>> gi.run_fault(network, fault_name="Fault1")  # doctest: +SKIP
+    >>> gi.run_fault(network, fault="Fault1")  # doctest: +SKIP
     """
     auto_phase_currents = _resolve_phase_current_mode(
         phase_current_mode, auto_parallel_coefficients
     )
 
     # Set the active fault
-    network.set_active_fault(fault_name)
+    network.set_active_fault(fault)
 
     # (Re)build paths when they are missing or the active topology changed
     # since they were last built (e.g. a manual Bus.active / Branch.active
@@ -927,11 +933,11 @@ def run_fault(
 
     # Results are stored in net.results within the ElectricalNetwork methods;
     # the diagnostics of the run are attached to that same object.
-    result = network.results[fault_name]
+    result = network.results[fault]
     result.diagnostics = unique(sink)
     # Stamp the inputs the result was computed from; Network.stale_results
     # compares the stamp with the network's inputs at any later time (GUI3).
-    result.input_digest = network._input_digest(fault_name)
+    result.input_digest = network._input_digest(fault)
     return result
 
 

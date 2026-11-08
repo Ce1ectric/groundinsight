@@ -56,7 +56,7 @@ from groundinsight import waveforms
 # Assume `net` is a built network with one current source 'infeed'
 # and a fault 'fault1'.
 
-study = gi.TransientStudy(network=net, fault_name="fault1")
+study = gi.TransientStudy(network=net, fault="fault1")
 study.set_source_waveform(
     "infeed",
     waveforms.sinusoidal_with_dc_offset(

@@ -51,6 +51,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from groundinsight.diagnostics import ModelAssumptionWarning, emit
 from groundinsight.electrical_network import ElectricalNetwork
 from groundinsight.models.core_models import Network, TransientModelWarning
+from groundinsight.utils.compat import renamed_parameters
 
 if TYPE_CHECKING:
     import polars as pl  # forward reference for type annotations only
@@ -418,15 +419,16 @@ class TransientStudy:
         paths for its mutual coupling; since pass 19 it takes the phase
         split from the stationary phase-network solve instead, which needs
         no path set.
-    fault_name : str
+    fault : str
         Name of the fault this study simulates. It does not have to be the
-        network's active fault.
+        network's active fault. It is kept as the attribute ``fault_name``.
+        The former keyword ``fault_name`` is accepted as a deprecated alias.
 
     Examples
     --------
     >>> import groundinsight as gi  # doctest: +SKIP
     >>> from groundinsight.simulation import waveforms  # doctest: +SKIP
-    >>> study = gi.TransientStudy(network, fault_name='F1')  # doctest: +SKIP
+    >>> study = gi.TransientStudy(network, fault='F1')  # doctest: +SKIP
     >>> study.set_source_waveform(  # doctest: +SKIP
     ...     'src',
     ...     waveforms.sinusoidal_with_dc_offset(
@@ -439,13 +441,14 @@ class TransientStudy:
     >>> result = study.solve(t_end=0.2, dt=1e-4)  # doctest: +SKIP
     """
 
-    def __init__(self, network: Network, fault_name: str):
-        if fault_name not in network.faults:
+    @renamed_parameters(fault_name="fault")
+    def __init__(self, network: Network, fault: str):
+        if fault not in network.faults:
             raise ValueError(
-                f"Fault '{fault_name}' does not exist in the network."
+                f"Fault '{fault}' does not exist in the network."
             )
         self.network = network
-        self.fault_name = fault_name
+        self.fault_name = fault
         self._source_waveforms: Dict[str, WaveformFunc] = {}
         self._obs_buses: List[str] = []
         self._obs_branches: List[str] = []

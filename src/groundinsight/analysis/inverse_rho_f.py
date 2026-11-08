@@ -227,7 +227,7 @@ def evaluate_max_epr_under_k(
         # Sweep: each fault once. The first call populates ``network.paths``
         # for every (source, fault) pair; subsequent calls reuse the cache.
         for b, fname in zip(bus_names, sweep_fault_names):
-            run_fault(network, fault_name=fname, **rfk)
+            run_fault(network, fault=fname, **rfk)
             try:
                 result_bus = next(
                     rb for rb in network.results[fname].buses if rb.name == b

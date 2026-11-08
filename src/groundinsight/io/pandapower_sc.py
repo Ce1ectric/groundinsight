@@ -99,6 +99,7 @@ from ..analysis.shortcircuit import (
     thermal_equivalent_current,
 )
 from ..models.core_models import ComplexNumber, Network
+from ..utils.compat import renamed_parameters
 from .pandapower_import import _bus_index_to_name, _require_pandapower
 
 
@@ -360,12 +361,13 @@ def _kappa_for_row(
     return kappa_from_r_to_x(r_to_x), "iec_closed_form"
 
 
+@renamed_parameters(f="frequency")
 def read_shortcircuit_results(
     net,
     *,
     t_k_s: Optional[float] = None,
     n_factor: float = 1.0,
-    f: float = 50.0,
+    frequency: float = 50.0,
     buses: Optional[Sequence[int]] = None,
 ) -> pl.DataFrame:
     """
@@ -401,8 +403,9 @@ def read_shortcircuit_results(
         IEC 60909-0 AC heat factor ``n``. ``1.0`` is the
         far-from-generator case. pandapower does not model ``n``, so this
         argument is the only source of a non-neutral value.
-    f : float, default 50.0
+    frequency : float, default 50.0
         System frequency in Hz used in the ``m`` factor.
+        The former keyword ``f`` is accepted as a deprecated alias.
     buses : sequence of int, optional
         Restrict the output to these pandapower bus indices. Defaults to
         every bus in ``res_bus_sc``.
@@ -504,7 +507,7 @@ def read_shortcircuit_results(
             if i_k_a is not None:
                 i_p_a = peak_short_circuit_current(i_k_a, kappa)
             if t_k_s is not None:
-                m = iec60909_m(kappa, f, t_k_s)
+                m = iec60909_m(kappa, frequency, t_k_s)
                 if i_k_a is not None:
                     i_th_a = thermal_equivalent_current(i_k_a, m, n_factor)
 
@@ -543,10 +546,11 @@ def read_shortcircuit_results(
     return pl.DataFrame(rows, schema=_SC_SCHEMA)
 
 
+@renamed_parameters(fault_name="fault")
 def apply_shortcircuit_characteristics(
     network: Network,
     sc_results,
-    fault_name: str,
+    fault: str,
     *,
     pp_bus: Optional[int] = None,
     bus_name: Optional[str] = None,
@@ -580,8 +584,10 @@ def apply_shortcircuit_characteristics(
         Either a solved pandapower net (passed through
         :func:`read_shortcircuit_results`) or a frame previously returned
         by it.
-    fault_name : str
+    fault : str
         Name of the :class:`Fault` in ``network`` the results belong to.
+        The former keyword ``fault_name`` is accepted as a deprecated
+        alias.
     pp_bus : int, optional
         pandapower bus index to read the characteristics from. Defaults to
         the row whose ``bus_name`` equals the fault's bus, which is the
@@ -655,10 +661,10 @@ def apply_shortcircuit_characteristics(
     if pp_bus is not None and bus_name is not None:
         raise ValueError("Provide at most one of 'pp_bus' or 'bus_name'.")
 
-    fault = network.faults.get(fault_name)
-    if fault is None:
+    fault_obj = network.faults.get(fault)
+    if fault_obj is None:
         raise ValueError(
-            f"Fault {fault_name!r} is not in network {network.name!r}. "
+            f"Fault {fault!r} is not in network {network.name!r}. "
             f"Available: {sorted(network.faults)}."
         )
 
@@ -671,7 +677,7 @@ def apply_shortcircuit_characteristics(
         raise ValueError("The short-circuit result frame is empty.")
 
     # --- pick the row describing the fault location --------------------
-    target = bus_name if bus_name is not None else fault.bus
+    target = bus_name if bus_name is not None else fault_obj.bus
     if pp_bus is not None:
         matches = frame.filter(pl.col("pp_bus_index") == int(pp_bus))
         selector = f"pp_bus={pp_bus}"
@@ -720,11 +726,11 @@ def apply_shortcircuit_characteristics(
             if frame_n is not None and frame_n != _NEUTRAL_N_FACTOR
             else None
         )
-    _adopt_fault_value(fault, "t_k_s", t_k, fault_name)
-    _adopt_fault_value(fault, "n_factor", n_val, fault_name)
+    _adopt_fault_value(fault_obj, "t_k_s", t_k, fault)
+    _adopt_fault_value(fault_obj, "n_factor", n_val, fault)
     # Report what is in effect afterwards, not what was offered.
-    effective_t_k = fault.t_k_s
-    effective_n = fault.n_factor
+    effective_t_k = fault_obj.t_k_s
+    effective_n = fault_obj.n_factor
 
     if frequency is None:
         frequency = next((float(x) for x in network.frequencies if x > 0), 50.0)
@@ -739,10 +745,10 @@ def apply_shortcircuit_characteristics(
                 f"Unknown source(s) {unknown} in network {network.name!r}."
             )
     else:
-        names = _sources_feeding(network, fault_name)
+        names = _sources_feeding(network, fault)
     if not names:
         raise ValueError(
-            f"No sources are eligible for fault {fault_name!r}. Build the paths "
+            f"No sources are eligible for fault {fault!r}. Build the paths "
             "(run_fault / build_paths) or pass sources=[...] explicitly."
         )
 
@@ -794,7 +800,7 @@ def apply_shortcircuit_characteristics(
 
         rows.append(
             {
-                "fault_name": fault_name,
+                "fault_name": fault,
                 "source_name": name,
                 "bus": src.bus,
                 "frequency": frequency,
@@ -814,7 +820,7 @@ def apply_shortcircuit_characteristics(
     logger.info(
         "Applied IEC 60909 characteristics of bus '%s' to fault '%s': "
         "I_k''=%.1f A, kappa=%s (%s), T_k=%s s over %d source(s).",
-        row.get("bus_name"), fault_name, i_k_total,
+        row.get("bus_name"), fault, i_k_total,
         "n/a" if kappa is None else f"{kappa:.4f}", kappa_origin,
         effective_t_k, len(names),
     )

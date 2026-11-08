@@ -16,7 +16,7 @@ assumptions each one makes, and explains where one is the right choice
 over the other.
 
 ```python
-study = gi.TransientStudy(network, fault_name="F1")
+study = gi.TransientStudy(network, fault="F1")
 study.set_source_waveform("src", waveforms.sinusoidal_with_dc_offset(...))
 study.set_observation(buses=["b10"], branches=["L_09_10"])
 

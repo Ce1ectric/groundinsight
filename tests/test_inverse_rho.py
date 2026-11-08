@@ -132,7 +132,10 @@ def test_find_max_rho_scaling_admissible_returns_upper_bound():
 
 def test_find_max_rho_scaling_rejects_non_positive_u_max():
     net = _build_two_bus_net()
-    with pytest.raises(ValueError, match="u_max"):
+    # The limit is called ``u_limit`` since audit pass 19 (USE8); ``u_max``
+    # is still accepted as a deprecated alias, so the old call raises with
+    # the new name in the message.
+    with pytest.raises(ValueError, match="u_limit"):
         find_max_rho_scaling(net, "flt", ["b0"], u_max=0.0)
 
 

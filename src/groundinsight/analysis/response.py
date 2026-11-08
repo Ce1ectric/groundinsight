@@ -99,6 +99,7 @@ from scipy.sparse.linalg import splu
 
 from groundinsight.electrical_network import _component_labels, _restricted_columns
 from groundinsight.models.core_models import Network
+from groundinsight.utils.compat import renamed_parameters
 from groundinsight.utils.earth_current import (
     NOISE_REL,
     earth_current_vanishes,
@@ -263,35 +264,84 @@ class BusResponse(BaseModel):
             name: u0[name] - z_col[name] * factor for name in self.bus_names
         }
 
-    def voltages(self, z_bus: ElectrodeSpec, freq: float) -> Dict[str, complex]:
+    @renamed_parameters(freq="frequency")
+    def voltages(
+        self, z_bus: ElectrodeSpec, frequency: float
+    ) -> Dict[str, complex]:
         """
         Nodal voltages for one electrode at one frequency.
 
         Both endpoints are evaluated as limits, so an ideal electrode gives
         exactly zero at ``bus`` instead of a very small number.
-        """
-        return self._with_electrode(self.u_open[freq], z_bus, freq)
 
+        Parameters
+        ----------
+        z_bus : complex, float or None
+            The electrode at ``bus`` in Ohm: ``None`` or an infinite value
+            for no electrode, ``0`` for an ideal one (see :meth:`admittance`).
+        frequency : float
+            One of the frequencies of the response, in Hz. The former
+            keyword ``freq`` is accepted as a deprecated alias.
+
+        Returns
+        -------
+        dict of str to complex
+            The EPR phasor per bus.
+        """
+        return self._with_electrode(self.u_open[frequency], z_bus, frequency)
+
+    @renamed_parameters(freq="frequency")
     def voltages_no_mutual(
-        self, z_bus: ElectrodeSpec, freq: float
+        self, z_bus: ElectrodeSpec, frequency: float
     ) -> Optional[Dict[str, complex]]:
         """
         The same, for the injection vector without the mutual Norton sources.
 
         This is the denominator of the EPR-based reduction factor. ``None`` when
         the response was built without that right-hand side.
+
+        Parameters
+        ----------
+        z_bus : complex, float or None
+            The electrode at ``bus`` in Ohm: ``None`` or an infinite value
+            for no electrode, ``0`` for an ideal one (see :meth:`admittance`).
+        frequency : float
+            One of the frequencies of the response, in Hz. The former
+            keyword ``freq`` is accepted as a deprecated alias.
+
+        Returns
+        -------
+        dict of str to complex or None
+            The EPR phasor per bus without mutual coupling.
         """
-        u0 = self.u_open_no_mutual.get(freq)
+        u0 = self.u_open_no_mutual.get(frequency)
         if u0 is None:
             return None
-        return self._with_electrode(u0, z_bus, freq)
+        return self._with_electrode(u0, z_bus, frequency)
 
-    def driving_point(self, z_bus: ElectrodeSpec, freq: float) -> complex:
-        """``Z_dp = 1 / (Y_B + 1/Z_net)`` -- the impedance seen at ``bus``."""
+    @renamed_parameters(freq="frequency")
+    def driving_point(self, z_bus: ElectrodeSpec, frequency: float) -> complex:
+        """
+        ``Z_dp = 1 / (Y_B + 1/Z_net)`` -- the impedance seen at ``bus``.
+
+        Parameters
+        ----------
+        z_bus : complex, float or None
+            The electrode at ``bus`` in Ohm: ``None`` or an infinite value
+            for no electrode, ``0`` for an ideal one (see :meth:`admittance`).
+        frequency : float
+            One of the frequencies of the response, in Hz. The former
+            keyword ``freq`` is accepted as a deprecated alias.
+
+        Returns
+        -------
+        complex
+            The driving-point impedance in Ohm.
+        """
         y = self.admittance(z_bus)
         if np.isinf(y.real):
             return 0.0 + 0.0j
-        z_net = self.z_network[freq]
+        z_net = self.z_network[frequency]
         if z_net == 0:
             return 0.0 + 0.0j
         total = y + 1.0 / z_net
@@ -300,7 +350,7 @@ class BusResponse(BaseModel):
         return 1.0 / total
 
     def fault_driving_point(
-        self, z_bus: ElectrodeSpec, freq: float
+        self, z_bus: ElectrodeSpec, frequency: float
     ) -> Optional[complex]:
         """
         ``Z_E`` -- the driving-point impedance at the **fault** bus -- for one
@@ -325,7 +375,7 @@ class BusResponse(BaseModel):
         ----------
         z_bus : complex, float or None
             The electrode at ``bus``, as for :meth:`evaluate`.
-        freq : float
+        frequency : float
             Frequency in Hz.
 
         Returns
@@ -336,11 +386,11 @@ class BusResponse(BaseModel):
             whatever the electrode at ``bus``, or because ``z_bus`` is ``None``
             and the electrode at ``bus`` was its only path.
         """
-        z_ff = self.z_fault_open.get(freq)
-        z_fb = self.z_fault_transfer.get(freq)
-        z_bb = self.z_bus_open.get(freq)
+        z_ff = self.z_fault_open.get(frequency)
+        z_fb = self.z_fault_transfer.get(frequency)
+        z_bb = self.z_bus_open.get(frequency)
         if z_ff is None or z_fb is None or z_bb is None:
-            ideal = self.z_fault_ideal.get(freq)
+            ideal = self.z_fault_ideal.get(frequency)
             if ideal is None:
                 return None
             y = self.admittance(z_bus)
@@ -361,7 +411,8 @@ class BusResponse(BaseModel):
             return None
         return z_ff - y * z_fb * z_fb / denominator
 
-    def worst_case_electrode(self, freq: float) -> Dict[str, complex]:
+    @renamed_parameters(freq="frequency")
+    def worst_case_electrode(self, frequency: float) -> Dict[str, complex]:
         """
         The passive electrode that maximises ``|Z_dp|``, and the value it gives.
 
@@ -370,6 +421,12 @@ class BusResponse(BaseModel):
         real part is as small as it can be, i.e. at ``Y_B = -j*Im(Y_net)``. The
         result exceeds ``|Z_net|`` only slightly in a cable network, but it is
         the true bound rather than an assumed one.
+
+        Parameters
+        ----------
+        frequency : float
+            One of the frequencies of the response, in Hz. The former
+            keyword ``freq`` is accepted as a deprecated alias.
 
         Returns
         -------
@@ -384,14 +441,14 @@ class BusResponse(BaseModel):
             non-positive one turns the same expression into a negative or
             infinite "worst case" that reads like an answer.
         """
-        z_net = self.z_network[freq]
+        z_net = self.z_network[frequency]
         if z_net == 0 or not np.isfinite(z_net):
             return {"z_bus": complex(np.inf, 0.0), "z_driving_point": z_net}
         y_net = 1.0 / z_net
         if y_net.real <= 0:
             raise ValueError(
                 f"The network at bus '{self.bus}' has a non-positive "
-                f"conductance at {freq} Hz (Re(1/Z_net) = {y_net.real:g}), so "
+                f"conductance at {frequency} Hz (Re(1/Z_net) = {y_net.real:g}), so "
                 f"the passive worst case 1/Re(Y_net) is not a maximum -- it "
                 f"would come back negative or infinite. A passive network "
                 f"cannot do this: check the grounding impedances of network "

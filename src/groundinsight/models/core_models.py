@@ -59,6 +59,7 @@ from groundinsight.diagnostics import (
     InputWarning,
     emit,
 )
+from groundinsight.utils.compat import renamed_parameters
 from groundinsight.utils.validations import (
     BRANCH_FORMULA_SYMBOLS,
     BUS_FORMULA_SYMBOLS,
@@ -2981,16 +2982,18 @@ class Network(ValidatedAssignmentModel):
     def electrical_network(self, value):
         self._electrical_network = value
 
-    def set_active_fault(self, fault_name: str, keep_results: bool = False):
+    @renamed_parameters(fault_name="fault")
+    def set_active_fault(self, fault: str, keep_results: bool = False):
         """Set the specified fault as active and deactivate all other faults.
 
         Parameters
         ----------
-        fault_name : str
-            The name of the fault to activate.
+        fault : str
+            The name of the fault to activate. The former keyword
+            ``fault_name`` is accepted as a deprecated alias.
         keep_results : bool, default ``False``
             If ``False`` (historic behaviour), any previously cached
-            :class:`Result` for ``fault_name`` is dropped so the next
+            :class:`Result` for ``fault`` is dropped so the next
             solve starts from a clean slate. If ``True``, the cached
             result is preserved — useful when re-using the same
             network to plot a previous solve without recomputing it.
@@ -3000,22 +3003,21 @@ class Network(ValidatedAssignmentModel):
         ValueError
             If the specified fault does not exist in the network.
         """
-        if fault_name not in self.faults:
-            raise ValueError(f"Fault '{fault_name}' does not exist in the network.")
+        if fault not in self.faults:
+            raise ValueError(f"Fault '{fault}' does not exist in the network.")
 
         # Deactivate all faults
-        for fault in self.faults.values():
-            fault._set_active(False)
+        for other in self.faults.values():
+            other._set_active(False)
 
         # Activate the specified fault
-        fault = self.faults[fault_name]
-        fault._set_active(True)
-        self.active_fault = fault_name
+        self.faults[fault]._set_active(True)
+        self.active_fault = fault
 
         # Clear previous results for the fault unless the caller
         # explicitly asks us to keep them.
-        if not keep_results and fault_name in self.results:
-            del self.results[fault_name]
+        if not keep_results and fault in self.results:
+            del self.results[fault]
 
     def invalidate_paths(self) -> None:
         """Drop the cached pathfinder results *for this network*.
@@ -3090,7 +3092,8 @@ class Network(ValidatedAssignmentModel):
         # flip or a rewiring and rebuild them instead of silently reusing them.
         self._paths_fingerprint = self._active_topology_fingerprint()
 
-    def sources_reaching(self, fault_name: str) -> List[str]:
+    @renamed_parameters(fault_name="fault")
+    def sources_reaching(self, fault: str) -> List[str]:
         """
         Names of the sources that are connected to a fault over active elements.
 
@@ -3108,8 +3111,9 @@ class Network(ValidatedAssignmentModel):
 
         Parameters
         ----------
-        fault_name : str
-            Name of the fault to test reachability against.
+        fault : str
+            Name of the fault to test reachability against. The former
+            keyword ``fault_name`` is accepted as a deprecated alias.
 
         Returns
         -------
@@ -3119,7 +3123,7 @@ class Network(ValidatedAssignmentModel):
         Raises
         ------
         ValueError
-            If ``fault_name`` is not a fault of this network.
+            If ``fault`` is not a fault of this network.
 
         Examples
         --------
@@ -3128,12 +3132,12 @@ class Network(ValidatedAssignmentModel):
         """
         from groundinsight.pathfinder import PathFinder  # local import
 
-        if fault_name not in self.faults:
+        if fault not in self.faults:
             raise ValueError(
-                f"Fault '{fault_name}' does not exist in the network "
+                f"Fault '{fault}' does not exist in the network "
                 f"'{self.name}'."
             )
-        fault_bus = self.faults[fault_name].bus
+        fault_bus = self.faults[fault].bus
         pathfinder = PathFinder(self)
         return [
             name

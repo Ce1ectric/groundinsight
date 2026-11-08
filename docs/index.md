@@ -78,7 +78,7 @@ gi.create_branch(
 gi.create_source(name="infeed", bus="src", values={50: 1000.0}, network=net)
 gi.create_fault(name="f1", bus="flt", scalings={50: 1.0}, network=net)
 
-gi.run_fault(network=net, fault_name="f1")
+gi.run_fault(network=net, fault="f1")
 print(net.res_all_impedances())
 ```
 

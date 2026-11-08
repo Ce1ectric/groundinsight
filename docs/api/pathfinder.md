@@ -45,7 +45,7 @@ meshed topologies.
 
 Since 0.6.1 the default `phase_current_mode="auto"` therefore does
 **not** enumerate at all. It only needs to know which sources
-reach the fault, and `Network.sources_reaching(fault_name)`
+reach the fault, and `Network.sources_reaching(fault)`
 answers that with a breadth-first search in `O(V + E)`. The
 enumeration runs for the legacy `phase_current_mode="paths"`, for
 the transient state-space solver, and whenever you ask for it with

@@ -284,11 +284,12 @@ def test_max_iter_one_is_allowed(net):
     "kwargs, match",
     [
         # F5: the NaN limit passed `value <= 0` and poisoned every later
-        # comparison.
-        ({"u_max": float("nan")}, "u_max must be a finite positive number"),
-        ({"u_max": float("inf")}, "u_max must be a finite positive number"),
-        ({"u_max": 0.0}, "u_max must be a finite positive number"),
-        ({"u_max": -1.0}, "u_max must be a finite positive number"),
+        # comparison. (The limit is ``u_limit`` since audit pass 19, USE8;
+        # ``u_max`` is the deprecated alias these cases still pass.)
+        ({"u_max": float("nan")}, "u_limit must be a finite positive number"),
+        ({"u_max": float("inf")}, "u_limit must be a finite positive number"),
+        ({"u_max": 0.0}, "u_limit must be a finite positive number"),
+        ({"u_max": -1.0}, "u_limit must be a finite positive number"),
         # F3: a tolerance the exit test can never act on.
         ({"tol_rel": 0.0}, "tol_rel must be a finite positive number"),
         ({"tol_rel": -1.0}, "tol_rel must be a finite positive number"),

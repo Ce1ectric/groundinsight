@@ -65,7 +65,7 @@ gi.create_fault(name="f1", bus="bus_fault",
                 scalings={50.0: 1.0, 250.0: 0.05}, network=net)
 
 # 4. Run
-gi.run_fault(network=net, fault_name="f1")
+gi.run_fault(network=net, fault="f1")
 print(net.res_buses(fault="f1"))
 ```
 

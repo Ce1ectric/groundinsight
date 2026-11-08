@@ -72,6 +72,7 @@ import polars as pl
 
 from ..diagnostics import ModelAssumptionWarning, emit
 from ..models.core_models import Network
+from ..utils.compat import renamed_parameters
 from ._guards import require_complete_results
 from .shortcircuit import (
     iec60909_m,
@@ -528,7 +529,7 @@ def _resolve_sc_inputs(
         if t_k is None:
             raise ValueError(
                 f"No fault duration available for fault {fault_name!r}. Pass "
-                "t_k=... explicitly or set Fault.t_k_s on the fault."
+                "t_k_s=... explicitly or set Fault.t_k_s on the fault."
             )
     t_k = float(t_k)
     if t_k <= 0:
@@ -545,7 +546,7 @@ def _resolve_sc_inputs(
             f"below that where the AC component decays. A value above one "
             f"raises I_th without any physical reading (n = 3 by 70 %), and "
             f"a negative one reaches sqrt(m + n) as a bare math domain "
-            f"error. Pass n=... explicitly or fix Fault.n_factor."
+            f"error. Pass n_factor=... explicitly or fix Fault.n_factor."
         )
 
     if f is None:
@@ -653,11 +654,12 @@ def iec60949_k(
     )
 
 
+@renamed_parameters(t_k="t_k_s")
 def admissible_short_circuit_current(
-    k: float, cross_section_mm2: float, t_k: float
+    k: float, cross_section_mm2: float, t_k_s: float
 ) -> float:
     """
-    Adiabatic admissible short-circuit current ``I_adm = k*S/sqrt(t_k)``.
+    Adiabatic admissible short-circuit current ``I_adm = k*S/sqrt(t_k_s)``.
 
     Parameters
     ----------
@@ -665,8 +667,9 @@ def admissible_short_circuit_current(
         Material constant from :func:`iec60949_k`, in A·s^0.5/mm².
     cross_section_mm2 : float
         Conductor cross-section ``S`` in mm². Must be strictly positive.
-    t_k : float
-        Fault duration in seconds. Must be strictly positive.
+    t_k_s : float
+        Fault duration ``T_k`` in seconds. Must be strictly positive. The
+        former keyword ``t_k`` is accepted as a deprecated alias.
 
     Returns
     -------
@@ -676,26 +679,27 @@ def admissible_short_circuit_current(
     Raises
     ------
     ValueError
-        If ``cross_section_mm2`` or ``t_k`` is not strictly positive.
+        If ``cross_section_mm2`` or ``t_k_s`` is not strictly positive.
     """
     if cross_section_mm2 <= 0:
         raise ValueError(
             f"cross_section_mm2 must be strictly positive, got {cross_section_mm2!r}."
         )
-    if t_k <= 0:
-        raise ValueError(f"t_k must be strictly positive, got {t_k!r}.")
-    return k * cross_section_mm2 / math.sqrt(t_k)
+    if t_k_s <= 0:
+        raise ValueError(f"t_k_s must be strictly positive, got {t_k_s!r}.")
+    return k * cross_section_mm2 / math.sqrt(t_k_s)
 
 
+@renamed_parameters(fault_name="fault", t_k="t_k_s", n="n_factor", f="frequency")
 def check_conductor_limits(
     network: Network,
-    fault_name: str,
-    t_k: Optional[float] = None,
+    fault: str,
+    t_k_s: Optional[float] = None,
     *,
     kappa: Optional[float] = None,
     r_to_x: Optional[float] = None,
-    n: Optional[float] = None,
-    f: Optional[float] = None,
+    n_factor: Optional[float] = None,
+    frequency: Optional[float] = None,
     aggregation: str = "weighted",
 ) -> pl.DataFrame:
     """
@@ -738,11 +742,11 @@ def check_conductor_limits(
        ``I_dc**2`` to ``I_th**2`` and the reported check is unconservative
        (PH10).
 
-    All three IEC 60909 inputs — ``t_k``, ``kappa`` and ``n`` — can either
-    be passed explicitly or be left to the network data:
+    All three IEC 60909 inputs — ``t_k_s``, ``kappa`` and ``n_factor`` — can
+    either be passed explicitly or be left to the network data:
 
-    * ``t_k`` falls back to ``Fault.t_k_s``,
-    * ``n`` falls back to ``Fault.n_factor`` (default ``1.0``),
+    * ``t_k_s`` falls back to ``Fault.t_k_s``,
+    * ``n_factor`` falls back to ``Fault.n_factor`` (default ``1.0``),
     * ``kappa`` falls back to the current-weighted aggregation over the
       feeding sources' ``kappa`` / ``r_to_x``, see
       :func:`~groundinsight.analysis.shortcircuit.resolve_fault_sc_characteristics`.
@@ -753,11 +757,11 @@ def check_conductor_limits(
     Parameters
     ----------
     network : Network
-        A network that already has results for ``fault_name`` (call
+        A network that already has results for ``fault`` (call
         :func:`run_fault` first).
-    fault_name : str
+    fault : str
         Name of the solved fault whose branch currents are checked.
-    t_k : float, optional
+    t_k_s : float, optional
         Fault duration ``T_k`` in seconds. Must be strictly positive.
         Defaults to ``Fault.t_k_s`` of the named fault.
     kappa : float, optional
@@ -767,13 +771,16 @@ def check_conductor_limits(
     r_to_x : float, optional
         ``R/X`` ratio at the fault, converted to ``kappa`` internally.
         Mutually exclusive with ``kappa``.
-    n : float, optional
+    n_factor : float, optional
         AC-decay heat factor ``n`` (IEC 60909-0). Defaults to
         ``Fault.n_factor``, i.e. ``1.0`` (far-from-generator;
         ``I_k'' = I_k``).
-    f : float, optional
+    frequency : float, optional
         System frequency in Hz used in the ``m`` factor. Defaults to the
         lowest positive frequency of ``network`` (usually 50), or ``50.0``.
+        The former keywords ``fault_name``, ``t_k``, ``n`` and ``f`` are
+        accepted as deprecated aliases of ``fault``, ``t_k_s``,
+        ``n_factor`` and ``frequency``.
     aggregation : {'weighted', 'max'}, default 'weighted'
         Only relevant when ``kappa`` is resolved from the sources.
         ``"weighted"`` reproduces the sum of the individual source peaks
@@ -796,32 +803,32 @@ def check_conductor_limits(
     Raises
     ------
     ValueError
-        If ``t_k`` is neither given nor stored and positive, if both
+        If ``t_k_s`` is neither given nor stored and positive, if both
         ``kappa`` and ``r_to_x`` are given, if ``kappa`` can be resolved
         from neither the arguments nor the sources, or if ``network`` has
-        no results for ``fault_name``. Also if the stored result does not
+        no results for ``fault``. Also if the stored result does not
         cover every branch of the network -- an incomplete result would
         silently report the missing branches as free of violations. Re-run
         :func:`groundinsight.run_fault` in that case.
 
     Examples
     --------
-    >>> gi.check_conductor_limits(net, "F1", t_k=0.5, r_to_x=0.1)  # doctest: +SKIP
+    >>> gi.check_conductor_limits(net, "F1", t_k_s=0.5, r_to_x=0.1)  # doctest: +SKIP
     >>> gi.check_conductor_limits(net, "F1")  # all inputs from the model  # doctest: +SKIP
     """
     sc = _resolve_sc_inputs(
-        network, fault_name, t_k, kappa, r_to_x, n, f, aggregation
+        network, fault, t_k_s, kappa, r_to_x, n_factor, frequency, aggregation
     )
     t_k, kappa, m, n, i_th_factor = (
         sc.t_k, sc.kappa, sc.m, sc.n, sc.i_th_factor
     )
 
-    result = network.results[fault_name]
+    result = network.results[fault]
     # ``compute_branch_currents`` emits a row for *every* branch, including
     # inactive and open ones, so any missing name means the stored result is
     # stale or half-built. See _require_complete_results.
     _require_complete_results(
-        fault_name,
+        fault,
         list(network.branches),
         [rb.name for rb in result.branches],
         "branch",
@@ -884,15 +891,15 @@ def check_conductor_limits(
             }
         )
 
-    _warn_half_declared(incomplete, fault_name, "branch(es)")
-    _warn_dc_excluded(rows, fault_name, "branch_name", "branch")
+    _warn_half_declared(incomplete, fault, "branch(es)")
+    _warn_dc_excluded(rows, fault, "branch_name", "branch")
 
     violations = [r["branch_name"] for r in rows if r["within_limit"] is False]
     if violations:
         logger.warning(
             "Thermal limit exceeded on %d branch(es) for fault '%s' "
             "(t_k=%.3g s, kappa=%.3f): %s",
-            len(violations), fault_name, t_k, kappa, violations,
+            len(violations), fault, t_k, kappa, violations,
         )
 
     return pl.DataFrame(rows, schema=_BRANCH_SCHEMA)
@@ -912,15 +919,16 @@ _NODE_ELEMENTS: Dict[str, Dict[str, str]] = {
 }
 
 
+@renamed_parameters(fault_name="fault", t_k="t_k_s", n="n_factor", f="frequency")
 def check_node_limits(
     network: Network,
-    fault_name: str,
-    t_k: Optional[float] = None,
+    fault: str,
+    t_k_s: Optional[float] = None,
     *,
     kappa: Optional[float] = None,
     r_to_x: Optional[float] = None,
-    n: Optional[float] = None,
-    f: Optional[float] = None,
+    n_factor: Optional[float] = None,
+    frequency: Optional[float] = None,
     aggregation: str = "weighted",
     elements: Sequence[str] = ("earthing_conductor", "electrode"),
 ) -> pl.DataFrame:
@@ -1007,11 +1015,11 @@ def check_node_limits(
     Parameters
     ----------
     network : Network
-        A network that already has results for ``fault_name`` (call
+        A network that already has results for ``fault`` (call
         :func:`run_fault` first).
-    fault_name : str
+    fault : str
         Name of the solved fault whose bus currents are checked.
-    t_k : float, optional
+    t_k_s : float, optional
         Fault duration ``T_k`` in seconds. Defaults to ``Fault.t_k_s``.
     kappa : float, optional
         Peak factor ``kappa`` in ``(1, 2]``. Mutually exclusive with
@@ -1019,12 +1027,15 @@ def check_node_limits(
     r_to_x : float, optional
         ``R/X`` ratio at the fault, converted to ``kappa`` internally.
         Mutually exclusive with ``kappa``.
-    n : float, optional
+    n_factor : float, optional
         AC-decay heat factor ``n`` (IEC 60909-0). Defaults to
         ``Fault.n_factor``, i.e. ``1.0``.
-    f : float, optional
+    frequency : float, optional
         System frequency in Hz used in the ``m`` factor. Defaults to the
-        lowest positive frequency of ``network``, or ``50.0``.
+        lowest positive frequency of ``network``, or ``50.0``. The former
+        keywords ``fault_name``, ``t_k``, ``n`` and ``f`` are accepted as
+        deprecated aliases of ``fault``, ``t_k_s``, ``n_factor`` and
+        ``frequency``.
     aggregation : {'weighted', 'max'}, default 'weighted'
         Only relevant when ``kappa`` is resolved from the sources; see
         :func:`check_conductor_limits`.
@@ -1051,7 +1062,7 @@ def check_node_limits(
     ------
     ValueError
         For an unknown entry in ``elements``, and for the same conditions
-        as :func:`check_conductor_limits` (no results, missing ``t_k``,
+        as :func:`check_conductor_limits` (no results, missing ``t_k_s``,
         unresolvable ``kappa``, both ``kappa`` and ``r_to_x`` given, or a
         stored result that does not cover every *active* bus).
 
@@ -1081,15 +1092,15 @@ def check_node_limits(
         )
 
     sc = _resolve_sc_inputs(
-        network, fault_name, t_k, kappa, r_to_x, n, f, aggregation
+        network, fault, t_k_s, kappa, r_to_x, n_factor, frequency, aggregation
     )
 
-    result = network.results[fault_name]
+    result = network.results[fault]
     # ``solve_network`` emits a row for every *active* bus (inactive ones are
     # removed from the nodal system and carry no EPR), so the expectation is
     # the set of active buses. See _require_complete_results.
     _require_complete_results(
-        fault_name,
+        fault,
         [name for name, bus in network.buses.items() if bus.active],
         [rb.name for rb in result.buses],
         "bus",
@@ -1177,8 +1188,8 @@ def check_node_limits(
                 }
             )
 
-    _warn_half_declared(incomplete, fault_name, "node element(s)")
-    _warn_dc_excluded(rows, fault_name, "bus_name", "bus")
+    _warn_half_declared(incomplete, fault, "node element(s)")
+    _warn_dc_excluded(rows, fault, "bus_name", "bus")
 
     violations = [
         f"{r['bus_name']}/{r['element']}" for r in rows if r["within_limit"] is False
@@ -1187,7 +1198,7 @@ def check_node_limits(
         logger.warning(
             "Thermal limit exceeded on %d node element(s) for fault '%s' "
             "(t_k=%.3g s, kappa=%.3f): %s",
-            len(violations), fault_name, sc.t_k, sc.kappa, violations,
+            len(violations), fault, sc.t_k, sc.kappa, violations,
         )
 
     return pl.DataFrame(rows, schema=_NODE_SCHEMA)

@@ -437,7 +437,9 @@ def test_the_check_requires_a_fault_duration_and_says_so():
     with pytest.raises(ValueError) as excinfo:
         gi.check_node_limits(net, "F")
     message = str(excinfo.value)
-    assert "t_k=" in message and "t_k_s" in message
+    # The keyword is ``t_k_s`` since audit pass 19 (USE8), the same name as
+    # the ``Fault`` field; ``t_k`` is its deprecated alias.
+    assert "t_k_s=" in message and "Fault.t_k_s" in message
 
 
 def test_the_check_requires_dc_information_and_says_so():

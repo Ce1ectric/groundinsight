@@ -606,7 +606,7 @@ def run_outage_study(
         )
         run_fault(
             network,
-            fault_name=fault,
+            fault=fault,
             auto_parallel_coefficients=auto_parallel_coefficients,
             phase_current_mode=phase_current_mode,
         )
@@ -624,7 +624,7 @@ def run_outage_study(
             with outage_context(network, scenario):
                 run_fault(
                     network,
-                    fault_name=fault,
+                    fault=fault,
                     auto_parallel_coefficients=auto_parallel_coefficients,
                     phase_current_mode=phase_current_mode,
                 )

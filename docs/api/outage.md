@@ -106,7 +106,7 @@ modification is needed:
 
 ```python
 with gi.outage_context(net, scenario_cable_out):
-    gi.run_fault(network=net, fault_name="fault1")
+    gi.run_fault(network=net, fault="fault1")
     print(net.res_all_impedances())
 # net is fully restored on exit — including the cached paths.
 ```

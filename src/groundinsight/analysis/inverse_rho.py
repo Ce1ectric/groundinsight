@@ -8,7 +8,7 @@ Given an existing network with a configured fault, sources and paths, this
 module computes the largest uniform scaling factor ``c`` of the selected
 buses' specific earth resistance ``rho`` such that the RMS earth potential
 rise (EPR) at the fault bus stays at or below a user-supplied limit
-``u_max``. The resulting ``rho_max[bus] = c * rho_0[bus]`` characterises
+``u_limit``. The resulting ``rho_max[bus] = c * rho_0[bus]`` characterises
 the worst-case soil condition the network can tolerate while still
 satisfying the EPR limit.
 
@@ -54,7 +54,7 @@ Examples
 >>> _ = gi.create_source(name="src", bus="b0", values={50: 100.0}, network=net)
 >>> _ = gi.create_fault(name="flt", bus="b1", scalings={50: 1.0}, network=net)
 >>> from groundinsight.analysis import find_max_rho_scaling
->>> result = find_max_rho_scaling(net, "flt", ["b0", "b1"], u_max=200.0)
+>>> result = find_max_rho_scaling(net, "flt", ["b0", "b1"], u_limit=200.0)
 >>> sorted(result.keys())
 ['bracket_rel_width', 'c_bracket', 'c_max', 'converged', 'iterations', 'rho_max', 'status', 'u_epr_rms_at_c_max']
 """
@@ -65,6 +65,7 @@ from typing import Any, Dict, List, Tuple
 
 from ..models.core_models import Network
 from ..network_operations import run_fault
+from ..utils.compat import renamed_parameters
 from ._bisection import (
     STATUS_BRACKET_FULLY_ADMISSIBLE,
     STATUS_MAX_ITER_REACHED,
@@ -87,7 +88,7 @@ logger = logging.getLogger(__name__)
 def _non_monotone_result(
     grid: Tuple[float, ...],
     grid_eprs: Tuple[float, ...],
-    u_max: float,
+    u_limit: float,
     tol_rel: float,
     max_iter: int,
     evaluate,
@@ -110,7 +111,7 @@ def _non_monotone_result(
     ----------
     grid, grid_eprs : tuple of float
         The pre-scan and its EPR values, in order of increasing ``c``.
-    u_max, tol_rel, max_iter
+    u_limit, tol_rel, max_iter
         As in :func:`find_max_rho_scaling`.
     evaluate : callable
         ``c -> EPR``, the same closure the bisection uses.
@@ -132,10 +133,10 @@ def _non_monotone_result(
     ValueError
         If no grid point satisfies the limit.
     """
-    admissible = [i for i, epr in enumerate(grid_eprs) if epr <= u_max]
+    admissible = [i for i, epr in enumerate(grid_eprs) if epr <= u_limit]
     if not admissible:
         raise ValueError(
-            f"u_max={u_max:g} V is below the EPR at every one of the "
+            f"u_limit={u_limit:g} V is below the EPR at every one of the "
             f"{len(grid)} scanned factors in {c_bounds!r} (EPR from "
             f"{min(grid_eprs):g} to {max(grid_eprs):g} V). EPR(c) is not "
             f"monotone over this bracket, so a factor between two scanned "
@@ -152,7 +153,7 @@ def _non_monotone_result(
         while iterations < max_iter and (c_hi - c_lo) / c_lo > tol_rel:
             c_mid = math.sqrt(c_lo * c_hi)
             epr_mid = evaluate(c_mid)
-            if epr_mid <= u_max:
+            if epr_mid <= u_limit:
                 c_lo, epr_lo = c_mid, epr_mid
             else:
                 c_hi = c_mid
@@ -170,11 +171,11 @@ def _non_monotone_result(
         "found it falling and rising again (%g to %g V). A bisection assumes "
         "one crossing and would discard the half of the bracket that holds "
         "the answer, so it was not run. c_max=%g is the largest scanned "
-        "factor that satisfied u_max=%g V, refined inside its own grid "
+        "factor that satisfied u_limit=%g V, refined inside its own grid "
         "interval; factors between two scanned points may satisfy it as "
         "well. Raise monotonicity_grid for a finer scan, or narrow c_bounds "
         "to a stretch where the curve is monotone.",
-        c_bounds, len(grid), min(grid_eprs), max(grid_eprs), c_lo, u_max,
+        c_bounds, len(grid), min(grid_eprs), max(grid_eprs), c_lo, u_limit,
     )
     return {
         "c_max": c_lo,
@@ -188,11 +189,12 @@ def _non_monotone_result(
     }
 
 
+@renamed_parameters(fault_name="fault", u_max="u_limit")
 def find_max_rho_scaling(
     network: Network,
-    fault_name: str,
+    fault: str,
     bus_names: List[str],
-    u_max: float,
+    u_limit: float,
     *,
     c_bounds: Tuple[float, float] = (1e-3, 1e3),
     tol_rel: float = 1e-3,
@@ -206,7 +208,7 @@ def find_max_rho_scaling(
     Bisects the scalar ``c`` such that scaling every selected bus'
     specific earth resistance to ``c * rho_0`` yields an RMS earth
     potential rise at the fault bus that just satisfies
-    ``|u_EPR|_rms <= u_max``. The bus impedance formula is re-evaluated
+    ``|u_EPR|_rms <= u_limit``. The bus impedance formula is re-evaluated
     through the existing :meth:`Bus.calculate_impedance` machinery, so
     any user-defined rho-f characteristic is honoured.
 
@@ -216,17 +218,19 @@ def find_max_rho_scaling(
         The simulation network. Must already contain the named fault, the
         sources, the buses listed in ``bus_names`` and consistent paths
         from sources to fault.
-    fault_name : str
+    fault : str
         Name of the fault to evaluate. Used as ``active_fault`` during
-        every bisection step.
+        every bisection step. The former keyword ``fault_name`` is accepted
+        as a deprecated alias.
     bus_names : list of str
         Names of the buses whose specific earth resistance is uniformly
         scaled by the same factor ``c``. Must be non-empty and refer to
         buses in ``network``.
-    u_max : float
+    u_limit : float
         Upper bound on the RMS earth potential rise at the fault bus, in
         volts. Must be finite and strictly positive. The RMS is taken
         over all simulation frequencies, matching :attr:`ResultBus.uepr`.
+        The former keyword ``u_max`` is accepted as a deprecated alias.
     c_bounds : tuple of (float, float), optional
         Search interval for the scaling factor ``c``. Both bounds must be
         finite and strictly positive and ``c_bounds[0] < c_bounds[1]``.
@@ -296,17 +300,17 @@ def find_max_rho_scaling(
     Raises
     ------
     ValueError
-        If ``u_max``, ``tol_rel``, ``max_iter``, ``monotonicity_grid`` or
+        If ``u_limit``, ``tol_rel``, ``max_iter``, ``monotonicity_grid`` or
         ``c_bounds`` is invalid (see the parameter descriptions --
         non-finite values are rejected, not just out-of-range ones),
         ``bus_names`` is empty, any name is not in the network, the EPR at
-        the lower bound ``c_bounds[0]`` already exceeds ``u_max``, or the
+        the lower bound ``c_bounds[0]`` already exceeds ``u_limit``, or the
         model returns a non-finite EPR at some trial factor.
 
     Notes
     -----
     **The assumption, and what happens when it does not hold.** A bisection
-    finds *the* crossing of ``EPR(c)`` with ``u_max``, which presumes there
+    finds *the* crossing of ``EPR(c)`` with ``u_limit``, which presumes there
     is only one -- i.e. that ``EPR`` rises monotonically with ``c``. That is
     the usual case but not a theorem: this function scales the scalar ``rho``,
     and an impedance formula in which only part of the expression carries
@@ -329,13 +333,13 @@ def find_max_rho_scaling(
     --------
     >>> import groundinsight as gi  # doctest: +SKIP
     >>> res = gi.find_max_rho_scaling(  # doctest: +SKIP
-    ...     network=net, fault_name="flt",
-    ...     bus_names=["b0", "b1"], u_max=200.0,
+    ...     network=net, fault="flt",
+    ...     bus_names=["b0", "b1"], u_limit=200.0,
     ... )
     >>> if not res["converged"]:  # doctest: +SKIP
     ...     print(res["status"], res["c_bracket"])
     """
-    validate_limit(u_max, "u_max")
+    validate_limit(u_limit, "u_limit")
     validate_tol_rel(tol_rel)
     validate_max_iter(max_iter)
     validate_grid_points(monotonicity_grid)
@@ -345,12 +349,12 @@ def find_max_rho_scaling(
     missing = [b for b in bus_names if b not in network.buses]
     if missing:
         raise ValueError(f"Unknown bus(es) in network: {missing!r}.")
-    if fault_name not in network.faults:
-        raise ValueError(f"Unknown fault {fault_name!r} in network.")
+    if fault not in network.faults:
+        raise ValueError(f"Unknown fault {fault!r} in network.")
 
     rfk: Dict[str, Any] = dict(run_fault_kwargs) if run_fault_kwargs else {}
 
-    fault_bus_name = network.faults[fault_name].bus
+    fault_bus_name = network.faults[fault].bus
 
     # Snapshot original rhos so the network can be restored at the end.
     rho_0: Dict[str, float] = {
@@ -359,8 +363,8 @@ def find_max_rho_scaling(
     # Snapshot the state run_fault will mutate so the search leaves the network
     # exactly as it found it (the returned figures are already final).
     active_fault_backup = network.active_fault
-    result_backup = network.results.get(fault_name)
-    had_result = fault_name in network.results
+    result_backup = network.results.get(fault)
+    had_result = fault in network.results
     # The assembled nodal system is *not* recomputed by anything the caller
     # does afterwards -- ``bus_response`` and ``analyze_cuts`` read it back as
     # it stands. Every ``run_fault`` below replaces it with the matrices of a
@@ -378,15 +382,15 @@ def find_max_rho_scaling(
             bus = network.buses[b]
             bus.specific_earth_resistance = c * rho_0[b]
             bus.calculate_impedance(network.frequencies)
-        run_fault(network, fault_name=fault_name, **rfk)
+        run_fault(network, fault=fault, **rfk)
         result_bus = next(
             rb
-            for rb in network.results[fault_name].buses
+            for rb in network.results[fault].buses
             if rb.name == fault_bus_name
         )
         epr = float(result_bus.uepr)
         if not math.isfinite(epr):
-            # A non-finite EPR cannot be compared against u_max: every
+            # A non-finite EPR cannot be compared against u_limit: every
             # comparison is False, so the bisection would take the same turn
             # at every step and walk silently to the lower bracket bound.
             # The impedance pipeline raises on NaN before a formula can get
@@ -395,7 +399,7 @@ def find_max_rho_scaling(
             raise ValueError(
                 f"The EPR at bus {fault_bus_name!r} evaluated to {epr!r} for "
                 f"the scaling factor c={c:g}. A non-finite EPR cannot be "
-                "compared against u_max -- every comparison would be False "
+                "compared against u_limit -- every comparison would be False "
                 "and the bisection would walk to the lower bracket bound "
                 "without ever raising. This is a model problem, not a search "
                 "problem: check the bus impedance formula at the scaled rho."
@@ -418,7 +422,7 @@ def find_max_rho_scaling(
 
         if not monotone:
             return _non_monotone_result(
-                grid, grid_eprs, u_max, tol_rel, max_iter, _epr_rms_at,
+                grid, grid_eprs, u_limit, tol_rel, max_iter, _epr_rms_at,
                 rho_0, bus_names, c_bounds,
             )
 
@@ -426,19 +430,19 @@ def find_max_rho_scaling(
         # the threshold falls in, which pays back part of its own cost --
         # every interval skipped is a bisection step not taken.
         for value, epr in zip(grid, grid_eprs):
-            if epr <= u_max:
+            if epr <= u_limit:
                 c_lo, epr_lo = value, epr
             else:
                 c_hi, epr_hi = value, epr
                 break
 
-        if epr_lo > u_max:
+        if epr_lo > u_limit:
             raise ValueError(
-                f"u_max={u_max:g} V is below the EPR at c_min={c_lo:g}: "
+                f"u_limit={u_limit:g} V is below the EPR at c_min={c_lo:g}: "
                 f"|u_EPR|_rms(c_min)={epr_lo:g} V — no scaling factor in "
                 f"the bracket {c_bounds!r} satisfies the constraint."
             )
-        if epr_hi <= u_max:
+        if epr_hi <= u_limit:
             # Whole bracket is admissible. c_hi is a real, measured answer,
             # but it is a lower bound on the true maximum, not the maximum:
             # nothing above c_hi was evaluated. The status says so, and
@@ -446,19 +450,19 @@ def find_max_rho_scaling(
             # machine-readable.
             logger.info(
                 "Bracket fully admissible: |u_EPR|_rms(c_hi=%g)=%g V <= "
-                "u_max=%g V. Consider widening c_bounds.",
-                c_hi, epr_hi, u_max,
+                "u_limit=%g V. Consider widening c_bounds.",
+                c_hi, epr_hi, u_limit,
             )
             c_max, epr_at = c_hi, epr_hi
             status = STATUS_BRACKET_FULLY_ADMISSIBLE
         else:
-            # From here on epr(c_lo) <= u_max < epr(c_hi) holds and is
+            # From here on epr(c_lo) <= u_limit < epr(c_hi) holds and is
             # preserved by every step, so c_lo is always a *verified*
             # admissible factor and the threshold stays bracketed.
             while iterations < max_iter and (c_hi - c_lo) / c_lo > tol_rel:
                 c_mid = math.sqrt(c_lo * c_hi)  # geometric mean -> log bisection
                 epr_mid = _epr_rms_at(c_mid)
-                if epr_mid <= u_max:
+                if epr_mid <= u_limit:
                     c_lo, epr_lo = c_mid, epr_mid
                 else:
                     c_hi, epr_hi = c_mid, epr_mid
@@ -485,9 +489,9 @@ def find_max_rho_scaling(
         # Restore the result cache and active fault so no trace of the search
         # remains on the network.
         if had_result:
-            network.results[fault_name] = result_backup
+            network.results[fault] = result_backup
         else:
-            network.results.pop(fault_name, None)
+            network.results.pop(fault, None)
         if active_fault_backup is None:
             network.active_fault = None
             for _flt in network.faults.values():

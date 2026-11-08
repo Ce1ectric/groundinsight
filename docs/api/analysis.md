@@ -48,9 +48,9 @@ import groundinsight as gi
 # scaled jointly — typically all buses sharing a soil environment.
 result = gi.find_max_rho_scaling(
     network=net,
-    fault_name="fault1",
+    fault="fault1",
     bus_names=["bus_substation", "bus_fault"],
-    u_max=200.0,            # touch-voltage limit in volts (RMS)
+    u_limit=200.0,          # touch-voltage limit in volts (RMS)
     c_bounds=(0.1, 100.0),  # search bracket on the scaling factor
     tol_rel=1e-3,
     max_iter=40,
@@ -98,7 +98,7 @@ bracket is open upwards.
 
 The arguments are validated strictly, because a limit search that
 returns a number nobody can tell apart from an answer is worse than
-one that raises. `u_max` and `tol_rel` must be finite and strictly
+one that raises. `u_limit` and `tol_rel` must be finite and strictly
 positive — NaN passes a plain `<= 0` check and then makes every later
 comparison `False` — `c_bounds` must be finite, and `max_iter` must be
 an `int` of at least 1.
@@ -170,7 +170,7 @@ gi.check_conductor_limits(net, "F").select(
 )
 ```
 
-Explicit `t_k`, `kappa` / `r_to_x` and `n` arguments override whatever
+Explicit `t_k_s`, `kappa` / `r_to_x` and `n_factor` arguments override whatever
 is stored on the model, so sensitivity studies stay possible.
 
 ## Node thermal limits — earthing conductor vs earth electrode
@@ -235,7 +235,7 @@ would not be a split but an error.
 
 ```python
 gi.run_fault(net, "F")
-gi.check_node_limits(net, "F", t_k=0.5, r_to_x=0.1).select(
+gi.check_node_limits(net, "F", t_k_s=0.5, r_to_x=0.1).select(
     "bus_name", "element", "I_rms_A", "current_split",
     "I_th_A", "I_admissible_A", "utilization", "within_limit",
 )

@@ -352,3 +352,419 @@ def test_a_result_from_solve_is_current_when_committed():
 def test_solve_is_exported():
     assert "solve" in gi.__all__
     assert gi.solve.__module__ == "groundinsight.service"
+
+
+# --------------------------------------------------------------------------
+# USE8/STD3 -- one name per concept, old names as deprecated aliases
+# --------------------------------------------------------------------------
+#
+# The fault is ``fault`` everywhere (``run_sweep``, ``bus_response`` and
+# ``analyze_cuts`` already said so, ``run_fault`` and half the analysis layer
+# said ``fault_name``), an EPR limit is ``u_limit``, a fault duration
+# ``t_k_s``, the IEC 60909 AC heat factor ``n_factor`` and a frequency
+# ``frequency`` -- the names of the model fields ``Fault.t_k_s`` /
+# ``Fault.n_factor`` and of the newer functions.
+
+#: Every public parameter that was renamed: (attribute path, old, new).
+RENAMES = [
+    ("run_fault", "fault_name", "fault"),
+    ("set_active_fault", "fault_name", "fault"),
+    ("Network.set_active_fault", "fault_name", "fault"),
+    ("Network.sources_reaching", "fault_name", "fault"),
+    ("TransientStudy.__init__", "fault_name", "fault"),
+    ("find_max_rho_scaling", "fault_name", "fault"),
+    ("find_max_rho_scaling", "u_max", "u_limit"),
+    ("check_conductor_limits", "fault_name", "fault"),
+    ("check_conductor_limits", "t_k", "t_k_s"),
+    ("check_conductor_limits", "n", "n_factor"),
+    ("check_conductor_limits", "f", "frequency"),
+    ("check_node_limits", "fault_name", "fault"),
+    ("check_node_limits", "t_k", "t_k_s"),
+    ("check_node_limits", "n", "n_factor"),
+    ("check_node_limits", "f", "frequency"),
+    ("admissible_short_circuit_current", "t_k", "t_k_s"),
+    ("iec60909_m", "f", "frequency"),
+    ("iec60909_m", "t_k", "t_k_s"),
+    ("thermal_equivalent_current", "n", "n_factor"),
+    ("resolve_fault_sc_characteristics", "fault_name", "fault"),
+    ("apply_shortcircuit_characteristics", "fault_name", "fault"),
+    ("read_shortcircuit_results", "f", "frequency"),
+    ("BusResponse.voltages", "freq", "frequency"),
+    ("BusResponse.voltages_no_mutual", "freq", "frequency"),
+    ("BusResponse.driving_point", "freq", "frequency"),
+    ("BusResponse.worst_case_electrode", "freq", "frequency"),
+]
+
+#: Parameter names that must not survive anywhere in the public API.
+OLD_NAMES = {"fault_name", "u_max", "t_k", "n", "f", "freq"}
+
+
+def _resolve(path: str):
+    obj = gi
+    for part in path.split("."):
+        obj = getattr(obj, part)
+    return obj
+
+
+def _public_callables():
+    """Functions in ``gi.__all__`` plus the public methods of its classes."""
+    import inspect
+
+    seen = set()
+    for name in gi.__all__:
+        obj = getattr(gi, name)
+        if inspect.isclass(obj):
+            members = [
+                (f"{name}.{member}", value)
+                for member, value in vars(obj).items()
+                if inspect.isfunction(value)
+                and (not member.startswith("_") or member == "__init__")
+            ]
+        elif inspect.isfunction(obj):
+            members = [(name, obj)]
+        else:
+            members = []
+        for qualname, func in members:
+            if not getattr(func, "__module__", "").startswith("groundinsight"):
+                continue
+            if id(func) in seen:
+                continue
+            seen.add(id(func))
+            yield qualname, func
+
+
+def _alias_warnings(record):
+    """The rename warnings of this package, not third-party deprecations."""
+    return [
+        str(w.message)
+        for w in record
+        if issubclass(w.category, DeprecationWarning)
+        and "is deprecated, use" in str(w.message)
+    ]
+
+
+def _call_old_and_new(call_old, call_new, olds):
+    """Run both spellings; the old one must warn once per old name used, the
+    new one not at all."""
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        old_value = call_old()
+    messages = _alias_warnings(record)
+    assert len(messages) == len(olds), messages
+    for old in olds:
+        assert any(f"'{old}'" in message for message in messages), messages
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        new_value = call_new()
+    assert _alias_warnings(record) == []
+    return old_value, new_value
+
+
+@pytest.mark.parametrize("path, old, new", RENAMES)
+def test_every_renamed_parameter_keeps_its_old_name_as_alias(path, old, new):
+    import inspect
+
+    func = _resolve(path)
+    parameters = inspect.signature(func).parameters
+    assert new in parameters
+    assert old not in parameters
+    assert getattr(func, "__deprecated_parameters__", {}).get(old) == new
+
+
+def test_no_public_callable_keeps_a_pre_canonical_parameter_name():
+    """USE8: a signature walk over ``__all__`` and the public methods."""
+    import inspect
+
+    offenders = {
+        qualname: sorted(OLD_NAMES & set(inspect.signature(func).parameters))
+        for qualname, func in _public_callables()
+    }
+    offenders = {k: v for k, v in offenders.items() if v}
+    assert offenders == {}
+
+
+def test_the_alias_warning_names_both_spellings_and_the_policy():
+    from groundinsight.utils.compat import renamed_parameters
+
+    @renamed_parameters(old="new")
+    def demo(a, new=1):
+        return a, new
+
+    with pytest.warns(DeprecationWarning) as record:
+        assert demo(1, old=5) == (1, 5)
+    message = str(record[0].message)
+    assert "demo()" in message and "'old'" in message and "'new'" in message
+    assert "two releases" in message and "six months" in message
+    # stacklevel: the warning points at the caller, not at the wrapper.
+    assert record[0].filename == __file__
+
+
+def test_the_alias_refuses_a_value_for_both_spellings():
+    from groundinsight.utils.compat import renamed_parameters
+
+    @renamed_parameters(old="new")
+    def demo(a, new=1):
+        return a, new
+
+    with pytest.raises(TypeError, match="'new'.*'old'"):
+        demo(1, new=2, old=3)
+    with pytest.raises(TypeError, match="'new'.*'old'"):
+        demo(1, 2, old=3)
+
+
+def test_the_new_name_and_positional_calls_do_not_warn():
+    import inspect
+
+    from groundinsight.utils.compat import renamed_parameters
+
+    @renamed_parameters(old="new")
+    def demo(a, new=1):
+        return a, new
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert demo(1, new=2) == (1, 2)
+        assert demo(1, 2) == (1, 2)
+    assert list(inspect.signature(demo).parameters) == ["a", "new"]
+    assert demo.__deprecated_parameters__ == {"old": "new"}
+
+
+def test_the_decorator_rejects_an_inconsistent_declaration():
+    from groundinsight.utils.compat import renamed_parameters
+
+    def demo(a, new=1):
+        return a, new
+
+    with pytest.raises(TypeError, match="missing"):
+        renamed_parameters(old="missing")(demo)
+    with pytest.raises(TypeError, match="'a'"):
+        renamed_parameters(a="new")(demo)
+
+
+def test_the_alias_works_on_a_constructor():
+    from groundinsight.utils.compat import renamed_parameters
+
+    class Study:
+        @renamed_parameters(fault_name="fault")
+        def __init__(self, network, fault):
+            self.fault = fault
+
+    with pytest.warns(DeprecationWarning, match=r"Study\(\)"):
+        assert Study(None, fault_name="F").fault == "F"
+
+
+# --- behaviour: the old spelling reaches the same code as the new one -------
+
+
+def test_run_fault_and_the_fault_activation_accept_the_old_name():
+    old_net, new_net = _chain(), _chain()
+    old, new = _call_old_and_new(
+        lambda: gi.run_fault(old_net, fault_name="F"),
+        lambda: gi.run_fault(new_net, fault="F"),
+        ["fault_name"],
+    )
+    assert old.model_dump_json() == new.model_dump_json()
+
+    _call_old_and_new(
+        lambda: gi.set_active_fault(old_net, fault_name="FA"),
+        lambda: gi.set_active_fault(new_net, fault="FA"),
+        ["fault_name"],
+    )
+    assert old_net.active_fault == new_net.active_fault == "FA"
+    _call_old_and_new(
+        lambda: old_net.set_active_fault(fault_name="F", keep_results=True),
+        lambda: new_net.set_active_fault(fault="F", keep_results=True),
+        ["fault_name"],
+    )
+    assert old_net.active_fault == new_net.active_fault == "F"
+    old, new = _call_old_and_new(
+        lambda: old_net.sources_reaching(fault_name="F"),
+        lambda: new_net.sources_reaching(fault="F"),
+        ["fault_name"],
+    )
+    assert old == new == ["SRC"]
+
+
+def test_transient_study_accepts_the_old_name():
+    net = _chain()
+    old, new = _call_old_and_new(
+        lambda: gi.TransientStudy(net, fault_name="F"),
+        lambda: gi.TransientStudy(net, fault="F"),
+        ["fault_name"],
+    )
+    assert old.fault_name == new.fault_name == "F"
+
+
+def test_find_max_rho_scaling_accepts_both_old_names():
+    net = _chain()
+    epr = gi.solve(net, "F").buses[2].uepr
+    old, new = _call_old_and_new(
+        lambda: gi.find_max_rho_scaling(
+            net, fault_name="F", bus_names=["A", "F"], u_max=2.0 * epr,
+            monotonicity_grid=0, max_iter=12,
+        ),
+        lambda: gi.find_max_rho_scaling(
+            net, fault="F", bus_names=["A", "F"], u_limit=2.0 * epr,
+            monotonicity_grid=0, max_iter=12,
+        ),
+        ["fault_name", "u_max"],
+    )
+    assert old == new
+    assert old["u_epr_rms_at_c_max"] <= 2.0 * epr
+
+
+def _thermal_network() -> gi.Network:
+    bus_type = gi.BusType(
+        name="bt", system_type="MV", voltage_level=20.0,
+        impedance_formula="0.1*rho",
+        earthing_conductor_material="Cu", earthing_conductor_cross_section_mm2=50.0,
+        electrode_material="Cu", electrode_cross_section_mm2=50.0,
+    )
+    branch_type = gi.BranchType(
+        name="brt", grounding_conductor=True,
+        self_impedance_formula="(0.25 + j*f*0.012)*l",
+        mutual_impedance_formula="(0.05 + j*f*0.012)*l",
+        conductor_material="Cu", cross_section_mm2=50.0,
+        theta_initial_C=20.0, theta_final_C=300.0,
+    )
+    net = gi.create_network("thermal", frequencies=[50.0])
+    for name in ("S", "A", "F"):
+        gi.create_bus(name, bus_type, 100.0, network=net)
+    gi.create_branch("SA", branch_type, "S", "A", 1.0, network=net)
+    gi.create_branch("AF", branch_type, "A", "F", 1.0, network=net)
+    gi.create_source("SRC", "S", {50.0: 4000.0}, network=net, i_k_a=4000.0,
+                     kappa=1.7)
+    gi.create_fault("F", "F", {50.0: 1.0}, network=net)
+    gi.run_fault(net, "F")
+    return net
+
+
+@pytest.mark.parametrize("check", ["check_conductor_limits", "check_node_limits"])
+def test_thermal_checks_accept_all_four_old_names(check):
+    net = _thermal_network()
+    func = getattr(gi, check)
+    old, new = _call_old_and_new(
+        lambda: func(net, fault_name="F", t_k=0.5, kappa=1.8, n=0.9, f=50.0),
+        lambda: func(net, fault="F", t_k_s=0.5, kappa=1.8, n_factor=0.9,
+                     frequency=50.0),
+        ["fault_name", "t_k", "n", "f"],
+    )
+    assert old.equals(new)
+    # Second route for the one number all rows depend on: I_th / I_ac is
+    # sqrt(m + n) with m from the IEC 60909-0 closed form.
+    log_k = math.log(1.8 - 1.0)
+    m = (math.exp(4 * 50.0 * 0.5 * log_k) - 1.0) / (2 * 50.0 * 0.5 * log_k)
+    assert new["I_th_factor"].to_list()[0] == pytest.approx(
+        math.sqrt(m + 0.9), rel=1e-12
+    )
+
+
+def test_iec60909_primitives_accept_the_old_names():
+    log_k = math.log(1.8 - 1.0)
+    m_closed = (math.exp(4 * 50.0 * 0.5 * log_k) - 1.0) / (2 * 50.0 * 0.5 * log_k)
+    old, new = _call_old_and_new(
+        lambda: gi.iec60909_m(1.8, f=50.0, t_k=0.5),
+        lambda: gi.iec60909_m(1.8, frequency=50.0, t_k_s=0.5),
+        ["f", "t_k"],
+    )
+    assert old == new == pytest.approx(m_closed, rel=1e-12)
+
+    old, new = _call_old_and_new(
+        lambda: gi.thermal_equivalent_current(1000.0, 0.2, n=0.9),
+        lambda: gi.thermal_equivalent_current(1000.0, 0.2, n_factor=0.9),
+        ["n"],
+    )
+    assert old == new == pytest.approx(1000.0 * math.sqrt(1.1), rel=1e-12)
+
+    old, new = _call_old_and_new(
+        lambda: gi.admissible_short_circuit_current(143.0, 50.0, t_k=0.5),
+        lambda: gi.admissible_short_circuit_current(143.0, 50.0, t_k_s=0.5),
+        ["t_k"],
+    )
+    assert old == new == pytest.approx(143.0 * 50.0 / math.sqrt(0.5), rel=1e-12)
+
+
+def test_resolve_fault_sc_characteristics_accepts_the_old_name():
+    net = _thermal_network()
+    old, new = _call_old_and_new(
+        lambda: gi.resolve_fault_sc_characteristics(net, fault_name="F"),
+        lambda: gi.resolve_fault_sc_characteristics(net, fault="F"),
+        ["fault_name"],
+    )
+    assert old == new
+
+
+def _pandapower_case():
+    pp = pytest.importorskip("pandapower")
+    sc = pytest.importorskip("pandapower.shortcircuit")
+    net = pp.create_empty_network(sn_mva=100.0)
+    b1 = pp.create_bus(net, vn_kv=110.0, name="HV")
+    b2 = pp.create_bus(net, vn_kv=20.0, name="MV1")
+    pp.create_ext_grid(
+        net, b1, s_sc_max_mva=1000.0, rx_max=0.1, s_sc_min_mva=800.0,
+        rx_min=0.1, x0x_max=1.0, r0x0_max=0.1, x0x_min=1.0, r0x0_min=0.1,
+    )
+    pp.create_transformer_from_parameters(
+        net, b1, b2, sn_mva=40, vn_hv_kv=110, vn_lv_kv=20, vkr_percent=0.5,
+        vk_percent=12, pfe_kw=0, i0_percent=0, vector_group="Dyn",
+        vk0_percent=12, vkr0_percent=0.5, mag0_percent=100, mag0_rx=0.0,
+        si0_hv_partial=0.9,
+    )
+    sc.calc_sc(net, fault="1ph", case="max", ip=True, ith=True, tk_s=0.5,
+               topology="radial", kappa_method="C")
+    return net
+
+
+def _sc_grounding_network() -> gi.Network:
+    net = gi.create_network("sc", frequencies=[50.0])
+    bus_type = gi.BusType(name="b", system_type="s", voltage_level=20.0,
+                          impedance_formula="rho*0 + 0.5")
+    branch_type = gi.BranchType(
+        name="c", grounding_conductor=True,
+        self_impedance_formula="(0.25 + j*f*0.012)*l",
+        mutual_impedance_formula="(0.05 + j*f*0.012)*l",
+    )
+    gi.create_bus("HV", bus_type, network=net)
+    gi.create_bus("MV1", bus_type, network=net)
+    gi.create_branch("HV-MV1", branch_type, "HV", "MV1", 1.0, network=net)
+    gi.create_source("src", "HV", {50.0: 1000.0}, network=net)
+    gi.create_fault("F", "MV1", {50.0: 1.0}, network=net)
+    return net
+
+
+def test_pandapower_short_circuit_helpers_accept_the_old_names():
+    pp_net = _pandapower_case()
+    old, new = _call_old_and_new(
+        lambda: gi.read_shortcircuit_results(pp_net, f=50.0),
+        lambda: gi.read_shortcircuit_results(pp_net, frequency=50.0),
+        ["f"],
+    )
+    assert old.equals(new)
+
+    old_net, new_net = _sc_grounding_network(), _sc_grounding_network()
+    old, new = _call_old_and_new(
+        lambda: gi.apply_shortcircuit_characteristics(old_net, pp_net, fault_name="F"),
+        lambda: gi.apply_shortcircuit_characteristics(new_net, pp_net, fault="F"),
+        ["fault_name"],
+    )
+    assert old.equals(new)
+    assert old_net.model_dump_json() == new_net.model_dump_json()
+
+
+def test_bus_response_methods_accept_the_old_frequency_name():
+    net = _chain()
+    gi.run_fault(net, "F")
+    response = gi.bus_response(net, fault="F", bus="A")
+    for method, args in (
+        ("voltages", (10.0,)),
+        ("voltages_no_mutual", (10.0,)),
+        ("driving_point", (10.0,)),
+        ("worst_case_electrode", ()),
+    ):
+        bound = getattr(response, method)
+        old, new = _call_old_and_new(
+            lambda: bound(*args, freq=50.0),
+            lambda: bound(*args, frequency=50.0),
+            ["freq"],
+        )
+        assert old == new

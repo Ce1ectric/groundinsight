@@ -18,7 +18,7 @@ Every check here exists because the unguarded value produced a
 for a limit calculation, because nothing downstream can tell it apart
 from an answer:
 
-``limit`` (``u_max`` / ``u_limit``) as NaN
+``limit`` (``u_limit``) as NaN
     ``nan <= 0`` is ``False``, so a plain positivity guard lets NaN
     through. Afterwards every comparison against the limit is also
     ``False``: the search neither raises at the lower bound nor accepts
@@ -97,7 +97,7 @@ def validate_limit(value: float, name: str) -> None:
     Parameters
     ----------
     value : float
-        The limit to check (``u_max`` or ``u_limit``), in volts.
+        The limit to check (``u_limit``), in volts.
     name : str
         Parameter name, echoed in the message so the caller sees which
         argument tripped the check.
