@@ -177,6 +177,30 @@ not otherwise touch, and keep formatting changes out of functional pull
 requests: a mass reformat hides the real change from review and from
 `git blame`. Match the style of the code around your change.
 
+The two linters are pinned in the `dev` group, and the CI job `lint` runs
+the same two commands; a finding fails the build:
+
+```bash
+poetry run ruff check src tests scripts gui docs/snippets
+poetry run numpydoc lint $(git ls-files 'src/groundinsight/*.py')
+```
+
+Fix a finding by a deliberate edit, not with `ruff --fix` over code your
+change does not otherwise touch. A `# noqa: <code>` carries a one-line
+reason and stands only where the rule is wrong for that line.
+`tests/test_audit_pass19_standards.py` checks what the linters cannot:
+module headers, docstrings that state the contract and its reason rather
+than the history, examples for every public object, warnings with a package
+category, the canonical parameter names, and a complexity ratchet -- no
+function may become more complex than `tests/data/complexity_ratchet.toml`
+records, and an entry goes once its function is back at the limit.
+
+Every warning is an error in the test suite. A test that provokes a package
+warning asserts it with `pytest.warns`; where the warning comes with the
+test's network and the test is about something else, it acknowledges the
+warning by name with `acknowledge(...)` from `tests/_warning_policy.py`,
+with a one-line reason next to it.
+
 ## Commits and pull requests
 
 - Commit subjects follow [Conventional Commits](https://www.conventionalcommits.org/):
