@@ -34,14 +34,26 @@ encoding wherever they read or write text; a scan over ``tests/`` keeps it so.
 The same sites were found a second way, by running the suite under
 ``-X warn_default_encoding`` (``EncodingWarning``), which also caught a
 ``subprocess.run(..., text=True)`` that the first version of the scan missed.
+
+SEC6 -- bandit (B608) and ruff (S608) flag four f-string SQL statements in
+``database/migration.py``. They are not exploitable: every interpolated
+identifier is a module constant, a literal of the caller or a column of the
+freshly created ORM schema; names read from the file being migrated are only
+used in membership tests, and values go through ``?`` placeholders. Each
+site now says so next to a ``# nosec B608``. The claim is also checked by
+behaviour: a legacy file with a hostile column and table name is migrated
+while every SQL string the module sends is recorded.
 """
 
 from __future__ import annotations
 
 import ast
+import json
 import re
 import shutil
+import sqlite3
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -520,3 +532,162 @@ def test_tests_name_the_encoding_of_every_text_file_they_touch():
         for lineno, call in _default_encoding_calls(path.read_text(encoding="utf-8")):
             findings.append(f"{path.name}:{lineno} {call}")
     assert findings == []
+
+
+# ---------------------------------------------------------------------------
+# SEC6 -- the migration's f-string SQL is justified, and the claim holds
+# ---------------------------------------------------------------------------
+
+_MIGRATION = ROOT / "src" / "groundinsight" / "database" / "migration.py"
+_DML = re.compile(r"\b(SELECT\b.*\bFROM|INSERT\s+INTO|UPDATE\b.*\bSET|DELETE\s+FROM)\b", re.I)
+
+
+def _sql_fstrings(source: str) -> list:
+    """
+    f-strings with DML passed to ``execute`` / ``executemany`` -- B608's rule.
+
+    Parameters
+    ----------
+    source : str
+        Python source code.
+
+    Returns
+    -------
+    list of tuple
+        ``(line of the f-string, line where the statement starts)``.
+    """
+    found = []
+    tree = ast.parse(source)
+    for statement in ast.walk(tree):
+        if not isinstance(statement, ast.stmt):
+            continue
+        for node in ast.walk(statement):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in ("execute", "executemany")
+                and node.args
+                and isinstance(node.args[0], ast.JoinedStr)
+            ):
+                static = "".join(
+                    part.value
+                    for part in node.args[0].values
+                    if isinstance(part, ast.Constant)
+                )
+                if _DML.search(static):
+                    found.append((node.args[0].lineno, statement.lineno))
+    # ast.walk visits nested statements too; keep the innermost start line.
+    innermost = {}
+    for line, start in found:
+        innermost[line] = max(start, innermost.get(line, 0))
+    return sorted(innermost.items())
+
+
+def test_every_sql_fstring_in_the_migration_is_suppressed_with_a_reason():
+    lines = _MIGRATION.read_text(encoding="utf-8").splitlines()
+    sites = _sql_fstrings("\n".join(lines))
+    assert len(sites) == 4, sites  # the four sites bandit and ruff report
+    for fstring_line, start in sites:
+        assert "# nosec B608" in lines[fstring_line - 1], lines[fstring_line - 1]
+        above = lines[start - 2].strip()
+        assert above.startswith("#") and "B608" in above, (start, above)
+
+
+def test_bandit_reports_no_open_b608_in_the_migration():
+    """Second method: bandit itself, where it is installed."""
+    pytest.importorskip("bandit")
+    proc = subprocess.run(
+        [sys.executable, "-m", "bandit", "-q", "-f", "json", str(_MIGRATION)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=300,
+    )
+    report = json.loads(proc.stdout)
+    open_b608 = [r["line_number"] for r in report["results"] if r["test_id"] == "B608"]
+    assert open_b608 == []
+    assert report["metrics"]["_totals"]["skipped_tests"] == 4
+
+
+class _RecordingSqlite:
+    """
+    Stand-in for the ``sqlite3`` module inside ``migration`` that records SQL.
+
+    Only ``connect`` is replaced; every other attribute is the real module's.
+    SQLAlchemy keeps the real module, so only the migration's own statements
+    are recorded.
+
+    Parameters
+    ----------
+    log : list
+        Receives every SQL string passed to ``execute`` / ``executemany``.
+    """
+
+    def __init__(self, log):
+        self._log = log
+
+    def connect(self, *args, **kwargs):
+        """
+        Open a real connection wrapped in a recorder.
+
+        Returns
+        -------
+        object
+            Proxy that logs SQL and forwards everything to the connection.
+        """
+        log = self._log
+        connection = sqlite3.connect(*args, **kwargs)
+
+        class _Proxy:
+            def execute(self, sql, *rest):
+                log.append(sql)
+                return connection.execute(sql, *rest)
+
+            def executemany(self, sql, *rest):
+                log.append(sql)
+                return connection.executemany(sql, *rest)
+
+            def __getattr__(self, name):
+                return getattr(connection, name)
+
+        return _Proxy()
+
+    def __getattr__(self, name):
+        return getattr(sqlite3, name)
+
+
+def test_migration_never_puts_a_name_from_the_file_into_sql(tmp_path, monkeypatch):
+    """The SEC6 triage, checked by behaviour rather than by reading the code."""
+    import groundinsight as gi
+    from groundinsight.database import migration
+    from groundinsight.models.database_models import Base
+    from tests.test_audit_pass11_migration import _write_head_schema_db
+
+    path = tmp_path / "legacy.db"
+    _write_head_schema_db(
+        str(path),
+        {"netA": {"buses": ["A", "B"], "branches": [("L1", "A", "B")], "path": ["L1"]}},
+    )
+    marker = 'evil" , "x'
+    quoted = '"' + marker.replace('"', '""') + '"'
+    conn = sqlite3.connect(path)
+    conn.execute(f"ALTER TABLE buses ADD COLUMN {quoted} TEXT")
+    conn.execute(f"CREATE TABLE {quoted} (payload TEXT)")
+    conn.commit()
+    conn.close()
+
+    executed = []
+    monkeypatch.setattr(migration, "sqlite3", _RecordingSqlite(executed))
+    gi.close_dbsession()
+    report = migration.migrate_database(str(path))
+
+    assert report.migrated
+    assert executed, "the recorder saw no SQL -- the shim is not in effect"
+    assert not [sql for sql in executed if "evil" in sql]
+
+    conn = sqlite3.connect(path)
+    try:
+        bus_columns = {row[1] for row in conn.execute('PRAGMA table_info("buses")')}
+    finally:
+        conn.close()
+    assert bus_columns == {column.name for column in Base.metadata.tables["buses"].columns}

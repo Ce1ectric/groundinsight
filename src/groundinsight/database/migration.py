@@ -552,8 +552,9 @@ def _read_memberships(
 
     memberships: Dict[str, List[str]] = {}
     owners: Dict[str, List[str]] = {}
+    # B608 not exploitable: key and association are looked up in the module constants above.
     rows = conn.execute(
-        f'SELECT network_name, "{key}" FROM "{association}" ORDER BY rowid'
+        f'SELECT network_name, "{key}" FROM "{association}" ORDER BY rowid'  # nosec B608
     )
     for network_name, element_name in rows:
         if network_name is None or element_name is None:
@@ -574,7 +575,8 @@ def _read_rows(conn: sqlite3.Connection, table: str) -> Dict[str, Dict[str, Any]
     """Read a legacy element table into ``name -> {column: value}``."""
     columns = _column_names(conn, table)
     out: Dict[str, Dict[str, Any]] = {}
-    for row in conn.execute(f'SELECT * FROM "{table}" ORDER BY rowid'):
+    # B608 not exploitable: the only caller passes one of five literal element-table names.
+    for row in conn.execute(f'SELECT * FROM "{table}" ORDER BY rowid'):  # nosec B608
         record = dict(zip(columns, row))
         out[record["name"]] = record
     return out
@@ -711,8 +713,9 @@ def _insert(
             "again."
         )
 
+    # B608 not exploitable: table is a caller literal and quoted lists target (ORM) columns; values use '?'.
     conn.executemany(
-        f'INSERT INTO "{table}" ({quoted}) VALUES ({placeholders})', payload
+        f'INSERT INTO "{table}" ({quoted}) VALUES ({placeholders})', payload  # nosec B608
     )
     report.rows[table] = len(payload)
 
@@ -741,9 +744,10 @@ def _rebuild_from_legacy(
                 report.rows[table] = 0
                 continue
             columns = _column_names(source, table)
+            # B608 not exploitable: table iterates the constant _GLOBAL_TABLES, never a name from the file.
             records = [
                 dict(zip(columns, row))
-                for row in source.execute(f'SELECT * FROM "{table}" ORDER BY rowid')
+                for row in source.execute(f'SELECT * FROM "{table}" ORDER BY rowid')  # nosec B608
             ]
             _insert(target, table, records, report)
 
