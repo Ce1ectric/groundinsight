@@ -30,6 +30,7 @@ states), closed forms (``1/|1 - Z_m/Z_s|`` for a single coupled branch) and a
 verbatim copy of the pre-P8 block solve.
 """
 
+import contextlib
 import logging
 import math
 import pathlib
@@ -560,10 +561,8 @@ def _old_blocked_spectrum(study, bus_index, bus_Z, branch_Z, i_spectrum, freqs):
             u_spectrum[:, start:stop] = np.linalg.solve(Y_block, rhs)[:, :, 0].T
         except np.linalg.LinAlgError:
             for offset, k in enumerate(bins):
-                try:
+                with contextlib.suppress(np.linalg.LinAlgError):
                     u_spectrum[:, k] = np.linalg.solve(Y_block[offset], i_spectrum[k])
-                except np.linalg.LinAlgError:
-                    pass
     return u_spectrum
 
 

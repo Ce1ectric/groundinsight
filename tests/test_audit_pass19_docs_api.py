@@ -176,9 +176,13 @@ def _has_attribute_docstring(module, name):
 def _defining_module(obj, name, fallback):
     """The module in which a plain value is assigned under ``name``."""
     for module_name, module in sorted(sys.modules.items()):
-        if module_name.startswith("groundinsight") and isinstance(module, types.ModuleType):
-            if module.__dict__.get(name) is obj and name in _assigned_names(module):
-                return module
+        if (
+            module_name.startswith("groundinsight")
+            and isinstance(module, types.ModuleType)
+            and module.__dict__.get(name) is obj
+            and name in _assigned_names(module)
+        ):
+            return module
     return fallback
 
 

@@ -44,7 +44,7 @@ def test_reduction_factor_for_bus7_fault7():
     # reference values asserted further down were always computed from the
     # 0.1 ... 2.9 line. Trimming the list to 29 entries keeps that network
     # unchanged and only removes the entry that never had any effect.
-    net2 = gi.create_network_assistant(name="Network2", frequencies=[50,250], number_buses=30, bus_type=bus_type, branch_type=branch_type,
+    gi.create_network_assistant(name="Network2", frequencies=[50,250], number_buses=30, bus_type=bus_type, branch_type=branch_type,
                                     branch_length=[(x+1)/10 for x in range(29)], specific_earth_resistance=100)
 
 
@@ -66,7 +66,7 @@ def test_reduction_factor_for_bus7_fault7():
     gi.create_bus(name="bus8", type=bus_type, network=net, specific_earth_resistance=100.0)
     gi.create_bus(name="bus9", type=bus_type, network=net, specific_earth_resistance=100.0)
 
-    #create branch 
+    #create branch
     #defining a line length of each branch
     line_length = 1
 
@@ -90,20 +90,20 @@ def test_reduction_factor_for_bus7_fault7():
 
     #create a fault at bus2
     fault_scaling = {0:1, 50: 1.0, 250: 1}
-    fault = gi.create_fault(name="fault1", bus="bus1", description="A fault at bus", scalings=fault_scaling, network=net)
-    fault2 = gi.create_fault(name="fault2", bus="bus2", description="A fault at bus", scalings=fault_scaling, network=net)
-    fault3 = gi.create_fault(name="fault3", bus="bus3", description="A fault at bus", scalings=fault_scaling, network=net)
-    fault4 = gi.create_fault(name="fault4", bus="bus4", description="A fault at bus", scalings=fault_scaling, network=net)
-    fault5 = gi.create_fault(name="fault5", bus="bus5", description="A fault at bus", scalings=fault_scaling, network=net)
-    fault6 = gi.create_fault(name="fault6", bus="bus6", description="A fault at bus", scalings=fault_scaling, network=net)
-    fault7 = gi.create_fault(name="fault7", bus="bus7", description="A fault at bus", scalings=fault_scaling, network=net)
-    fault8 = gi.create_fault(name="fault8", bus="bus8", description="A fault at bus", scalings=fault_scaling, network=net)
-    fault9 = gi.create_fault(name="fault9", bus="bus9", description="A fault at bus", scalings=fault_scaling, network=net)
+    gi.create_fault(name="fault1", bus="bus1", description="A fault at bus", scalings=fault_scaling, network=net)
+    gi.create_fault(name="fault2", bus="bus2", description="A fault at bus", scalings=fault_scaling, network=net)
+    gi.create_fault(name="fault3", bus="bus3", description="A fault at bus", scalings=fault_scaling, network=net)
+    gi.create_fault(name="fault4", bus="bus4", description="A fault at bus", scalings=fault_scaling, network=net)
+    gi.create_fault(name="fault5", bus="bus5", description="A fault at bus", scalings=fault_scaling, network=net)
+    gi.create_fault(name="fault6", bus="bus6", description="A fault at bus", scalings=fault_scaling, network=net)
+    gi.create_fault(name="fault7", bus="bus7", description="A fault at bus", scalings=fault_scaling, network=net)
+    gi.create_fault(name="fault8", bus="bus8", description="A fault at bus", scalings=fault_scaling, network=net)
+    gi.create_fault(name="fault9", bus="bus9", description="A fault at bus", scalings=fault_scaling, network=net)
 
 
 
     #add a source at bus1
-    source = gi.create_source(name="source1", bus="bus1", values={0:10, 50:60, 250:60, 350:60}, network=net)
+    gi.create_source(name="source1", bus="bus1", values={0:10, 50:60, 250:60, 350:60}, network=net)
     #source2 = gi.create_source(name="source2", bus="bus6", values={0:0, 50:30, 250:30, 350:30}, network=net)
 
     #define the paths of the network

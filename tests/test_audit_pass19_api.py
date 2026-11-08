@@ -823,8 +823,8 @@ def test_bus_response_methods_accept_the_old_frequency_name():
     ):
         bound = getattr(response, method)
         old, new = _call_old_and_new(
-            lambda: bound(*args, freq=50.0),
-            lambda: bound(*args, frequency=50.0),
+            lambda bound=bound, args=args: bound(*args, freq=50.0),
+            lambda bound=bound, args=args: bound(*args, frequency=50.0),
             ["freq"],
         )
         assert old == new

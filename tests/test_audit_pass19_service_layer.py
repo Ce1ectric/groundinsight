@@ -460,7 +460,7 @@ def test_save_writes_a_utf8_project_file_without_results(tmp_path, quickstart):
     location = quickstart.save(str(path))
     raw = path.read_bytes()
     payload = _strict_json(raw.decode("utf-8"))
-    assert "Süd Ω".encode("utf-8") in raw
+    assert "Süd Ω".encode() in raw
     assert payload["results"] == {}  # ... the file does not
     assert payload["schema_version"] >= 1 and payload["groundinsight_version"] == gi.__version__
     assert quickstart.network.results  # saving did not drop them either

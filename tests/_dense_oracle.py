@@ -589,7 +589,7 @@ def solve(
         resolved = model.resolver(f)
         scaling = fault_obj.scaling_at(f)
 
-        def injection(source) -> Optional[complex]:
+        def injection(source, f=f, scaling=scaling, resolved=resolved) -> Optional[complex]:
             if source.source_type == "current":
                 value = (source.values or {}).get(f)
                 if value is None:

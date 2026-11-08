@@ -23,7 +23,6 @@ feeder; its numbers are checked against the fault-bus EPR of ``res_buses`` and
 a driving-point impedance assembled here from the model's own impedances.
 """
 
-import cmath
 import math
 import runpy
 import warnings
@@ -33,7 +32,6 @@ import mpmath
 import numpy as np
 import pytest
 
-import groundinsight as gi
 from groundinsight.utils.impedance_calculator import DCLimitWarning, compute_impedance
 
 ROOT = Path(__file__).resolve().parent.parent

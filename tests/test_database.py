@@ -1,3 +1,5 @@
+import contextlib
+
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType
 import pytest
@@ -42,9 +44,9 @@ def test_session_start():
     gi.run_fault(network=net, fault_name="fault1")
 
     # try to save it to the database without starting the session
-    with pytest.raises(RuntimeError) as e:
+    with pytest.raises(RuntimeError):
         gi.save_network_to_db(network=net, overwrite=True)
-    
+
     # start the session
     gi.start_dbsession(sqlite_path="tests/test_grounding.db")
     gi.save_network_to_db(network=net, overwrite=True)
@@ -59,7 +61,7 @@ def test_bus_type_save_load():
         impedance_formula="rho * 0 + 1 + I * f * 1/50",
     )
 
-    branch_type = BranchType(
+    BranchType(
         name="TestBranchType",
         grounding_conductor=True,
         self_impedance_formula="(rho * 0 + 0.25 + I * f * 0.012)*l",
@@ -68,9 +70,9 @@ def test_bus_type_save_load():
 
     gi.close_dbsession()
     # save the bus type to the database error will be raised if the session is not started
-    with pytest.raises(RuntimeError) as e:
+    with pytest.raises(RuntimeError):
         gi.save_bustype_to_db(bus_type)
-    
+
     # start the session
     gi.start_dbsession("tests/test_grounding.db")
 
@@ -83,7 +85,7 @@ def test_bus_type_save_load():
 def test_branch_type_save_load():
     #create a network with buses, branches, soruces, faults, paths and results from run_fault
 
-    bus_type = BusType(
+    BusType(
         name="BusTypeFormulaTest",
         system_type="Grounded",
         voltage_level=230.0,
@@ -99,9 +101,9 @@ def test_branch_type_save_load():
 
     gi.close_dbsession()
     # save the branch type to the database error will be raised if the session is not started
-    with pytest.raises(RuntimeError) as e:
+    with pytest.raises(RuntimeError):
         gi.save_branchtype_to_db(branch_type)
-    
+
     # start the session
     gi.start_dbsession("tests/test_grounding.db")
 
@@ -152,9 +154,9 @@ def test_network_save_load():
 
     gi.close_dbsession()
     # save the network to the database error will be raised if the session is not started
-    with pytest.raises(RuntimeError) as e:
+    with pytest.raises(RuntimeError):
         gi.save_network_to_db(network=net)
-    
+
     # start the session
     gi.start_dbsession("tests/test_grounding.db")
 
@@ -163,7 +165,7 @@ def test_network_save_load():
     # load the network from the database
     loaded_net = gi.load_network_from_db("TestNet")
     gi.run_fault(network=loaded_net, fault_name="fault1")
-    
+
     assert loaded_net.name == net.name
     assert loaded_net.frequencies == net.frequencies
     assert loaded_net.buses == net.buses
@@ -210,10 +212,8 @@ def test_voltage_source_db_roundtrip():
     gi.create_paths(network=net)
 
     # Make sure the session is up. The previous tests may have closed it.
-    try:
+    with contextlib.suppress(Exception):
         gi.start_dbsession("tests/test_grounding.db")
-    except Exception:
-        pass
 
     gi.save_network_to_db(network=net, overwrite=True)
     loaded = gi.load_network_from_db("TestNetThevenin")
@@ -267,10 +267,8 @@ def test_rlc_parameters_db_roundtrip():
     gi.create_fault(name="fault1", bus="bus2", scalings={50: 1.0}, network=net)
     gi.create_paths(network=net)
 
-    try:
+    with contextlib.suppress(Exception):
         gi.start_dbsession("tests/test_grounding.db")
-    except Exception:
-        pass
     gi.save_network_to_db(network=net, overwrite=True)
     loaded = gi.load_network_from_db("TestNetRLC")
 

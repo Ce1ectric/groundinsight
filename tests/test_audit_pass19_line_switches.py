@@ -41,7 +41,7 @@ import polars as pl
 import pytest
 
 import groundinsight as gi
-from groundinsight.diagnostics import InputWarning, collecting
+from groundinsight.diagnostics import collecting
 from tests import _reference_mna as ref
 
 pp = pytest.importorskip("pandapower")

@@ -5,7 +5,6 @@ Testfile for JSON serialization and deserialization functions of the Network cla
 Based on the example from the groundinsight package
 """
 
-import pytest
 import groundinsight as gi
 
 def test_save_network_successful(tmp_path):

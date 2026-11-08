@@ -812,7 +812,7 @@ def _private_uses(root: pathlib.Path) -> List[Tuple[str, str, int, str]]:
         module = _module_name(path, root)
         package = module if path.name == "__init__.py" else module.rpartition(".")[0]
 
-        def reaches(obj: ast.expr, name: str) -> bool:
+        def reaches(obj: ast.expr, name: str, own=own, elsewhere=elsewhere) -> bool:
             if not _is_private(name) or name in own or name not in elsewhere:
                 return False
             return not (isinstance(obj, ast.Name) and obj.id in ("self", "cls"))
@@ -837,9 +837,13 @@ def _private_uses(root: pathlib.Path) -> List[Tuple[str, str, int, str]]:
                     "__setattr__", "__getattribute__", "__delattr__"
                 )
                 name = node.args[1]
-                if (by_name or by_object) and isinstance(name, ast.Constant) and isinstance(name.value, str):
-                    if reaches(node.args[0], name.value):
-                        uses.append((relative, name.value, node.lineno, ast.unparse(func)))
+                if (
+                    (by_name or by_object)
+                    and isinstance(name, ast.Constant)
+                    and isinstance(name.value, str)
+                    and reaches(node.args[0], name.value)
+                ):
+                    uses.append((relative, name.value, node.lineno, ast.unparse(func)))
     return sorted(uses)
 
 

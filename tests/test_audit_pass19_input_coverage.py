@@ -17,7 +17,7 @@ scaling is 1.0).
 from __future__ import annotations
 
 import warnings
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import pytest
 

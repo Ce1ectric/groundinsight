@@ -30,7 +30,6 @@ A3. Impedance/RLC formula strings flowed straight into ``sympy.sympify``
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import numpy as np
@@ -239,7 +238,7 @@ def test_malicious_formula_rejected_on_json_load(tmp_path: Path):
             }
         },
     }
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         gi.Network.model_validate_json(json.dumps(payload))
     assert not canary.exists()
 

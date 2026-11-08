@@ -13,8 +13,6 @@ the source values do when they are partial, and a DC study with an ideal bond.
 Run it as a script: ``python docs/snippets/harmonics.py``.
 """
 
-import math
-
 import groundinsight as gi
 from groundinsight.diagnostics import collecting
 

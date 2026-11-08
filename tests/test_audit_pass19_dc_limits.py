@@ -382,7 +382,9 @@ def test_a_log_term_behind_a_carson_term_was_already_refused():
         impedance_formula=formula,
     )
     net = gi.create_network(name="p19_log_carson", frequencies=[0.0, 50.0])
-    with pytest.warns(DCLimitWarning, match="converges only slowly"):
-        with pytest.raises(ValueError, match="negative"):
-            gi.create_bus(name="A", type=bus_type,
-                          specific_earth_resistance=100.0, network=net)
+    with (
+        pytest.warns(DCLimitWarning, match="converges only slowly"),
+        pytest.raises(ValueError, match="negative"),
+    ):
+        gi.create_bus(name="A", type=bus_type,
+                      specific_earth_resistance=100.0, network=net)

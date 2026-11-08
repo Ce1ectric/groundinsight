@@ -18,7 +18,6 @@ Run it as a script: ``python docs/snippets/pandapower_topology.py``.
 
 import copy
 
-import polars as pl
 import pandapower.networks as pn
 
 import groundinsight as gi

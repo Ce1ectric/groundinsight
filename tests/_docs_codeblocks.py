@@ -46,6 +46,7 @@ The result file maps every page to the outcome of each of its blocks.
 """
 
 import argparse
+import contextlib
 import faulthandler
 import json
 import logging
@@ -292,10 +293,9 @@ def _reset_process_state(gi_module) -> None:
             package_logger.removeHandler(handler)
     package_logger.setLevel(logging.NOTSET)
     if gi_module is not None:
-        try:
+        # An exception here only means that no default database was open.
+        with contextlib.suppress(Exception):
             gi_module.close_dbsession()
-        except Exception:  # noqa: BLE001 -- no default database was open
-            pass
 
 
 def run_page(root: Path, page: str, timeout: float, progress: Path) -> List[Dict[str, object]]:

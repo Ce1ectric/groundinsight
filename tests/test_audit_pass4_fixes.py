@@ -27,9 +27,7 @@ from groundinsight.diagnostics import collecting
 from groundinsight.models.core_models import (
     BranchType,
     BusType,
-    ComplexNumber,
     Fault,
-    Source,
 )
 from groundinsight.pathfinder import (
     PathFinder,
@@ -230,7 +228,7 @@ def test_start_dbsession_force_disposes_old_engine(tmp_path):
 def test_fault_scalings_int_keys_coerced_to_float():
     fault = Fault(name="F", bus="B1", scalings={50: 1.0})
     assert list(fault.scalings.keys()) == [50.0]
-    assert all(isinstance(k, float) for k in fault.scalings.keys())
+    assert all(isinstance(k, float) for k in fault.scalings)
 
 
 def test_fault_scalings_mixed_int_and_float_keys_yield_float_keys_only():
@@ -248,7 +246,7 @@ def test_fault_scalings_mixed_int_and_float_keys_yield_float_keys_only():
         scalings={50: 1.0, 100: 0.5},
     )
     assert sorted(fault.scalings.keys()) == [50.0, 100.0]
-    assert all(isinstance(k, float) for k in fault.scalings.keys())
+    assert all(isinstance(k, float) for k in fault.scalings)
 
 
 def test_fault_scalings_unparsable_key_rejected():

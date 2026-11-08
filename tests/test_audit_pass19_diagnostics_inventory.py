@@ -38,7 +38,6 @@ import re
 import warnings
 from typing import Dict, List, Tuple
 
-import numpy as np
 import polars as pl
 import pytest
 
@@ -134,33 +133,36 @@ _LEVELS = {"warning", "error", "exception", "critical"}
 def _log_sites() -> Dict[Tuple[str, str], int]:
     """Every ``logger.<warning|error|exception|critical>(...)`` call in the package."""
     found: Dict[Tuple[str, str], int] = {}
+
+    class Visitor(ast.NodeVisitor):
+        def __init__(self, module: str) -> None:
+            self.module = module
+            self.stack: List[str] = []
+
+        def visit_FunctionDef(self, node):
+            self.stack.append(node.name)
+            self.generic_visit(node)
+            self.stack.pop()
+
+        visit_AsyncFunctionDef = visit_FunctionDef
+        visit_ClassDef = visit_FunctionDef
+
+        def visit_Call(self, node):
+            func = node.func
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr in _LEVELS
+                and isinstance(func.value, ast.Name)
+                and func.value.id in ("logger", "log", "_log", "_logger")
+            ):
+                key = (self.module, ".".join(self.stack))
+                found[key] = found.get(key, 0) + 1
+            self.generic_visit(node)
+
     for path in sorted(SRC.rglob("*.py")):
         module = path.relative_to(SRC).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        stack: List[str] = []
-
-        class Visitor(ast.NodeVisitor):
-            def visit_FunctionDef(self, node):
-                stack.append(node.name)
-                self.generic_visit(node)
-                stack.pop()
-
-            visit_AsyncFunctionDef = visit_FunctionDef
-            visit_ClassDef = visit_FunctionDef
-
-            def visit_Call(self, node):
-                func = node.func
-                if (
-                    isinstance(func, ast.Attribute)
-                    and func.attr in _LEVELS
-                    and isinstance(func.value, ast.Name)
-                    and func.value.id in ("logger", "log", "_log", "_logger")
-                ):
-                    key = (module, ".".join(stack))
-                    found[key] = found.get(key, 0) + 1
-                self.generic_visit(node)
-
-        Visitor().visit(tree)
+        Visitor(module).visit(tree)
     return found
 
 
@@ -663,28 +665,25 @@ def _study(net, sources):
 
 def test_an_unconnected_transient_source_is_reported():
     net = _transient_network(isolated_source=True)
-    with collecting() as records:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            _study(net, ["Q", "QX"]).solve(t_end=0.04, dt=1e-4)
+    with collecting() as records, warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _study(net, ["Q", "QX"]).solve(t_end=0.04, dt=1e-4)
     assert [r.elements for r in _records("TRANSIENT_SOURCE_NOT_CONNECTED", records)] == [
         [("source", "QX")]
     ]
 
 
 def test_state_space_reports_skipped_branches_and_ignored_coupling():
-    with collecting() as records:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            _study(_transient_network(rlc_branch=False), ["Q"]).solve(
-                t_end=0.02, dt=1e-4, solver="state_space")
+    with collecting() as records, warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _study(_transient_network(rlc_branch=False), ["Q"]).solve(
+            t_end=0.02, dt=1e-4, solver="state_space")
     skipped = _records("TRANSIENT_BRANCH_SKIPPED", records)
     assert [r.elements for r in skipped] == [[("branch", "AF")]]
-    with collecting() as records:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            _study(_transient_network(rlc_branch=False, resistive_with_mutual=True),
-                   ["Q"]).solve(t_end=0.02, dt=1e-4, solver="state_space")
+    with collecting() as records, warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _study(_transient_network(rlc_branch=False, resistive_with_mutual=True),
+               ["Q"]).solve(t_end=0.02, dt=1e-4, solver="state_space")
     ignored = _records("TRANSIENT_RESISTIVE_COUPLING_IGNORED", records)
     assert [r.elements for r in ignored] == [[("branch", "AF")]]
     assert ignored[0].category == "TransientModelWarning"
@@ -692,10 +691,9 @@ def test_state_space_reports_skipped_branches_and_ignored_coupling():
 
 def test_state_space_reports_the_coupling_it_skips_for_voltage_sources():
     net = _transient_network(voltage_source=True)
-    with collecting() as records:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            _study(net, ["Q", "V"]).solve(t_end=0.02, dt=1e-4, solver="state_space")
+    with collecting() as records, warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _study(net, ["Q", "V"]).solve(t_end=0.02, dt=1e-4, solver="state_space")
     skipped = _records("TRANSIENT_COUPLING_SKIPPED", records)
     assert [r.elements for r in skipped] == [[("source", "V")]]
 

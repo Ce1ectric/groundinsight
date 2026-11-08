@@ -25,6 +25,7 @@ doctests) are left alone.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
@@ -182,10 +183,8 @@ def _reset_test_grounding_db():
     Yields control to the rest of the suite and does not clean up afterwards
     -- that lets developers inspect the produced DB after a failing run.
     """
-    try:
+    with contextlib.suppress(FileNotFoundError):
         os.remove(_FIXTURE_DB)
-    except FileNotFoundError:
-        pass
     yield
 
 

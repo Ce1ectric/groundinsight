@@ -30,7 +30,6 @@ import numpy as np
 import pytest
 
 import groundinsight as gi
-from groundinsight.diagnostics import ModelAssumptionWarning
 from tests import _reference_mna as ref
 
 

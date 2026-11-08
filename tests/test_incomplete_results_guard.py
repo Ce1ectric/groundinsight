@@ -122,9 +122,11 @@ def test_branch_check_raises_instead_of_silently_passing(caplog):
     net = _overstressed_net()
     ElectricalNetwork(net).solve_network()
 
-    with caplog.at_level(logging.WARNING, logger="groundinsight"):
-        with pytest.raises(ValueError, match="Incomplete results"):
-            gi.check_conductor_limits(net, "F")
+    with (
+        caplog.at_level(logging.WARNING, logger="groundinsight"),
+        pytest.raises(ValueError, match="Incomplete results"),
+    ):
+        gi.check_conductor_limits(net, "F")
 
     # and it must not have been reported as a clean run on the way out
     assert "Thermal limit exceeded" not in caplog.text

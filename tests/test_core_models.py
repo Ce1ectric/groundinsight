@@ -1,6 +1,5 @@
 # tests/test_core_models.py
 
-from pydantic import ValidationError
 import pytest
 from groundinsight.models.core_models import (
     ComplexNumber,
@@ -18,9 +17,7 @@ from groundinsight.models.core_models import (
     Path,
     Network,
 )
-from groundinsight.utils.validations import validate_impedance_formula_value
 import numpy as np
-from sympy import sympify, symbols, I, pi  # Import pi from sympy
 
 
 
@@ -181,7 +178,7 @@ def test_bustype_initialization_invalid():
             voltage_level=230.0,
             impedance_formula="1+2",
         )
-    
+
     #invalid voltage level
     with pytest.raises(ValueError):
         BusType(
@@ -207,7 +204,7 @@ def test_branchtype_initialization_valid():
     assert branch_type.description == "A high voltage branch type"
     assert branch_type.self_impedance_formula == "1+rho+f"
     assert branch_type.mutual_impedance_formula == "1+rho+f"
-    assert branch_type.grounding_conductor == True
+    assert branch_type.grounding_conductor is True
 
 def test_branchtype_initialization_missing_optional():
     """
@@ -222,7 +219,7 @@ def test_branchtype_initialization_missing_optional():
     assert branch_type.description is None
     assert branch_type.self_impedance_formula == "1+2"
     assert branch_type.mutual_impedance_formula == "1+2"
-    assert branch_type.grounding_conductor == False
+    assert branch_type.grounding_conductor is False
 
 def test_branchtype_initialization_invalid():
     """
@@ -371,7 +368,7 @@ def test_branchtype_with_rlc_formulas():
 
 def test_branch_calculates_rlc_when_formulas_present():
     """Branch.calculate_impedance fills the RLCM dicts when formulas exist."""
-    bus_type = BusType(
+    BusType(
         name="bt",
         system_type="Substation",
         voltage_level=20.0,
@@ -468,7 +465,7 @@ def test_bus_initialization_invalid():
             voltage_level=230.0,
             impedance_formula="1+rho+f",
         )
-        bus = Bus(
+        Bus(
             name="Bus A",
             type=bus_type,
             specific_earth_resistance=200,
@@ -484,7 +481,7 @@ def test_bus_initialization_invalid():
             voltage_level=230.0,
             impedance_formula="1+rho+f",
         )
-        bus = Bus(
+        Bus(
             name=1,
             type=bus_type,
             specific_earth_resistance=200,
@@ -500,7 +497,7 @@ def test_bus_initialization_invalid():
             voltage_level=230.0,
             impedance_formula="1+rho+f",
         )
-        bus = Bus(
+        Bus(
             name="Bus A",
             type=bus_type,
             specific_earth_resistance="ABC",
@@ -588,7 +585,7 @@ def test_branch_initialization_invalid():
             self_impedance_formula="1+rho+f",
             mutual_impedance_formula="1+rho+f",
         )
-        branch = Branch(
+        Branch(
             name="Branch A",
             type=branch_type,
             length=100,
@@ -609,7 +606,7 @@ def test_branch_initialization_invalid():
             self_impedance_formula="1+rho+f",
             mutual_impedance_formula="1+rho+f",
         )
-        branch = Branch(
+        Branch(
             name=1,
             type=branch_type,
             length=100,
@@ -630,7 +627,7 @@ def test_branch_initialization_invalid():
             self_impedance_formula="1+rho+f",
             mutual_impedance_formula="1+rho+f",
         )
-        branch = Branch(
+        Branch(
             name="Branch A",
             type=branch_type,
             length=100,
@@ -651,7 +648,7 @@ def test_branch_initialization_invalid():
             self_impedance_formula="1+rho+f",
             mutual_impedance_formula="1+rho+f",
         )
-        branch = Branch(
+        Branch(
             name="Branch A",
             type=branch_type,
             length=100,
@@ -685,7 +682,7 @@ def test_fault_initialization_valid():
     assert fault.description == "Description"
     assert fault.bus == "Bus A"
     assert fault.scalings == {50: 1.0}
-    assert fault.active == False
+    assert fault.active is False
 
 def test_fault_initialization_missing_optional():
     """
@@ -701,7 +698,7 @@ def test_fault_initialization_missing_optional():
     assert fault.name == "Fault A"
     assert fault.bus == "Bus A"
     assert fault.scalings == {50: 1.0}
-    assert fault.active == False
+    assert fault.active is False
 
 def test_fault_initialization_invalid():
     """
@@ -709,7 +706,7 @@ def test_fault_initialization_invalid():
     """
     #invalid scalings
     with pytest.raises(ValueError):
-        fault = Fault(
+        Fault(
             name="Fault A",
             description="Description",
             bus="Bus A",
@@ -718,7 +715,7 @@ def test_fault_initialization_invalid():
 
     #invalid name
     with pytest.raises(ValueError):
-        fault = Fault(
+        Fault(
             name=1,
             description="Description",
             bus="Bus A",
@@ -727,7 +724,7 @@ def test_fault_initialization_invalid():
 
     #invalid bus
     with pytest.raises(ValueError):
-        fault = Fault(
+        Fault(
             name="Fault A",
             description="Description",
             bus=1,
@@ -776,7 +773,7 @@ def test_source_initialization_invalid():
     """
     #invalid values
     with pytest.raises(ValueError):
-        source = Source(
+        Source(
             name="Source A",
             description="Description",
             bus="Bus A",
@@ -785,7 +782,7 @@ def test_source_initialization_invalid():
 
     #invalid name
     with pytest.raises(ValueError):
-        source = Source(
+        Source(
             name=1,
             description="Description",
             bus="Bus A",
@@ -794,7 +791,7 @@ def test_source_initialization_invalid():
 
     #invalid bus
     with pytest.raises(ValueError):
-        source = Source(
+        Source(
             name="Source A",
             description="Description",
             bus=1,
@@ -918,7 +915,7 @@ def test_resultbus_initialization_invalid():
     """
     #invalid uepr_freq
     with pytest.raises(ValueError):
-        resultbus = ResultBus(
+        ResultBus(
             name="Bus A",
             uepr=1.0,
             ia=2.0,
@@ -928,7 +925,7 @@ def test_resultbus_initialization_invalid():
 
     #invalid name
     with pytest.raises(ValueError):
-        resultbus = ResultBus(
+        ResultBus(
             name=1,
             uepr=1.0,
             ia=2.0,
@@ -938,7 +935,7 @@ def test_resultbus_initialization_invalid():
 
     #invalid uepr
     with pytest.raises(ValueError):
-        resultbus = ResultBus(
+        ResultBus(
             name="Bus A",
             uepr="ABC",
             ia=2.0,
@@ -948,7 +945,7 @@ def test_resultbus_initialization_invalid():
 
     #invalid ia
     with pytest.raises(ValueError):
-        resultbus = ResultBus(
+        ResultBus(
             name="Bus A",
             uepr=1.0,
             ia="ABC",
@@ -978,7 +975,7 @@ def test_resultbranch_initialization_invalid():
     """
     #invalid i_s_freq
     with pytest.raises(ValueError):
-        resultbranch = ResultBranch(
+        ResultBranch(
             name="Branch A",
             i_s=1.0,
             i_s_freq={50: 1.0+2.0j, 60: "ABC"},
@@ -986,7 +983,7 @@ def test_resultbranch_initialization_invalid():
 
     #invalid name
     with pytest.raises(ValueError):
-        resultbranch = ResultBranch(
+        ResultBranch(
             name=1,
             i_s=1.0,
             i_s_freq={50: 1.0+2.0j},
@@ -994,7 +991,7 @@ def test_resultbranch_initialization_invalid():
 
     #invalid i_s
     with pytest.raises(ValueError):
-        resultbranch = ResultBranch(
+        ResultBranch(
             name="Branch A",
             i_s="ABC",
             i_s_freq={50: 1.0+2.0j},
@@ -1021,14 +1018,14 @@ def test_resultreductionfactor_initialization_invalid():
     """
     #invalid value
     with pytest.raises(ValueError):
-        resultreductionfactor = ResultReductionFactor(
+        ResultReductionFactor(
             fault_bus="Bus A",
             value={50: "ABC"},
         )
 
     #invalid fault_bus
     with pytest.raises(ValueError):
-        resultreductionfactor = ResultReductionFactor(
+        ResultReductionFactor(
             fault_bus=1,
             value={50: 1.0},
         )
@@ -1056,14 +1053,14 @@ def test_resultgroundingimpedance_initialization_invalid():
     """
     #invalid value
     with pytest.raises(ValueError):
-        resultgroundingimpedance = ResultGroundingImpedance(
+        ResultGroundingImpedance(
             fault_bus="Bus A",
             value={50: "ABC"},
         )
 
     #invalid fault_bus
     with pytest.raises(ValueError):
-        resultgroundingimpedance = ResultGroundingImpedance(
+        ResultGroundingImpedance(
             fault_bus=1,
             value={50: 1.0+2.0j},
         )
@@ -1124,7 +1121,7 @@ def test_result_initialization_invalid():
     """
     #invalid buses
     with pytest.raises(ValueError):
-        result = Result(
+        Result(
             buses=[ResultBus(
                 name="Bus A",
                 uepr=1.0,
@@ -1156,7 +1153,7 @@ def test_result_initialization_invalid():
 
     #invalid branches
     with pytest.raises(ValueError):
-        result = Result(
+        Result(
             buses=[ResultBus(
                 name="Bus A",
                 uepr=1.0,
@@ -1186,7 +1183,7 @@ def test_result_initialization_invalid():
 
     #invalid reduction_factor
     with pytest.raises(ValueError):
-        result = Result(
+        Result(
             buses=[ResultBus (
                 name="Bus A",
                 uepr=1.0,
@@ -1212,7 +1209,7 @@ def test_result_initialization_invalid():
 
     #invalid grounding_impedance
     with pytest.raises(ValueError):
-        result = Result(
+        Result(
             buses=[ResultBus (
                 name="Bus A",
                 uepr=1.0,
@@ -1238,7 +1235,7 @@ def test_result_initialization_invalid():
 
     #invalid fault
     with pytest.raises(ValueError):
-        result = Result(
+        Result(
             buses=[ResultBus (
                 name="Bus A",
                 uepr=1.0,
@@ -1357,7 +1354,7 @@ def test_path_initialization_invalid():
     """
     #invalid segments
     with pytest.raises(ValueError):
-        path = Path(
+        Path(
             name="Path A",
             description="Description",
             source="Source A",
@@ -1401,7 +1398,7 @@ def test_path_initialization_invalid():
 
     #invalid name
     with pytest.raises(ValueError):
-        path = Path(
+        Path(
             name=1,
             description="Description",
             source="Source A",
@@ -1428,7 +1425,7 @@ def test_path_initialization_invalid():
 
     #invalid source
     with pytest.raises(ValueError):
-        path = Path(
+        Path(
             name="Path A",
             description="Description",
             source=1,
@@ -1455,7 +1452,7 @@ def test_path_initialization_invalid():
 
     #invalid fault
     with pytest.raises(ValueError):
-        path = Path(
+        Path(
             name="Path A",
             description="Description",
             source="Source A",
@@ -1524,7 +1521,7 @@ def test_network_set_active_fault():
 
     network.set_active_fault("Fault A")
     assert network.active_fault == "Fault A"
-    assert mock_fault.active == True
+    assert mock_fault.active is True
 
     with pytest.raises(ValueError, match="Fault 'Nonexistent Fault' does not exist"):
         network.set_active_fault("Nonexistent Fault")

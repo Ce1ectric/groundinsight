@@ -1,6 +1,4 @@
 import pytest
-from sympy import symbols, I
-from sympy.core.sympify import SympifyError
 from groundinsight.utils.validations import validate_impedance_formula_value, validate_numerics_dict
 
 def test_validate_impedance_formula_valid():

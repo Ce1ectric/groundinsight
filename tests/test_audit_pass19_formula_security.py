@@ -25,6 +25,7 @@ spy instead of measuring time.
 """
 
 import ast
+import contextlib
 import json
 import time
 
@@ -125,10 +126,8 @@ def test_hostile_network_json_is_rejected_fast(sympify_spy):
     assert sympify_spy == []
 
     def load():
-        try:
+        with contextlib.suppress(ValueError):
             gi.Network.model_validate_json(payload)
-        except ValueError:
-            pass
 
     assert _min_time(load) < 0.5
 
@@ -232,7 +231,7 @@ def test_worst_admitted_formulas_stay_cheap():
     for formula in worst:
         assert_safe_formula(formula)
 
-        def full():
+        def full(formula=formula):
             validations._validate_impedance_formula_str.cache_clear()
             clear_formula_cache()
             sympy.core.cache.clear_cache()

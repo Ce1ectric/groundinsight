@@ -14,8 +14,6 @@ formatted output to keep them robust against minor wording changes.
 
 import logging
 
-import pytest
-
 import groundinsight as gi
 from groundinsight.database.store import default_database
 from groundinsight.models.core_models import (

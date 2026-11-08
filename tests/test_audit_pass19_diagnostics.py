@@ -77,12 +77,11 @@ def test_emit_warns_with_code_and_elements():
 
 
 def test_collecting_records_emitted_and_plain_warnings_even_when_filtered():
-    with collecting() as sink:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            emit(InputWarning, "gap", code="SCALINGS_INCOMPLETE", elements=[("fault", "F")])
-            # A legacy call site without the helper is recorded as well.
-            warnings.warn("legacy text", gi.TransientModelWarning)
+    with collecting() as sink, warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        emit(InputWarning, "gap", code="SCALINGS_INCOMPLETE", elements=[("fault", "F")])
+        # A legacy call site without the helper is recorded as well.
+        warnings.warn("legacy text", gi.TransientModelWarning, stacklevel=1)
     assert [d.code for d in sink] == ["SCALINGS_INCOMPLETE", "TRANSIENT_MODEL"]
     assert sink[0].elements == [("fault", "F")]
     assert sink[0].category == "InputWarning"
@@ -102,11 +101,10 @@ def test_sinks_are_isolated_between_threads():
     results = {}
 
     def worker(tag):
-        with collecting() as sink:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                for _ in range(50):
-                    emit(InputWarning, tag, code=tag)
+        with collecting() as sink, warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            for _ in range(50):
+                emit(InputWarning, tag, code=tag)
         results[tag] = {d.code for d in sink}
 
     threads = [threading.Thread(target=worker, args=(t,)) for t in ("A", "B", "C")]

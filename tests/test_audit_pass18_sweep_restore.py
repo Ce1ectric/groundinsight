@@ -123,7 +123,7 @@ def test_sweep_point_after_a_failing_point_sees_the_original_network():
     good_point = gi.SweepPoint(label="good", bus_impedance={"S": _table(2.0 + 0j)})
     only_good = gi.run_sweep(net, fault="F", points=[good_point])
     reference = only_good.buses().filter(
-        (only_good.buses()["bus_name"] == "F")
+        only_good.buses()["bus_name"] == "F"
     )["EPR_V"].to_list()
 
     bad = gi.SweepPoint(
@@ -132,7 +132,7 @@ def test_sweep_point_after_a_failing_point_sees_the_original_network():
     )
     good = gi.SweepPoint(label="good", bus_impedance={"S": _table(2.0 + 0j)})
     mixed = gi.run_sweep(net, fault="F", points=[bad, good])
-    got = mixed.buses().filter((mixed.buses()["bus_name"] == "F"))["EPR_V"].to_list()
+    got = mixed.buses().filter(mixed.buses()["bus_name"] == "F")["EPR_V"].to_list()
 
     assert got == pytest.approx(reference)
 

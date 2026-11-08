@@ -13,7 +13,6 @@ guarantee that the network state (bus impedances, faults, paths,
 ``active_fault``) is fully restored after every call.
 """
 
-import polars as pl
 import pytest
 
 import groundinsight as gi

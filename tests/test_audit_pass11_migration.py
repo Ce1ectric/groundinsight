@@ -1013,7 +1013,7 @@ def test_a_network_that_cannot_be_loaded_is_named_in_the_report(tmp_path):
 
     # The diagnosis has to be reproducible: the file really is unloadable.
     gi.start_dbsession(path)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         gi.load_network_from_db("netA")
 
 

@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path
+from typing import Optional
 
 import pytest
 from packaging.version import Version
@@ -181,7 +182,7 @@ dependencies = [
 """
 
 
-def _fake_repository(root: Path, version: str = "0.6.0", gui_pin: str = None) -> None:
+def _fake_repository(root: Path, version: str = "0.6.0", gui_pin: Optional[str] = None) -> None:
     (root / "src" / "groundinsight").mkdir(parents=True)
     (root / "gui" / "groundinsight_gui").mkdir(parents=True)
     (root / "gui" / "pyproject.toml").write_text(

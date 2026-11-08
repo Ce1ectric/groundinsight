@@ -21,7 +21,6 @@ each guide the tests
   formulas, the known path counts of grid graphs, the IEC 60909/60949 formulas.
 """
 
-import cmath
 import contextlib
 import io
 import math

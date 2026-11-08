@@ -30,7 +30,6 @@ evaluation of the formula with :func:`compute_impedance`.
 """
 
 import copy
-import math
 import pickle
 
 import numpy as np

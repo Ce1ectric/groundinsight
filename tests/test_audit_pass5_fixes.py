@@ -39,7 +39,6 @@ from __future__ import annotations
 import gc
 import logging
 
-import numpy as np
 import pytest
 from pydantic import ValidationError
 
@@ -47,9 +46,7 @@ import groundinsight as gi
 from groundinsight.models.core_models import (
     BranchType,
     BusType,
-    Fault,
     Result,
-    Source,
 )
 from groundinsight.pathfinder import (
     PathFinder,

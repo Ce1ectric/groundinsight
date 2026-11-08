@@ -273,7 +273,7 @@ def test_save_and_load_never_use_an_implicit_encoding(tmp_path):
     proc = _python(code, str(path), str(copy), flags=("-X", "warn_default_encoding"))
     assert proc.returncode == 0, proc.stderr[-2000:]
     assert proc.stdout.strip() == "True"
-    assert "Süd Ω".encode("utf-8") in copy.read_bytes()
+    assert "Süd Ω".encode() in copy.read_bytes()
 
 
 def test_a_cp1252_file_written_by_0_6_0_on_windows_still_loads(tmp_path, monkeypatch):

@@ -19,7 +19,6 @@ for the local source, and the closed form of Carson's reactance for the
 resistivity dependence.
 """
 
-import cmath
 import math
 import runpy
 import warnings

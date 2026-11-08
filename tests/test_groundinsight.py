@@ -173,7 +173,7 @@ def test_fault_activation_and_simulation():
     # Run the fault
     gi.run_fault(network=net, fault_name="fault1")
 
-    assert net.faults["fault1"].active == True
+    assert net.faults["fault1"].active is True
     assert len(net.results) > 0
 
 def test_reduction_factor_between_0_1():
@@ -216,7 +216,7 @@ def test_reduction_factor_between_0_1():
     # Run the fault
     gi.run_fault(network=net, fault_name="fault1")
 
-    assert net.faults["fault1"].active == True
+    assert net.faults["fault1"].active is True
     assert len(net.results) > 0
 
     # get the result of reduction factor
@@ -226,7 +226,7 @@ def test_reduction_factor_between_0_1():
     # check if the reduction factor is between 0 and 1 for every value of the dict
     for key in reduction_factors:
         assert 0 <= reduction_factors[key] <= 1
- 
+
 def test_plot_bus_voltages_all_parameter():
     """
     Test of bus voltage plot was all possible parameter

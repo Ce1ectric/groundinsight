@@ -67,6 +67,7 @@ already reports with a better message than this guard could produce.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import warnings
@@ -398,13 +399,11 @@ def test_probing_the_overflow_emits_no_runtime_warning():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         for magnitude in (5e-324, 1e-320, 1e-310, 1e-300):
-            try:
+            with contextlib.suppress(ValueError):
                 check_passive_impedance(
                     {50.0: ComplexNumber(real=magnitude, imag=0.0)},
                     element="bus 'X'",
                 )
-            except ValueError:
-                pass
 
 
 # ---------------------------------------------------------------------------

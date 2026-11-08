@@ -242,12 +242,16 @@ def test_outage_context_restores_active_flags_on_exit():
 
 def test_outage_context_raises_on_unknown_names():
     net = _build_line()
-    with pytest.raises(ValueError, match="unknown buses"):
-        with outage_context(net, Outage(name="x", disabled_buses=["does_not_exist"])):
-            pass
-    with pytest.raises(ValueError, match="unknown branches"):
-        with outage_context(net, Outage(name="x", disabled_branches=["nope"])):
-            pass
+    with (
+        pytest.raises(ValueError, match="unknown buses"),
+        outage_context(net, Outage(name="x", disabled_buses=["does_not_exist"])),
+    ):
+        pass
+    with (
+        pytest.raises(ValueError, match="unknown branches"),
+        outage_context(net, Outage(name="x", disabled_branches=["nope"])),
+    ):
+        pass
 
 
 def test_run_outage_study_collects_base_and_scenarios():
