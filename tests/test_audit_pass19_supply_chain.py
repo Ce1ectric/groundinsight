@@ -19,6 +19,14 @@ a lock ("pyproject.toml changed significantly since poetry.lock was last
 generated"), so every CI job would have stopped at its install step, while a
 suite run from a hand-made virtual environment noticed nothing. The lock is
 checked here, where the suite runs, and not only in CI.
+
+SEC2 -- ``pillow = "^11.3.0"`` kept the dependency below every fixed release.
+pip-audit (2026-11-08) lists 73 advisories for 11.3.0 and still 39 for 12.3.0;
+all of them are fixed in 13.0.0, the first release without a known advisory.
+groundinsight never imports PIL -- matplotlib is the only consumer and asks for
+``pillow>=8`` -- so the direct declaration is a security floor and nothing
+else, and it carries no upper bound: a cap is what kept every fix out of
+reach, and it would do the same to the next one.
 """
 
 from __future__ import annotations
@@ -30,6 +38,8 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -172,3 +182,66 @@ def test_poetry_accepts_the_lock_file():
         timeout=300,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+# ---------------------------------------------------------------------------
+# SEC2 -- a pillow floor without known advisories, and no cap
+# ---------------------------------------------------------------------------
+
+#: First pillow release without a known advisory (pip-audit, 2026-11-08).
+_FIRST_CLEAN_PILLOW = Version("13.0.0")
+
+#: Releases pip-audit reports as affected: 11.3.0 (the old lock, 73
+#: advisories), the 12.x releases the old fix suggestion pointed at, and
+#: 12.3.0 (still 39 advisories, every one fixed in 13.0.0).
+_AFFECTED_PILLOW = ("11.3.0", "12.1.1", "12.2.0", "12.3.0")
+
+
+def _pillow_specifier() -> SpecifierSet:
+    """
+    The pillow constraint of ``pyproject.toml`` as a PEP 440 specifier set.
+
+    A Poetry caret (``^13.0``) is not PEP 440 and fails to parse here on
+    purpose: the caret's implicit upper bound is the defect this pass removes.
+
+    Returns
+    -------
+    packaging.specifiers.SpecifierSet
+        The parsed constraint.
+    """
+    return SpecifierSet(_pyproject()["tool"]["poetry"]["dependencies"]["pillow"])
+
+
+def test_pillow_floor_excludes_every_release_with_a_known_advisory():
+    specifier = _pillow_specifier()
+    for affected in _AFFECTED_PILLOW:
+        assert affected not in specifier, affected
+    assert str(_FIRST_CLEAN_PILLOW) in specifier
+
+
+def test_pillow_constraint_has_no_upper_bound():
+    """SEC2's root cause: ``^11.3.0`` meant ``<12``, and every fix was 12.1.1+."""
+    operators = {spec.operator for spec in _pillow_specifier()}
+    assert operators <= {">=", ">", "!="}, operators
+    assert "99.0" in _pillow_specifier()
+
+
+def test_locked_pillow_is_the_first_clean_release_or_newer():
+    """Second route: the version CI actually installs, read from the lock."""
+    locked = [p["version"] for p in _lock()["package"] if p["name"] == "pillow"]
+    assert len(locked) == 1, locked
+    assert Version(locked[0]) >= _FIRST_CLEAN_PILLOW
+    assert locked[0] in _pillow_specifier()
+
+
+def test_installation_page_names_every_runtime_dependency():
+    """DOC5: the runtime list on the installation page left out pillow."""
+    dependencies = _pyproject()["tool"]["poetry"]["dependencies"]
+    runtime = [
+        name
+        for name, spec in dependencies.items()
+        if name != "python" and not (isinstance(spec, dict) and spec.get("optional"))
+    ]
+    page = (ROOT / "docs" / "installation.md").read_text(encoding="utf-8")
+    missing = [name for name in runtime if f"`{name}`" not in page]
+    assert missing == []

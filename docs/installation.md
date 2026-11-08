@@ -24,7 +24,9 @@ can be installed with any standard Python package manager.
     ```
 
 This pulls in the runtime dependencies: `pydantic`, `numpy`, `scipy`, `sympy`,
-`sqlalchemy`, `polars` and `matplotlib`.
+`sqlalchemy`, `polars`, `matplotlib` and `pillow` (the image library
+matplotlib uses; declared directly so that no release with a known security
+advisory is installed alongside groundinsight).
 
 ## Install from source
 

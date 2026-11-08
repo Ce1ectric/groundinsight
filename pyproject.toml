@@ -29,7 +29,12 @@ polars = "^1.5.0"
 sympy = "^1.13.2"
 matplotlib = "^3.10"
 scipy = "^1.16"
-pillow = "^11.3.0"
+# Security floor only (audit pass 19, SEC2): groundinsight never imports PIL;
+# matplotlib does, and asks for pillow>=8. 13.0.0 is the first release
+# without a known advisory (12.3.0 still has 39). No upper bound on purpose:
+# the old "^11.3.0" meant "<12", which kept every fix out of reach of anyone
+# installing groundinsight, and a new cap would do the same to the next fix.
+pillow = ">=13.0.0"
 # Optional importer dependencies, installed via the matching extra.
 pandapower = { version = "^3.0", optional = true }
 
@@ -42,9 +47,9 @@ pandapower = ["pandapower"]
 alembic = "^1.13.2"
 sqlalchemy-stubs = "^0.4"
 ipykernel = "^6.29.5"
-pytest = "^8.3.2"
-pytest-cov = "^5.0.0"
-black = "^24.8.0"
+pytest = ">=8.3.2,<10.0.0"
+pytest-cov = ">=5,<8"
+black = ">=24.8,<27.0"
 pandapower = "^3.0"
 pyzmq = "^27.0"
 
@@ -54,9 +59,9 @@ optional = true
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.6.1"
 mkdocs-material = "^9.5.34"
-mkdocstrings = { extras = ["python"], version = "^0.26.1" }
-pymdown-extensions = "^10.9"
-mkdocs-jupyter = "^0.25.0"
+mkdocstrings = { extras = ["python"], version = ">=0.26.1,<1.1.0" }
+pymdown-extensions = ">=10.9,<13.0"
+mkdocs-jupyter = ">=0.25,<0.27"
 
 # No [tool.poetry.scripts] block on purpose. The two maintainer commands used
 # to install executables named ``release`` and
