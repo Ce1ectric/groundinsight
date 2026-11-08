@@ -297,7 +297,13 @@ def test_release_workflow_tests_before_publishing():
 
 
 def test_ci_builds_the_docs_strictly_and_executes_the_notebooks():
+    # Since audit pass 19 (DOC1 / DOC2) the strict docs build executes the
+    # notebooks itself (mkdocs.yml: execute: true, allow_errors: false), so
+    # the separate nbconvert job is gone; the build needs the pandapower
+    # extra for examples/pandapower_import.ipynb.
     workflow = (_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "mkdocs build --strict" in workflow
-    assert "nbconvert" in workflow
-    assert "docs/examples/*.ipynb" in workflow
+    assert "--extras pandapower" in workflow
+    config = (_ROOT / "mkdocs.yml").read_text(encoding="utf-8")
+    assert "execute: true" in config
+    assert "allow_errors: false" in config

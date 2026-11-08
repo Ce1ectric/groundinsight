@@ -135,9 +135,15 @@ jobs:
         working-directory: gui
         run: python -m pytest
 
+  # The example notebooks in docs/examples are stored without outputs and
+  # executed by mkdocs-jupyter while the site is built (execute: true,
+  # allow_errors: false in mkdocs.yml). This job is therefore also the one
+  # place in CI that runs them: a notebook cell that raises fails the build.
+  # examples/pandapower_import.ipynb needs the pandapower extra.
   docs:
-    name: Docs build (strict)
+    name: Docs build (strict, notebooks executed)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -159,10 +165,10 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .venv
-          key: venv-docs-${{ runner.os }}-py3.14-${{ hashFiles('**/poetry.lock') }}
+          key: venv-docs-pandapower-${{ runner.os }}-py3.14-${{ hashFiles('**/poetry.lock') }}
 
-      - name: Install project with docs group
-        run: poetry install --no-interaction --with docs
+      - name: Install project with docs group and pandapower extra
+        run: poetry install --no-interaction --with docs --extras pandapower
 
       # ``docs.yml`` only runs on ``main``, i.e. after the merge -- a broken
       # cross-reference was therefore always found too late, on the branch
@@ -177,40 +183,3 @@ jobs:
       # it (DOC4).
       - name: Check that every public name is rendered
         run: poetry run python scripts/check_api_inventory.py site/objects.inv
-
-  notebooks:
-    name: Curated notebooks execute
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Python 3.14
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.14"
-
-      - name: Install Poetry
-        uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Install project with docs and dev groups
-        run: >-
-          poetry install --no-interaction --with docs,dev
-          --extras pandapower
-
-      # ``mkdocs.yml`` sets ``execute: false``, so the notebooks under
-      # ``docs/examples`` are published with their *stored* output. Nothing
-      # checked that the stored output still matched the code:
-      # ``mv_ring_transient.ipynb`` shipped a reduction factor of 0.904 next
-      # to a cell that raised ``KeyError: 'F1'`` when run. This job runs them.
-      - name: Execute the curated example notebooks
-        run: >-
-          poetry run jupyter nbconvert --to notebook --execute
-          --ExecutePreprocessor.timeout=600
-          --output-dir /tmp/nbconvert
-          docs/examples/*.ipynb

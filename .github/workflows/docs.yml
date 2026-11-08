@@ -16,6 +16,7 @@ jobs:
   build-and-deploy:
     name: Build and deploy MkDocs site
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write # mkdocs gh-deploy pushes the built site to gh-pages
     steps:
@@ -42,10 +43,12 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .venv
-          key: venv-docs-${{ runner.os }}-py3.14-${{ hashFiles('**/poetry.lock') }}
+          key: venv-docs-pandapower-${{ runner.os }}-py3.14-${{ hashFiles('**/poetry.lock') }}
 
-      - name: Install project with docs group
-        run: poetry install --no-interaction --with docs
+      # The build executes the example notebooks (mkdocs.yml); one of them
+      # imports pandapower.
+      - name: Install project with docs group and pandapower extra
+        run: poetry install --no-interaction --with docs --extras pandapower
 
       # --strict (audit pass 19, STD11): the pull-request job in ci.yml
       # builds strictly, but this push to main is what gets published, and

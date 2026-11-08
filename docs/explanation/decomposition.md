@@ -104,3 +104,12 @@ In a network without voltage sources the driving-point impedance that the cuts
 decompose is the earthing impedance $Z_E$ of the fault bus, the number
 [Reduction factors and earthing impedance](reduction-factors.md#grounding-impedance)
 defines.
+
+## See also
+
+- [Location response bracket](../examples/bus_response_extremes.ipynb) — the
+  response of a station to every electrode from two solves, checked against
+  solved networks, and what the bracket of the extremes does not cover.
+- [Electrode at the fault location](../examples/cuts_and_rho_f_sweep.ipynb) —
+  the cuts on a feeder with harmonics against the closed forms of the ladder,
+  a catalogue of electrodes in the $\rho$–$f$ form, and a closed ring.

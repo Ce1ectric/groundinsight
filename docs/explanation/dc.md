@@ -28,7 +28,7 @@ what happens when the number it produces has no reciprocal.
     and for a conductor whose reactance is written as `j*2*pi*f*L` it was
     accurate: on the reference chain above 0.1 Hz gives
     $456.621004575\ \text{V}$ and 0 Hz gives $456.621004566\ \text{V}$ —
-    eleven digits. It was needed only because `f = 0` used to raise.
+    eleven digits. With `f = 0` an ordinary frequency, it is not needed.
 
     For the far more common spelling `(0.25 + j*0.6)*l` the workaround is
     wrong, and not marginally: 0.1 Hz keeps the $6\ \Omega$ of reactance that
@@ -85,8 +85,8 @@ length, all branches of one type get the same verdict.
 A real part that runs to $-\infty$ — a `log(f)` term without a factor $f$ —
 is none of the three. It is the limit of negative resistances, not the open
 circuit $+\infty$ of a pole, and it is refused for every impedance that is
-inverted, like a negative real part. Earlier releases accepted it and read it
-as an open circuit, because $1/(-\infty) = 0$.
+inverted, like a negative real part. Accepted, it would read as an open
+circuit, because $1/(-\infty) = 0$.
 
 ## A finite reactance has no reading at DC
 
@@ -167,21 +167,25 @@ between routes matters.
 
 An `rfft` frequency grid always contains a 0 Hz bin, so *every* transient run
 evaluates every formula at zero frequency, whether or not the study is about
-DC. There was never a `f = 0.1 Hz` workaround available on that path, which is
-why a Carson-type conductor could not be used in a transient study at all and
-why a purely inductive bond was silently opened in every one. Both are fixed on
-the same code path as the stationary case; the state-space solver works from
-the lumped R/L/C fields and never inverts an impedance, so it has no DC
-inversion problem and serves as the independent cross-check.
+DC, and there is no `f = 0.1 Hz` workaround on that path. The FFT solver
+therefore follows the rules of the stationary solve: a Carson-type conductor
+takes its DC limit, an ideal bond the stand-in. The state-space solver works
+from the lumped R/L/C fields and never inverts an impedance, so it needs no
+stand-in and serves as the independent cross-check: for the bond of the
+example notebook its settled DC state agrees with the node-merged solution to
+$10^{-13}$, and it keeps the two bonded buses at one potential.
 
 ## What a source and a fault need at DC
 
-- **Current source.** `values` needs a `0.0` key: `values={0.0: 1000.0}`. Give
-  it a real number — at zero frequency the imaginary part is not a phase shift.
-- **Voltage source.** `voltage` and `source_impedance` both need a `0.0` entry,
-  and the source impedance must have a real part: the Thevenin loop is closed
-  by inverting it, and a purely inductive internal impedance would be zero at
-  DC. A zero `source_impedance` is rejected when the source is constructed.
+- **Current source.** `values` needs a `0.0` key: `values={0.0: 1000.0}`.
+  Without it the source contributes nothing at DC, announced once per run
+  (`InputWarning`, code `SOURCE_FREQUENCY_GAP`). Give it a real number — at
+  zero frequency the imaginary part is not a phase shift.
+- **Voltage source.** `voltage` and `source_impedance` both need a `0.0` entry;
+  a network solved at 0 Hz without one is rejected at the solve. The `0.0`
+  entry of `source_impedance` is the DC resistance of the source: the values
+  are numbers, not formulas, so nothing drops a reactance there for you. A zero
+  `source_impedance` is rejected when the source is constructed.
 - **Fault.** `scalings` does not need a `0.0` key: a frequency without a key
   is scaled with 1.0, i.e. the sources contribute in full at DC. Give
   `0.0: 0.0` to exclude the DC bin from a fault. A mapping that names some
@@ -196,3 +200,10 @@ inversion problem and serves as the independent cross-check.
   independent: the DC handling is confined to the 0 Hz bin, and a study
   carrying both returns the same 50 Hz answer, bit for bit, as one carrying
   50 Hz alone.
+
+## See also
+
+- [Direct-current studies](../examples/dc_studies.ipynb) — the example
+  notebook: each case of this page against a reference that does not come
+  from `groundinsight`, the cost of the `f = 0.1 Hz` workaround, and the
+  state-space cross-check.

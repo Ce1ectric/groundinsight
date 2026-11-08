@@ -3,10 +3,12 @@
 Audit pass 19 -- the structure of the documentation site, checked statically.
 
 Finding IDs: D1 (Diataxis structure: getting started, how-to guides,
-understanding the model, examples, reference, project), DOC9 (links that do
-not reach their target -- the strict build did not check anchors, and it does
-not look into notebooks at all), DOC12 (flat navigation; the audit log was a
-fifth of the search index).
+understanding the model, examples, reference, project), DOC1 / DOC2 (example
+notebooks published with stored outputs that no longer matched the code next
+to them), D3 (the curated notebooks of the maintainer's collection), DOC9
+(links that do not reach their target -- the strict build did not check
+anchors, and it does not look into notebooks at all), DOC12 (flat
+navigation; the audit log was a fifth of the search index).
 
 A ``mkdocs build`` in a subprocess takes tens of seconds and needs the
 optional ``docs`` group, which the CI test job does not install. The gates
@@ -15,7 +17,11 @@ the docs job of the CI builds the site strictly on top of them. They use only
 the standard library and PyYAML (dev group).
 """
 
+import importlib.util
+import json
 import math
+import os
+import posixpath
 import re
 from pathlib import Path
 
@@ -601,3 +607,284 @@ def test_ring_reproduces_its_numbers_two_ways(monkeypatch, tmp_path, capsys):
            if row["is_rms"]][0]
     assert rms["U_E_V"] == pytest.approx(math.hypot(rows[50.0]["U_E_V"], rows[250.0]["U_E_V"]),
                                          rel=1e-12)
+
+
+# --------------------------------------------------------------------------
+# DOC1 / DOC2 / D3 / DOC9 -- the example notebooks
+# --------------------------------------------------------------------------
+
+EXAMPLES = DOCS / "examples"
+
+#: The notebooks taken over from the maintainer's collection (decision D3).
+CURATED_NOTEBOOKS = [
+    "thermal_limits.ipynb",
+    "dc_studies.ipynb",
+    "mesh_phase_currents.ipynb",
+    "cuts_and_rho_f_sweep.ipynb",
+    "bus_response_extremes.ipynb",
+]
+
+#: Text that must not appear in a notebook any more, with the reason.
+STALE_NOTEBOOK_TEXT = {
+    "fault_name=": "the keyword is fault=",
+    ".phase_currents": "an internal attribute, not a result",
+    "logging.basicConfig": "warnings and Result.diagnostics carry the messages",
+    "groundinsight.models.core_models import": "the types are exported as gi.<name>",
+    "groundinsight.utils": "not part of the documented API",
+    "Z_G": "the earthing impedance is Z_E",
+    "/home/": "a local path",
+    "/Users/": "a local path",
+    "C:\\": "a local path",
+    "Dissertation": "a private reference",
+}
+
+
+def _notebook_names():
+    """
+    The notebooks under ``docs/examples``.
+
+    Returns
+    -------
+    list of str
+        File names, sorted.
+    """
+    return sorted(path.name for path in EXAMPLES.glob("*.ipynb"))
+
+
+def _notebook(name):
+    """
+    One notebook as a dictionary.
+
+    Parameters
+    ----------
+    name : str
+        File name under ``docs/examples``.
+
+    Returns
+    -------
+    dict
+        The parsed notebook.
+    """
+    return json.loads((EXAMPLES / name).read_text(encoding="utf-8"))
+
+
+def _site_page(site_path):
+    """
+    The page source behind a site address such as ``explanation/dc/``.
+
+    Parameters
+    ----------
+    site_path : str
+        Address relative to the site root, without anchor.
+
+    Returns
+    -------
+    str or None
+        Page path relative to ``docs/``, or ``None`` if there is none.
+    """
+    stem = site_path.strip("/")
+    if stem in ("", "."):
+        return "index.md"
+    for candidate in (f"{stem}.md", f"{stem}/index.md", f"{stem}.ipynb"):
+        if (DOCS / candidate).is_file():
+            return candidate
+    return None
+
+
+def _notebook_hook():
+    """
+    The build hook ``docs/hooks/notebooks.py`` as a module.
+
+    Returns
+    -------
+    module
+        The loaded hook.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "_docs_hooks_notebooks", DOCS / "hooks" / "notebooks.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_curated_notebooks_are_published():
+    """D3: the five notebooks of the maintainer's collection are examples."""
+    assert set(CURATED_NOTEBOOKS) <= set(_notebook_names())
+
+
+def test_notebooks_are_stored_without_outputs():
+    """DOC1 / DOC2: a stored output is not checked against the code beside
+    it, and one did drift -- a reduction factor of 0.904 shown next to code
+    that gave 0.310. The notebooks are stored clean and executed at build."""
+    stored = [
+        (name, cell.get("id"))
+        for name in _notebook_names()
+        for cell in _notebook(name)["cells"]
+        if cell["cell_type"] == "code"
+        and (cell.get("outputs") or cell.get("execution_count") is not None)
+    ]
+    assert stored == []
+
+
+def test_notebook_cells_carry_unique_ids():
+    """nbformat 4.5 cell ids, so a diff of a notebook names its cells."""
+    for name in _notebook_names():
+        ids = [cell.get("id") for cell in _notebook(name)["cells"]]
+        assert all(ids) and len(set(ids)) == len(ids), name
+
+
+def test_notebooks_are_executed_when_the_site_is_built():
+    """DOC1 / DOC2: mkdocs-jupyter executes every notebook during the build,
+    a cell that raises stops it, the hook prepares the kernel, and a cell has
+    a time limit."""
+    config = _mkdocs_config()
+    jupyter = next(
+        plugin["mkdocs-jupyter"]
+        for plugin in config["plugins"]
+        if isinstance(plugin, dict) and "mkdocs-jupyter" in plugin
+    )
+    assert jupyter["execute"] is True
+    assert jupyter["allow_errors"] is False
+    assert "docs/hooks/notebooks.py" in config["hooks"]
+    nbconvert = json.loads(
+        (DOCS / "hooks" / "jupyter" / "jupyter_nbconvert_config.json").read_text(encoding="utf-8")
+    )
+    assert 0 < nbconvert["NotebookClient"]["timeout"] <= 1800
+
+
+def test_notebook_pages_offer_the_notebook_for_download():
+    """The examples page promises a download button: mkdocs-jupyter
+    publishes each notebook next to its page and sets ``page.nb_url``, and
+    the theme override shows it."""
+    config = _mkdocs_config()
+    jupyter = next(
+        plugin["mkdocs-jupyter"]
+        for plugin in config["plugins"]
+        if isinstance(plugin, dict) and "mkdocs-jupyter" in plugin
+    )
+    assert jupyter["include_source"] is True
+    assert config["theme"]["custom_dir"] == "overrides"
+    assert "page.nb_url" in (ROOT / "overrides" / "main.html").read_text(encoding="utf-8")
+
+
+def test_every_notebook_is_listed_on_the_examples_page_and_in_the_nav():
+    linked = {target.partition("#")[0] for target in _page_links("examples/index.md")}
+    in_nav = {
+        page for page, trail in _nav_entries(_mkdocs_config()["nav"])
+        if trail and trail[0] == "Examples"
+    }
+    for name in _notebook_names():
+        assert name in linked, name
+        assert f"examples/{name}" in in_nav, name
+
+
+def test_notebook_links_reach_existing_pages_and_anchors():
+    """DOC9: the strict build does not look into notebooks. A notebook page
+    is rendered at ``examples/<name>/``, so its links are site addresses
+    relative to that -- a link to a ``.md`` or ``.ipynb`` source would not
+    be rewritten and would break on the site."""
+    broken = []
+    for name in _notebook_names():
+        base = f"examples/{name[: -len('.ipynb')]}/"
+        for cell in _notebook(name)["cells"]:
+            if cell["cell_type"] != "markdown":
+                continue
+            text = _FENCE.sub("", "".join(cell["source"]))
+            for target in _LINK.findall(text):
+                if re.match(r"^[a-z][a-z0-9+.-]*:", target):
+                    continue
+                path, _, anchor = target.partition("#")
+                if path.endswith((".md", ".ipynb")):
+                    broken.append((name, target, "a source path, not a site address"))
+                    continue
+                page = _site_page(posixpath.normpath(posixpath.join(base, path))) if path else None
+                if path and page is None:
+                    broken.append((name, target, "no such page"))
+                    continue
+                if anchor and page and page.endswith(".md"):
+                    ids = _anchors(page)
+                    if ids is not None and anchor not in ids:
+                        broken.append((name, target, "no such anchor"))
+    assert broken == []
+
+
+def test_notebooks_hold_no_stale_names_or_local_paths():
+    found = [
+        (name, text, reason)
+        for name in _notebook_names()
+        for cell in _notebook(name)["cells"]
+        for text, reason in STALE_NOTEBOOK_TEXT.items()
+        if text in "".join(cell["source"])
+    ]
+    assert found == []
+
+
+def test_notebook_hook_puts_a_directory_first_once(tmp_path):
+    hook = _notebook_hook()
+    environ = {"PYTHONPATH": os.pathsep.join(["/elsewhere", str(tmp_path)])}
+    hook.prepend_path("PYTHONPATH", tmp_path, environ)
+    assert environ["PYTHONPATH"].split(os.pathsep) == [str(tmp_path), "/elsewhere"]
+    hook.prepend_path("JUPYTER_CONFIG_PATH", tmp_path, environ)
+    assert environ["JUPYTER_CONFIG_PATH"] == str(tmp_path)
+
+
+def test_notebook_cache_key_follows_the_source(tmp_path):
+    """A change to the package must not reuse notebook outputs of the old
+    code: the cache directory is named after a digest of the source."""
+    hook = _notebook_hook()
+    package = tmp_path / "groundinsight"
+    package.mkdir()
+    (package / "__init__.py").write_text("X = 1\n", encoding="utf-8")
+    first = hook.source_digest(tmp_path, dependencies=())
+    assert first == hook.source_digest(tmp_path, dependencies=())
+    (package / "__init__.py").write_text("X = 2\n", encoding="utf-8")
+    assert hook.source_digest(tmp_path, dependencies=()) != first
+    assert hook.source_digest(tmp_path, dependencies=("numpy",)) != hook.source_digest(
+        tmp_path, dependencies=()
+    )
+    assert Path(hook.cache_directory(".cache/mkdocs-jupyter", first)) == (
+        Path(".cache/mkdocs-jupyter") / first
+    )
+
+
+def test_notebook_hook_prepares_kernel_and_cache(monkeypatch):
+    hook = _notebook_hook()
+    monkeypatch.setenv("PYTHONPATH", "/elsewhere")
+    monkeypatch.setenv("JUPYTER_CONFIG_PATH", "/elsewhere")
+
+    class _Plugin:
+        config = {"cache": True, "cache_dir": ".cache/mkdocs-jupyter"}
+
+    class _Config:
+        plugins = {"mkdocs-jupyter": _Plugin()}
+
+    hook.on_config(_Config())
+    assert os.environ["PYTHONPATH"].split(os.pathsep) == [str(ROOT / "src"), "/elsewhere"]
+    assert os.environ["JUPYTER_CONFIG_PATH"].split(os.pathsep)[0] == str(DOCS / "hooks" / "jupyter")
+    assert re.fullmatch(
+        r"\.cache/mkdocs-jupyter/[0-9a-f]{16}", Path(_Plugin.config["cache_dir"]).as_posix()
+    )
+
+
+def test_notebook_hook_flags_a_page_that_shows_the_build_machine(caplog):
+    """A cell that leaves a warning unhandled prints the checkout path; the
+    hook turns that into a build warning, which --strict makes fatal."""
+    hook = _notebook_hook()
+
+    class _File:
+        def __init__(self, src_uri):
+            self.src_uri = src_uri
+
+    class _Page:
+        def __init__(self, src_uri):
+            self.file = _File(src_uri)
+
+    leaked = f"<pre>{ROOT / 'src' / 'groundinsight' / 'x.py'}:1: ModelAssumptionWarning</pre>"
+    with caplog.at_level("WARNING", logger="mkdocs.hooks.notebooks"):
+        assert hook.on_post_page("<p>clean</p>", _Page("examples/a.ipynb"), None) == "<p>clean</p>"
+        assert hook.on_post_page(leaked, _Page("explanation/a.md"), None) == leaked
+        assert caplog.records == []
+        assert hook.on_post_page(leaked, _Page("examples/a.ipynb"), None) == leaked
+    assert len(caplog.records) == 1
+    assert "examples/a.ipynb" in caplog.records[0].getMessage()

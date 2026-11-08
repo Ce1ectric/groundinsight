@@ -8,6 +8,8 @@ copyright: Copyright &copy; 2024&ndash;2026 Christian Ehlert
 
 theme:
   name: material
+  # overrides/main.html adds a download button to the notebook pages.
+  custom_dir: overrides
   language: en
   palette:
     - media: "(prefers-color-scheme: light)"
@@ -102,7 +104,13 @@ plugins:
             show_root_full_path: false
             heading_level: 2
   - mkdocs-jupyter:
-      execute: false
+      # The notebooks are stored without outputs and executed while the site
+      # is built, so every output on a page is that of the code next to it;
+      # a cell that raises stops the build. docs/hooks/notebooks.py points
+      # the kernel at src/, limits the time per cell and keys the cache to
+      # the state of the source.
+      execute: true
+      allow_errors: false
       include_source: true
       # Notebooks only. The plugin's default also converts every *.py file
       # under docs/ into a notebook page; the scripts in docs/snippets/ are
@@ -112,8 +120,10 @@ plugins:
 # Build hooks. reference_cases.py writes the table of the closed-form
 # reference cases into explanation/verification.md from REFERENCE_CASES and
 # one run of gi.run_reference_cases(), so the table cannot go stale.
+# notebooks.py prepares the environment the example notebooks run in.
 hooks:
   - docs/hooks/reference_cases.py
+  - docs/hooks/notebooks.py
 
 # The hooks are build code, not pages or downloads.
 exclude_docs: |
@@ -179,6 +189,11 @@ nav:
       - Pandapower import: examples/pandapower_import.ipynb
       - Fault sweep: examples/fault_sweep.ipynb
       - Fault decomposition: examples/fault_decomposition.ipynb
+      - Electrode at the fault location: examples/cuts_and_rho_f_sweep.ipynb
+      - Location response bracket: examples/bus_response_extremes.ipynb
+      - Phase currents in meshes: examples/mesh_phase_currents.ipynb
+      - Direct-current studies: examples/dc_studies.ipynb
+      - Thermal limits: examples/thermal_limits.ipynb
   - Reference:
       - Conventions and units: reference/conventions.md
       - Formula syntax: reference/formula-syntax.md

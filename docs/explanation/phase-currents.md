@@ -196,3 +196,8 @@ is then the physically correct answer.
 
 - [From a line to a ring](../getting-started/ring.md) — the tutorial: a
   symmetric ring, the phase impedance and the legacy mode.
+- [Phase currents in meshes](../examples/mesh_phase_currents.ipynb) — the
+  example notebook: a line, a ring, two parallel cables and a mesh in both
+  modes, checked against a fully coupled multi-conductor solve; with the same
+  $k$ on every branch the split moves the shield currents but no earth
+  potential.

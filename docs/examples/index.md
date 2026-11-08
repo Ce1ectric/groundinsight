@@ -1,49 +1,76 @@
 # Examples
 
-The examples are Jupyter notebooks that walk through representative
-`groundinsight` workflows. They are rendered into this site via
-[`mkdocs-jupyter`](https://pypi.org/project/mkdocs-jupyter/), so all
-figures and DataFrame outputs are visible inline.
+The examples are Jupyter notebooks. They are stored without outputs and
+executed when this site is built, so every table and figure on these pages
+is the output of the code next to it, run against the documented release —
+a notebook that fails stops the build. Each one states the numbers it
+expects and checks them a second way: against a closed form, a nodal solve
+written in NumPy, or a second solver.
 
-## Notebooks in this section
+## First steps with the model
 
-- **[Minimal example](minimal.ipynb)** — three-bus MV cable line with a
-  single source and one fault. The smallest possible working example;
-  includes the analytical plausibility checks (Kirchhoff at the fault
-  bus, reduction factor `r = |1 - Z_mutual / Z_self|`). Use this as a
-  starting point for your own networks.
-- **[MV ring (stationary)](mv_ring.ipynb)** — classical frequency-domain
-  fault analysis of a 20 kV ring with 20 substations and a single-core
-  shielded cable type. Shows EPR per bus, reduction factor and
-  grounding impedance at the fault bus.
-- **[MV ring (transient)](mv_ring_transient.ipynb)** — same 20 kV ring,
-  full transient stack: FFT vs state-space comparison, the effect of
-  the cable-shield mutual coupling on the fault-bus EPR, and a Thévenin
-  voltage source switched onto the ring.
-- **[Pandapower import](pandapower_import.ipynb)** — end-to-end use of
-  `gi.preview_pandapower_import` and `gi.from_pandapower`: build a small
-  pandapower MV network, convert it, inject a fault, and run a
-  follow-up outage study on the imported network.
-- **[Fault sweep](fault_sweep.ipynb)** — sweep the fault location across
-  every bus of a 10-bus MV cable line and visualise the resulting
-  grounding impedance and reduction factor per fault bus and frequency.
-  Uses `Network.res_all_impedances()` for the bookkeeping.
-- **[Fault decomposition](fault_decomposition.ipynb)** — the analysis
-  layer on top of a solve: the two reduction factors and why they answer
-  different questions, `analyze_cuts` for what each direction away from
-  the fault contributes, `bus_response` for the response to *any*
-  electrode at the faulted station from two solves, `run_sweep` with
-  `summarize`/`classify` across soil resistivities, and the closed-form
-  `run_reference_cases`.
+- **[Minimal example](minimal.ipynb)** — three stations on a cable line,
+  one source, one fault: build, solve, read the results as tables, and check
+  four of them against Kirchhoff's laws and the closed forms of a line. The
+  tutorial [Your first fault calculation](../getting-started/first-calculation.md)
+  takes the same steps more slowly.
+- **[MV ring (stationary)](mv_ring.ipynb)** — a 20 kV ring with 20
+  substations in the frequency domain: earth potential rise per bus, both
+  reduction factors and the earthing impedance at the fault.
+- **[MV ring (transient)](mv_ring_transient.ipynb)** — the same ring in the
+  time domain: the FFT and the state-space solver, each against the
+  stationary solve it must reproduce, a fault current with DC offset, and a
+  Thévenin source switched onto the ring.
+- **[Pandapower import](pandapower_import.ipynb)** — preview and convert a
+  pandapower network with `preview_pandapower_import` and `from_pandapower`,
+  add a fault, solve, and run an outage study on the result.
+- **[Fault sweep](fault_sweep.ipynb)** — the fault moved over every bus of
+  a 10-bus cable line at five frequencies: earthing impedance and both
+  reduction factors per fault location, with `Network.res_all_impedances()`.
 
-Each notebook is self-contained: it builds the network in code, runs
-the fault calculation, extracts the results as Polars DataFrames and
-produces the plots inline. Clone the repository to execute them
-locally:
+## Analysis
+
+- **[Fault decomposition](fault_decomposition.ipynb)** — the analysis layer
+  on top of a solve: the two reduction factors, `analyze_cuts`,
+  `bus_response`, `run_sweep` with `summarize` and `classify`, and the
+  closed-form reference cases.
+- **[Electrode at the fault location](cuts_and_rho_f_sweep.ipynb)** — which
+  electrode does the faulted station need? The network split at the fault
+  into what belongs to the network and what to the electrode, a catalogue of
+  electrodes in the $\rho$–$f$ form through `run_sweep`, statistics and
+  classes on the stacked results.
+- **[Location response bracket](bus_response_extremes.ipynb)** — a station
+  characterised without knowing its electrode: the response to every
+  electrode from two solves, the bracket of no electrode, an ideal one and
+  the passive worst case, and what that bracket does not cover.
+- **[Phase currents in meshes](mesh_phase_currents.ipynb)** — how the fault
+  current divides in rings, meshes and parallel cables, what the legacy
+  `paths` mode makes of it, and what `phase_impedance_formula` changes —
+  checked against a fully coupled multi-conductor solve.
+- **[Direct-current studies](dc_studies.ipynb)** — `f = 0` as an ordinary
+  frequency: removable singularities, dropped reactances, ideal bonds and
+  true poles, each against a reference that does not come from
+  `groundinsight`.
+- **[Thermal limits](thermal_limits.ipynb)** — whether an earthing conductor
+  survives the fault current, after IEC 60949 and IEC 60909-0.
+
+## Run them yourself
+
+The button at the top of each notebook page downloads the notebook, without
+outputs. To run it, install the package with the pandapower extra and
+JupyterLab into a virtual environment
+([Installation](../getting-started/installation.md)):
+
+```bash
+pip install "groundinsight[pandapower]" jupyterlab
+jupyter lab
+```
+
+To run all of them from a clone of the repository instead:
 
 ```bash
 git clone https://github.com/Ce1ectric/groundinsight.git
 cd groundinsight
-poetry install
-poetry run jupyter lab docs/examples/
+pip install -e ".[pandapower]" jupyterlab
+jupyter lab docs/examples/
 ```

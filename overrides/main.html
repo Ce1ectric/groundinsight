@@ -1,0 +1,16 @@
+{#- overrides/main.html
+    Theme override: a download button on every example notebook page.
+    mkdocs-jupyter publishes the notebook next to its page
+    (include_source: true in mkdocs.yml) and sets page.nb_url; the theme
+    does not show it by itself. The published file is the stored notebook,
+    without outputs, ready to run. -#}
+{% extends "base.html" %}
+
+{% block content %}
+  {% if page.nb_url %}
+    <a href="{{ page.nb_url }}" title="Download this notebook" class="md-content__button md-icon" download>
+      {% include ".icons/material/download.svg" %}
+    </a>
+  {% endif %}
+  {{ super() }}
+{% endblock content %}
