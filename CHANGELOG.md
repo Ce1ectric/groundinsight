@@ -388,6 +388,27 @@ migration checklist.
   field it names and with an independent nodal solver to 1e-12 on a radial
   chain, a meshed cable/overhead-line ring and a network with two infeeds of
   different angle. (USE1, GUI6)
+- **`gi.PathfinderSettings` and `Network.pathfinder_settings` — the limit and
+  the memory of the path search belong to the network.** Up to 0.6.0 the limit
+  (`set_pathfinder_max_paths`) and the memory size (`set_pathfinder_cache_size`)
+  were process-wide switches, and the memory was three module-level
+  dictionaries shared by every network. A limit set for one network applied to
+  all of them — also to a network another thread was solving at that moment —
+  the dictionaries were changed from several threads without a lock, and they
+  kept every branch of a deleted network alive. Now
+  `net.pathfinder_settings = gi.PathfinderSettings(max_paths=…, cache_size=…)`
+  configures one network; the settings are frozen and validated (positive
+  integers, no `bool`, no float), `None` returns to the process default
+  (`max_paths=100_000`, `cache_size=256`), and a network only accepts a
+  `PathfinderSettings` (`TypeError` otherwise). Each network owns its memory:
+  three LRU tables bounded by its own `cache_size`, holding the network only
+  weakly; every copy (`model_copy`, `copy`, `deepcopy`, pickle) starts with an
+  empty one and keeps the settings. The settings are runtime configuration and
+  are not written to project files or the database. The limit error names the
+  per-network fix. Measured: two 4 × 4 grids (184 paths each) with limits 100
+  and 1000, solved in two threads for four rounds — before, one of the two
+  results was wrong in every round (4 of 8, independent of timing, because the
+  last global write wins); now 0 of 8, equal to two sequential runs. (ARC2)
 
 ### Changed
 
@@ -672,6 +693,11 @@ migration checklist.
   and summaries of what the returned object already carries (status of the
   ρ searches, failures of sweeps and outage studies, the `within_limit`
   column of the thermal checks). (GUI4, STD5)
+- **`gi.solve` no longer touches any shared path-search state.** The overlay it
+  solves on gets a memory of its own that goes with it; before, its entries
+  went into the shared dictionaries, keyed on `id(overlay)`, and had to be
+  removed again so that a later object at the same address could not find
+  them. Different networks can now be solved from different threads. (ARC2)
 
 ### Deprecated
 
@@ -688,6 +714,16 @@ migration checklist.
   name keeps working for at least two releases and six months after the
   release that deprecated it. A value under both names is a `TypeError`. The
   full table is on the service API page. (USE8)
+- **`set_pathfinder_max_paths`, `get_pathfinder_max_paths`,
+  `gi.set_pathfinder_cache_size` and `gi.get_pathfinder_cache_size`.** They
+  keep working with a `DeprecationWarning` and now set or read the process
+  default — the settings of every network without settings of its own;
+  `set_pathfinder_cache_size` trims the memory of those networks at once.
+  Removal no earlier than two releases and six months after this release.
+  Replacement: `net.pathfinder_settings = gi.PathfinderSettings(max_paths=n)`
+  (or `cache_size=n`); `net.pathfinder_settings.max_paths` to read.
+  `clear_pathfinder_cache(network)` and `clear_pathfinder_cache()` stay as
+  they are. (ARC2)
 
 ### Fixed
 
@@ -1172,6 +1208,18 @@ migration checklist.
   its category and the function that raises it (kept complete by a test),
   how to collect the records around any call, and the route into logging.
   (GUI4)
+- **The database stores the results of a network.** The Database page and the
+  docstrings of `Database.save_network`/`load_network` said that results are
+  not stored; they are, as a JSON column of the network row (since pass 9). A
+  test pins the round trip (dump equality and a fresh solve, EPR rel. 1e-12).
+  (ARC2)
+- **The pathfinder page describes the settings and memory per network**, with
+  a migration table for the deprecated switches; the Service page drops the
+  warning about shared path caches. (ARC2)
+- **"Internal API" is defined in the API reference index.** Functions and
+  methods that modules of the package share carry no underscore and say
+  "Internal API" in their docstring; they are not exported and can change in
+  any release. (ARC5)
 
 ### Internal
 
@@ -1526,6 +1574,46 @@ migration checklist.
   one test of the edit invariants expects the sweep to leave no stale
   result, and 21 older tests in six files read the structured records
   instead of `caplog`.
+- **The package `__init__` holds imports, `__all__`, `__version__` and the
+  deprecation `__getattr__` only.** The logging default and `set_log_level`
+  moved to `groundinsight/_logging.py`, `show_versions` to
+  `groundinsight/_versions.py`; both stay re-exported. Re-importing the package
+  (`importlib.reload`) no longer adds a second `NullHandler`. A test checks the
+  allowed statements and that each of the 103 names of the previous `__all__`
+  stays importable. Import time unchanged: median 0.912 s → 0.895 s (30
+  interleaved runs in fresh interpreters). (ARC3)
+- **One reachability search and one passivity classification.** The transient
+  study asks `Network.sources_reaching` for the sources that feed the fault
+  instead of running a breadth-first search of its own. The four passivity
+  rules have one implementation, `passivity_classes`, used by the dictionary
+  checker, the array checker of the transient solver and the vectorised check
+  of the stationary kernel (`non_passive_mask`); the message builder exists
+  once as well. Decisions and messages are unchanged: both checkers agree with
+  a rule-by-rule oracle on 48 edge cases (zero, signed zero, subnormal, ±∞,
+  NaN, …), and the reachability agrees with connected components from
+  `scipy.sparse.csgraph` on 40 random networks with inactive elements and
+  islands. (ARC6)
+- **Internal API instead of underscore names across modules.** Modules used 23
+  underscore names of other modules (`electrical._resolved_impedance`,
+  `fault._set_active`, `network._needs_path_rebuild`, …). They are now
+  internal API without the underscore: `ElectricalNetwork.resolved_impedance`,
+  `.grounding_shunts`, `.earthed_buses`, `.remove_loop_closures`,
+  `.compute_phase_currents`; `electrical_network.component_labels`,
+  `.restricted_columns`; `Fault.mark_active` (was `_set_active`);
+  `Network.needs_path_rebuild`, `Network.input_digest`;
+  `impedance_calculator.render_frequencies`, `.short_circuit_mask`;
+  `analysis.shortcircuit.sources_feeding`;
+  `io.pandapower_import.bus_index_to_name`, `.require_pandapower`. The rules
+  of `Network.frequencies` moved from the field validator into
+  `models.core_models.validate_frequencies`, which the validator and
+  `check_network` call; the order warning still points at the code that
+  builds the network. Code that used the former underscore names has to use
+  the new ones. An AST test finds every remaining use of another module's
+  underscore name (also through `getattr`/`setattr`/`hasattr`/`delattr`/
+  `object.__setattr__`); it finds none, with an empty allow-list. (ARC5)
+- **Tests use `gi.Database` instead of the deprecated session globals**,
+  except the tests of the deprecation path, which assert the warning; the
+  suite raises 11 `DeprecationWarning`s fewer. (ARC2)
 
 ## [0.6.0] — 2026-09-01
 
