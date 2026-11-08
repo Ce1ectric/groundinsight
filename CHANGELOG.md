@@ -157,6 +157,27 @@ migration checklist.
   code that turns these fields into floats has to handle `None`; the
   diagnostics `EARTH_GROUP_UNDEFINED` and `REDUCTION_FACTOR_UNDEFINED` give
   the reason. (P9, F14)
+- **A real part of minus infinity is refused, not read as an open circuit.**
+  A bus formula with a `log(f)` term that no factor of `f` cancels, such as
+  `rho*0.01 + log(f)`, is −∞ at 0 Hz (`log(0)`). The passivity checks looked
+  at finite values only, so −∞ passed and the solver read `1/(−∞) = 0`: the
+  electrode was disconnected at DC without a word — in a DC study and in the
+  0 Hz bin of every transient study, while a bin just above 0 Hz is refused
+  for its negative real part (`1 + log(f)` is negative below 0.37 Hz). −∞ is
+  the limit of negative resistances and is now refused like one, for bus
+  impedances, grounding-conductor self impedances and voltage-source
+  impedances: where the element is built, on the transient FFT grid and
+  before the solve. Refusing rather than warning, because there is no value
+  to continue with — +∞ would be an open circuit the formula does not
+  describe — and because the same formula with a Carson term beside it was
+  already refused (its approach to 0 Hz ends on a finite negative value).
+  Positive infinity — the `"nan"` open end, `1/f`, a capacitance at DC —
+  stays an open circuit, and a network that does not list 0 Hz never
+  evaluates the formula there and is not affected (a transient study always
+  does). Migration: give the formula a finite DC value — let the
+  frequency-dependent part vanish at 0 Hz (`f*log(...)`, as in Carson's
+  terms) or state the DC resistance as a term without `f` — or leave 0 Hz out
+  of a stationary study. (D7)
 
 ### Added
 
@@ -720,6 +741,20 @@ migration checklist.
   frequency at 20 000 buses, now 9 ms (0.6 / 2.1 / 106 ms at 1 000 /
   4 000 / 100 000). On 2 000 random phasor sets and a 4 000-bus set, the
   result equals that of the previous implementation with `==`. (P3)
+- **Carson mutual impedances no longer warn at 0 Hz.** The resolution test of
+  the DC limit compared the last step of the approach (10⁻⁷ → 10⁻⁸ Hz) with
+  10⁻⁶ of the value plus 10⁻¹² Ω. A real part without a constant term — the
+  earth-return resistance π²·10⁻⁴·f of every Carson mutual impedance — moves
+  by 90 % of its value per decade however small it is, so every such cable
+  longer than 11.3 m warned "converges only slowly" in a network that lists
+  0 Hz, although its value there is π²·10⁻¹²·l Ω. A step that shrinks at
+  least five-fold per decade now counts as resolved, since at most a quarter
+  of it then remains to the limit: anything linear in `f` shrinks it ten-fold,
+  `f*log(1/f)` 8.5-fold, while `sqrt(f)` (3.2-fold) and `log(f)` (not at all)
+  are still reported, now with the measured step ratio in the message. The
+  verdict no longer depends on the branch length, and the value used at
+  0 Hz is unchanged. The FFT transient solver was not affected; it evaluates
+  self impedances only. (D7)
 
 ### Security
 
@@ -901,6 +936,9 @@ migration checklist.
   or other programs. (D8, DOC7)
 - **Liability note** on the home page, the EN 50522 how-to and the standards
   page. (D10)
+- The data-sheet how-to, the formula syntax reference, the concepts chapter
+  and the transient chapter state both rules at 0 Hz; the how-to no longer
+  documents the Carson warning as expected. (D7)
 
 ### Internal
 
