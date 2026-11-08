@@ -2,78 +2,71 @@
 
 The API reference is generated directly from the docstrings in the
 `groundinsight` source tree via
-[`mkdocstrings`](https://mkdocstrings.github.io/). Every page below corresponds
-to one Python module; navigate through the pages to see the public functions,
-classes and their signatures.
+[`mkdocstrings`](https://mkdocstrings.github.io/). Each page covers one area of
+the package: a short explanation, examples, and the rendered docstrings of
+the public functions and classes. [Top-level package](toplevel.md) lists every
+public name with its page.
 
 ## Modules
 
-- [Network operations](network_operations.md) — high-level factory functions
-  for creating networks, buses, branches, sources, faults, paths, and for
-  running fault calculations.
-- [Service functions](service.md) — calls for code that holds a network on
-  behalf of someone else: `solve` (a fault solve that leaves the network
-  untouched), `check_network` (every problem as structured diagnostics,
-  never an exception) and the canonical parameter names with their
-  deprecated aliases; the service layer `groundinsight.api` for front ends
-  (project sessions, undoable edit commands, jobs, JSON-safe DTOs) and the
-  `groundinsight` command line.
-- [Core models](core_models.md) — Pydantic data classes for `Bus`, `Branch`,
-  `Source`, `Fault`, `Network`, the different `Result*` containers and the
-  `ComplexNumber` helper.
-- [Electrical network](electrical_network.md) — numerical core: assembly of
-  the admittance matrices, sparse LU solve, reduction-factor and grounding-
-  impedance computation.
-- [Pathfinder](pathfinder.md) — DFS-based enumeration of every simple path
-  from each source bus to the active fault bus.
-- [Plotting](plotting.md) — Matplotlib bar-plot helpers for EPR, branch
-  currents and bus currents (both stationary bar plots and transient time
-  series).
-- [Database](database.md) — SQLAlchemy CRUD helpers for persisting bus types,
-  branch types and entire networks to SQLite.
-- [I/O — network importers](io.md) — `ImportDefaults` schema, the
-  pandapower topology importer (`from_pandapower`,
-  `preview_pandapower_import`) and the short-circuit result import
-  (`read_shortcircuit_results`,
-  `apply_shortcircuit_characteristics`), and networks as tables
-  (`network_from_tables`, `Network.to_tables`) for spreadsheets and CSV.
-- [Outage studies](outage.md) — what-if API on top of the `active` flag
+- [Top-level package](toplevel.md) — every public name of `groundinsight` and
+  of the service layer `groundinsight.api`, with the page that documents it;
+  `set_log_level`, `show_versions` and the warning classes.
+- [Network operations](network_operations.md) — factory functions that build a
+  network (`create_network`, `create_bus`, `create_branch`, `create_source`,
+  `create_fault`, …) and `run_fault`.
+- [Service functions](service.md) — `solve` (a fault solve that leaves the
+  network untouched), `check_network` (every problem as structured
+  diagnostics, never an exception), progress and cancellation, the canonical
+  parameter names with their deprecated aliases; the service layer
+  `groundinsight.api` for front ends (project sessions, undoable edit
+  commands, jobs, JSON-safe DTOs) and the `groundinsight` command line.
+- [Core models](core_models.md) — the Pydantic classes `Bus`, `Branch`,
+  `Source`, `Fault`, `Network`, the types, the `Result*` containers and
+  `ComplexNumber`; editing a network and stale results.
+- [Electrical network](electrical_network.md) — the numerical core: nodal
+  admittance matrices, sparse solve, reduction factors and earthing impedance.
+- [Pathfinder](pathfinder.md) — enumeration of the simple paths between a
+  source and the fault, used by the legacy phase-current mode, and its
+  per-network settings.
+- [Plotting](plotting.md) — Matplotlib helpers for earth potential rise,
+  branch and bus currents, stationary and transient.
+- [Database](database.md) — `gi.Database` and the module-level persistence
+  helpers for SQLite, and the migration of files written by earlier releases.
+- [I/O](io.md) — `ImportDefaults`, the pandapower topology import
+  (`from_pandapower`, `preview_pandapower_import`), the short-circuit import
+  (`read_shortcircuit_results`, `apply_shortcircuit_characteristics`),
+  networks as tables (`network_from_tables`, `Network.to_tables`) and the JSON
+  project file.
+- [Outage studies](outage.md) — what-if studies on the `active` flag
   (`Outage`, `outage_context`, `run_outage_study`).
-- [Analysis](analysis.md) — higher-level routines on top of `run_fault`:
-  the inverse rho / rho-f scaling helpers (`find_max_rho_scaling`,
-  `find_max_rho_f_scaling`, `evaluate_max_epr_under_k`,
-  `select_rho_f_from_catalog`) and the conductor thermal-limit check
-  (`check_conductor_limits`, `resolve_fault_sc_characteristics` and the
-  IEC 60909 / 60949 primitives behind them).
-- [Transient simulations](transient.md) — time-domain solver paths
-  (`TransientStudy`, `ResultTransient`) plus the
-  `groundinsight.simulation.waveforms` library for source signals.
+- [Parameter sweeps](sweep.md) — `run_sweep`, `SweepPoint`, `rho_f_points`.
+- [Analysis](analysis.md) — the inverse rho and rho-f searches, the
+  short-circuit characteristics and the thermal checks of conductors and
+  nodes.
+- [Decomposition](decomposition.md) — the network split at the fault location
+  (`Cut`, `analyze_cuts`).
+- [Location response](response.md) — a station characterised without its own
+  electrode (`bus_response`).
+- [Reference cases](reference.md) — the closed-form cases the solver is
+  checked against (`run_reference_cases`).
+- [Statistics](statistics.md) — `summarize` and `classify` on long-format
+  frames.
+- [Transient simulations](transient.md) — `TransientStudy`, `ResultTransient`
+  and the waveform library `gi.waveforms`.
+
+The columns of every result frame are listed in
+[Result tables](../reference/results.md), every diagnostic code in
+[Warnings and diagnostics](../reference/warnings.md), and the tasks these
+functions serve in the [how-to guides](../howto/harmonics.md).
 
 ## Top-level package
 
-The `groundinsight` top-level module re-exports the most commonly used
-symbols so that everyday work only requires `import groundinsight as gi`:
+`import groundinsight as gi` gives every public name; the list, grouped by
+topic and linked to the page of each name, is on
+[Top-level package](toplevel.md).
 
-```python
-# fragment: the arguments are elided
-import groundinsight as gi
-
-net = gi.create_network(name="...", frequencies=[50])
-gi.create_bus(...)
-gi.create_branch(...)
-gi.create_fault(...)
-gi.create_source(...)
-gi.run_fault(network=net, fault="...")
-```
-
-Top-level helpers and persistence factories (`gi.set_log_level`,
-`gi.Database`, `gi.start_dbsession`, `gi.close_dbsession`, `gi.save_*_to_db`,
-`gi.load_*_from_db`, `gi.save_network_to_json`,
-`gi.load_network_from_json`) are listed in `groundinsight.__all__` as
-of 0.5 and are therefore visible to `from groundinsight import *`
-and to type-checkers.
-
-### Logging
+## Logging
 
 `gi.set_log_level("INFO")` enables a console handler on the
 `groundinsight` package logger. The helper is *handler-idempotent*:
@@ -81,7 +74,8 @@ repeated calls with alternating levels do not stack up duplicate
 handlers. If you have separately called `logging.basicConfig()` at
 the root logger and observe duplicate output, set
 `logging.getLogger("groundinsight").propagate = False` after
-`set_log_level`.
+`set_log_level`. What qualifies a result is not logged but raised as a
+diagnostic; see [Diagnostics, logging and warnings](../howto/diagnostics.md).
 
 ## Internal API
 

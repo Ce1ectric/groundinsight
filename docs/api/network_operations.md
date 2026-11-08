@@ -8,7 +8,9 @@ package as `groundinsight.create_network`,
 ## Physical / modelling context
 
 A `Network` is a graph: each `Bus` represents a grounding node with
-an own earthing impedance $Z_E(f, \rho)$, every `Branch` a
+an own electrode impedance $Z_B(f, \rho)$ (not the earthing impedance
+$Z_E$ of EN 50522, which `run_fault` computes at the fault bus), every
+`Branch` a
 metallic return path with self-impedance
 $Z_\text{branch}(f, l)$ and an optional mutual coupling that
 appears as a Norton injection along the source-to-fault path.
@@ -69,25 +71,27 @@ gi.run_fault(network=net, fault="f1")
 print(net.res_buses(fault="f1"))
 ```
 
-The same workflow scales to multi-source ring or mesh topologies;
-`auto_parallel_coefficients=True` activates an auxiliary phase-only
-solve that derives per-path current shares automatically.
+The same workflow scales to multi-source ring or mesh topologies. The
+default `phase_current_mode="auto"` splits the phase current of a meshed
+network by solving the phase-conductor network itself; give the branch
+types a `phase_impedance_formula`, otherwise the split uses proxy
+impedances and the result says so (`PHASE_PROXY`).
 
 ## A network without excitation is rejected
 
-Step 3 is not optional. Path enumeration runs over
-`sources × faults`, so a network missing either side yields no paths
-at all — and the calculation used to run to completion anyway and
-report **0 V at every bus**. That is a plausible-looking answer, and
-the most common way to arrive at it is a forgotten
-`gi.create_source(...)`, not a network that is genuinely unexcited.
-`create_paths` — and therefore `run_fault`, which rebuilds the paths
-itself — now raises a `ValueError` naming the missing side.
+Step 3 is not optional. A network without a source or without a
+fault has nothing that drives a current, and the calculation used to
+run to completion anyway and report **0 V at every bus**. That is a
+plausible-looking answer, and the most common way to arrive at it is a
+forgotten `gi.create_source(...)`, not a network that is genuinely
+unexcited. `run_fault` (and the path enumeration of
+[Pathfinder](pathfinder.md)) now raises a `ValueError` naming the
+missing side.
 
-Finding no path *between* an existing source and an existing fault
-is a different matter and stays permitted: that is exactly what an
-outage scenario islanding the fault bus produces, and 0 V is then
-the correct answer.
+A fault that no source *reaches* over active elements is a different
+matter and stays permitted: that is exactly what an outage scenario
+islanding the fault bus produces, and 0 V is then the correct answer.
+`gi.check_network` reports it (`FAULT_NOT_REACHED`).
 
 ## `create_network_assistant` and the n−1 rule
 

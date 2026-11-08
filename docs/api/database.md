@@ -134,9 +134,9 @@ star import does not trigger the warning.
 
 Returns a dictionary with the installed versions of ``groundinsight``,
 the active Python and platform, and — if importable — the peer
-packages ``groundfield`` and ``groundmeas``. Intended as the
-ADR-0013-aligned cross-repo convention, so a bug report can include
-the full earthing-platform stack with a single call:
+packages ``groundfield`` and ``groundmeas``. The companion packages
+offer the same helper, so a bug report can include the full
+earthing-platform stack with a single call:
 
 ```pycon
 >>> import groundinsight as gi
@@ -149,6 +149,21 @@ the full earthing-platform stack with a single call:
 ## Database object and module-level helpers
 
 ::: groundinsight.database.store
+
+## Migration of older files
+
+`gi.needs_migration(path)` classifies a file, `gi.migrate_database(path,
+backup=True)` converts it in place after keeping a `.bak` copy and returns a
+`gi.MigrationReport`; `gi.Database(path)` does both when it opens a file.
+[Save, load and migrate](../howto/persistence.md#migrate-a-database) walks
+through a migration.
+
+::: groundinsight.database.migration
+    options:
+      members:
+        - needs_migration
+        - migrate_database
+        - MigrationReport
 
 ## CRUD functions
 

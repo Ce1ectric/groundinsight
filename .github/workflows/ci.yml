@@ -171,6 +171,13 @@ jobs:
       - name: Build the site strictly
         run: poetry run mkdocs build --strict
 
+      # ``--strict`` does not notice a public name that no page renders. The
+      # inventory the build writes lists what was rendered; every name of
+      # ``groundinsight.__all__`` and ``groundinsight.api.__all__`` must be in
+      # it (DOC4).
+      - name: Check that every public name is rendered
+        run: poetry run python scripts/check_api_inventory.py site/objects.inv
+
   notebooks:
     name: Curated notebooks execute
     runs-on: ubuntu-latest

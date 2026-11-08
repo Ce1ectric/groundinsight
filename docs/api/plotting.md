@@ -11,17 +11,26 @@ quantities that are routinely inspected:
 
 - **Earth potential rise (EPR)** — the magnitude of
   $\underline{u}(f)$ per bus, both per frequency and as the
-  RMS $\sqrt{\sum_f |u(f)|^2}$ across all frequencies. The
-  RMS view is the touch-voltage proxy under EN 50522.
-- **Branch currents** — the per-frequency phasor of the
-  current flowing through each grounding-conductor branch,
-  signed in the branch traversal direction. This is the
-  shield-current pattern that determines reduction factor
-  and EMC effects.
-- **Bus currents** — the *injected* current per bus, i.e.
-  the residual that returns through the local earth path
-  $1/Z_E$. The sum over all buses equals the fault current
-  scaled by $r$.
+  RMS $\sqrt{\sum_f |u(f)|^2}$ across all frequencies. The RMS
+  value at the fault bus is the earthing voltage $U_E$ that
+  EN 50522 compares with the permissible touch voltage; it is an
+  upper bound of the touch voltage, not the touch voltage itself
+  (see [Compare results with EN 50522 limits](../howto/en50522-check.md)).
+- **Branch currents** — the current of the grounding conductor
+  (screen, earth wire) of each branch, `I_branch_A`, counted
+  positive from `from_bus` to `to_bus` for the physical fault
+  (see [Signs and phase angles](../reference/conventions.md#signs-and-phase-angles)).
+  This is the shield-current pattern behind the reduction factor
+  and the EMC effects.
+- **Bus currents** — the **electrode current** of each bus,
+  `I_bus_A`: what the bus's own electrode $Z_B$ passes into the
+  soil. The electrode currents of all buses sum to zero — the
+  fault current enters the soil at some stations and leaves it at
+  others — so their sum says nothing about the reduction factor.
+  The current of the earthing conductor at a source or fault bus,
+  `I_inj_A`, is a different quantity; size an earthing conductor
+  with `I_inj_A`, an electrode with `I_bus_A`
+  ([Thermal limits](../howto/thermal.md)).
 
 For the time-domain transient solver
 ([`groundinsight.simulation.transient`](transient.md)) the same

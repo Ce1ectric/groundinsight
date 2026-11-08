@@ -13,9 +13,10 @@ $Y(f)\,\underline{u}(f) = \underline{i}(f)$ over **active** elements
 only. An inactive `Bus` is removed from the system entirely (its row
 and column drop from $Y$); an inactive `Branch` contributes no
 self-admittance, no mutual-coupling Norton injection, and reports a
-zero current in the result — the open-circuit limit. The pathfinder
-also skips inactive elements when enumerating source-to-fault paths,
-which keeps the per-path Norton bookkeeping consistent.
+zero current in the result — the open-circuit limit. The search for
+the sources that reach the fault skips inactive elements as well (and so
+does the path enumeration of the legacy `phase_current_mode="paths"`),
+which keeps the phase currents and their Norton injections consistent.
 
 That makes maintenance scenarios, planned outages, broken shields,
 and N-1 contingencies expressible as **scenarios** without rebuilding
@@ -72,6 +73,20 @@ print(study.compare_buses())     # EPR per bus, with delta vs. base
 print(study.compare_branches())  # branch currents, with delta vs. base
 ```
 
+## The comparison frames
+
+`compare_buses()` and `compare_branches()` are long frames: one row per
+element, frequency, metric (`EPR_V` and `I_bus_A` for a bus, `I_branch_A`
+for a branch) and scenario, with the columns `bus_name` or `branch_name`,
+`frequency_Hz`, `metric`, `value`, `scenario` and the two delta columns.
+Unlike in `res_buses`, where the frequency is a number and the RMS row is
+marked by `is_rms`, `frequency_Hz` is text here: `"50.0"` for a frequency
+and `"RMS"` for the RMS value of the element. Filter with strings —
+`pl.col("frequency_Hz") == "RMS"`, `pl.col("frequency_Hz") == "50.0"` —
+and keep the RMS rows out of anything that sums or averages over
+frequencies. The column tables are in
+[Result tables](../reference/results.md#studies).
+
 ## Reading the two delta columns
 
 Each comparison carries an absolute `delta_vs_<ref>` and a relative
@@ -99,7 +114,8 @@ skip it:
 ```python
 # fragment: continues the study above
 tbl = study.compare_buses()
-tbl["delta_pct_vs_base"].mean()   # finite; the null rows are skipped
+rms_epr = tbl.filter((pl.col("frequency_Hz") == "RMS") & (pl.col("metric") == "EPR_V"))
+rms_epr["delta_pct_vs_base"].mean()   # finite; the null rows are skipped
 tbl.filter(pl.col("delta_pct_vs_base").is_null())   # the zero-baseline rows
 ```
 

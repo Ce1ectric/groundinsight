@@ -231,7 +231,8 @@ category and the function whose docstring describes the condition:
 
 `gi.check_network` returns its own codes, listed [above](#pre-flight-check);
 `SCALINGS_INCOMPLETE`, `SOURCE_FREQUENCY_GAP` and
-`SOURCE_FREQUENCY_OUTSIDE_NETWORK` mean the same there.
+`SOURCE_FREQUENCY_OUTSIDE_NETWORK` mean the same there. What each code means
+and what to do about it: [Warnings and diagnostics](../reference/warnings.md).
 
 ## Canonical parameter names
 
@@ -359,7 +360,7 @@ to types by name; types are read-only in the library, so a type edit creates
 a changed copy and swaps it into every element of that type, all or nothing.
 The commands are pydantic models with a discriminator `op`, so
 `parse_command({"op": "update_bus", "name": "b1", "fields": {"active": False}})`
-builds one from JSON.
+builds one from JSON; `COMMAND_OPS` lists the `op` value of every command.
 
 ### Jobs
 
@@ -440,11 +441,19 @@ every finding of `check_network`, as `table`, `json` (`CheckReportDTO`) or
 
 ::: groundinsight.api.commands
 
+::: groundinsight.api.commands.COMMAND_OPS
+    options:
+      heading_level: 3
+
 ::: groundinsight.api.jobs
 
 ::: groundinsight.api.schemas
 
 ::: groundinsight.api.examples
+
+::: groundinsight.api.examples.EXAMPLES
+    options:
+      heading_level: 3
 
 ### Command line
 

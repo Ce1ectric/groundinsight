@@ -86,7 +86,7 @@ per_50_hz = net.res_buses().filter(pl.col("frequency_Hz") == 50.0)
 rms       = net.res_buses().filter(pl.col("is_rms"))
 ```
 
-!!! warning "Changed in 0.6.1"
+!!! warning "Changed after 0.6.0"
     Up to 0.6.0 the RMS row carried the literal string `"RMS"` in
     `frequency_Hz`, which forced the whole column to `Utf8` —
     `filter(pl.col("frequency_Hz") == 50.0)` then matched nothing,
@@ -154,26 +154,29 @@ the stored numbers also when the network was edited since —
 ## Active subset / cache invalidation
 
 `Bus.active` and `Branch.active` are plain Pydantic fields that
-flip an instance in or out of the topology used by
-[`PathFinder`](pathfinder.md). Two callers therefore matter when a
-flag is flipped in-place after `define_paths()` has already
-populated `network.paths`:
+flip an instance in or out of the topology. `run_fault` reads them on
+every solve: the default `phase_current_mode="auto"` needs no paths
+and drops a path set that no longer matches the active topology; the
+legacy mode `"paths"` enumerates the paths again. Enumerated paths are
+kept in two places that mirror the *previous* topology when a flag is
+flipped in-place after `define_paths()` has populated them:
 
-- `network.paths` itself, which mirrors the *previously* active
-  topology.
+- `network.paths` itself.
 - The network's path-search memo (`network.path_cache()`, see
   [`groundinsight.pathfinder`](pathfinder.md)), which is keyed on the
   same topology fingerprint for fast re-use.
 
-`Network.invalidate_paths()` is the explicit hook for that case:
+`Network.invalidate_paths()` is the explicit hook that drops both:
 
 ```python
-# fragment: assumes a network `net` with the branch "LN_main"
-# Flip a branch out of service mid-notebook and rebuild paths.
-net.branches["LN_main"].active = False
-net.invalidate_paths()  # drops self.paths + this network's cache
-gi.create_paths(net)    # rebuilds with the new topology
+# fragment: assumes a network `net` with the branch "LN_main" and the fault "F1"
+net.branches["LN_main"].active = False   # take a branch out of service
+net.invalidate_paths()                   # drop the paths of the old topology
+gi.run_fault(net, "F1")                  # solves the new topology
 ```
+
+Paths of the new topology, as data, come from the enumeration on the
+[Pathfinder](pathfinder.md) page.
 
 The invalidation is **scoped to the calling `Network` instance**:
 cache entries belonging to other live networks in the same process
@@ -356,9 +359,12 @@ therefore bounds the work before SymPy runs:
 | terms (numbers, names, operations, calls) | 512 |
 | function calls / arguments per call | 8 / 3 |
 
-The largest formula in this documentation uses 6 digits, exponent 2,
-27 terms and 2 calls. Write very small or large factors with an exponent
-part — `1e-15` rather than `10**-15`.
+The longest formula in this documentation, the reduced phase-conductor
+impedance $Z_\text{red}$ of
+[Bus and branch types from data sheets](../howto/types-from-datasheets.md),
+has 99 terms and 6 calls, number literals of at most 9 digits and no
+exponent above 2 — well inside the limits. Write very small or large
+factors with an exponent part — `1e-15` rather than `10**-15`.
 
 ::: groundinsight.utils.validations.check_formula_symbols
 

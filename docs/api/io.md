@@ -46,52 +46,29 @@ from the nodal solve straight away — see the
 
 ## Example
 
+`pandapower.networks.example_simple()` has a 110 kV and a 20 kV level joined by
+a transformer. The 20 kV level is imported; its `MV Transformer Bus` reaches the
+`MV Main Bus` only through a closed bus-to-bus switch, which
+`switch_branch_type` turns into a short branch — without it that bus would be
+isolated and read 0 V (see below). The earthing types are illustrative; the
+complete script and its output are in the how-to
+[Import from pandapower](../howto/pandapower.md).
+
 ```python
-import pandapower.networks as pn
-import groundinsight as gi
-
-# Any pandapower MV / LV demo network — here a simple 4-bus MV ring.
-net_pp = pn.example_simple()
-
-defaults = gi.ImportDefaults(
-    rho=100.0,
-    frequencies=[50.0, 250.0],
-    default_bus_type=gi.BusType(
-        name="MVbus",
-        description="Default substation grounding grid",
-        system_type="Substation",
-        voltage_level=20.0,
-        impedance_formula="rho * 0.01 + j * f * 1/50 * 0.1",
-    ),
-    default_branch_type=gi.BranchType(
-        name="MVcable",
-        description="Default 20 kV cable",
-        grounding_conductor=True,
-        self_impedance_formula="(0.25 + j * f * 0.012) * l",
-        mutual_impedance_formula="(0.0  + j * f * 0.012) * l",
-    ),
-)
-
-# 1. Pre-flight summary: kept vs. skipped elements with a reason column.
-#    Pass the same `defaults` so closed bus-to-bus switches are previewed
-#    the way they will actually be imported.
-preview = gi.preview_pandapower_import(
-    net_pp, voltage_level_kV=20.0, defaults=defaults
-)
-print(preview)
-
-# 2. Build the Network. Only buses / lines on the chosen voltage
-#    level are imported; ext_grids, sgens and loads are ignored, and
-#    trafos / impedance elements are listed as skipped.
-net = gi.from_pandapower(
-    net_pp,
-    defaults=defaults,
-    voltage_level_kV=20.0,
-    network_name="MV ring (from pandapower)",
-)
-
-print(f"Imported {len(net.buses)} buses, {len(net.branches)} branches.")
+--8<-- "docs/snippets/pandapower_topology.py:defaults"
 ```
+
+```python
+--8<-- "docs/snippets/pandapower_topology.py:preview"
+```
+
+```python
+--8<-- "docs/snippets/pandapower_topology.py:import"
+```
+
+The import keeps 4 buses and 4 branches (`Line 2`, `Line 3`, `Line 4` and the
+bond `switch_bus_1`) and skips the three 110 kV buses, the 110 kV line, the
+other switches and the transformer.
 
 The pandapower extra is optional; install with
 `pip install 'groundinsight[pandapower]'` (or
@@ -99,31 +76,35 @@ The pandapower extra is optional; install with
 
 ## Skip-reason vocabulary
 
-Both `preview_pandapower_import` and `from_pandapower` produce
-warning records on the `groundinsight.io.pandapower_import` logger
-whenever they discard a row. The `reason` column of the preview frame
-matches the warning text:
+`preview_pandapower_import` lists every pandapower row it keeps or skips; the
+`reason` column of a skipped row is one of the following. `from_pandapower`
+skips the same rows and announces them as `InputWarning`s with a code
+(`IMPORT_BUS_SKIPPED`, `IMPORT_LINE_SKIPPED`, `IMPORT_SWITCH_NOT_IMPORTED`,
+`IMPORT_ELEMENT_NOT_IMPORTED`; see [Warnings and diagnostics](../reference/warnings.md)).
 
-| Reason                            | Element | Trigger                                                                 |
-|-----------------------------------|---------|-------------------------------------------------------------------------|
-| `voltage_level_mismatch`          | bus     | `bus.vn_kv != voltage_level_kV`.                                        |
-| `vn_kv_unparsable`                | bus     | `bus.vn_kv` is missing, `None`, or `NaN`. **New in 0.5.**               |
-| `endpoint_off_target_voltage_level` | line  | One endpoint sits on a different voltage level.                         |
-| `endpoint_bus_missing`            | line    | An endpoint bus could not be resolved.                                  |
-| `self_loop`                       | line    | `from_bus == to_bus`. **New in 0.5.**                                   |
-| `no_switch_branch_type`           | switch  | A **closed** bus-to-bus switch, but no `ImportDefaults.switch_branch_type` to build it with. **New in 0.6.1.** |
-| `switch_open`                     | switch  | The switch is open — genuinely not a connection. **New in 0.6.1.**      |
-| `switch_not_bus_to_bus`           | switch  | `et != "b"`: the switching state of a line or trafo, not a bond. **New in 0.6.1.** |
-| `trafos_are_not_modelled`         | trafo   | `net.trafo` / `net.trafo3w`. **New in 0.6.1.**                          |
-| `impedance_elements_are_not_modelled` | impedance | `net.impedance`. **New in 0.6.1.**                                |
+| Reason | Element | Trigger |
+|---|---|---|
+| `voltage_level_mismatch` | bus | `vn_kv` is not `voltage_level_kV`: `math.isclose(vn_kv, voltage_level_kV, rel_tol=1e-9)` is false. |
+| `vn_kv_unparsable` | bus | `vn_kv` is missing, `None` or `NaN`. |
+| `endpoint_off_target_voltage_level` | line, switch | An end sits on another voltage level. |
+| `endpoint_bus_missing` | line, switch | An end bus could not be resolved. |
+| `self_loop` | line, switch | Both ends are the same bus. |
+| `zero_length` | line | `length_km` is 0. `from_pandapower` refuses the import with a `ValueError`: a branch without series impedance would act as an open circuit, not as the short it represents. |
+| `negative_length` | line | `length_km` is negative; refused like `zero_length`. |
+| `no_switch_branch_type` | switch | A **closed** bus-to-bus switch, but no `ImportDefaults.switch_branch_type` to build it with. |
+| `switch_open` | switch | The switch is open — genuinely not a connection. |
+| `switch_not_bus_to_bus` | switch | `et != "b"`: the switching state of a line or transformer, not a bond. The line itself is imported with its screen and its phase conductor — see the how-to for a ring operated open at such a switch. |
+| `trafos_are_not_modelled` | trafo | `net.trafo` / `net.trafo3w`. |
+| `impedance_elements_are_not_modelled` | impedance | `net.impedance`. |
 
-If the importer produces a `Network` with zero buses or zero branches
-it now also emits a `logger.warning` so a wrong `voltage_level_kV`
-argument fails loudly rather than silently.
+A line without a usable `length_km` is kept with a length of 1 km and
+announced (`IMPORT_LENGTH_DEFAULT`). An import that produces no bus or no
+branch is announced as well (`IMPORT_EMPTY`), so a wrong `voltage_level_kV`
+fails loudly rather than silently.
 
 ### Closed switches bond grounding systems
 
-!!! warning "Changed in 0.6.1"
+!!! warning "Changed after 0.6.0"
     A **closed bus-to-bus switch** (`et="b"`, `closed=True`) bonds two
     grounding systems. Up to 0.6.0 it was discarded without a word, so a
     bus reachable only through a switch came out galvanically isolated
@@ -131,7 +112,7 @@ argument fails loudly rather than silently.
     station. Set `ImportDefaults.switch_branch_type` (and optionally
     `switch_length_km`, default 1 m) to import such switches as short
     branches. Without it the behaviour is unchanged, but the omission is
-    now logged and appears in the preview.
+    announced (`IMPORT_SWITCH_NOT_IMPORTED`) and appears in the preview.
 
 ### Deriving the phase-conductor impedance
 
@@ -139,8 +120,14 @@ argument fails loudly rather than silently.
 `phase_impedance_formula` from the pandapower columns `r_ohm_per_km`
 and `x_ohm_per_km`, i.e. `(r + I*x) * l`. That is what the default
 `phase_current_mode="auto"` solve needs; without it every imported
-mesh falls back to the older path-based proxy. Lines that share `r`
-and `x` share one derived branch type.
+mesh is split with proxy impedances (`PHASE_PROXY`). Lines that share `r`
+and `x` share one derived branch type. Two approximations come with it:
+the formula is the positive-sequence impedance R₁ + jX₁, while the phase
+network wants the reduced impedance `Z_red` of the phase conductor with the
+screen's return — exact only when all parallel routes are of the same
+construction —, and the reactance is pandapower's value at its network
+frequency, used at every frequency. See
+[Import from pandapower](../howto/pandapower.md#the-phase-conductor-impedance).
 
 The **earth-return** formulas (`self_impedance_formula`,
 `mutual_impedance_formula`) are deliberately *not* derived. They depend
@@ -153,12 +140,12 @@ on `default_branch_type`.
 
 `voltage_level_kV` selects which pandapower buses are imported;
 `default_bus_type.voltage_level` states which level the type was
-written for. The two are independent, but a mismatch is now reported at
-`WARNING`, because every imported bus carries the *type's* value and
-that is what a touch-voltage assessment reads. The bus filter compares
-`vn_kv` with `math.isclose` rather than `==`, so rounding noise from a
-CSV or DGS export no longer reports the whole target level as a
-mismatch.
+written for. The two are independent, but a mismatch is announced
+(`IMPORT_VOLTAGE_LEVEL_MISMATCH`), because every imported bus carries the
+*type's* value and that is what an assessment reads. Both comparisons use
+`math.isclose` with a relative tolerance of 1e-9 rather than `==`, so
+rounding noise from a CSV or DGS export no longer reports the whole target
+level as a mismatch.
 
 ## Short-circuit characteristics (IEC 60909-0)
 
@@ -186,25 +173,32 @@ hand-tuned excitation is never silently replaced. The returned frame
 is an audit trail: it carries `i_k_previous_a` next to `i_k_a`, so a
 review sees exactly what changed.
 
+The example builds a 20 kV feeder in pandapower with the minimum data an
+earth-fault calculation (`fault="1ph"`) needs — the short-circuit power
+`s_sc_max_mva` and the ratios `rx_max`, `x0x_max`, `r0x0_max` of the external grid, and the
+positive- and zero-sequence data `r_ohm_per_km`, `x_ohm_per_km`,
+`c_nf_per_km`, `r0_ohm_per_km`, `x0_ohm_per_km`, `c0_nf_per_km` of the
+lines — and solves it with `ip=True, ith=True` and a clearing time:
+
 ```python
-# fragment: assumes the solved pandapower net `net_pp` and a groundinsight network `net_gi` with the fault "fault1"
-import pandapower.shortcircuit as sc
-import groundinsight as gi
-
-sc.calc_sc(net_pp, fault="1ph", case="max", ip=True, ith=True, tk_s=0.5)
-
-# Inspect first ...
-gi.read_shortcircuit_results(net_pp).select(
-    "bus_name", "i_k_a", "r_to_x", "kappa", "kappa_origin", "i_p_a", "i_th_a"
-)
-
-# ... then write onto the grounding model and check the conductors.
-gi.apply_shortcircuit_characteristics(
-    net_gi, net_pp, "fault1", set_source_values=True
-)
-gi.run_fault(net_gi, "fault1")
-gi.check_conductor_limits(net_gi, "fault1")
+--8<-- "docs/snippets/pandapower_shortcircuit.py:case"
 ```
+
+Inspect the case first ...
+
+```python
+--8<-- "docs/snippets/pandapower_shortcircuit.py:read"
+```
+
+... then write it onto the grounding model and check the conductors:
+
+```python
+--8<-- "docs/snippets/pandapower_shortcircuit.py:apply"
+```
+
+The script is [`pandapower_shortcircuit.py`](../snippets/pandapower_shortcircuit.py);
+its output and a hand check of $I_k''$, $R/X$ and $\kappa$ are in
+[Import from pandapower](../howto/pandapower.md).
 
 ### Two deliberate deviations from pandapower
 

@@ -43,8 +43,8 @@ paths, and a 6×6 grid 1 262 816, which takes about a minute.
 Treat the enumeration as affordable only for radial and lightly
 meshed topologies.
 
-Since 0.6.1 the default `phase_current_mode="auto"` therefore does
-**not** enumerate at all. It only needs to know which sources
+Since the first release after 0.6.0 the default
+`phase_current_mode="auto"` therefore does **not** enumerate at all. It only needs to know which sources
 reach the fault, and `Network.sources_reaching(fault)`
 answers that with a breadth-first search in `O(V + E)`. The
 enumeration runs for the legacy `phase_current_mode="paths"`, for

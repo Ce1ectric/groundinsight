@@ -45,12 +45,16 @@ Source waveforms are produced by the small library in
 `sinusoidal_with_dc_offset` (the textbook
 single-line-to-ground fault current with DC asymmetry) and
 `damped_oscillation`. Custom waveforms are any vectorised callable
-`f(t) -> values`.
+`f(t) -> values`. A waveform gives instantaneous values, so its
+`amplitude` is a **peak** value, while `Source.values` holds RMS phasors:
+a fault current of 1000 A RMS has the amplitude $\sqrt 2 \cdot 1000$ A.
 
 ## Example
 
 ```python
 # fragment: assumes a network `net` with the current source "infeed", the fault "fault1", the bus "bus_fault" and the branch "cable_1"
+import math
+
 import groundinsight as gi
 from groundinsight import waveforms
 
@@ -61,9 +65,11 @@ study = gi.TransientStudy(network=net, fault="fault1")
 study.set_source_waveform(
     "infeed",
     waveforms.sinusoidal_with_dc_offset(
-        amplitude=1e3, frequency_hz=50.0,
+        amplitude=math.sqrt(2) * 1e3,   # peak value: a fault current of 1000 A RMS
+        frequency_hz=50.0,
         t_on=0.02, t_off=0.12,
-        dc_amplitude=500.0, dc_decay_tau=0.05,
+        dc_amplitude=500.0,             # initial value of the DC offset, in A
+        dc_decay_tau=0.05,
     ),
 )
 study.set_observation(buses=["bus_fault"], branches=["cable_1"])
