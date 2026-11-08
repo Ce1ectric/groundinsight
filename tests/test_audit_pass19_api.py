@@ -20,6 +20,7 @@ tested further down in this module.
 from __future__ import annotations
 
 import gc
+import json
 import math
 import warnings
 
@@ -768,3 +769,424 @@ def test_bus_response_methods_accept_the_old_frequency_name():
             ["freq"],
         )
         assert old == new
+
+
+# --------------------------------------------------------------------------
+# GUI9 -- check_network: every problem at once, as data, never an exception
+# --------------------------------------------------------------------------
+#
+# A form-based editor needs all problems of a network before it solves, each
+# with a stable code and the element it is about. ``run_fault`` and the
+# ``create_*`` factories report the *first* problem as a ``ValueError`` -- or,
+# for a branch whose end names no bus and for a source on an unknown bus,
+# nothing at all: the solver drops the element and reports 0 V.
+
+
+def _quickstart() -> gi.Network:
+    """The network of ``docs/quickstart.md`` sections 1-4, verbatim."""
+    net = gi.create_network(
+        name="quickstart_demo", frequencies=[50, 250, 350, 450, 550]
+    )
+    bus_type = gi.BusType(
+        name="SubstationBus",
+        description="Lumped substation grounding grid",
+        system_type="Substation",
+        voltage_level=20,
+        impedance_formula="rho * 0.01 + j * f * 1/50 * 0.1",
+    )
+    cable_type = gi.BranchType(
+        name="MSCable",
+        description="20 kV single-core cable with shield",
+        grounding_conductor=True,
+        self_impedance_formula="(0.25 + j * f * 0.012) * l",
+        mutual_impedance_formula="(0.0  + j * f * 0.012) * l",
+    )
+    gi.create_bus(name="bus_source", type=bus_type, network=net,
+                  specific_earth_resistance=100.0)
+    gi.create_bus(name="bus_fault", type=bus_type, network=net,
+                  specific_earth_resistance=100.0)
+    gi.create_branch(name="cable_1", type=cable_type, from_bus="bus_source",
+                     to_bus="bus_fault", length=5.0,
+                     specific_earth_resistance=100.0, network=net)
+    gi.create_source(name="substation_infeed", bus="bus_source",
+                     values={50: 1000.0, 250: 200.0, 350: 100.0, 450: 50.0,
+                             550: 25.0}, network=net)
+    gi.create_fault(name="fault_at_remote_bus", bus="bus_fault",
+                    description="Single-phase-to-ground fault at bus_fault",
+                    scalings={50: 1.0}, network=net)
+    return net
+
+
+def _two_bus_docstring_network() -> gi.Network:
+    """The network of the ``gi.solve`` docstring example."""
+    bus_type = gi.BusType(name="BT", system_type="MV", voltage_level=20.0,
+                          impedance_formula="0.01*rho")
+    cable = gi.BranchType(name="K", grounding_conductor=True,
+                          self_impedance_formula="(0.25+0.6*j)*l",
+                          mutual_impedance_formula="0.6*j*l")
+    net = gi.create_network(name="demo", frequencies=[50.0])
+    gi.create_bus(name="b0", type=bus_type, network=net)
+    gi.create_bus(name="b1", type=bus_type, network=net)
+    gi.create_branch(name="k", type=cable, from_bus="b0", to_bus="b1",
+                     length=1.0, network=net)
+    gi.create_source(name="q", bus="b0", values={50.0: 100.0}, network=net)
+    gi.create_fault(name="ef", bus="b1", scalings={50.0: 1.0}, network=net)
+    return net
+
+
+def _codes(diagnostics):
+    return [(d.code, d.severity, tuple(d.elements)) for d in diagnostics]
+
+
+@pytest.mark.parametrize(
+    "build", [_chain, _ring, _thevenin, _two_bus_docstring_network],
+    ids=["chain", "ring", "thevenin", "solve_docstring"],
+)
+def test_check_network_is_silent_on_a_sound_network(build):
+    net = build()
+    assert gi.check_network(net) == []
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for fault in net.faults:
+            gi.run_fault(net, fault)
+    assert gi.check_network(net) == []
+
+
+def test_check_network_is_silent_on_the_shared_fixture(simple_network):
+    assert gi.check_network(simple_network) == []
+
+
+def test_check_network_finds_no_source_and_an_isolated_bus_and_nothing_else():
+    """GUI9: two problems, two records, no exception."""
+    net = _chain()
+    net.sources.clear()
+    gi.create_bus("iso", _bus_type(), 100.0, network=net)
+    assert sorted(_codes(gi.check_network(net))) == [
+        ("ISOLATED_BUS", "warning", (("bus", "iso"),)),
+        ("NO_SOURCE", "error", (("network", "chain"),)),
+    ]
+
+
+def test_check_network_reports_the_partial_scalings_of_the_quickstart():
+    """The quickstart scales 50 Hz only and solves at five frequencies; with
+    the missing ones taken as 1.0 (decision F7) that is reported, once."""
+    diagnostics = gi.check_network(_quickstart())
+    assert _codes(diagnostics) == [
+        ("SCALINGS_INCOMPLETE", "warning", (("fault", "fault_at_remote_bus"),))
+    ]
+    assert "250" in diagnostics[0].message and "550" in diagnostics[0].message
+
+
+# --- malformed networks: edit, expected record, what the solver does --------
+
+
+def _edit_no_fault(net):
+    net.faults.clear()
+
+
+def _edit_frequencies_emptied(net):
+    net.frequencies.clear()  # in place: bypasses the field validator
+
+
+def _edit_frequency_duplicated(net):
+    net.frequencies.append(50.0)
+
+
+def _loaded_with(net, collection, name, field, value):
+    """``net`` saved and loaded again, with one reference edited in the file.
+
+    An element that belongs to a network refuses a reference to a bus the
+    network does not have (the edit invariants of pass 19), so a dangling
+    reference no longer comes out of the editing API. It still comes in from
+    outside: a project file edited by hand, a database written by another
+    tool, dictionaries filled by a script. Loading does not check references
+    -- ``check_network`` is where they surface.
+    """
+    data = json.loads(net.model_dump_json())
+    data[collection][name][field] = value
+    return gi.Network.model_validate(data)
+
+
+def _edit_dangling_branch(net):
+    return _loaded_with(net, "branches", "AF", "to_bus", "ghost")
+
+
+def _edit_source_on_unknown_bus(net):
+    return _loaded_with(net, "sources", "SRC", "bus", "ghost")
+
+
+def _edit_fault_on_unknown_bus(net):
+    return _loaded_with(net, "faults", "F", "bus", "ghost")
+
+
+def _edit_fault_bus_inactive(net):
+    net.buses["F"].active = False
+
+
+def _edit_source_bus_inactive(net):
+    net.buses["S"].active = False
+
+
+def _edit_impedance_missing(net):
+    net.buses["A"].impedance = {50.0: ComplexNumber(real=10.0, imag=0.0)}
+
+
+def _edit_formula_unevaluable(net):
+    # Built without validation: a type formula with an unknown symbol is
+    # rejected when the type is created (USE2), but a network loaded from an
+    # older file or assembled by hand can still carry one. The bus has no
+    # stored impedance, so the solver would need the formula.
+    bad_type = gi.BusType.model_construct(
+        name="bad", system_type="MV", voltage_level=20.0,
+        impedance_formula="L*rho",
+    )
+    bus = gi.Bus(name="X", type=bad_type, impedance={},
+                 specific_earth_resistance=100.0)
+    net.buses["X"] = bus
+    gi.create_branch("AX", _branch_type(), "A", "X", 1.0, network=net)
+
+
+def _edit_impedance_not_passive(net):
+    net.buses["A"].impedance = {f: ComplexNumber(real=-5.0, imag=1.0) for f in FREQ}
+
+
+def _edit_impedance_nan(net):
+    net.buses["A"].impedance = {
+        50.0: ComplexNumber(real=math.nan, imag=0.0),
+        250.0: ComplexNumber(real=10.0, imag=0.0),
+    }
+
+
+def _edit_source_frequency_none(net):
+    net.sources["SRC"].values = {60.0: 1000.0}
+
+
+def _edit_source_frequency_gap(net):
+    net.sources["SRC"].values = {50.0: 1000.0}
+
+
+def _edit_source_value_nan(net):
+    net.sources["SRC"].values = {50.0: complex(math.nan, 0.0), 250.0: 100.0}
+
+
+def _edit_scalings_incomplete(net):
+    net.faults["F"].scalings = {50.0: 1.0}
+
+
+def _edit_source_cut_off(net):
+    net.branches["SA"].active = False
+
+
+def _edit_floating_island(net):
+    open_end = gi.BusType(name="open", system_type="MV", voltage_level=20.0,
+                          impedance_formula="nan")
+    gi.create_bus("X", open_end, network=net)
+    gi.create_bus("Y", open_end, network=net)
+    gi.create_branch("XY", _branch_type(), "X", "Y", 1.0, network=net)
+
+
+def _edit_no_active_bus(net):
+    for bus in net.buses.values():
+        bus.active = False
+
+
+def _edit_garbage_entry(net):
+    net.buses["Z"] = "not a bus"
+
+
+# (edit, expected (code, severity, elements) record, what the solver does:
+#  "raises" -- run_fault raises; "zero" -- it returns 0 V everywhere for "F";
+#  None -- it runs. A source that covers no solved frequency -- also because
+#  the frequency list was emptied -- made run_fault return 0 V or a result
+#  without a single frequency; since USE3 it raises.)
+# An edit changes the network in place or returns the network to use instead.
+MALFORMED = {
+    "no_fault": (_edit_no_fault, ("NO_FAULT", "error", (("network", "chain"),)), "raises"),
+    "frequencies_emptied": (
+        _edit_frequencies_emptied,
+        ("FREQUENCIES_INVALID", "error", (("network", "chain"),)), "raises",
+    ),
+    "frequency_duplicated": (
+        _edit_frequency_duplicated,
+        ("FREQUENCIES_INVALID", "error", (("network", "chain"),)), None,
+    ),
+    "dangling_branch": (
+        _edit_dangling_branch,
+        ("BRANCH_UNKNOWN_BUS", "error", (("branch", "AF"), ("bus", "ghost"))), "zero",
+    ),
+    "source_on_unknown_bus": (
+        _edit_source_on_unknown_bus,
+        ("SOURCE_UNKNOWN_BUS", "error", (("source", "SRC"), ("bus", "ghost"))), "zero",
+    ),
+    "fault_on_unknown_bus": (
+        _edit_fault_on_unknown_bus,
+        ("FAULT_UNKNOWN_BUS", "error", (("fault", "F"), ("bus", "ghost"))), "raises",
+    ),
+    "fault_bus_inactive": (
+        _edit_fault_bus_inactive,
+        ("FAULT_BUS_INACTIVE", "error", (("fault", "F"), ("bus", "F"))), "raises",
+    ),
+    "source_bus_inactive": (
+        _edit_source_bus_inactive,
+        ("SOURCE_BUS_INACTIVE", "warning", (("source", "SRC"), ("bus", "S"))), "zero",
+    ),
+    "impedance_missing": (
+        _edit_impedance_missing,
+        ("IMPEDANCE_MISSING", "error", (("bus", "A"),)), "raises",
+    ),
+    "formula_unevaluable": (
+        _edit_formula_unevaluable,
+        ("FORMULA_ERROR", "error", (("bus", "X"), ("bus_type", "bad"))), "raises",
+    ),
+    "impedance_not_passive": (
+        _edit_impedance_not_passive,
+        ("IMPEDANCE_NOT_PASSIVE", "error", (("bus", "A"),)), "raises",
+    ),
+    "impedance_nan": (
+        _edit_impedance_nan,
+        ("IMPEDANCE_NOT_FINITE", "error", (("bus", "A"),)), "raises",
+    ),
+    "source_frequency_none": (
+        _edit_source_frequency_none,
+        ("SOURCE_FREQUENCY_NONE", "error", (("source", "SRC"),)), "raises",
+    ),
+    "source_frequency_gap": (
+        _edit_source_frequency_gap,
+        ("SOURCE_FREQUENCY_GAP", "warning", (("source", "SRC"),)), None,
+    ),
+    "source_value_nan": (
+        _edit_source_value_nan,
+        ("SOURCE_VALUE_NOT_FINITE", "error", (("source", "SRC"),)), "raises",
+    ),
+    "scalings_incomplete": (
+        _edit_scalings_incomplete,
+        ("SCALINGS_INCOMPLETE", "warning", (("fault", "F"),)), None,
+    ),
+    "source_cut_off": (
+        _edit_source_cut_off,
+        ("FAULT_NOT_REACHED", "warning", (("fault", "F"),)), "zero",
+    ),
+    "floating_island": (
+        _edit_floating_island,
+        ("FLOATING_ISLAND", "error", (("bus", "X"), ("bus", "Y"))), "raises",
+    ),
+    "no_active_bus": (
+        _edit_no_active_bus,
+        ("NO_ACTIVE_BUS", "error", (("network", "chain"),)), "raises",
+    ),
+    "garbage_entry": (
+        _edit_garbage_entry,
+        ("ELEMENT_INVALID", "error", (("bus", "Z"),)), "raises",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(MALFORMED))
+def test_check_network_names_the_problem_with_code_and_elements(case):
+    edit, expected, _ = MALFORMED[case]
+    net = _chain()
+    net = edit(net) or net
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        diagnostics = gi.check_network(net)
+    assert expected in _codes(diagnostics), _codes(diagnostics)
+    for record in diagnostics:
+        assert record.code in gi.checks.CHECK_CODES or record.code in (
+            "FREQUENCY_ORDER", "DC_LIMIT",
+        )
+        assert record.message
+
+
+@pytest.mark.parametrize("case", sorted(MALFORMED))
+def test_check_network_severity_agrees_with_what_the_solver_does(case):
+    """Second route: run the solver on the same network. Every "error" is a
+    network on which ``run_fault`` raises, or returns an answer that does not
+    describe the network (an element silently dropped: 0 V) -- and every
+    "warning" alone still solves."""
+    edit, (code, severity, _), solver = MALFORMED[case]
+    net = _chain()
+    net = edit(net) or net
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        if solver == "raises":
+            with pytest.raises((ValueError, KeyError, AttributeError)):
+                gi.run_fault(net, "F")
+            return
+        result = gi.run_fault(net, "F")
+    if solver == "zero":
+        assert max(bus.uepr for bus in result.buses) == 0.0
+    else:
+        assert severity == "warning" or code == "FREQUENCIES_INVALID"
+        assert max(bus.uepr for bus in result.buses) > 0.0
+
+
+def test_check_network_collects_several_problems_in_one_pass():
+    net = _edit_dangling_branch(_chain())
+    _edit_source_frequency_gap(net)
+    _edit_scalings_incomplete(net)
+    _edit_impedance_not_passive(net)
+    codes = {d.code for d in gi.check_network(net)}
+    assert {
+        "BRANCH_UNKNOWN_BUS", "SOURCE_FREQUENCY_GAP", "SCALINGS_INCOMPLETE",
+        "IMPEDANCE_NOT_PASSIVE",
+    } <= codes
+
+
+def test_check_network_restricts_fault_checks_to_the_named_fault():
+    net = _chain()
+    net.faults["FA"].scalings = {50.0: 1.0}
+    assert gi.check_network(net, fault="F") == []
+    assert [d.code for d in gi.check_network(net, fault="FA")] == [
+        "SCALINGS_INCOMPLETE"
+    ]
+    assert _codes(gi.check_network(net, fault="nope")) == [
+        ("FAULT_UNKNOWN", "error", (("fault", "nope"),))
+    ]
+
+
+def test_check_network_never_raises():
+    assert _codes(gi.check_network(None)) == [("NOT_A_NETWORK", "error", ())]
+    net = _chain()
+    net.__dict__["buses"] = None  # beyond any validator
+    diagnostics = gi.check_network(net)
+    assert diagnostics and all(d.severity in ("error", "warning") for d in diagnostics)
+
+
+def test_a_check_that_crashes_is_reported_and_the_others_still_run(monkeypatch):
+    import groundinsight.checks as checks
+
+    def explode(report):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(checks, "_check_sources", explode)
+    net = _chain()
+    _edit_impedance_not_passive(net)
+    diagnostics = gi.check_network(net)
+    codes = {d.code: d for d in diagnostics}
+    assert "IMPEDANCE_NOT_PASSIVE" in codes
+    assert "boom" in codes["CHECK_FAILED"].message
+    assert codes["CHECK_FAILED"].severity == "error"
+
+
+def test_check_network_does_not_modify_the_network():
+    net = _chain()
+    _edit_formula_unevaluable(net)  # forces a formula evaluation on a copy
+    _edit_impedance_missing(net)
+    before = _state(net)
+    gi.check_network(net)
+    assert _state(net) == before
+    assert net.buses["X"].impedance == {}
+
+
+def test_every_check_code_is_upper_snake_and_has_a_severity():
+    import re
+
+    assert gi.checks.CHECK_CODES
+    for code, (severity, meaning) in gi.checks.CHECK_CODES.items():
+        assert re.fullmatch(r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*", code), code
+        assert severity in ("error", "warning")
+        assert meaning
+
+
+def test_check_network_is_exported():
+    assert "check_network" in gi.__all__
