@@ -29,6 +29,7 @@ import json
 import time
 
 import pytest
+import sympy
 
 import groundinsight as gi
 import groundinsight.utils.validations as validations
@@ -151,7 +152,7 @@ _OTHER_VECTORS = {
     # exp of a huge float costs ~15 ms each in mpmath
     "exp_of_huge_float": ("exp(1e300)", "100"),
     # Max/Min compare symbolic arguments pairwise: 120 arguments, 6.6 s
-    "max_many_arguments": ("Max(" + ",".join(f"{i}.{i}*rho" for i in range(1, 120)) + ")", "4"),
+    "max_many_arguments": ("Max(" + ",".join(f"{i}.{i}*rho" for i in range(1, 120)) + ")", "3"),
     # many calls: 300 acosh, 0.55 s -- caught by the term limit first ...
     "many_calls": ("+".join(f"acosh({1000 + i})" for i in range(300)), "512"),
     # ... and nine calls by the call limit
@@ -195,7 +196,7 @@ def test_other_dos_vectors_are_rejected_fast(name):
         "(0.05 + I*2*pi*f*2e-7*log(658*sqrt(rho/f)/0.4))*l",
         "floor(f/50) + ceiling(rho/10)",
         "exp(-f/1000)*rho + atan2(f, 50)",
-        "Max(f, 1)*0 + Min(rho, 100, 1000)",
+        "Max(f, 1)*0 + Min(rho, 100, 1000)",  # three arguments: the limit
         "9" * 100 + " * 0 + rho",          # 100-digit literal: at the limit
         "((9**12)**12)**12 * 0 + rho",     # 1650 exact digits: cheap, admitted
         "  NaN  ",
@@ -209,7 +210,7 @@ def test_ordinary_formulas_stay_accepted(formula):
 
 @pytest.mark.parametrize(
     "formula",
-    ["2**13", "2**-13", "f**(2*7)", "9" * 101 + "*rho", "10**(f*100)"],
+    ["2**13", "2**-13", "f**(2*7)", "9" * 101 + "*rho", "10**(f*100)", "Max(f, rho, 1, 2)"],
 )
 def test_just_beyond_the_limits_is_rejected(formula):
     with pytest.raises(ValueError):
@@ -218,11 +219,12 @@ def test_just_beyond_the_limits_is_rejected(formula):
 
 def test_worst_admitted_formulas_stay_cheap():
     """At the limits, validation plus compilation stays in the tens of
-    milliseconds (measured 10-40 ms; the limit here leaves room for load)."""
+    milliseconds (measured with cold caches: 6-50 ms; the limit here leaves
+    room for load)."""
     from groundinsight.utils.impedance_calculator import clear_formula_cache, compute_impedance
 
     worst = [
-        "+".join(f"Max({i}.5*rho, f, {i}*f, rho/{i + 1})" for i in range(1, 9)),
+        "+".join(f"Max({i}.5*rho, f, {i}*f)" for i in range(1, 9)),
         "+".join(f"acosh({1000 + i}*rho)" for i in range(8)),
         "(" + "9" * 100 + ")**12 * 0 + rho",
         "+".join(f"{i}.25*rho*f" for i in range(85)),
@@ -233,6 +235,7 @@ def test_worst_admitted_formulas_stay_cheap():
         def full():
             validations._validate_impedance_formula_str.cache_clear()
             clear_formula_cache()
+            sympy.core.cache.clear_cache()
             validate_impedance_formula_value(formula)
             compute_impedance(formula, [50.0, 250.0], {"rho": 100.0})
 

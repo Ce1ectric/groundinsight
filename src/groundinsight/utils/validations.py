@@ -83,7 +83,7 @@ _MAX_FORMULA_LENGTH = 4096
 # formula needs (measured on every formula in the documentation, the curated
 # notebooks and the test suite: at most 6 digits per number, exponents up to
 # 2, 27 terms, 2 calls) and far below the point where the cost becomes
-# noticeable (measured: worst admitted formula well under 0.1 s, against
+# noticeable (measured: worst admitted formula about 50 ms, against
 # 1.9 s for one rejected review case and never-returning ones for others).
 
 # Largest exponent a power may have, written out or computed. ``10**-12``
@@ -118,9 +118,11 @@ _MAX_FORMULA_TERMS = 512
 
 # Most function calls in one formula, and most arguments of one call. SymPy
 # simplifies every call on construction; ``Max``/``Min`` compare their
-# symbolic arguments pairwise (8 arguments 20 ms, 64 arguments 1.3 s).
+# symbolic arguments pairwise (8 arguments 20 ms, 64 arguments 1.3 s). With
+# these limits the most expensive admitted formula -- eight ``Max`` of three
+# symbolic arguments -- costs about 50 ms with cold caches.
 _MAX_FORMULA_CALLS = 8
-_MAX_CALL_ARGUMENTS = 4
+_MAX_CALL_ARGUMENTS = 3
 
 _SKIPPED_TOKEN_TYPES = frozenset({
     tokenize.NEWLINE, tokenize.NL, tokenize.INDENT, tokenize.DEDENT,
