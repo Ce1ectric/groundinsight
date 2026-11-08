@@ -1,12 +1,17 @@
 # tests/test_audit_pass19_workflows.py
 
 """
-GitHub workflows: test matrix and hardening (audit pass 19, F10, REL6, SEC3,
-SEC4).
+GitHub workflows: test matrix and hardening (audit pass 19, F10, REL6, REL7,
+SEC3, SEC4, STD11).
 
 F10 / REL6 -- with the floor at ``^3.12`` the CI has to back the claim: the
 suite runs on 3.12, 3.13 and 3.14. Before this pass the matrix was 3.13/3.14,
 which matched the old ``^3.13`` floor.
+
+REL7 -- CI ran on ubuntu only. macOS and Windows now run the two ends of the
+supported range, with the settings those runners need: bash as the shell,
+the Agg matplotlib backend, no cached virtualenv on Windows, and a single
+coverage upload.
 
 SEC3 -- every action was referenced by a moving tag, and
 ``pypa/gh-action-pypi-publish`` by the moving *branch* ``release/v1`` inside
@@ -22,6 +27,10 @@ more (publish, GitHub release, docs deploy) say so themselves. Checkouts in
 jobs that never push also drop the token from ``.git/config``
 (``persist-credentials: false``), so a later step -- a dependency's install
 hook, say -- cannot pick it up.
+
+STD11 / DOC15 -- ``docs.yml`` deployed with ``mkdocs gh-deploy`` and no
+``--strict``: the pull-request job built strictly, but a push to ``main``
+published whatever built, warnings included.
 
 The workflow files are read as text. PyYAML only comes with the optional
 ``docs`` group and is therefore missing from the CI test environment, so every
@@ -683,3 +692,25 @@ def test_coverage_is_uploaded_by_exactly_one_matrix_job():
     condition = re.search(r"^\s*if:\s*(.+)$", uploads[0], re.MULTILINE).group(1)
     assert "matrix.os == 'ubuntu-latest'" in condition
     assert f"matrix.python-version == '{_declared_pythons()[-1]}'" in condition
+
+
+# ---------------------------------------------------------------------------
+# STD11 / DOC15 -- the published site is a strict build
+# ---------------------------------------------------------------------------
+
+
+def test_docs_are_deployed_only_from_a_strict_build():
+    deploys = [
+        line
+        for line in _text("docs.yml").splitlines()
+        if re.match(r"^\s*run:.*\bmkdocs gh-deploy\b", line)
+    ]
+    assert len(deploys) == 1, deploys
+    assert re.search(r"(^|\s)--strict(\s|$)", deploys[0]), deploys[0]
+
+
+def test_strict_deploy_agrees_with_yaml():
+    """Second method: the command of the deploy step in the parsed file."""
+    steps = _yaml("docs.yml")["jobs"]["build-and-deploy"]["steps"]
+    commands = [step["run"] for step in steps if "gh-deploy" in step.get("run", "")]
+    assert len(commands) == 1 and "--strict" in commands[0].split()

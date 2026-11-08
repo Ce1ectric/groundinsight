@@ -47,5 +47,8 @@ jobs:
       - name: Install project with docs group
         run: poetry install --no-interaction --with docs
 
+      # --strict (audit pass 19, STD11): the pull-request job in ci.yml
+      # builds strictly, but this push to main is what gets published, and
+      # without the flag it would publish a site with broken references.
       - name: Deploy to GitHub Pages
-        run: poetry run mkdocs gh-deploy --force --clean --verbose
+        run: poetry run mkdocs gh-deploy --strict --force --clean --verbose
