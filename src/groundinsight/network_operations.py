@@ -148,7 +148,7 @@ def create_branch(
     to_bus : str
         The name of the terminating bus.
     length : float
-        The length of the branch (km).
+        The length of the branch in km; finite and strictly positive.
     specific_earth_resistance : float, optional
         The specific earth resistance for the branch (Ohm * m). Defaults
         to ``100``.
@@ -175,7 +175,9 @@ def create_branch(
     ------
     ValueError
         If the specified ``from_bus`` or ``to_bus`` does not exist in the
-        provided network.
+        provided network, if ``length`` is not a finite positive number of
+        km, or if the impedances cannot be derived from ``type``. The
+        network is unchanged in every case.
 
     Examples
     --------

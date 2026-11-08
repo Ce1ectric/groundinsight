@@ -367,3 +367,75 @@ def test_create_fault_active_without_network_is_a_clear_error():
     'set_active_fault'``."""
     with pytest.raises(ValueError, match="active=True"):
         gi.create_fault(name="F", bus="a", scalings={}, active=True)
+
+
+# ---------------------------------------------------------------------------
+# USE5 -- Branch.length must be a finite positive length in km
+# ---------------------------------------------------------------------------
+
+_BAD_LENGTHS = [0.0, -1.0, float("nan"), float("inf"), float("-inf")]
+
+
+def _assert_length_message(excinfo, value):
+    """The error names the length, its unit and the rejected value."""
+    message = str(excinfo.value)
+    assert "Branch.length" in message
+    assert "km" in message
+    assert repr(float(value)) in message
+
+
+@pytest.mark.parametrize("value", _BAD_LENGTHS, ids=repr)
+def test_branch_rejects_non_positive_length_at_construction(value):
+    """Rejected by the model itself -- detached, before any formula runs."""
+    with pytest.raises(ValueError) as excinfo:
+        gi.Branch(
+            name="x", type=_cable_type(), length=value, from_bus="a", to_bus="b",
+            self_impedance={}, mutual_impedance={},
+        )
+    _assert_length_message(excinfo, value)
+
+
+@pytest.mark.parametrize("value", _BAD_LENGTHS, ids=repr)
+def test_create_branch_reports_the_length_not_the_impedance(value):
+    """``length=0`` used to surface as "exactly zero impedance", ``-1`` as a
+    negative real part -- neither names the length."""
+    net = build_ring()
+    before = net.model_dump()
+    with pytest.raises(ValueError) as excinfo:
+        gi.create_branch(
+            name="x", type=_cable_type(), from_bus="a", to_bus="c",
+            length=value, network=net,
+        )
+    _assert_length_message(excinfo, value)
+    assert net.model_dump() == before
+
+
+@pytest.mark.parametrize("value", _BAD_LENGTHS, ids=repr)
+@pytest.mark.parametrize("attached", [False, True], ids=["detached", "attached"])
+def test_branch_rejects_non_positive_length_on_assignment(value, attached):
+    net = build_ring()
+    if attached:
+        branch = net.branches["l0"]
+    else:
+        branch = gi.Branch(
+            name="x", type=_cable_type(), length=1.0, from_bus="a", to_bus="b",
+            self_impedance={}, mutual_impedance={},
+        )
+    snapshot = branch.model_dump()
+    with pytest.raises(ValueError) as excinfo:
+        branch.length = value
+    _assert_length_message(excinfo, value)
+    assert branch.model_dump() == snapshot
+
+
+def test_short_positive_length_is_accepted():
+    """A jumper of 1 mm is a legitimate branch; its impedance is the formula
+    evaluated at that length (second way: compute_impedance)."""
+    net = build_ring()
+    gi.create_branch(
+        name="jumper", type=_cable_type(), from_bus="a", to_bus="c",
+        length=1e-6, network=net,
+    )
+    assert net.branches["jumper"].self_impedance == compute_impedance(
+        SELF_FORMULA, FREQUENCIES, {"rho": 100.0, "l": 1e-6}
+    )

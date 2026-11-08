@@ -943,7 +943,8 @@ class Branch(ValidatedAssignmentModel):
     type : BranchType
         The type of the branch.
     length : float
-        The length of the branch (km).
+        The length of the branch in km. Must be finite and strictly
+        positive; it is checked on construction and on assignment.
     from_bus : str
         The name of the originating bus.
     to_bus : str
@@ -1202,6 +1203,44 @@ class Branch(ValidatedAssignmentModel):
             frequencies=frequencies,
             params=self._params(),
         )
+
+    @field_validator("length")
+    @classmethod
+    def _validate_length(cls, value):
+        """Reject a length that is not a finite positive number of kilometres.
+
+        Every formula of a branch type scales with ``l``. ``l = 0`` makes the
+        branch an ideal short circuit, which the nodal solver cannot invert,
+        and ``l < 0`` gives it a negative resistance. Both used to be accepted
+        here and only surfaced when the impedance was derived -- as "exactly
+        zero impedance" or as a negative real part, neither of which names
+        the length -- and a detached branch was not checked at all.
+
+        Parameters
+        ----------
+        value : float
+            The length in km.
+
+        Returns
+        -------
+        float
+            ``value``, unchanged.
+
+        Raises
+        ------
+        ValueError
+            If ``value`` is zero, negative, NaN or infinite.
+        """
+        value = float(value)
+        if not math.isfinite(value) or value <= 0.0:
+            raise ValueError(
+                f"Branch.length must be a finite length > 0 in km, got "
+                f"{value!r}. Every branch formula scales with l: l = 0 makes "
+                "the branch an ideal short circuit the nodal solver cannot "
+                "invert, l < 0 gives it a negative resistance. Model a bus "
+                "coupler or jumper with a short positive length (e.g. 0.001 km)."
+            )
+        return value
 
     @field_validator("self_impedance", mode="before")
     def validate_self_impedance(cls, value):
