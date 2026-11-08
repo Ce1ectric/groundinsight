@@ -162,20 +162,25 @@ def earthing_voltage(
     buses: List[str],
 ) -> Tuple[complex, float]:
     """
-    The earthing voltage ``U_E`` of a bonded group, and how equipotential it is.
+    The current-weighted mean potential of a bonded group, and how equipotential it is.
 
-    EN 50522 writes ``U_E = 3*I_0 * Z_E * r`` for an installation that is one
-    earthing system at one potential. A network model does not deliver a single
-    potential -- the stations differ by the drop along the shields between them
-    -- so ``U_E`` is taken as the mean over the group weighted by each station's
-    electrode current. That makes the station passing the most current into the
-    soil count the most, which is the one the norm's lumped picture is about.
+    A network model does not deliver a single potential for a group of bonded
+    stations -- they differ by the drop along the shields between them -- so
+    this mean weights each station by its electrode current: the station
+    passing the most current into the soil counts the most.
 
-    The second return value says whether that lumped picture applies at all:
+    It is reported as ``ResultReductionFactor.u_earthing_group``, a
+    diagnostic. Until audit pass 19 it was reported as the earthing voltage
+    ``U_E`` of EN 50522; since decision F4 ``U_E`` is the EPR at the fault
+    bus, because on a long bonded run the group reaches into the decaying
+    tail of the potential profile and its mean lies 43 % below the fault-bus
+    EPR (unconservative for a touch-voltage assessment).
+
+    The second return value says whether the lumped picture applies at all:
     the weighted phasor sum over the weighted sum of magnitudes, in ``(0, 1]``.
     One means the group really is at one potential; well below one means the
-    stations counted as one earthing system are not, and ``U_E`` is then a
-    weighted average of genuinely different voltages.
+    stations counted as one group are not, and the mean is then a weighted
+    average of genuinely different voltages.
 
     Parameters
     ----------
@@ -189,8 +194,8 @@ def earthing_voltage(
     Returns
     -------
     tuple of (complex, float)
-        ``(U_E, equipotential)``. ``(0j, 0.0)`` when the group carries no
-        current at all.
+        ``(mean potential, equipotential)``. ``(0j, 0.0)`` when the group
+        carries no current at all.
     """
     weights = {b: abs(electrode_currents.get(b, 0.0 + 0.0j)) for b in buses}
     total = sum(weights.values())

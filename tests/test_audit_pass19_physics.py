@@ -413,3 +413,191 @@ if given is not None:
         """PQ-INV, hypothesis variant: the same invariants on seeds chosen by
         hypothesis (derandomized, so the suite stays deterministic)."""
         _check_invariants(seed)
+
+
+# ---------------------------------------------------------------------------
+# PQ-PH4 -- the EN 50522 quantities U_E, Z_E (decision F4)
+# ---------------------------------------------------------------------------
+
+import cmath  # noqa: E402
+
+ZS_KM, ZM_KM = complex(0.29, 0.625), complex(0.049, 0.625)
+SECTION_KM, Z_STATION, I_FAULT = 0.5, 2.0, 1000.0
+
+
+def _uniform_chain(n_sections: int) -> gi.Network:
+    """Homogeneous cable chain, source at the start, fault at the end: the
+    norm's ideal case of a fault far from the infeed on a long bonded run."""
+    buses = {f"N{i}": (f"{Z_STATION}", 100.0) for i in range(n_sections + 1)}
+    buses["N0"] = ("0.2", 100.0)
+    cable = dict(zs=f"({ZS_KM.real}+{ZS_KM.imag}*j*f/50)*l",
+                 zm=f"({ZM_KM.real}+{ZM_KM.imag}*j*f/50)*l")
+    branches = {f"L{i}": dict(a=f"N{i}", b=f"N{i + 1}", l=SECTION_KM, **cable)
+                for i in range(n_sections)}
+    spec = dict(freqs=[50.0], buses=buses, branches=branches,
+                sources={"s": dict(kind="current", bus="N0", I=at50(I_FAULT))},
+                faults={"F1": (f"N{n_sections}", {50.0: 1.0})})
+    return build(spec, f"chain{n_sections}")
+
+
+def test_pq_ph4_u_e_and_z_e_are_the_fault_bus_quantities_on_a_long_chain():
+    """PQ-PH4: on a homogeneous chain of 64 sections the reported U_E is the
+    EPR at the fault bus and Z_E the driving-point impedance there.
+
+    First way, closed form: the Norton injections telescope to (1-k)*I at the
+    two ends, so with the source far away u_F = (1-k) * I * Z_dp(F) and
+    Z_dp(F) tends to the ladder limit Z_inf = -Z'/2 + sqrt(Z'^2/4 + Z_E*Z').
+    Second way: the driving point from bus_response (network without the
+    local electrode, recombined in parallel). Third way: the reference MNA.
+    """
+    net = _uniform_chain(64)
+    result = solve(net)
+    factor = result.reduction_factor
+    fault_bus = "N64"
+    z_series, z_mutual = ZS_KM * SECTION_KM, ZM_KM * SECTION_KM
+    k = z_mutual / z_series
+    z_inf = -z_series / 2 + cmath.sqrt(z_series ** 2 / 4 + Z_STATION * z_series)
+
+    u_f = next(complex(b.uepr_freq[50.0]) for b in result.buses if b.name == fault_bus)
+    assert abs(u_f) == pytest.approx(abs(1 - k) * I_FAULT * abs(z_inf), rel=1e-5)
+
+    u_e = complex(factor.u_earthing[50.0])
+    z_e = complex(factor.z_earthing[50.0])
+    assert u_e == u_f                                   # same number, not a recomputation
+    assert abs(z_e) == pytest.approx(abs(z_inf), rel=1e-5)
+    assert z_e == pytest.approx(z_inf, rel=1e-5)
+    assert complex(result.grounding_impedance.value[50.0]) == z_e
+
+    response = gi.bus_response(net, fault="F1", bus=fault_bus)
+    z_dp_response = 1.0 / (1.0 / Z_STATION + 1.0 / response.z_network[50.0])
+    assert abs(z_e - z_dp_response) <= 1e-12 * abs(z_e)
+    rd = ref.reference_network(net, 50.0, "F1")
+    assert abs(z_e - ref.driving_point_impedance(rd, fault_bus)) <= 1e-12 * abs(z_e)
+
+    # The norm's chain with r = |1 - Z_m/Z_s| closes on the reported values
+    # in its ideal case -- not by construction, but by physics.
+    assert abs(u_e) == pytest.approx(factor.value[50.0] * I_FAULT * abs(z_e), rel=1e-5)
+    assert complex(factor.i_fault[50.0]) == I_FAULT
+
+
+def test_pq_ph4_the_group_quantities_are_kept_as_diagnostics():
+    """The previous U_E / Z_E -- current-weighted mean potential of the earth
+    group, and that mean over I_E -- move to u_earthing_group /
+    z_earthing_group. On the long chain they are the 43 % / 45 % lower values
+    the review measured (second way: the reference solver's group)."""
+    net = _uniform_chain(64)
+    result = solve(net)
+    factor = result.reduction_factor
+    u_group = complex(factor.u_earthing_group[50.0])
+    z_group = complex(factor.z_earthing_group[50.0])
+    i_earth = complex(factor.i_earth[50.0])
+    assert z_group == pytest.approx(u_group / i_earth, rel=1e-14)
+    rd = ref.reference_network(net, 50.0, "F1")
+    mapped = ref.to_package_frame(ref.solve_oneway(rd, thevenin_phase="norton"))
+    _, group = ref.half_plane_split(mapped["ia"], "N64")
+    weights = {b: abs(mapped["ia"][b]) for b in group}
+    u_ref = sum(mapped["u"][b] * weights[b] for b in group) / sum(weights.values())
+    assert abs(u_group - u_ref) <= 1e-12 * abs(u_ref)
+    assert abs(u_group) / abs(complex(factor.u_earthing[50.0])) == pytest.approx(0.570, abs=0.01)
+    assert abs(z_group) / abs(complex(factor.z_earthing[50.0])) == pytest.approx(0.555, abs=0.01)
+
+
+@pytest.mark.parametrize("case", sorted(STRUCTURAL_CASES))
+def test_pq_ph4_definitions_hold_on_every_structural_case(case):
+    """U_E is the fault-bus EPR, Z_E the driving point of the earthing network
+    (reference MNA, shield currents as unknowns, no coupling), I_F the sum of
+    the scaled source currents, and the grounding impedance equals Z_E."""
+    spec = STRUCTURAL_CASES[case]
+    net = build(spec, case.replace(" ", "_"))
+    result = solve(net)
+    factor = result.reduction_factor
+    fault_bus = spec["faults"]["F1"][0]
+    for f in spec["freqs"]:
+        rd = ref.reference_network(net, f, "F1")
+        u_f = next(complex(b.uepr_freq[f]) for b in result.buses if b.name == fault_bus)
+        assert complex(factor.u_earthing[f]) == u_f
+        z_ref = ref.driving_point_impedance(rd, fault_bus)
+        z_e = complex(factor.z_earthing[f])
+        assert abs(z_e - z_ref) <= TOL * abs(z_ref), (case, f)
+        assert complex(result.grounding_impedance.value[f]) == z_e
+        i_f_ref = ref.solve_oneway(rd, thevenin_phase="norton")["I_F"]
+        assert abs(complex(factor.i_fault[f]) - i_f_ref) <= TOL * abs(i_f_ref)
+
+
+def test_pq_ph4_thevenin_loops_are_not_part_of_the_earthing_impedance():
+    """Z_E is a property of the earthing network: the loop closure 1/Z_src a
+    voltage source puts between its bus and the fault bus is not part of it
+    (second way: the reference MNA, which never sees that admittance)."""
+    spec = dict(STRUCTURAL_CASES["chain"],
+                sources={"v": dict(kind="voltage", bus="S", E=at50(11547.0), Zsrc=at50(1 + 3j))})
+    net = build(spec, "thevenin_chain")
+    result = solve(net)
+    rd = ref.reference_network(net, 50.0, "F1")
+    z_ref = ref.driving_point_impedance(rd, "F")
+    assert abs(complex(result.reduction_factor.z_earthing[50.0]) - z_ref) <= TOL * abs(z_ref)
+    # the solved system (with the loop closure) has a different driving point
+    with_loop = gi.analyze_cuts(net, fault="F1", cuts=[gi.Cut(name="all", branches=["L3"])])
+    assert abs(with_loop.z_driving_point[50.0] - z_ref) > 1e-3 * abs(z_ref)
+
+
+LEGACY_RESULT = {
+    "buses": [], "branches": [], "fault": "F1",
+    "reduction_factor": {
+        "name": None, "fault_bus": "F",
+        "value": {"50.0": 0.35}, "value_current": {"50.0": 0.36},
+        "i_earth": {"50.0": {"real": -300.0, "imag": 20.0}},
+        "earth_buses": {"50.0": ["F", "A"]},
+        "u_earthing": {"50.0": {"real": -120.0, "imag": 8.0}},
+        "z_earthing": {"50.0": {"real": 0.4, "imag": 0.0}},
+    },
+    "grounding_impedance": {"name": None, "fault_bus": "F",
+                            "value": {"50.0": {"real": 0.4, "imag": 0.0}}},
+}
+
+
+def test_a_result_stored_with_the_previous_definition_loads_without_claiming_the_new_one():
+    """Results written before F4 carry the group quantities under the names
+    that now mean U_E = u_F and Z_E = Z_dp(F). They still load; the stored
+    values move to the *_group fields, the redefined fields stay empty, and
+    the result says so -- a stored number never claims a meaning it was not
+    computed with."""
+    import json
+
+    restored = gi.Result.model_validate_json(json.dumps(LEGACY_RESULT))
+    factor = restored.reduction_factor
+    assert complex(factor.u_earthing_group[50.0]) == complex(-120.0, 8.0)
+    assert complex(factor.z_earthing_group[50.0]) == complex(0.4, 0.0)
+    assert factor.u_earthing == {} and factor.z_earthing == {}
+    assert restored.grounding_impedance.value == {}
+    assert factor.value[50.0] == 0.35 and factor.value_current[50.0] == 0.36
+    assert [d.code for d in restored.diagnostics] == ["LEGACY_EARTHING_DEFINITION"]
+    # a result written now round-trips unchanged
+    net = _uniform_chain(4)
+    current = solve(net)
+    again = gi.Result.model_validate_json(current.model_dump_json())
+    assert again.model_dump() == current.model_dump()
+
+
+@pytest.mark.parametrize("bus", ["A", "B", "F"])
+@pytest.mark.parametrize("z_bus", ["0.1", "3.0", "200.0"])
+def test_pq_ph4_bus_response_reports_the_same_z_e_for_every_electrode(bus, z_bus):
+    """bus_response's Z_G column is the fault-bus driving point for the
+    electrode under test (Möbius form, no further solve). Second way: a fresh
+    run_fault with that electrode installed. The network carries a Thevenin
+    source, so the loop closure has to be taken out of both."""
+    def network(electrode: Optional[str]) -> gi.Network:
+        spec = dict(STRUCTURAL_CASES["chain"])
+        spec["buses"] = dict(spec["buses"])
+        if electrode is not None:
+            spec["buses"][bus] = (f"rho*0 + {electrode}", 100.0)
+        spec["sources"] = {"v": dict(kind="voltage", bus="S", E=at50(11547.0), Zsrc=at50(1 + 3j))}
+        return build(spec, f"mobius_{bus}")
+
+    base = network(None)
+    solve(base)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        row = gi.bus_response(base, fault="F1", bus=bus).evaluate(float(z_bus))
+    fresh = network(z_bus)
+    expected = abs(complex(solve(fresh).reduction_factor.z_earthing[50.0]))
+    assert row["Z_G_Ohm"][0] == pytest.approx(expected, rel=1e-10)

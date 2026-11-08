@@ -519,38 +519,51 @@ quotient exactly. It is algebra, not a numerical accident.
 
 #### Which one is the EN 50522 reduction factor
 
-`value_current`. The norm writes the earthing voltage as
+`value_current`, `r = |I_E|/|3I_0|`. The norm writes the earthing voltage as
 
 $$
 U_E = 3 I_0 \cdot Z_E \cdot r,
 $$
 
-and that chain closes in the model to machine precision, with `U_E` the
-earthing voltage of the bonded group, `I_E` its summed electrode current,
-`Z_E = U_E/I_E` its earthing impedance and `r = |I_E|/|3I_0|`. All three routes
-to `r` — the current ratio, `U_E/(Z_E \cdot 3I_0)`, and the reported factor —
-give the same number. `ResultReductionFactor` carries `u_earthing` and
-`z_earthing` so the chain can be checked from the result alone.
+with two quantities that `groundinsight` reports at the **fault bus**
+(`ResultReductionFactor`):
 
-Rearranging the norm to $U_E(r)/U_E(r{=}1) = r$ is correct, and it is worth
-being precise about what the reference case is: **`r = 1` means the whole fault
-current flows through `Z_E`**, so `U_E(r=1) = Z_E \cdot 3I_0`. On the
-verification feeder that is 3298 V.
+- `u_earthing` is `U_E`, the **EPR at the fault bus** — the same complex number
+  as the fault bus's `uepr_freq`;
+- `z_earthing` is `Z_E`, the **driving-point impedance of the earthing network
+  at the fault bus**: one ampere injected there against remote earth, every
+  electrode and shield in place, no inductive coupling, no Thevenin loop
+  closure. It is what an earthing-impedance measurement at the station sees,
+  the stations bonded through cable shields included, and it is the reported
+  grounding impedance.
+
+The chain is a physical statement about these, not an identity: it holds where
+the norm's assumptions hold. On a long homogeneous cable run with the fault far
+from the infeed it closes with `r = |1 - Z_m/Z_s|` (the factor `value`) on the
+ladder limit `Z_E = -Z'/2 + sqrt(Z'^2/4 + Z_e Z')` to better than `1e-5`
+(`tests/test_audit_pass19_physics.py`, 64 sections). Away from that case — a
+short feeder, the infeed close by, large electrodes — `|U_E|` and
+`r \cdot 3I_0 \cdot |Z_E|` differ, and the difference measures how far the
+installation is from the norm's lumped picture; nothing raises or warns.
+
+The current-weighted mean potential of the earth group and that mean divided by
+`I_E` — which carried the names `u_earthing` / `z_earthing` before audit pass
+19 — are kept as `u_earthing_group` / `z_earthing_group`. On that pair the chain
+closes to machine precision, but only because `z_earthing_group` is *defined* as
+`u_earthing_group / I_E`; it checks nothing. On the long run above they lie 43 %
+and 45 % below the fault-bus EPR and the driving-point impedance, which is why
+they are no longer reported as `U_E` and `Z_E`: taken into a touch-voltage
+assessment they are unconservative.
+
+The fault current the factor divides by is stored as `i_fault`
+(`sum(scaling * I_src)` over the sources that reach the fault).
 
 `value` uses a *different* reference: the mutual coupling removed, but the
-cable shield still in place as a metallic return path. That reference voltage
-is 214 V — fifteen times smaller, because most of the current still comes back
-through the shield rather than through the soil. The ratio of the two reference
-voltages is exactly the ratio of the two factors, and nothing else. Both are
-correct answers; they answer different questions.
-
-One caveat on `Z_E`: it is *not* the electrodes in parallel. The shield sections
-between the bonded stations add to it — 3.30 Ω against 2.50 Ω on the
-verification feeder — which is the quiet reason a hand calculation from the
-electrode values alone comes out low. And where the stations counted as one
-earthing system are not actually at one potential, `groundinsight` says so at
-INFO: the norm's lumped picture assumes they are, and `U_E` is otherwise a
-weighted average of genuinely different voltages.
+cable shield still in place as a metallic return path. Most of the current
+still comes back through the shield rather than through the soil, so that
+reference voltage is far below `Z_E \cdot 3I_0` (the norm's `r = 1`, the whole
+fault current through the earthing impedance). Both factors are correct
+answers; they answer different questions.
 
 #### The two factors are not two computations of one number
 
@@ -678,29 +691,28 @@ monotonic decay towards zero.
 
 ### Grounding impedance
 
-`ResultGroundingImpedance.value` is `Z_E` in the EN 50522 sense: the earthing
-voltage of the bonded earthing system divided by the current it passes into the
-soil. The norm's chain `U_E = 3*I_0 * Z_E * r` therefore closes on the reported
-value, with `r` the current-based reduction factor. Note that `Z_E` is not the
-station electrodes in parallel — the shield sections between them add to it.
-
-
-The effective earthing impedance is
+`ResultGroundingImpedance.value` is `Z_E` in the EN 50522 sense: the
+driving-point impedance of the earthing network at the fault bus, identical to
+`ResultReductionFactor.z_earthing`,
 
 $$
-Z_G(f) = Z_E(f) = \frac{\underline{U}_E(f)}{\underline{I}_E(f)},
+Z_G(f) = Z_E(f) = Z_\text{dp}(F, f) = \left(Y_E(f)^{-1}\right)_{FF},
 $$
 
-the earthing voltage of the bonded earthing system over the current that
-system passes into the soil. Both quantities come from the same split of the
-electrode currents that produces the current-based reduction factor, so the
-normative chain $U_E = 3 I_0 \, Z_E \, r$ closes on the reported value by
-construction.
+with $Y_E$ the nodal matrix of electrodes and shields alone — without the
+inductive coupling and without the Thevenin loop closures of voltage sources,
+which belong to the fault loop rather than to the earthing system. It is the
+impedance an earthing-impedance measurement at the station sees, the stations
+bonded to it through cable shields included; `gi.bus_response(...)` (Möbius
+form) and `gi.analyze_cuts(...)` (without voltage sources) reproduce it. Note
+that it is not the station electrodes in parallel either — the shield sections
+between them add to it.
 
-The older definition $u_{\text{EPR}}/(r \cdot I_{\text{fault}})$ was replaced
-in 0.6.0. The two agree only in the equipotential limit -- one bonded earthing
-system at a single potential -- and diverge as soon as the shield sections
-between the stations carry a noticeable potential difference.
+The quotient of the earth group's mean potential by `I_E`, which was the
+grounding impedance from 0.6.0 until audit pass 19, is kept as
+`z_earthing_group`; on a long homogeneous run it is 45 % below `Z_E`. The
+pre-0.6.0 definition $u_{\text{EPR}}/(r \cdot I_{\text{fault}})$ mixed the
+coupling ratio into an impedance.
 
 It is exposed **per frequency** through `net.res_all_impedances()`, which
 has one row per (fault, frequency) and no RMS row: a grounding impedance is

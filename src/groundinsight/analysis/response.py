@@ -90,7 +90,6 @@ from groundinsight.models.core_models import Network
 from groundinsight.utils.earth_current import (
     NOISE_REL,
     earth_current_vanishes,
-    earthing_voltage,
     split_earth_currents,
 )
 
@@ -144,6 +143,16 @@ class BusResponse(BaseModel):
         electrode in hand.
     i_fault : dict of float to complex
         Fault current, the negated sum of source injections. Constant.
+    z_fault_open : dict of float to complex
+        Driving-point impedance of the earthing network at the **fault** bus
+        with the electrode at ``bus`` removed (Thevenin loop closures
+        excluded) -- ``Z0_FF``.
+    z_fault_transfer : dict of float to complex
+        Transfer impedance between ``bus`` and the fault bus in that network
+        -- ``Z0_Fb``.
+    z_bus_open : dict of float to complex
+        Driving-point impedance at ``bus`` in that network -- ``Z0_bb``; equal
+        to :attr:`z_network` when the network has no voltage source.
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -160,6 +169,9 @@ class BusResponse(BaseModel):
     other_impedance: Dict[float, Dict[str, complex]] = Field(default_factory=dict)
     r_epr: Dict[float, Optional[float]] = Field(default_factory=dict)
     i_fault: Dict[float, complex] = Field(default_factory=dict)
+    z_fault_open: Dict[float, complex] = Field(default_factory=dict)
+    z_fault_transfer: Dict[float, complex] = Field(default_factory=dict)
+    z_bus_open: Dict[float, complex] = Field(default_factory=dict)
 
     # -- the curve ------------------------------------------------------------
 
@@ -266,6 +278,54 @@ class BusResponse(BaseModel):
             return complex(np.inf, 0.0)
         return 1.0 / total
 
+    def fault_driving_point(
+        self, z_bus: ElectrodeSpec, freq: float
+    ) -> Optional[complex]:
+        """
+        ``Z_E`` -- the driving-point impedance at the **fault** bus -- for one
+        electrode at ``bus``.
+
+        The shunt ``Y_B`` at ``bus`` is a rank-one change of the earthing
+        network, so the fault-bus driving point is Möbius in it as well:
+
+        ``Z_FF(Y_B) = Z0_FF - Y_B * Z0_Fb**2 / (1 + Y_B * Z0_bb)``
+
+        with both endpoints as exact limits. It is the quantity
+        ``run_fault`` reports as ``ResultReductionFactor.z_earthing`` and as
+        the grounding impedance (decision F4); for ``bus == fault_bus`` it
+        reduces to :meth:`driving_point` of a network without voltage source.
+
+        Parameters
+        ----------
+        z_bus : complex, float or None
+            The electrode at ``bus``, as for :meth:`evaluate`.
+        freq : float
+            Frequency in Hz.
+
+        Returns
+        -------
+        complex or None
+            ``None`` when the response carries no earthing-network columns for
+            ``freq`` (the fault bus reaches remote earth only through a
+            Thevenin loop).
+        """
+        z_ff = self.z_fault_open.get(freq)
+        z_fb = self.z_fault_transfer.get(freq)
+        z_bb = self.z_bus_open.get(freq)
+        if z_ff is None or z_fb is None or z_bb is None:
+            return None
+        y = self.admittance(z_bus)
+        if np.isinf(y.real):
+            if z_bb == 0:
+                return z_ff
+            return z_ff - z_fb * z_fb / z_bb
+        if y == 0:
+            return z_ff
+        denominator = 1.0 + y * z_bb
+        if denominator == 0:
+            return None
+        return z_ff - y * z_fb * z_fb / denominator
+
     def worst_case_electrode(self, freq: float) -> Dict[str, complex]:
         """
         The passive electrode that maximises ``|Z_dp|``, and the value it gives.
@@ -344,7 +404,14 @@ class BusResponse(BaseModel):
         if u_nm is None or self.fault_bus not in u_nm:
             return self.r_epr.get(freq)
         denominator = abs(u_nm[self.fault_bus])
-        if denominator == 0:
+        # The noise rule of run_fault (P9): the denominator must stand above
+        # 1e-9 of the EPR the fault current alone raises the fault bus to.
+        z_ff = self.fault_driving_point(z_bus, freq)
+        i_fault = self.i_fault.get(freq)
+        reference = 0.0
+        if z_ff is not None and i_fault is not None:
+            reference = abs(i_fault) * abs(z_ff)
+        if not denominator > NOISE_REL * reference:
             return None
         return float(abs(u[self.fault_bus]) / denominator)
 
@@ -352,28 +419,33 @@ class BusResponse(BaseModel):
         self, z_bus: ElectrodeSpec, freq: float, u: Dict[str, complex]
     ) -> Dict[str, Optional[complex]]:
         """
-        The two EN 50522 quantities of the bonded earthing system, in one split.
+        The current-based reduction factor of the bonded earthing system.
 
         ``r_I = |I_E| / |I_F|`` with ``I_E`` summed over every bus that feeds the
-        soil, matching ``ResultReductionFactor.value_current``, and the earthing
-        impedance ``Z_E = U_E / I_E`` of that same group, matching
-        :meth:`~groundinsight.electrical_network.ElectricalNetwork.compute_grounding_impedance`.
-        Both come out of one call to :func:`split_earth_currents`, because both
-        are statements about the *same* group and reading them from two
-        different splits is how they would drift apart.
+        soil, matching ``ResultReductionFactor.value_current``, under the same
+        noise rules (P9). The earthing impedance is no longer derived from the
+        group: it is the fault-bus driving point,
+        :meth:`fault_driving_point` (decision F4).
 
         The bus being varied is included like any other -- its electrode is part
         of the earthing system, and leaving it out would reduce the whole sum to
         the electrode current of one station.
 
+        Parameters
+        ----------
+        z_bus : complex, float or None
+            The electrode under test.
+        freq : float
+            Frequency in Hz.
+        u : dict of str to complex
+            Nodal voltages for that electrode.
+
         Returns
         -------
         dict
-            ``r_current`` (float or None) and ``z_earthing`` (complex or None).
+            ``r_current`` (float or None).
         """
-        empty: Dict[str, Optional[complex]] = {
-            "r_current": None, "z_earthing": None
-        }
+        empty: Dict[str, Optional[complex]] = {"r_current": None}
         impedances = self.other_impedance.get(freq, {})
         electrode_currents = {
             name: u[name] / z for name, z in impedances.items() if name != self.bus
@@ -404,11 +476,7 @@ class BusResponse(BaseModel):
             if i_fault is not None and i_fault != 0
             else None
         )
-        z_earthing = None
-        if split.i_earth != 0:
-            u_e, _ = earthing_voltage(u, electrode_currents, split.feeding_buses)
-            z_earthing = u_e / split.i_earth
-        return {"r_current": r_current, "z_earthing": z_earthing}
+        return {"r_current": r_current}
 
     def evaluate(
         self, z_bus: ElectrodeSpec, *, label: Optional[str] = None
@@ -439,9 +507,11 @@ class BusResponse(BaseModel):
         ``r_epr`` is evaluated **for this electrode** at the fault bus (see the
         module docstring); it is constant across electrodes only when ``bus`` is
         the fault bus. ``Z_G_Ohm`` is the EN 50522 earthing impedance
-        ``|Z_E| = |U_E / I_E|`` of the bonded group, the same definition
-        :func:`~groundinsight.network_operations.run_fault` reports -- not the
-        ``u_b / (r * I_F)`` form that 0.6.0 replaced.
+        ``|Z_E|``: the driving-point impedance of the earthing network at the
+        **fault** bus for this electrode (:meth:`fault_driving_point`), the same
+        definition :func:`~groundinsight.network_operations.run_fault` reports
+        (decision F4). For ``bus == fault_bus`` it equals
+        ``Z_driving_point_Ohm`` when the network has no voltage source.
         """
         return _frame(self._rows(z_bus, label, self.frequencies))
 
@@ -466,7 +536,7 @@ class BusResponse(BaseModel):
             u_b = u[self.bus]
             r_epr = self._epr_reduction_factor(z_bus, freq, u)
             earth = self._earth_quantities(z_bus, freq, u)
-            z_g = earth["z_earthing"]
+            z_g = self.fault_driving_point(z_bus, freq)
             row = {
                 "case": label if label is not None else _render(z_bus),
                 "fault": self.fault,
@@ -699,6 +769,10 @@ def bus_response(
     z_column: Dict[float, Dict[str, complex]] = {}
     other_impedance: Dict[float, Dict[str, complex]] = {}
     i_fault: Dict[float, complex] = {}
+    z_fault_open: Dict[float, complex] = {}
+    z_fault_transfer: Dict[float, complex] = {}
+    z_bus_open: Dict[float, complex] = {}
+    fault_bus = network.faults[fault].bus
 
     for freq in frequencies:
         Y = electrical.Y_matrices.get(freq)
@@ -789,6 +863,13 @@ def bus_response(
             name: z for name, z in resolved.items() if _is_electrode(z)
         }
 
+        # The earthing network without the electrode at ``target`` and without
+        # the Thevenin loop closures: three numbers make the fault-bus driving
+        # point Z_E available for every electrode (fault_driving_point, F4).
+        earth_columns = _earthing_columns(electrical, Y0, k, index[fault_bus], freq)
+        if earth_columns is not None:
+            z_fault_open[freq], z_fault_transfer[freq], z_bus_open[freq] = earth_columns
+
         total_source = electrical.total_source_currents.get(freq)
         if total_source is not None:
             i_fault[freq] = -complex(total_source)
@@ -812,4 +893,56 @@ def bus_response(
         other_impedance=other_impedance,
         r_epr=r_epr,
         i_fault=i_fault,
+        z_fault_open=z_fault_open,
+        z_fault_transfer=z_fault_transfer,
+        z_bus_open=z_bus_open,
+    )
+
+
+def _earthing_columns(electrical, Y0: np.ndarray, bus_idx: int, fault_idx: int,
+                      freq: float):
+    """
+    ``(Z0_FF, Z0_Fb, Z0_bb)`` of the earthing network with one electrode removed.
+
+    ``Y0`` is the solved matrix with the shunt at ``bus_idx`` taken out; the
+    Thevenin loop closures of voltage sources are taken out as well, because
+    they belong to the fault loop and not to the earthing network whose
+    driving point ``Z_E`` is (decision F4).
+
+    Parameters
+    ----------
+    electrical : ElectricalNetwork
+        The assembled system, for its Thevenin stamps.
+    Y0 : numpy.ndarray
+        Solved matrix without the electrode at ``bus_idx``.
+    bus_idx, fault_idx : int
+        Rows of the varied bus and of the fault bus.
+    freq : float
+        Frequency in Hz.
+
+    Returns
+    -------
+    tuple of complex or None
+        ``None`` if the fault bus reaches remote earth through nothing but a
+        Thevenin loop once the electrode is gone.
+    """
+    Y_earth = np.array(Y0, dtype=complex, copy=True)
+    for src_idx, loop_idx, y_src in electrical.thevenin_loop_admittances(freq):
+        Y_earth[src_idx, src_idx] -= y_src
+        Y_earth[loop_idx, loop_idx] -= y_src
+        Y_earth[src_idx, loop_idx] += y_src
+        Y_earth[loop_idx, src_idx] += y_src
+    units = np.zeros((Y_earth.shape[0], 2), dtype=complex)
+    units[bus_idx, 0] = 1.0
+    units[fault_idx, 1] = 1.0
+    try:
+        columns = np.linalg.solve(Y_earth, units)
+    except np.linalg.LinAlgError:
+        return None
+    if not np.all(np.isfinite(columns)):
+        return None
+    return (
+        complex(columns[fault_idx, 1]),
+        complex(columns[fault_idx, 0]),
+        complex(columns[bus_idx, 0]),
     )

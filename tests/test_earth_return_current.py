@@ -299,17 +299,26 @@ def test_the_coupling_factor_reproduces_the_textbook_closed_form():
 
 
 # --- the EN 50522 chain U_E = 3*I_0 * Z_E * r --------------------------------
+#
+# Audit pass 19, decision F4: ``u_earthing`` / ``z_earthing`` are now the EPR
+# and the driving-point impedance at the fault bus. The tests below pinned the
+# *group* quantities that carried those names before -- the current-weighted
+# mean potential of the earth group and that mean over ``I_E``. Those moved to
+# ``u_earthing_group`` / ``z_earthing_group`` unchanged, so the tests follow
+# them there with the same numbers. The new quantities are tested against the
+# ladder closed form and the reference solver in
+# ``tests/test_audit_pass19_physics.py`` (PQ-PH4).
 
 
 @pytest.mark.parametrize("z_electrode", [10.0, 2.0, 0.5])
-def test_the_en50522_chain_closes_in_the_model(z_electrode):
+def test_the_group_chain_closes_on_the_group_quantities(z_electrode):
     """
-    ``U_E = 3*I_0 * Z_E * r`` with ``r = |I_E| / |3*I_0|``.
+    ``U_group = I_F * Z_group * r`` with ``r = |I_E| / |I_F|``.
 
-    All three routes to ``r`` -- the current ratio, the voltage over
-    ``Z_E * 3I_0``, and the reported factor -- have to be the same number. This
-    is the identity the norm asserts, checked against the model rather than
-    assumed.
+    Since F4 this is a consistency check of the stored diagnostics and no
+    more: ``Z_group`` is *defined* as ``U_group / I_E``, so the chain closes by
+    construction. Where the EN 50522 chain on ``U_E`` and ``Z_E`` closes is a
+    physical statement, see PQ-PH4.
     """
     bus_type = BusType(
         name="bt",
@@ -336,8 +345,8 @@ def test_the_en50522_chain_closes_in_the_model(z_electrode):
 
     factor = net.results["EF"].reduction_factor
     i_fault = 1000.0
-    u_e = abs(complex(factor.u_earthing[FREQ]))
-    z_e = abs(complex(factor.z_earthing[FREQ]))
+    u_e = abs(complex(factor.u_earthing_group[FREQ]))
+    z_e = abs(complex(factor.z_earthing_group[FREQ]))
     i_e = abs(complex(factor.i_earth[FREQ]))
 
     r_reported = factor.value_current[FREQ]
@@ -346,20 +355,21 @@ def test_the_en50522_chain_closes_in_the_model(z_electrode):
 
     assert r_from_currents == pytest.approx(r_reported, rel=1e-12)
     assert r_from_voltage == pytest.approx(r_reported, rel=1e-12)
-    # ... and the chain itself, written the way the norm writes it.
     assert i_fault * z_e * r_reported == pytest.approx(u_e, rel=1e-12)
+    assert abs(complex(factor.i_fault[FREQ])) == i_fault
 
 
-def test_the_earthing_impedance_is_not_just_the_electrodes_in_parallel():
+def test_the_group_impedance_is_not_just_the_electrodes_in_parallel():
     """
-    The shield sections between the bonded stations add to ``Z_E``.
+    The shield sections between the bonded stations add to the group
+    impedance (the pre-F4 ``Z_E``, now ``z_earthing_group``, same value).
 
     Worth pinning because it is the quiet reason a hand calculation from the
     electrode values alone comes out low.
     """
     net = _feeder("S3")
     factor = net.results["EF"].reduction_factor
-    z_e = abs(complex(factor.z_earthing[FREQ]))
+    z_e = abs(complex(factor.z_earthing_group[FREQ]))
     n_stations = len(factor.earth_buses[FREQ])
     pure_parallel = 10.0 / n_stations
     assert z_e > pure_parallel
@@ -369,20 +379,21 @@ def test_the_earthing_impedance_is_not_just_the_electrodes_in_parallel():
 
 def test_the_two_factors_use_different_reference_cases():
     """
-    Where the factor of fifteen comes from.
+    Where the factor of fifteen comes from -- told on the group quantities,
+    for which the ratio below is an identity.
 
-    The norm's ``r = 1`` means the whole fault current flows through ``Z_E``:
-    ``U_E(r=1) = Z_E * 3I_0``. The model's "no mutual coupling" leaves the
-    shield in place as a metallic return path, so its reference voltage is a
-    different -- and much smaller -- number. Both are correct answers to
-    different questions.
+    The norm's ``r = 1`` means the whole fault current flows through the
+    earthing impedance: ``U(r=1) = Z * 3I_0``. The model's "no mutual
+    coupling" leaves the shield in place as a metallic return path, so its
+    reference voltage is a different -- and much smaller -- number. Both are
+    correct answers to different questions.
     """
     net = _feeder("S3")
     factor = net.results["EF"].reduction_factor
-    u_e = abs(complex(factor.u_earthing[FREQ]))
-    z_e = abs(complex(factor.z_earthing[FREQ]))
+    u_e = abs(complex(factor.u_earthing_group[FREQ]))
+    z_e = abs(complex(factor.z_earthing_group[FREQ]))
 
-    u_reference_norm = z_e * 1000.0            # r = 1: everything through Z_E
+    u_reference_norm = z_e * 1000.0            # r = 1: everything through Z
     u_reference_no_coupling = u_e / factor.value[FREQ]  # coupling removed only
 
     assert u_reference_norm == pytest.approx(3298.3, rel=1e-3)
@@ -394,23 +405,35 @@ def test_the_two_factors_use_different_reference_cases():
     )
 
 
-def test_the_grounding_impedance_is_now_the_normative_z_e():
+def test_the_grounding_impedance_is_the_driving_point_at_the_fault_bus():
     """
-    ``ResultGroundingImpedance.value`` is ``Z_E`` in the EN 50522 sense.
+    ``ResultGroundingImpedance.value`` is ``Z_E`` in the EN 50522 sense, which
+    since decision F4 means the driving-point impedance of the earthing
+    network at the fault bus.
 
-    Until this change it was ``u_EPR / (r_coupling * I_F)``, which mixed the
-    coupling ratio into an impedance and reported 0.219 Ohm where the earthing
-    system of the bonded group actually presents 3.298 Ohm -- a factor of
-    fifteen, the same one that separates the two reduction factors.
+    Second way: the reference solver (branch-current MNA, one ampere into the
+    earthing node of S3, no source, no coupling) gives 1.7243 Ohm. The group
+    quotient that was reported before -- 3.298 Ohm, nearly twice that -- is
+    kept as ``z_earthing_group``. And this feeder is *not* the norm's ideal
+    case (10 Ohm electrodes, infeed two stations away), so the chain
+    ``U_E = r * I_F * Z_E`` does not close on it: that is physics, not a
+    defect, and nothing raises or warns.
     """
+    from tests import _reference_mna as ref
+
     net = _feeder("S3")
     result = net.results["EF"]
     factor = result.reduction_factor
-    z_g = abs(complex(result.grounding_impedance.value[FREQ]))
+    z_g = complex(result.grounding_impedance.value[FREQ])
 
-    assert z_g == pytest.approx(abs(complex(factor.z_earthing[FREQ])), rel=1e-12)
-    assert z_g == pytest.approx(3.2983, rel=1e-3)
-    # The norm's chain closes on the reported grounding impedance itself.
-    assert 1000.0 * z_g * factor.value_current[FREQ] == pytest.approx(
-        abs(complex(factor.u_earthing[FREQ])), rel=1e-12
+    assert z_g == complex(factor.z_earthing[FREQ])
+    z_reference = ref.driving_point_impedance(ref.reference_network(net, FREQ, "EF"), "S3")
+    assert abs(z_g - z_reference) <= 1e-12 * abs(z_reference)
+    assert abs(z_g) == pytest.approx(1.7243, rel=1e-4)
+    assert abs(complex(factor.z_earthing_group[FREQ])) == pytest.approx(3.2983, rel=1e-3)
+    u_fault_bus = next(b for b in result.buses if b.name == "S3").uepr_freq[FREQ]
+    assert complex(factor.u_earthing[FREQ]) == complex(u_fault_bus)
+    residual = abs(complex(factor.u_earthing[FREQ])) / (
+        factor.value[FREQ] * 1000.0 * abs(z_g)
     )
+    assert residual == pytest.approx(0.127, abs=0.001)

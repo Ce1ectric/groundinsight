@@ -184,12 +184,22 @@ def test_the_legacy_mode_still_collapses_the_ring():
     Pinning the degenerate result is deliberate: studies produced before 0.6.0
     have to stay reproducible, and the collapse is the reason the default moved.
     """
-    epr, r, z_g = _solve(
-        _network(RING, ["S", "A", "B", "F"]), phase_current_mode="paths"
-    )
+    net = _network(RING, ["S", "A", "B", "F"])
+    epr, r, z_g = _solve(net, phase_current_mode="paths")
     assert epr == pytest.approx(0.0, abs=1e-9)
     assert r == pytest.approx(0.0, abs=1e-12)
-    assert z_g is None
+    # Audit pass 19, decision F4: Z_G is the driving-point impedance of the
+    # earthing network at the fault bus -- a property of the electrodes and
+    # shields that the collapsed phase split cannot touch (second way: the
+    # reference solver). What collapses is the group quotient, which used to
+    # be Z_G and is now z_earthing_group.
+    from tests import _reference_mna as ref
+
+    z_reference = ref.driving_point_impedance(
+        ref.reference_network(net, 50.0, "F"), "F"
+    )
+    assert abs(complex(z_g) - z_reference) <= 1e-12 * abs(z_reference)
+    assert net.results["F"].reduction_factor.z_earthing_group[50.0] is None
 
 
 def test_two_parallel_cables_halve_the_potential_rise():

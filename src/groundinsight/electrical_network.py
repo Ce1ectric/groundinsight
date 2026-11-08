@@ -754,26 +754,88 @@ class ElectricalNetwork:
             # active fault bus. Skipped if there is no active fault yet, or if
             # either endpoint is inactive.
             if fault_bus_idx is not None:
-                for source in self.network.sources.values():
-                    if source.source_type != "voltage":
-                        continue
-                    src_idx = self.bus_indices.get(source.bus)
-                    if src_idx is None or src_idx == fault_bus_idx:
-                        continue
-                    Z_src_c = self._resolved_impedance(
-                        source.source_impedance.get(freq), freq
-                    )
-                    if Z_src_c is None:
-                        continue
-                    if _is_open_circuit(Z_src_c):
-                        continue
-                    Y_src = 1 / Z_src_c
+                for src_idx, loop_idx, Y_src in self.thevenin_loop_admittances(freq):
                     Y_matrix[src_idx, src_idx] += Y_src
-                    Y_matrix[fault_bus_idx, fault_bus_idx] += Y_src
-                    Y_matrix[src_idx, fault_bus_idx] -= Y_src
-                    Y_matrix[fault_bus_idx, src_idx] -= Y_src
+                    Y_matrix[loop_idx, loop_idx] += Y_src
+                    Y_matrix[src_idx, loop_idx] -= Y_src
+                    Y_matrix[loop_idx, src_idx] -= Y_src
 
             self.Y_matrices[freq] = Y_matrix
+
+    def thevenin_loop_admittances(self, freq: float) -> List[Tuple[int, int, complex]]:
+        """
+        The loop-closure stamps the Thevenin sources put into ``Y(freq)``.
+
+        A voltage source closes its loop with ``Y_src = 1/Z_src`` between its
+        own bus and the active fault bus: the non-grounding part of the fault
+        loop (transformer, phase conductor) that the earthing network does not
+        model. :meth:`_construct_Y_matrices` assembles them from this list,
+        and :meth:`earthing_admittance_matrix` takes them back out -- one rule
+        in one place, so the two cannot drift apart.
+
+        Parameters
+        ----------
+        freq : float
+            Frequency in Hz.
+
+        Returns
+        -------
+        list of tuple of (int, int, complex)
+            ``(source bus row, fault bus row, Y_src)`` per voltage source on
+            an active bus other than the fault bus, with a finite source
+            impedance at ``freq``. Empty without an active fault.
+        """
+        active_fault = self.network.active_fault
+        if active_fault is None:
+            return []
+        fault_bus_idx = self.bus_indices.get(self.network.faults[active_fault].bus)
+        if fault_bus_idx is None:
+            return []
+        stamps: List[Tuple[int, int, complex]] = []
+        for source in self.network.sources.values():
+            if source.source_type != "voltage":
+                continue
+            src_idx = self.bus_indices.get(source.bus)
+            if src_idx is None or src_idx == fault_bus_idx:
+                continue
+            Z_src_c = self._resolved_impedance(
+                source.source_impedance.get(freq), freq
+            )
+            if Z_src_c is None:
+                continue
+            if _is_open_circuit(Z_src_c):
+                continue
+            stamps.append((src_idx, fault_bus_idx, 1 / Z_src_c))
+        return stamps
+
+    def earthing_admittance_matrix(self, freq: float) -> np.ndarray:
+        """
+        ``Y(freq)`` of the earthing network alone, Thevenin loops removed.
+
+        The nodal matrix that is solved also carries the loop closures of the
+        voltage sources (:meth:`thevenin_loop_admittances`). They belong to
+        the fault loop, not to the earthing system, so a property *of the
+        earthing system* -- its driving-point impedance at the fault bus,
+        ``Z_E`` of EN 50522 -- is taken from this matrix instead. Without a
+        voltage source it is a copy of the solved one.
+
+        Parameters
+        ----------
+        freq : float
+            Frequency in Hz; ``Y_matrices[freq]`` must exist.
+
+        Returns
+        -------
+        numpy.ndarray
+            A new array; the assembled matrix is not modified.
+        """
+        Y_matrix = np.array(self.Y_matrices[freq], dtype=complex, copy=True)
+        for src_idx, loop_idx, Y_src in self.thevenin_loop_admittances(freq):
+            Y_matrix[src_idx, src_idx] -= Y_src
+            Y_matrix[loop_idx, loop_idx] -= Y_src
+            Y_matrix[src_idx, loop_idx] += Y_src
+            Y_matrix[loop_idx, src_idx] += Y_src
+        return Y_matrix
 
     def _construct_vectors(self):
         """
@@ -1983,6 +2045,11 @@ class ElectricalNetwork:
             voltage = self.u_vectors_no_mutual[freq][fault_bus_idx]
             uepr_without_mutual[freq] = voltage
 
+        # Z_E of EN 50522 (F4): the driving-point impedance of the earthing
+        # network at the fault bus. Computed first, because it is also the
+        # yardstick of the noise rule for the EPR-based factor below.
+        z_driving_point, z_isolated = self._earthing_driving_points(fault_bus_idx)
+
         # Step 4: Compute reduction factors
         epr_undefined: List[Tuple[float, float, float]] = []
         for freq in frequencies:
@@ -2010,7 +2077,9 @@ class ElectricalNetwork:
             i_fault = complex(self.total_source_currents.get(freq) or 0)
             reference = 0.0
             if i_fault != 0:
-                z_ff = self._solved_driving_point(freq, fault_bus_idx)
+                z_ff = z_driving_point.get(freq)
+                if z_ff is None:
+                    z_ff = self._solved_driving_point(freq, fault_bus_idx)
                 reference = abs(i_fault) * (abs(z_ff) if z_ff is not None else 0.0)
             if mag_without > NOISE_REL * reference:
                 reduction_factor = mag_with / mag_without
@@ -2036,7 +2105,7 @@ class ElectricalNetwork:
         ) = self._compute_current_reduction_factors()
 
         self._report_undefined_reduction_quantities(
-            fault_name, fault_bus, epr_undefined, group_undefined
+            fault_name, fault_bus, epr_undefined, group_undefined, z_isolated
         )
 
         # The two definitions answer different questions and only coincide in
@@ -2046,16 +2115,36 @@ class ElectricalNetwork:
             reduction_factors, reduction_factors_current
         )
 
+        # The EN 50522 quantities (F4): U_E is the EPR at the fault bus -- the
+        # very number ResultBus reports there -- and Z_E the driving-point
+        # impedance of the earthing network at the fault bus. The group mean
+        # and its quotient by I_E, which carried these names before, stay
+        # available as diagnostics.
+        fault_currents = {
+            freq: (
+                None
+                if self.total_source_currents.get(freq) is None
+                else complex(self.total_source_currents[freq])
+            )
+            for freq in frequencies
+        }
+        fault_potentials = {
+            freq: complex(self.u_vectors[freq][fault_bus_idx]) for freq in frequencies
+        }
+
         # Store the reduction factors in the result
         result = self.network.results[fault_name]
         result_reduction_factor = ResultReductionFactor(
             fault_bus=fault_bus,
             value=reduction_factors,
             value_current=reduction_factors_current,
+            i_fault=fault_currents,
             i_earth=earth_currents,
             earth_buses=earth_buses,
-            u_earthing=earthing_voltages,
-            z_earthing=earthing_impedances,
+            u_earthing=fault_potentials,
+            z_earthing=z_driving_point,
+            u_earthing_group=earthing_voltages,
+            z_earthing_group=earthing_impedances,
         )
         result.reduction_factor = result_reduction_factor
 
@@ -2121,20 +2210,74 @@ class ElectricalNetwork:
             return None
         return value
 
+    def _earthing_driving_points(
+        self, bus_idx: int
+    ) -> Tuple[Dict[float, Optional[complex]], List[float]]:
+        """
+        Driving-point impedance of the earthing network at one bus, per frequency.
+
+        ``Z_dp = (Y_E^-1)_bb`` with ``Y_E`` the earthing network alone: every
+        electrode and shield as assembled (0 Hz substitutes included), no
+        coupling, no Thevenin loop closure. Without a voltage source ``Y_E``
+        *is* the solved matrix and the value costs one triangular solve on
+        the factorisation ``solve_network`` kept; with one, ``Y_E`` is
+        factorised on its own.
+
+        Parameters
+        ----------
+        bus_idx : int
+            Row of the bus (the fault bus) in the nodal system.
+
+        Returns
+        -------
+        tuple of (dict of float to complex or None, list of float)
+            The impedance per frequency, and the frequencies at which the bus
+            has no path to remote earth through the earthing network alone
+            (only through a Thevenin loop) -- ``None`` there.
+        """
+        values: Dict[float, Optional[complex]] = {}
+        isolated: List[float] = []
+        for freq in self.network.frequencies:
+            if freq not in self.Y_matrices:
+                values[freq] = None
+                continue
+            if not self.thevenin_loop_admittances(freq):
+                values[freq] = self._solved_driving_point(freq, bus_idx)
+                continue
+            unit = np.zeros(self.num_buses, dtype=complex)
+            unit[bus_idx] = 1.0
+            try:
+                lu = splu(csc_matrix(self.earthing_admittance_matrix(freq)))
+                value = complex(lu.solve(unit)[bus_idx])
+            except (np.linalg.LinAlgError, RuntimeError):
+                value = None
+            if value is None or not (
+                math.isfinite(value.real) and math.isfinite(value.imag)
+            ):
+                values[freq] = None
+                isolated.append(freq)
+                continue
+            values[freq] = value
+        return values, isolated
+
     def _report_undefined_reduction_quantities(
         self,
         fault_name: str,
         fault_bus: str,
         epr_undefined: List[Tuple[float, float, float]],
         group_undefined: List[Tuple[float, float, float]],
+        z_isolated: Optional[List[float]] = None,
     ) -> None:
         """
         Say once per run where a reduction quantity was reported as ``None``.
 
-        Both conditions are a vanishing reference (audit finding P9): the
-        quotient or the group would otherwise be built from rounding noise.
-        Collected over all frequencies so that a sweep over fifty harmonics
-        produces one message per condition, not fifty.
+        The first two conditions are a vanishing reference (audit finding
+        P9): the quotient or the group would otherwise be built from rounding
+        noise. The third is a fault bus that reaches remote earth only through
+        the loop closure of a voltage source, so the earthing network alone
+        presents an infinite impedance there (F4). Collected over all
+        frequencies so that a sweep over fifty harmonics produces one message
+        per condition, not fifty.
 
         Parameters
         ----------
@@ -2147,8 +2290,25 @@ class ElectricalNetwork:
             is undefined.
         group_undefined : list of tuple of float
             ``(frequency, max|I_a|, |I_F|)`` where no earth-return group exists.
+        z_isolated : list of float, optional
+            Frequencies at which ``Z_E`` is undefined.
         """
         elements = [("fault", fault_name), ("bus", fault_bus)]
+        if z_isolated:
+            emit(
+                ModelAssumptionWarning,
+                f"Fault '{fault_name}': at "
+                f"{_render_frequencies(z_isolated)} the fault bus "
+                f"'{fault_bus}' reaches remote earth only through the loop "
+                f"closure of a voltage source, not through any electrode or "
+                f"shield. The earthing network alone presents an infinite "
+                f"impedance there, so the earthing impedance Z_E (the "
+                f"driving-point impedance of the earthing network at the fault "
+                f"bus) is reported as None.",
+                code="EARTHING_IMPEDANCE_UNDEFINED",
+                elements=elements,
+                stacklevel=4,
+            )
         if epr_undefined:
             emit(
                 ModelAssumptionWarning,
@@ -2314,9 +2474,13 @@ class ElectricalNetwork:
             earth_currents[freq] = split.i_earth
             feeding[freq] = split.feeding_buses
 
-            # The normative chain U_E = 3*I_0 * Z_E * r closes here: U_E is the
-            # earthing voltage of the bonded group, Z_E = U_E / I_E its earthing
-            # impedance, and r = |I_E| / |3*I_0| the factor already computed.
+            # Diagnostics of the group (u_earthing_group / z_earthing_group):
+            # its current-weighted mean potential and that mean over I_E. They
+            # were reported as U_E / Z_E before decision F4; the EN 50522
+            # quantities are now the fault-bus EPR and the driving-point
+            # impedance (see compute_reduction_factors). The chain
+            # mean = I_F * (mean / I_E) * |I_E| / |I_F| closes on these by
+            # construction, which is why it checks nothing.
             potentials = {
                 name: complex(u_vector[idx])
                 for name, idx in self.bus_indices.items()
@@ -2329,12 +2493,11 @@ class ElectricalNetwork:
                 earthing_impedances[freq] = u_e / split.i_earth
             if equipotential < 0.9 and split.feeding_buses:
                 logger.info(
-                    "The stations counted as one earthing system at %s Hz are "
-                    "not at one potential (coherence %.3f), so U_E = %.4g V is a "
-                    "current-weighted average of genuinely different voltages "
-                    "and Z_E follows it. EN 50522 writes U_E = 3*I_0*Z_E*r for "
-                    "an installation that *is* one potential; where it is not, "
-                    "read the per-bus EPR rather than the lumped value. Group: "
+                    "The stations counted as one earth group at %s Hz are "
+                    "not at one potential (coherence %.3f), so the group mean "
+                    "u_earthing_group = %.4g V averages genuinely different "
+                    "voltages and z_earthing_group follows it. U_E of EN 50522 "
+                    "is the EPR at the fault bus (u_earthing). Group: "
                     "%s.",
                     freq,
                     equipotential,
@@ -2435,31 +2598,31 @@ class ElectricalNetwork:
         """
         Compute the grounding impedance for the fault bus.
 
-        This method calculates the grounding impedance using the formula::
+        The grounding impedance is the earthing impedance of EN 50522 at the
+        fault bus::
 
-            Z_G = Z_E = U_E / I_E
+            Z_G = Z_E = Z_dp(F)
 
-        ``U_E`` is the earthing voltage of the bonded earthing system and
-        ``I_E`` the current that system passes into the soil. Both come from
-        the same split of the electrode currents that produces the
-        current-based reduction factor
-        (:meth:`_compute_current_reduction_factors`), so the normative chain
-        ``U_E = 3*I_0 * Z_E * r`` of EN 50522 closes on the reported value by
+        the driving-point impedance of the earthing network at the fault bus:
+        the voltage one ampere injected there raises the bus to against remote
+        earth, with every electrode and shield in place, without the inductive
+        coupling and without the Thevenin loop closures of voltage sources. It
+        is a property of the earthing system -- what an earthing-impedance
+        measurement at the station sees, the stations bonded to it through
+        cable shields included -- and it is computed alongside the reduction
+        factors as ``ResultReductionFactor.z_earthing``, which this method
+        copies. With ``U_E`` the EPR at the fault bus and
+        ``r = |1 - Z_m/Z_s|`` the norm's chain ``U_E = r * 3*I_0 * Z_E`` then
+        holds where the norm's assumptions hold (a fault far from the infeed
+        on a long bonded run), as a physical statement rather than by
         construction.
 
-        This replaced the pre-0.6.0 definition ``Z_G = u_EPR / (r * I_fault)``,
-        which the 0.6.0 changelog lists as a breaking change. The two agree
-        only in the equipotential limit -- one bonded system at a single
-        potential -- and diverge as soon as the shield sections between the
-        stations carry a noticeable potential difference. ``CLAUDE.md``,
+        This is decision F4 of audit pass 19. It replaced ``Z_E = U_E / I_E``
+        over the earth group (kept as ``z_earthing_group``), which on a long
+        homogeneous chain came out 45 % below the driving-point impedance, and
+        which in turn had replaced the pre-0.6.0 ``u_EPR / (r * I_fault)``.
         ``docs/concepts.md`` and ``docs/api/electrical_network.md`` name the
         current definition.
-
-        The fault current itself is the sum of the source injections that
-        reach the active fault. For current-mode sources that is
-        ``Sum(scaling * I_src)``; for Thevenin (voltage-mode) sources it is the
-        corresponding Norton injection ``Sum(scaling * U_emf / Z_src)``. It
-        enters the current-based reduction factor rather than ``Z_E``.
 
         The results are stored in the network's results object.
         """
@@ -2485,11 +2648,7 @@ class ElectricalNetwork:
             )
 
         for freq in frequencies:
-            # Z_E is the earthing impedance of the bonded earthing system in the
-            # EN 50522 sense: the earthing voltage of that system divided by the
-            # current it passes into the soil. It is computed alongside the
-            # current-based reduction factor, where the group is determined, and
-            # it closes the chain U_E = 3*I_0 * Z_E * r by construction.
+            # Z_E = Z_dp(F), computed alongside the reduction factors (F4).
             z_earthing = result.reduction_factor.z_earthing.get(freq)
             if z_earthing is not None:
                 grounding_impedances[freq] = ComplexNumber(
@@ -2497,9 +2656,8 @@ class ElectricalNetwork:
                 )
                 continue
 
-            # No earth-return current at this frequency -- nothing flows into
-            # the soil, so there is no earthing impedance to report. This is a
-            # different statement from an impedance of zero.
+            # The fault bus reaches remote earth only through a Thevenin loop:
+            # the earthing network alone presents no finite impedance there.
             grounding_impedances[freq] = None
 
         # Store the grounding impedance in the result

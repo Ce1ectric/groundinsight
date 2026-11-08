@@ -37,11 +37,14 @@ After the per-frequency solve the network derives:
   $|\underline{u}_\text{with}|/|\underline{u}_\text{without}|$ at
   the fault bus, where the second solve omits the mutual
   Norton sources.
-- **Earthing impedance** $Z_G = Z_E = \underline{U}_E/\underline{I}_E$
-  per frequency (EN 50522): the earthing voltage of the bonded
-  earthing system over the current it passes into the soil. The
-  pre-0.6.0 definition $u_\text{EPR}/(r \cdot I_\text{fault})$ agrees
-  with it only in the equipotential limit.
+- **Earthing impedance** $Z_G = Z_E = Z_\text{dp}(F)$ per frequency
+  (EN 50522): the driving-point impedance of the earthing network
+  at the fault bus -- electrodes and shields, without the coupling
+  and without Thevenin loop closures. The earthing voltage $U_E$ is
+  the EPR at the fault bus. The current-weighted mean of the earth
+  group and its quotient by $I_E$, reported as $U_E$/$Z_E$ before
+  audit pass 19, remain available as `u_earthing_group` /
+  `z_earthing_group`.
 
 The `ElectricalNetwork` is held as a `PrivateAttr` of `Network`,
 not exposed in the JSON / DB serialisation; it carries the raw
