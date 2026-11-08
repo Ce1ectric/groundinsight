@@ -564,6 +564,11 @@ class TransientStudy:
             ``scalings`` other than 1 (both solvers apply the source
             waveform as given and ignore them), or if the FFT window ends
             while the response is still ringing.
+        ModelAssumptionWarning
+            Code ``TRANSIENT_PHASE_SPLIT``, state-space solver only: the
+            phase current of a meshed network divides between routes of
+            different R/L ratio, so the split the coupling uses -- exact at
+            ``f_eval`` -- differs at the other frequencies in the waveform.
         """
         if solver == "fft":
             return self._solve_fft(t_end=t_end, dt=dt, zero_pad=zero_pad)
