@@ -159,7 +159,46 @@ class ElectricalNetwork:
     This class handles the construction of admittance matrices, voltage and current vectors,
     and performs network analysis to compute results such as bus voltages, branch currents,
     reduction factors, and grounding impedances.
+
+    Notes
+    -----
+    An instance is copied and pickled together with the :class:`Network` it
+    is attached to (``copy.deepcopy(network)``, ``network.model_copy(deep=True)``,
+    ``pickle.dumps(network)``). Every attribute travels with it except the
+    entries named in :attr:`_UNCOPYABLE_CACHES`: those hold SciPy ``SuperLU``
+    factorisations, which can be neither pickled nor deep-copied. They are
+    pure caches -- a copy starts without them and the solver refactorises
+    when it needs a factor again -- so dropping them loses no information.
+    The back-reference :attr:`network` is copied through the copy memo and
+    therefore points at the *copied* network, which is what
+    :meth:`matches_network_state` needs.
     """
+
+    #: Attributes that hold solver factorisations rather than model data.
+    #: They are emptied in every copy and pickle (see the class notes). A new
+    #: cache of SciPy factor objects has to be listed here, or a solved
+    #: network stops being copyable again.
+    _UNCOPYABLE_CACHES: Tuple[str, ...] = ("_lu_factors",)
+
+    def __getstate__(self) -> Dict[str, object]:
+        """
+        State for ``pickle`` and ``copy.deepcopy``, without the factor caches.
+
+        ``copy.deepcopy`` and ``pickle`` both go through this method, so one
+        override covers both. The caches are replaced by empty dictionaries,
+        not removed, so that every method can keep reading them as before.
+
+        Returns
+        -------
+        Dict[str, object]
+            A shallow copy of the instance dictionary with every entry of
+            :attr:`_UNCOPYABLE_CACHES` replaced by an empty dict.
+        """
+        state = self.__dict__.copy()
+        for name in self._UNCOPYABLE_CACHES:
+            if name in state:
+                state[name] = {}
+        return state
 
     def __init__(self, network: Network, auto_phase_currents: bool = False):
         """
