@@ -40,6 +40,8 @@ Where you find them:
   records on unchanged as `DiagnosticDTO` (code, severity, category,
   elements, message).
 
+A worked example of all four: [Diagnostics, logging and warnings](../howto/diagnostics.md).
+
 As Python warnings they also follow the usual machinery: `warnings.simplefilter("error", gi.ModelAssumptionWarning)`
 turns a category into an exception (useful in CI),
 `python -W error::groundinsight.DCLimitWarning` does the same from the command

@@ -130,7 +130,7 @@ column `point` (`String`, the `SweepPoint.label`) followed by one column per key
 of `SweepPoint.parameters` — `rho_f_points` adds `bus`, `rho_Ohm_m` and
 `k1` … `k5` — and then the columns of the frame it stacks, with the types
 listed above. A frame with nothing collected is an empty frame without
-columns. See [Parameter sweeps](../api/sweep.md).
+columns. See [Parameter sweeps and statistics](../howto/sweeps.md).
 
 ### `OutageStudyResult.compare_buses()` and `.compare_branches()`
 
@@ -183,7 +183,7 @@ One row per closed-form reference case; see
 
 One row per branch. The thermal columns are null for a branch whose type
 declares no material and cross-section; the currents are filled in anyway. See
-[Analysis](../api/analysis.md#conductor-thermal-limits-iec-60949-iec-60909-0).
+[Thermal limits of earthing conductors](../howto/thermal.md).
 
 <!-- result-table: conductor_limits -->
 
