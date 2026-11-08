@@ -800,6 +800,45 @@ migration checklist.
   `|Z_net|/cos(arg Z_net)` is 0.08 % above `|Z_net|` on a nearly resistive
   site and 57 % above it at the far end of a four-bus cable chain; the
   documentation called it "very little". (PH13)
+- **How-to "Bus and branch types from data sheets".** The documentation only
+  showed the illustrative formula `(0.25 + j*f*0.012)*l` and did not say how a
+  cable or electrode becomes a `BranchType` or `BusType`. The new page derives
+  the screen–earth loop `Z_s`, the coupling `Z_m` (Carson with
+  `D_E = 658·√(ρ/f)`), `r = |1 − Z_m/Z_s| = R_s'/|Z_s'|` and the quantity
+  `phase_impedance_formula` has to carry, `Z_red = Z_pp − Z_m²/Z_s`. Worked
+  example NA2XS(F)2Y 1×300 RM/25 12/20 kV (Prysmian data sheet, EN 60228) at
+  100 Ω·m, computed three ways in `docs/snippets/types_from_datasheets.py`:
+  closed form, Pollaczek's integral, a one-branch `run_fault` — r = 0.703286 /
+  0.703244 / 0.703286 at 50 Hz; the closed form stays within 1.5·10⁻⁴ of the
+  integral in r over 16.7 Hz … 2.5 kHz and 10 … 10 000 Ω·m. Also the
+  three-phase system in trefoil (r = 0.342 at 50 Hz; the screen of the faulted
+  core carries 35.9 % of the bundle current, which sets the thermal
+  cross-section), the flat formation, an overhead line with earth wire,
+  electrode formulas and what the evaluator returns at 0 Hz. Values that no
+  data sheet gives are marked for checking. (D7, PH5)
+- **How-to "Compare results with EN 50522 limits".** Which result is which
+  symbol (`3I_0` → `i_fault`, `r` → `value_current`, not `value`; `I_E`,
+  `Z_E`, `U_E` as defined in this release), the procedure of EN 50522:2022 by
+  clause without permissible values, EPR as the upper bound of the touch
+  voltage, and harmonics and DC as total RMS against the 50 Hz curve —
+  conservative by the frequency factors of IEC 60479-2. Worked example in
+  `docs/snippets/en50522_check.py`. (D5, D6, DOC8, PH4)
+- **Reference pages "Formula syntax", "Conventions and units", "Glossary and
+  symbols".** The formula symbols per type, the 28 callable functions, the
+  limits of the formula guard and why it exists, with the messages of 13
+  refused formulas; units, RMS phasors against peak waveform amplitudes, the
+  sign frame (earth-side phasors are the negatives of the physical ones, shield
+  and phase currents are physical — shown on a two-bus example), source
+  coverage and the `scalings` default; `Z_B` for the bus electrode and `Z_E`
+  only for the earthing impedance. (DOC6, DOC7, PH8, USE2, SEC1)
+- **Explanation pages "Standards and scope" and "Verification and
+  validation".** What the package implements of EN 50522:2022, IEC 61936-1,
+  IEC 60909-0, IEC 60949 and IEC 60479, and what it does not; the verification
+  evidence, with the reference-case table generated at build time from
+  `REFERENCE_CASES`, and plainly: not yet validated against field measurements
+  or other programs. (D8, DOC7)
+- **Liability note** on the home page, the EN 50522 how-to and the standards
+  page. (D10)
 
 ### Internal
 
@@ -1077,6 +1116,15 @@ migration checklist.
   everything skips as before. A test scans the suite's `importorskip`
   targets and requires each of them in the `dev` group, so the next
   optional import cannot go missing in CI either.
+- **Documentation examples run in the test suite.** `docs/snippets/*.py` are
+  included into the pages with `pymdownx.snippets` (now with `check_paths`)
+  and executed by `tests/test_audit_pass19_docs_examples.py`;
+  `tests/test_audit_pass19_docs_pages.py` reads the formula whitelist and the
+  guard limits from the code, replays the documented error messages, checks
+  the sign-frame and RMS examples a second way and runs every code block of
+  the new pages. A build hook, `docs/hooks/reference_cases.py`, writes the
+  reference-case table. `mkdocs-jupyter` is limited to `*.ipynb`: its default
+  turned every `*.py` file under `docs/` into a notebook page. (DOC13)
 
 ## [0.6.0] — 2026-09-01
 
