@@ -61,6 +61,11 @@ from groundinsight.utils.impedance_calculator import (
     compute_impedance,
     compute_real_value,
 )
+from tests._warning_policy import acknowledge
+
+#: A voltage source drives the coupled branches; the test is about its
+#: infinite internal impedance.
+THEVENIN = acknowledge("THEVENIN_COUPLING")
 
 
 # ---------------------------------------------------------------------------
@@ -652,6 +657,7 @@ def test_open_end_branch_in_the_automatic_phase_current_mode():
     assert currents["A-B"] == 0.0
 
 
+@THEVENIN
 def test_voltage_source_with_an_infinite_internal_impedance_is_switched_out():
     """A Thevenin source with an infinite internal impedance is an infeed that
     is out of service. ``Z_src = 0`` has always meant "no source" here; the

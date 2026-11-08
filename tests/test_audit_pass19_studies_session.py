@@ -33,6 +33,22 @@ import pytest
 import groundinsight as gi
 from groundinsight.analysis import _session
 from tests import test_audit_pass19_performance as perf
+from tests._warning_policy import acknowledge
+
+#: The rho searches sweep trial faults along chains and rings whose electrode
+#: currents are spread in angle; the tests compare the session with the full
+#: search.
+pytestmark = acknowledge("EARTH_GROUP_SPREAD")
+
+#: The 0 Hz stand-in cases put a 0 Hz bin in the grid on purpose.
+DC_STAND_IN = acknowledge("DC_LIMIT")
+
+#: A voltage source drives the coupled branches on purpose: its loop closure
+#: is what the session must not reuse.
+THEVENIN = acknowledge("THEVENIN_COUPLING")
+
+#: The paths mode on parallel routes, compared with the full search.
+PATHS_MODE = acknowledge("PARALLEL_COEFFICIENT_DEFAULT")
 
 
 # --------------------------------------------------------------------------
@@ -138,6 +154,7 @@ def _selection(net: gi.Network, spec) -> List[str]:
 # --------------------------------------------------------------------------
 
 
+@THEVENIN
 @pytest.mark.parametrize("case", sorted(RHO_CASES))
 def test_rho_search_with_session_equals_the_full_search(monkeypatch, full_solves, case):
     """The session answers every trial with the EPR a full ``run_fault``
@@ -176,6 +193,7 @@ def test_the_battery_above_exercises_the_bisection(monkeypatch):
     assert result["status"] == "converged" and result["iterations"] > 5
 
 
+@PATHS_MODE
 def test_rho_search_with_paths_mode_equals_the_full_search(monkeypatch):
     """The legacy path-based phase currents enter the injection vectors the
     session keeps; they do not depend on the bus impedances either."""
@@ -214,6 +232,7 @@ def test_rho_search_without_session_solves_every_trial(monkeypatch, full_solves)
     assert full_solves["n"] == 9 + result["iterations"]
 
 
+@DC_STAND_IN
 def test_rho_search_with_a_dc_stand_in_solves_fully(monkeypatch, full_solves):
     """At 0 Hz with a shorted shield the stand-in impedance is scaled to the
     smallest impedance of the network -- possibly a bus impedance, which the
@@ -355,6 +374,8 @@ def _rho_f_limit(builder, buses, kwargs) -> float:
     return max(eprs.values())
 
 
+@PATHS_MODE
+@THEVENIN
 @pytest.mark.parametrize("case", sorted(RHO_F_CASES))
 def test_rho_f_search_with_session_equals_the_full_search(monkeypatch, full_solves, case):
     """Every fault location keeps its own session from the first full sweep;
@@ -381,6 +402,7 @@ def test_rho_f_search_with_session_equals_the_full_search(monkeypatch, full_solv
     assert with_session[0] == "returned" and with_session[1]["iterations"] > 5
 
 
+@THEVENIN
 def test_fault_locations_share_the_matrix_unless_a_voltage_source_loops():
     """Two fault locations of one network assemble the same nodal matrix --
     except for the loop closure a voltage source puts between its bus and
@@ -417,6 +439,7 @@ def test_rho_f_search_without_session_sweeps_every_trial(monkeypatch, full_solve
     assert full_solves["n"] == len(buses) * (2 + result["iterations"])
 
 
+@DC_STAND_IN
 def test_rho_f_search_with_a_dc_stand_in_sweeps_fully(monkeypatch, full_solves):
     net = perf.dc_ring(24)
     buses = ["B3", "B12"]

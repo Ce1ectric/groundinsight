@@ -35,6 +35,14 @@ import pytest
 
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType
+from tests._warning_policy import acknowledge
+
+#: The ring or parallel-route network of these tests splits its phase current
+#: by the proxy (PHASE_PROXY); the tests are about something else.
+PROXY_SPLIT = acknowledge("PHASE_PROXY")
+
+#: The legacy paths mode on the ring, with default coefficients, on purpose.
+LEGACY_MODE = acknowledge("PARALLEL_COEFFICIENT_DEFAULT", "PHASE_PROXY")
 
 
 FREQ = [50.0]
@@ -160,6 +168,7 @@ def test_a_dead_end_branch_carries_no_phase_current():
 # --- the meshed cases the old scheme got wrong ------------------------------
 
 
+@PROXY_SPLIT
 def test_symmetric_ring_reproduces_the_hand_tuned_reference():
     """
     The ring is the case that used to collapse.
@@ -178,6 +187,7 @@ def test_symmetric_ring_reproduces_the_hand_tuned_reference():
     assert complex(auto[2]) == pytest.approx(complex(hand_tuned[2]), rel=1e-9)
 
 
+@LEGACY_MODE
 def test_the_legacy_mode_still_collapses_the_ring():
     """
     The old behaviour is preserved verbatim under ``phase_current_mode="paths"``.
@@ -203,6 +213,7 @@ def test_the_legacy_mode_still_collapses_the_ring():
     assert net.results["F"].reduction_factor.z_earthing_group[50.0] is None
 
 
+@PROXY_SPLIT
 def test_two_parallel_cables_halve_the_potential_rise():
     """
     Two identical cables between the same two buses: the phase current divides
@@ -218,6 +229,7 @@ def test_two_parallel_cables_halve_the_potential_rise():
     assert two[0] < one[0]
 
 
+@PROXY_SPLIT
 def test_the_result_does_not_depend_on_the_branch_declaration_order():
     """
     In the path-based scheme the first path a branch appeared on fixed its
@@ -400,6 +412,7 @@ def test_an_unknown_mode_is_rejected_by_name():
         gi.run_fault(net, "F", phase_current_mode="topology")
 
 
+@LEGACY_MODE
 @pytest.mark.parametrize(
     "legacy_flag, expected_epr",
     [(True, EPR_TWO_ROUTES), (False, 0.0)],

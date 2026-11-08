@@ -24,6 +24,11 @@ from groundinsight.models.core_models import (
     Source,
     ComplexNumber,
 )
+from tests._warning_policy import acknowledge
+
+#: The ring in the paths mode: the test checks that the parallel-coefficient
+#: warning also reaches the log.
+PATHS_RING = acknowledge("PARALLEL_COEFFICIENT_DEFAULT", "PHASE_PROXY")
 
 
 # --- package-level configuration --------------------------------------------
@@ -179,6 +184,7 @@ def test_overwrite_fault_and_source_emit_warning(caplog):
 # --- network_operations: parallel-coefficient warning -----------------------
 
 
+@PATHS_RING
 def test_parallel_coefficient_warning_is_logged():
     """
     The parallel-coefficient guidance message reaches the caller.

@@ -307,6 +307,11 @@ def test_close_dbsession_survives_a_failing_engine_dispose(
     )
     with pytest.raises(RuntimeError, match="not started"):
         gi.load_bustypes_from_db()
+    # The failed dispose left the engine's pooled connection open; release it
+    # here, or the garbage collector reports it as an unclosed database in
+    # whichever test happens to run next.
+    monkeypatch.undo()
+    database.engine.dispose()
 
 
 def test_close_dbsession_removes_a_live_legacy_session(tmp_path):

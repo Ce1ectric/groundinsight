@@ -25,6 +25,11 @@ import pytest
 
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType, ComplexNumber
+from tests._warning_policy import acknowledge
+
+#: The ring or parallel-route network of these tests splits its phase current
+#: by the proxy (PHASE_PROXY); the tests are about something else.
+RING = acknowledge("PHASE_PROXY")
 
 
 FREQ = [50.0]
@@ -95,6 +100,7 @@ def _independent_driving_point(net, bus_name, freq=50.0):
 # --- the parallel identity ---------------------------------------------------
 
 
+@RING
 @pytest.mark.parametrize("ring", [False, True], ids=["chain", "ring"])
 def test_the_parallel_decomposition_closes(ring):
     """``1/Z_local + sum(1/Z_side)`` is the driving-point admittance, exactly."""
@@ -109,6 +115,7 @@ def test_the_parallel_decomposition_closes(ring):
     )
 
 
+@RING
 @pytest.mark.parametrize("ring", [False, True], ids=["chain", "ring"])
 def test_the_driving_point_matches_a_hand_assembled_system(ring):
     """The module's own value is checked against a system assembled from
@@ -120,6 +127,7 @@ def test_the_driving_point_matches_a_hand_assembled_system(ring):
     )
 
 
+@RING
 def test_a_ring_reports_overlapping_directions_instead_of_empty_ones():
     """
     Removing one branch of a ring separates nothing.
@@ -324,6 +332,7 @@ def test_the_result_survives_a_json_round_trip():
     )
 
 
+@RING
 def test_the_overlap_notice_is_logged_once(caplog):
     net = _network(ring=True)
     with caplog.at_level(logging.INFO, logger="groundinsight"):

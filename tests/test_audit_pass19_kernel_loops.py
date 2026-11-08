@@ -29,6 +29,14 @@ import groundinsight as gi
 from groundinsight.electrical_network import _is_open_circuit
 from groundinsight.utils.earth_current import NOISE_REL, split_earth_currents
 from tests import test_audit_pass19_performance as perf
+from tests._warning_policy import acknowledge
+
+#: Random networks: rings, Thevenin sources, 0 Hz bins and electrode currents
+#: spread in angle occur by construction; the tests compare the kernel with
+#: its reference.
+pytestmark = acknowledge(
+    "DC_LIMIT", "EARTH_GROUP_SPREAD", "PHASE_PROXY", "THEVENIN_COUPLING"
+)
 
 
 def _solvable_random(seeds) -> List[gi.Network]:

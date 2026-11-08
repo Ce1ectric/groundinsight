@@ -481,9 +481,9 @@ class JobRunner:
     --------
     >>> from groundinsight.api import EXAMPLES, JobRunner, SolveRequestDTO
     >>> runner = JobRunner()
-    >>> handle = runner.submit(SolveRequestDTO(fault="F1"), EXAMPLES["mv_ring"]())
+    >>> handle = runner.submit(SolveRequestDTO(fault="fault"), EXAMPLES["minimal"]())
     >>> handle.result(timeout=60).key_figures.fault_bus
-    'b10'
+    'bus3'
     >>> handle.status().state
     'done'
     >>> runner.shutdown()

@@ -301,6 +301,8 @@ def test_the_same_formula_is_untouched_in_a_network_without_0_hz():
         assert got[bus] == pytest.approx(ref[bus], rel=1e-12)
 
 
+# The refusal at the 0 Hz bin is the subject, not the transient model notes
+# the FFT solver raises before it gets there.
 @pytest.mark.filterwarnings("ignore::groundinsight.TransientModelWarning")
 def test_a_transient_study_refuses_it_at_its_0_hz_bin():
     """The same network in a transient study: the FFT grid starts at 0 Hz,

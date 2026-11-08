@@ -24,6 +24,15 @@ import groundinsight as gi
 from groundinsight.simulation import waveforms
 from groundinsight.simulation.transient import TransientStudy, ResultTransient
 from groundinsight.models.core_models import BusType, BranchType
+from tests._warning_policy import acknowledge
+
+#: The comparisons read the steady state; the FFT grid starts at 0 Hz and the
+#: window is not meant to cover the ring-down.
+SHORT_WINDOW = acknowledge("DC_LIMIT", "TRANSIENT_RINGING")
+
+#: The FFT side of these comparisons skips the mutual coupling the state-space
+#: side models.
+FFT_COUPLING = acknowledge("TRANSIENT_COUPLING_IGNORED")
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +223,7 @@ def test_resistive_network_fft_tracks_source_proportionally():
     assert np.std(ratio) / np.abs(np.mean(ratio)) < 5e-2
 
 
+@SHORT_WINDOW
 def test_fft_steady_state_matches_frequency_domain_solver():
     """Cross-check: in steady state, the FFT solver and the existing
     frequency-domain solver must produce the same EPR magnitude at the
@@ -252,6 +262,7 @@ def test_fft_steady_state_matches_frequency_domain_solver():
     )
 
 
+@SHORT_WINDOW
 def test_fft_step_response_in_resistive_network_is_instant():
     """A purely resistive grounding network has no reactive elements; the
     EPR must follow the source step without rise time (apart from the
@@ -356,6 +367,7 @@ def test_state_space_step_response_shows_transient_decay():
     )
 
 
+@SHORT_WINDOW
 def test_state_space_matches_fft_on_lti_network():
     """For a strictly LTI network with both formula sets present, the
     state-space and FFT solvers must agree on the steady-state RMS at
@@ -737,6 +749,7 @@ def test_state_space_pi_section_branch_C_lumps_onto_buses():
     )
 
 
+@FFT_COUPLING
 def test_state_space_mutual_coupling_consistent_with_fft():
     """Mutual coupling in state-space must give the same steady-state RMS
     shield current as the FFT solver. The absolute change in the shield
@@ -793,6 +806,7 @@ def test_state_space_mutual_coupling_consistent_with_fft():
     np.testing.assert_allclose(rms_ss, rms_fft, rtol=5e-2)
 
 
+@FFT_COUPLING
 def test_state_space_mutual_matches_fft_in_steady_state():
     """For the same ``self_impedance_formula`` and consistent ``R_mutual``
     / ``M_mutual`` formulas, the state-space and FFT solvers must agree

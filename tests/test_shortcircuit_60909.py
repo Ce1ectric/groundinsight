@@ -39,6 +39,13 @@ from groundinsight.analysis.shortcircuit import (
     resolve_fault_sc_characteristics,
     thermal_equivalent_current,
 )
+from tests._warning_policy import acknowledge
+
+#: Sources with different R/X are the subject of these tests.
+KAPPA_MIXED = acknowledge("SC_KAPPA_MIXED")
+
+#: A source without IEC 60909 data, on purpose.
+SC_DATA = acknowledge("SC_DATA_INCOMPLETE")
 
 
 C_MAX = 1.1
@@ -240,6 +247,7 @@ def _two_source_network(rx_a=0.02, rx_b=0.60, i_a=800.0, i_b=400.0):
     return net
 
 
+@KAPPA_MIXED
 def test_p5_weighted_kappa_reproduces_the_sum_of_individual_peaks():
     i_a, rx_a = 800.0, 0.02
     i_b, rx_b = 400.0, 0.60
@@ -255,6 +263,7 @@ def test_p5_weighted_kappa_reproduces_the_sum_of_individual_peaks():
     assert data.sources_without_kappa == []
 
 
+@KAPPA_MIXED
 def test_p5_max_aggregation_is_conservative():
     net = _two_source_network()
     weighted = resolve_fault_sc_characteristics(net, "F", aggregation="weighted")
@@ -272,6 +281,7 @@ def test_p5_homogeneous_sources_keep_the_common_kappa():
     assert data.r_to_x == pytest.approx(0.25)
 
 
+@SC_DATA
 def test_resolve_reports_sources_without_characteristics():
     net = _two_source_network()
     net.sources["b"].r_to_x = None
@@ -312,6 +322,7 @@ def test_peak_and_thermal_current_formulas():
         thermal_equivalent_current(1000.0, -0.1, 1.0)
 
 
+@KAPPA_MIXED
 def test_explicit_kappa_beats_r_to_x_on_a_source():
     net = _two_source_network()
     net.sources["a"].kappa = 1.5

@@ -64,6 +64,13 @@ from groundinsight.plotting import (
     _DEFAULT_BAR_FIGSIZE,
     _DEFAULT_TRANSIENT_FIGSIZE,
 )
+from tests._warning_policy import acknowledge
+
+#: The transient fixture is only plotted; its model notes are not the subject.
+TRANSIENT_FIXTURE = acknowledge(
+    "DC_LIMIT", "TRANSIENT_COUPLING_IGNORED", "TRANSIENT_RINGING",
+    "TRANSIENT_SCALINGS_IGNORED"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +248,7 @@ def _positions(fig):
 # ---------------------------------------------------------------------------
 
 
+@TRANSIENT_FIXTURE
 @pytest.mark.parametrize("helper_id", ALL_HELPER_IDS)
 def test_default_call_creates_one_registered_open_figure(
     result, transient_result, helper_id

@@ -105,6 +105,27 @@ addopts = "-ra --doctest-modules"
 markers = [
     "slow: size and timing checks (deselect with '-m \"not slow\"')",
 ]
+# A warning in the suite is an error unless the test asserts it
+# (pytest.warns) or acknowledges it by name with a reason
+# (tests/_warning_policy.py). Each ignore below says what it hides and why.
+filterwarnings = [
+    # Neither the package nor the tests use deprecated API, the package's own
+    # or a dependency's; a test of a deprecated alias asserts its warning.
+    "error::DeprecationWarning:groundinsight",
+    "error::DeprecationWarning:tests",
+    "error::PendingDeprecationWarning:groundinsight",
+    "error::PendingDeprecationWarning:tests",
+    # Unclosed files and connections, also when the garbage collector finds
+    # them (pytest reports those as unraisable exceptions).
+    "error::ResourceWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+    # Every package warning is asserted or acknowledged, never scrolled past.
+    "error::groundinsight.GroundinsightWarning",
+    # pandapower 3 calls fillna on object columns in its branch and zero-
+    # sequence builders, which pandas 2.2 deprecates. Not ours to fix; it
+    # surfaces only through the optional pandapower import.
+    "ignore:Downcasting object dtype arrays:FutureWarning:pandapower",
+]
 
 # Lint, never format. ruff runs as a linter only: there is no formatter
 # configuration and no formatter in CI, because line breaks follow

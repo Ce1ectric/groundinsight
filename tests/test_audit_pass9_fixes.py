@@ -36,6 +36,15 @@ from groundinsight.analysis import find_max_rho_scaling, evaluate_max_epr_under_
 from groundinsight.models.core_models import Branch, BusType, BranchType
 from groundinsight.simulation import waveforms
 from groundinsight.simulation.transient import TransientStudy
+from tests._warning_policy import acknowledge
+
+#: The ring or parallel-route network of these tests splits its phase current
+#: by the proxy (PHASE_PROXY); the tests are about something else.
+RING = acknowledge("PHASE_PROXY")
+
+#: The fault scalings that the transient solvers ignore are the subject of the
+#: test.
+SCALINGS_IGNORED = acknowledge("TRANSIENT_SCALINGS_IGNORED")
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +81,7 @@ def _ring_network():
 # ---------------------------------------------------------------------------
 
 
+@RING
 def test_run_fault_rebuilds_paths_after_manual_active_flip():
     net = _ring_network()
     gi.run_fault(net, "F")
@@ -119,6 +129,7 @@ def _mutual_state_space_network(name):
     return net
 
 
+@SCALINGS_IGNORED
 def test_state_space_transient_invariant_to_fault_scalings():
     net = _mutual_state_space_network("pass9_ss_scalings")
     study = TransientStudy(net, fault="F1")
@@ -200,6 +211,7 @@ def test_evaluate_max_epr_under_k_clears_active_fault_on_fresh_network():
 # ---------------------------------------------------------------------------
 
 
+@RING
 def test_results_survive_sqlite_roundtrip(tmp_path):
     from groundinsight.database.crud import save_network, load_network
 
@@ -238,6 +250,7 @@ def test_fault_active_flag_survives_json_roundtrip():
 # ---------------------------------------------------------------------------
 
 
+@RING
 def test_clear_pathfinder_cache_does_not_evict_same_named_network():
     # Since audit pass 19 (ARC2) every network owns its memo
     # (``path_cache()``); the contract -- a scoped clear of A leaves the

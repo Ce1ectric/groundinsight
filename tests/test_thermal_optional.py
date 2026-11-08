@@ -45,6 +45,10 @@ from groundinsight.models.core_models import (
     ResultGroundingImpedance,
     ResultReductionFactor,
 )
+from tests._warning_policy import acknowledge
+
+#: Half-declared thermal data is the subject of these tests.
+HALF_DECLARED = acknowledge("THERMAL_DATA_INCOMPLETE")
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +325,7 @@ def test_elements_argument_can_restrict_the_frame():
 # ---------------------------------------------------------------------------
 
 
+@HALF_DECLARED
 @pytest.mark.parametrize(
     "kwargs, missing",
     [
@@ -347,6 +352,7 @@ def test_a_half_declared_branch_is_not_assessed_but_is_announced(kwargs, missing
     assert "not assessed" in warnings[0].lower()
 
 
+@HALF_DECLARED
 @pytest.mark.parametrize(
     "kwargs, missing",
     [
@@ -387,6 +393,7 @@ def test_the_half_declared_warning_does_not_fire_on_complete_data():
     assert not [r for r in records if r.code == "THERMAL_DATA_INCOMPLETE"]
 
 
+@HALF_DECLARED
 def test_the_half_declared_warning_lists_every_offender_once():
     """Two broken branches produce one warning naming both, not two warnings."""
     net = _chain(_bare_bus_type(), _bare_branch_type())
@@ -405,6 +412,7 @@ def test_the_half_declared_warning_lists_every_offender_once():
     assert warnings[0].startswith("2 branch(es)")
 
 
+@HALF_DECLARED
 def test_a_half_declared_element_does_not_disturb_its_neighbours(caplog):
     """The complete elements around a broken one are still assessed normally."""
     net = _chain(_full_bus_type(), _bare_branch_type())

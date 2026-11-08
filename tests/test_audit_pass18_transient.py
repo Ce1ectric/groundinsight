@@ -41,6 +41,14 @@ from groundinsight.models.core_models import (
 )
 from groundinsight.simulation import waveforms
 from groundinsight.simulation.transient import TransientStudy, _time_grid
+from tests._warning_policy import acknowledge
+
+#: The cross-solver cases start the FFT grid at 0 Hz, end the window before
+#: every ring-down has decayed and include a source without a path to the
+#: fault; the tests compare the solvers, not those conditions.
+pytestmark = acknowledge(
+    "DC_LIMIT", "TRANSIENT_RINGING", "TRANSIENT_SOURCE_NOT_CONNECTED"
+)
 
 
 # ---------------------------------------------------------------------------

@@ -430,17 +430,16 @@ class ProjectSession:
 
     Examples
     --------
-    >>> from groundinsight.api import ProjectSession, UpdateBus
-    >>> session = ProjectSession.from_example("quickstart")
-    >>> result = session.solve("fault_at_remote_bus")
+    >>> from groundinsight.api import ProjectSession, UpdateBranch
+    >>> session = ProjectSession.from_example("minimal")
+    >>> result = session.solve("fault")
     >>> result.key_figures.rms().fault_bus
-    'bus_fault'
-    >>> _ = session.apply(UpdateBus(name="bus_fault",
-    ...                             fields={"specific_earth_resistance": 250.0}))
-    >>> session.is_stale("fault_at_remote_bus"), session.revision
+    'bus3'
+    >>> _ = session.apply(UpdateBranch(name="b23", fields={"length": 2.0}))
+    >>> session.is_stale("fault"), session.revision
     (True, 1)
     >>> _ = session.undo()
-    >>> session.is_stale("fault_at_remote_bus"), session.revision
+    >>> session.is_stale("fault"), session.revision
     (False, 0)
     >>> session.close()
     """

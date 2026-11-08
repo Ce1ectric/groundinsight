@@ -41,6 +41,14 @@ from groundinsight.models.core_models import (
     _magnitude_angle,
 )
 from tests import test_audit_pass19_performance as perf
+from tests._warning_policy import acknowledge
+
+#: The column-wise frames are compared with the row-wise construction on
+#: networks that produce every kind of row: rings, 0 Hz bins, Thevenin
+#: sources, spread electrode currents.
+pytestmark = acknowledge(
+    "DC_LIMIT", "EARTH_GROUP_SPREAD", "PHASE_PROXY", "THEVENIN_COUPLING"
+)
 
 
 # --------------------------------------------------------------------------

@@ -50,6 +50,19 @@ from groundinsight.diagnostics import (
 )
 from groundinsight.models.core_models import TransientModelWarning
 from tests import _reference_mna as ref
+from tests._warning_policy import acknowledge
+
+#: The inventory: every test provokes the diagnostics it is named after and
+#: asserts them through diagnostics.collecting(), the structured channel; the
+#: parallel-route networks also split their phase current by the proxy.
+pytestmark = acknowledge(
+    "IMPORT_BUS_SKIPPED", "IMPORT_ELEMENT_NOT_IMPORTED", "IMPORT_EMPTY",
+    "IMPORT_LENGTH_DEFAULT", "IMPORT_LINE_SKIPPED",
+    "IMPORT_SWITCH_NOT_IMPORTED", "IMPORT_VOLTAGE_LEVEL_MISMATCH",
+    "PHASE_PROXY", "SC_DATA_INCOMPLETE", "SC_KAPPA_MISSING", "SC_KAPPA_MIXED",
+    "SC_KAPPA_OUT_OF_RANGE", "SC_ROW_AMBIGUOUS", "SC_SPLIT_EQUAL",
+    "SC_VALUE_REPLACED", "SC_VOLTAGE_SOURCE_SKIPPED", "THERMAL_DATA_INCOMPLETE"
+)
 
 SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "groundinsight"
 

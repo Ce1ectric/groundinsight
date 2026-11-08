@@ -39,6 +39,11 @@ from groundinsight.utils.impedance_calculator import (
     is_short_circuit,
 )
 from groundinsight.utils.validations import validate_impedance_formula_value
+from tests._warning_policy import acknowledge
+
+#: Reduction factors computed without a prior solve find no earth-return
+#: group, which the test accepts.
+NO_EARTH_GROUP = acknowledge("EARTH_GROUP_UNDEFINED")
 
 
 _FREQS = [0.0, 50.0, 150.0, 250.0]
@@ -129,6 +134,7 @@ def test_stale_factors_are_dropped_when_the_matrices_change():
     assert net.electrical_network._lu_factors[50.0] is not first
 
 
+@NO_EARTH_GROUP
 def test_compute_reduction_factors_still_works_without_a_prior_solve():
     """The dense fallback stays for a hand-built ElectricalNetwork."""
     net = _chain("p18_lu_fallback")

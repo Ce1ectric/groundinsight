@@ -48,6 +48,11 @@ from groundinsight.simulation import waveforms
 from groundinsight.simulation.transient import TransientStudy, _time_grid
 
 from tests import _transient_reference as ref
+from tests._warning_policy import acknowledge
+
+#: The ring cases split their phase current by the proxy; that split is what
+#: the transient solvers have to reproduce.
+pytestmark = acknowledge("PHASE_PROXY")
 
 
 W50 = 2.0 * math.pi * 50.0

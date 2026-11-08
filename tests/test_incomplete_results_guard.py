@@ -37,6 +37,11 @@ import pytest
 
 import groundinsight as gi
 from groundinsight.electrical_network import ElectricalNetwork
+from tests._warning_policy import acknowledge
+
+#: The ring or parallel-route network of these tests splits its phase current
+#: by the proxy (PHASE_PROXY); the tests are about something else.
+RING = acknowledge("PHASE_PROXY")
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +160,7 @@ def test_node_check_raises_when_a_bus_result_is_missing():
         gi.check_node_limits(net, "F")
 
 
+@RING
 def test_branch_added_after_run_fault_is_not_silently_skipped():
     """Staleness, not corruption: the same silent-skip in everyday use."""
     net = _overstressed_net()

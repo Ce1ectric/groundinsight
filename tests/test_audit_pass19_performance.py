@@ -55,8 +55,16 @@ import scipy.sparse as sp
 import groundinsight as gi
 from groundinsight import electrical_network as en_mod
 from tests import _dense_oracle as oracle
+from tests._warning_policy import acknowledge
 
-pytestmark = pytest.mark.filterwarnings("ignore")
+#: The kernel is compared with its dense oracle on random and structured
+#: networks, where rings, Thevenin sources, 0 Hz bins, floating fault sides
+#: and electrode currents spread in angle occur by construction.
+pytestmark = acknowledge(
+    "DC_LIMIT", "EARTH_GROUP_SPREAD", "EARTH_GROUP_UNDEFINED",
+    "EARTHING_IMPEDANCE_UNDEFINED", "PHASE_PROXY", "SOURCE_WITHOUT_PHASE_PATH",
+    "THEVENIN_COUPLING",
+)
 
 TOL = 1e-12
 

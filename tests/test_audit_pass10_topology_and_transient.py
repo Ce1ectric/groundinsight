@@ -60,6 +60,11 @@ from groundinsight.models.core_models import BusType, BranchType
 from groundinsight.pathfinder import PathFinder, clear_pathfinder_cache
 from groundinsight.simulation import waveforms
 from groundinsight.simulation.transient import TransientStudy
+from tests._warning_policy import acknowledge
+
+#: The ring or parallel-route network of these tests splits its phase current
+#: by the proxy (PHASE_PROXY); the tests are about something else.
+RING = acknowledge("PHASE_PROXY")
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +267,7 @@ def test_pathfinder_cache_key_keeps_parallel_branches_apart():
     ]
 
 
+@RING
 def test_run_fault_rebuilds_paths_after_parallel_branch_rewiring():
     """End-to-end twin of the cache-key test -- pre-fix EPR was ~33 % off."""
     clear_pathfinder_cache()
@@ -427,6 +433,7 @@ def _ring_coupled_network(name):
     return net
 
 
+@RING
 def test_state_space_mutual_factor_is_first_path_wins_not_accumulated():
     """T3b -- a branch on two parallel paths of one source got factor 2.0.
 

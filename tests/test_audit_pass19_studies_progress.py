@@ -31,6 +31,11 @@ import numpy as np
 import pytest
 
 import groundinsight as gi
+from tests._warning_policy import acknowledge
+
+#: The rho-f search sweeps trial faults along a chain whose electrode currents
+#: are spread in angle.
+SPREAD = acknowledge("EARTH_GROUP_SPREAD")
 
 FREQ = [50.0, 250.0]
 
@@ -376,6 +381,7 @@ def test_rho_search_result_does_not_depend_on_the_hooks():
 K_REF = (0.1, 0.0, 1e-4, 0.0, 0.0)
 
 
+@SPREAD
 def test_rho_f_search_reports_one_call_per_bus_solve(run_fault_calls):
     net = _ring()
     recorder = _Recorder()
@@ -387,6 +393,7 @@ def test_rho_f_search_reports_one_call_per_bus_solve(run_fault_calls):
     assert any("R1" in label for *_, label in recorder.calls)
 
 
+@SPREAD
 def test_rho_f_search_cancel_in_the_middle_of_a_bus_sweep_restores_the_network(
     run_fault_calls,
 ):
@@ -401,6 +408,7 @@ def test_rho_f_search_cancel_in_the_middle_of_a_bus_sweep_restores_the_network(
     assert _state(net) == before
 
 
+@SPREAD
 def test_rho_f_search_result_does_not_depend_on_the_hooks():
     plain = gi.find_max_rho_f_scaling(_ring(), ["R1", "R2"], 400.0, K_REF,
                                       max_iter=8)

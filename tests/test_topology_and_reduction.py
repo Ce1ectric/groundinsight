@@ -29,6 +29,15 @@ import pytest
 
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType
+from tests._warning_policy import acknowledge
+
+#: The ring cases split their phase current by the proxy; the tests check the
+#: reduction factor against closed forms.
+pytestmark = acknowledge("PHASE_PROXY")
+
+#: The 20-bus ring spreads its electrode currents in angle at the far
+#: stations.
+SPREAD = acknowledge("EARTH_GROUP_SPREAD")
 
 
 # ---------------------------------------------------------------------------
@@ -441,6 +450,7 @@ def test_reduction_factor_sweep_single_cable_converges_to_zero():
     assert rs[-1] < 0.05
 
 
+@SPREAD
 def test_reduction_factor_sweep_20_bus_ring_converges_to_zero():
     """20-bus symmetric ring with the fault opposite the source: same
     closed-form reduction factor as a single cable, hence the same

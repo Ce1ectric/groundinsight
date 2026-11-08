@@ -85,6 +85,14 @@ from groundinsight.utils.impedance_calculator import (
     render_frequencies,
     check_passive_impedance,
 )
+from tests._warning_policy import acknowledge
+
+#: A purely reactive impedance meets the 0 Hz bin on purpose.
+DC_REACTANCE = acknowledge("DC_LIMIT")
+
+#: An ideal electrode at the fault leaves no earth-return group, which is the
+#: case under test.
+NO_EARTH_GROUP = acknowledge("EARTH_GROUP_UNDEFINED")
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +308,7 @@ def test_the_sequence_towards_zero_converges_to_the_ideal_electrode():
     assert errors[6] / errors[3] == pytest.approx(1e-3, rel=0.1)
 
 
+@NO_EARTH_GROUP
 def test_the_answer_at_zero_used_to_be_the_answer_at_infinity():
     """Why the endpoint had to be rejected rather than kept.
 
@@ -712,6 +721,7 @@ def test_a_dc_short_circuit_is_sized_from_the_smallest_other_impedance():
     assert "bus 'bus1'" in str(record[0].message)
 
 
+@DC_REACTANCE
 def test_a_purely_reactive_impedance_may_be_zero_at_dc():
     """An ideal inductance is a short circuit at 0 Hz. The FFT grid always
     contains a 0 Hz bin, so applying the steady-state rule unchanged would

@@ -37,6 +37,15 @@ from groundinsight.diagnostics import collecting
 from groundinsight.io.defaults import ImportDefaults
 from groundinsight.io.pandapower_import import _PREVIEW_SCHEMA
 from groundinsight.models.core_models import BranchType, BusType
+from tests._warning_policy import acknowledge
+
+#: The tests feed the importer rows and results it has to report -- unusable
+#: lengths, transformers, a bus type of another level, a replaced t_k_s or
+#: n_factor -- and assert the outcome and the structured record.
+pytestmark = acknowledge(
+    "IMPORT_ELEMENT_NOT_IMPORTED", "IMPORT_LENGTH_DEFAULT",
+    "IMPORT_LINE_SKIPPED", "IMPORT_VOLTAGE_LEVEL_MISMATCH", "SC_VALUE_REPLACED"
+)
 
 
 # ---------------------------------------------------------------------------

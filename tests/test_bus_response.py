@@ -26,6 +26,17 @@ import pytest
 
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType, ComplexNumber
+from tests._warning_policy import acknowledge
+
+#: The genuine solve the closed form is compared with spreads its electrode
+#: currents in angle.
+SPREAD = acknowledge("EARTH_GROUP_SPREAD")
+
+#: A location whose earth reference is its own electrode leaves the group and
+#: the factor undefined, which is the case under test.
+OWN_ELECTRODE = acknowledge(
+    "EARTH_GROUP_UNDEFINED", "REDUCTION_FACTOR_UNDEFINED"
+)
 
 
 FREQ = [50.0, 250.0]
@@ -74,6 +85,7 @@ def _solved_values(z_bus, freq=50.0):
 # --- the closed form against real solves -------------------------------------
 
 
+@SPREAD
 @pytest.mark.parametrize(
     "z_bus", [0.05, 1.0, 10.0, 100.0, 500.0, complex(4.0, 9.0)]
 )
@@ -252,6 +264,7 @@ def test_an_unknown_bus_is_named_with_the_alternatives():
         gi.bus_response(net, fault="F", bus="nowhere")
 
 
+@OWN_ELECTRODE
 def test_a_location_whose_earth_reference_is_its_own_electrode_is_refused():
     """
     Removing the electrode has to leave the network with a path to earth,

@@ -305,6 +305,9 @@ def test_the_repairs_leave_finite_values_alone(formula, params, freqs):
     assert np.array_equal(repaired.view(np.float64), values.view(np.float64))
 
 
+# The formula battery includes a pole at 0 Hz (a series capacitance) and other
+# limits the DC check comments on; the test checks the fast path, not those
+# notes.
 @pytest.mark.filterwarnings("ignore::groundinsight.utils.impedance_calculator.DCLimitWarning")
 @pytest.mark.parametrize("freqs", [FREQS, FREQS_DC], ids=["ac", "with_dc"])
 @pytest.mark.parametrize("formula,params", FORMULAS)

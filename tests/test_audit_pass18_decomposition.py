@@ -38,6 +38,12 @@ from groundinsight.models.core_models import (
     ComplexNumber,
     Source,
 )
+from tests._warning_policy import acknowledge
+
+#: The decomposition cases include a DC short, a ring and a Thevenin loop
+#: closure on purpose; the tests check the decomposition, not those
+#: assumptions.
+pytestmark = acknowledge("DC_LIMIT", "PHASE_PROXY", "THEVENIN_COUPLING")
 
 
 CHAIN = [("SA", "S", "A"), ("AF", "A", "F"), ("FR1", "F", "R1")]

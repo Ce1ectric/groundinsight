@@ -27,6 +27,10 @@ import pytest
 import groundinsight as gi
 from groundinsight import pathfinder as pf_module
 from groundinsight.pathfinder import PathFinder
+from tests._warning_policy import acknowledge
+
+#: The paths mode on parallel routes with default coefficients, on purpose.
+PATHS_MODE = acknowledge("PARALLEL_COEFFICIENT_DEFAULT")
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +241,7 @@ def test_create_paths_still_enumerates_for_the_user():
     assert fingerprint_ok
 
 
+@PATHS_MODE
 def test_paths_mode_still_enumerates_and_solves():
     net = _grid(3, "p18_paths_mode")
     gi.run_fault(net, "F1", phase_current_mode="paths")

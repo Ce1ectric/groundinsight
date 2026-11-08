@@ -80,6 +80,14 @@ from groundinsight.utils.impedance_calculator import (
     dc_substitute_impedance,
     is_short_circuit,
 )
+from tests._warning_policy import acknowledge
+
+#: The transient comparisons only read the 0 Hz bin; the window is not meant
+#: to cover the ring-down.
+SHORT_WINDOW = acknowledge("TRANSIENT_RINGING")
+
+#: A DC study with a voltage source on coupled branches, on purpose.
+THEVENIN = acknowledge("THEVENIN_COUPLING")
 
 
 # ---------------------------------------------------------------------------
@@ -404,6 +412,7 @@ def test_a_stationary_dc_bond_matches_the_merged_network():
     assert abs(phases["C"]) == pytest.approx(180.0, abs=1e-6)
 
 
+@SHORT_WINDOW
 def test_the_transient_dc_bin_matches_the_merged_network():
     """The FFT grid always contains 0 Hz, so this is not an exotic case: it is
     every transient run of every network with a purely inductive element."""
@@ -415,6 +424,7 @@ def test_the_transient_dc_bin_matches_the_merged_network():
         assert epr[bus] == pytest.approx(ref[bus], rel=1e-6)
 
 
+@SHORT_WINDOW
 def test_the_substitution_beats_the_open_circuit_of_v050_by_orders():
     """The regression this pass exists for. Skipping the element modelled the
     short as an open circuit: bus A was cut off from the network entirely, its
@@ -434,6 +444,7 @@ def test_the_substitution_beats_the_open_circuit_of_v050_by_orders():
     assert old["B"] < 0 < ref["B"]
 
 
+@SHORT_WINDOW
 def test_an_explicit_small_resistance_converges_to_the_same_answer():
     """The substitution is not a special rule but the limit of an ordinary
     model: replacing the inductive bond by a shrinking real resistance walks
@@ -448,6 +459,7 @@ def test_an_explicit_small_resistance_converges_to_the_same_answer():
     assert errors[-1] < 1e-4
 
 
+@SHORT_WINDOW
 def test_a_capacitance_still_reads_as_an_open_circuit_at_dc():
     """The substitution must not touch a true pole. A capacitive bond carries
     no DC, so the DC bin is the network *without* that branch -- which is
@@ -498,6 +510,7 @@ def test_a_pure_dc_study_runs_end_to_end_with_carson_conductors():
     )
 
 
+@THEVENIN
 def test_a_dc_study_with_a_voltage_source_survives_the_thevenin_loop():
     """The Thevenin loop closure inverts the source impedance, which is a
     separate site from the three in the matrix build and is only reached by a

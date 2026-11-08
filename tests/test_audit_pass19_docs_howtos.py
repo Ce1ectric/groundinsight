@@ -36,6 +36,10 @@ import pytest
 import groundinsight as gi
 from groundinsight.diagnostics import collecting
 from tests import _reference_mna as ref
+from tests._warning_policy import acknowledge
+
+#: The documented quickstart network scales its fault at 50 Hz only.
+QUICKSTART = acknowledge("SCALINGS_INCOMPLETE")
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
@@ -757,6 +761,7 @@ def test_service_output_is_the_stated_one(service):
     assert_codes_explained("howto/service-layer.md", records)
 
 
+@QUICKSTART
 def test_service_key_figures_are_the_library_figures(service):
     """Second way: the DTO's RMS row against res_fault of a direct run_fault."""
     from groundinsight.api.examples import build_quickstart

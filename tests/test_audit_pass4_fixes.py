@@ -34,6 +34,14 @@ from groundinsight.pathfinder import (
     clear_pathfinder_cache,
 )
 from groundinsight.simulation import waveforms
+from tests._warning_policy import acknowledge
+
+#: The importer reports the malformed rows these tests feed it; the tests
+#: assert the structured records.
+IMPORT_REPORTS = acknowledge(
+    "IMPORT_BUS_SKIPPED", "IMPORT_EMPTY", "IMPORT_LINE_SKIPPED",
+    "IMPORT_VOLTAGE_LEVEL_MISMATCH"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -430,6 +438,7 @@ def _defaults_20kV():
     )
 
 
+@IMPORT_REPORTS
 def test_pandapower_empty_network_emits_warning(pp_module):
     """Mis-set voltage_level_kV produces an empty Network with a warning
     (an InputWarning IMPORT_EMPTY since audit pass 19, formerly a log line)."""
@@ -446,6 +455,7 @@ def test_pandapower_empty_network_emits_warning(pp_module):
     )
 
 
+@IMPORT_REPORTS
 def test_pandapower_self_loop_skipped_with_warning(pp_module):
     """Pandapower line with from_bus == to_bus must be skipped, not imported."""
     pp = pp_module
@@ -473,6 +483,7 @@ def test_pandapower_self_loop_skipped_with_warning(pp_module):
     )
 
 
+@IMPORT_REPORTS
 def test_pandapower_vn_kv_none_skipped_with_warning(pp_module):
     """Bus with vn_kv=None must be skipped explicitly, not silently zeroed."""
     pp = pp_module

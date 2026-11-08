@@ -38,6 +38,11 @@ import pytest
 
 import groundinsight as gi
 from groundinsight.utils.impedance_calculator import compute_impedance
+from tests._warning_policy import acknowledge
+
+#: Removing a source edits the inputs the stale check reads; the remaining
+#: source covers 50 Hz only.
+SOURCE_GAP = acknowledge("SOURCE_FREQUENCY_GAP")
 
 
 FREQUENCIES = [50.0, 250.0]
@@ -814,6 +819,7 @@ _STALE_EDITS = {
 }
 
 
+@SOURCE_GAP
 @pytest.mark.parametrize("name", sorted(_STALE_EDITS))
 def test_every_input_change_marks_the_results_stale(name):
     net = _two_fault_ring()

@@ -30,6 +30,15 @@ import pytest
 import groundinsight as gi
 from groundinsight.diagnostics import collecting
 from groundinsight.models.core_models import BranchType, BusType
+from tests._warning_policy import acknowledge
+
+#: The 0 Hz bin is left out of the adiabatic check on purpose; the tests check
+#: how.
+DC_EXCLUDED = acknowledge("THERMAL_DC_EXCLUDED")
+
+#: A source without IEC 60909 data, on purpose; the test checks the share it
+#: names.
+UNCOVERED = acknowledge("SC_DATA_INCOMPLETE")
 
 
 def _network(frequencies, source_values):
@@ -131,6 +140,7 @@ def test_i_th_is_the_shared_formula_not_a_second_copy():
 # --- A10: the DC bin ----------------------------------------------------------
 
 
+@DC_EXCLUDED
 def test_the_dc_bin_is_not_counted_in_the_short_time_current():
     """
     The same AC excitation with and without a DC bin has to give the same
@@ -150,6 +160,7 @@ def test_the_dc_bin_is_not_counted_in_the_short_time_current():
         assert b["I_th_A"] == pytest.approx(a["I_th_A"], rel=1e-9)
 
 
+@DC_EXCLUDED
 def test_the_dc_bin_is_reported_in_its_own_column():
     frame = gi.check_conductor_limits(
         _network([0.0, 50.0], {0.0: 700.0, 50.0: 1000.0}),
@@ -175,6 +186,7 @@ def test_without_a_dc_bin_the_column_is_null_rather_than_zero():
     )
 
 
+@DC_EXCLUDED
 def test_the_node_check_splits_the_dc_bin_the_same_way():
     ac_only = gi.check_node_limits(
         _network([50.0], {50.0: 1000.0}), "F", t_k_s=0.5, r_to_x=0.1
@@ -197,6 +209,7 @@ def test_the_node_check_splits_the_dc_bin_the_same_way():
 # --- A17: what the aggregation actually averages ------------------------------
 
 
+@UNCOVERED
 def test_the_uncovered_current_share_is_named_in_the_warning():
     net = _network([50.0], {50.0: 1000.0})
     gi.create_source("SRC2", "A", {50.0: 3000.0}, network=net)

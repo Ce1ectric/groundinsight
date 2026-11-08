@@ -49,6 +49,20 @@ import groundinsight as gi
 import groundinsight.api as gi_api
 from groundinsight.utils import validations
 from tests import _reference_mna as ref
+from tests._warning_policy import acknowledge
+
+#: The line of the page example spreads its electrode currents in angle; the
+#: test sums them three ways.
+SPREAD = acknowledge("EARTH_GROUP_SPREAD")
+
+#: pandapower's example network has a transformer and a closed bus-to-bus
+#: switch, which the importer reports as not imported, and an open line
+#: switch, which it reports as an open phase conductor; the imported network
+#: has a cycle, so its phase split is the proxy.
+EXAMPLE_IMPORT = acknowledge(
+    "IMPORT_ELEMENT_NOT_IMPORTED", "IMPORT_LINE_SWITCH_OPEN",
+    "IMPORT_SWITCH_NOT_IMPORTED", "PHASE_PROXY",
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
@@ -372,6 +386,7 @@ def test_plotting_page_states_that_the_bus_currents_sum_to_zero():
     assert "`I_bus_A`" in text and "`I_inj_A`" in text
 
 
+@SPREAD
 def test_electrode_currents_sum_to_zero_three_ways():
     """The statement on the plotting page, by objects, by frame and by the reference solver."""
     net, result = _line_network()
@@ -418,6 +433,7 @@ def test_reference_page_table_is_generated_from_the_cases():
     assert "U_E = 3I_0" not in text
 
 
+@EXAMPLE_IMPORT
 def test_io_example_imports_a_connected_mv_network():
     """DOC7 item 5: with switch_branch_type no bus of the example is isolated."""
     pytest.importorskip("pandapower")

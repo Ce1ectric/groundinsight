@@ -11,7 +11,16 @@ impedance, and for the current it must deliver with a finite one.
 import polars as pl
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType
+from tests._warning_policy import acknowledge
 
+#: The reference grid has parallel routes and a source with values beyond the
+#: network frequencies.
+REFERENCE_GRID = acknowledge("PHASE_PROXY", "SOURCE_FREQUENCY_OUTSIDE_NETWORK")
+
+#: Voltage sources on coupled branches are the subject of these tests.
+THEVENIN = acknowledge("THEVENIN_COUPLING")
+
+@REFERENCE_GRID
 def test_reduction_factor_for_bus7_fault7():
     # Create a network
     net = gi.create_network(name="MyTestNetwork", frequencies=[50])
@@ -181,6 +190,7 @@ def _build_simple_two_bus_network(name: str):
     return net
 
 
+@THEVENIN
 def test_voltage_source_reproduces_current_source_in_high_zsrc_limit():
     """A Thevenin source with very large Z_src and U = I_src * Z_src must
     reproduce the current-source EPR to within numerical tolerance."""
@@ -221,6 +231,7 @@ def test_voltage_source_reproduces_current_source_in_high_zsrc_limit():
     assert abs(epr_v_bus2 - epr_i_bus2) / max(abs(epr_i_bus2), 1.0) < 1e-6
 
 
+@THEVENIN
 def test_voltage_source_finite_zsrc_reduces_effective_fault_current():
     """With a finite source impedance the actual loop current must be smaller
     than the Norton open-circuit current ``U/Z_src``."""

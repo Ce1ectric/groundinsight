@@ -55,6 +55,21 @@ from groundinsight.models.core_models import (
     RES_FAULT_SCHEMA,
 )
 from tests import _reference_mna as ref
+from tests._warning_policy import acknowledge
+
+#: The service tests run the documented examples: the quickstart fault scales
+#: 50 Hz only and the MV ring splits its phase current by the proxy; the DTOs
+#: carry both as diagnostics.
+pytestmark = acknowledge("PHASE_PROXY", "SCALINGS_INCOMPLETE")
+
+#: Provoked on purpose: the commands' own diagnostics are what the test
+#: checks.
+COMMAND_DIAGNOSTICS = acknowledge(
+    "FREQUENCY_ORDER", "SOURCE_FREQUENCY_OUTSIDE_NETWORK"
+)
+
+#: The path-enumeration cap is exercised in the paths mode on the ring.
+PATHS_MODE = acknowledge("PARALLEL_COEFFICIENT_DEFAULT")
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 API_DIR = ROOT / "src" / "groundinsight" / "api"
@@ -793,6 +808,7 @@ def test_size_limits_reject_an_element_too_many():
         session.close()
 
 
+@PATHS_MODE
 @pytest.mark.parametrize("backend", ["thread", "process"])
 def test_a_session_caps_the_path_enumeration_of_its_own_network(backend):
     """``max_paths`` becomes the network's own path-search settings (ARC2), so
@@ -868,6 +884,7 @@ def test_commands_parse_from_json_and_name_unknown_operations():
     assert {c.op for c in _command_catalogue()} == set(api.COMMAND_OPS)
 
 
+@COMMAND_DIAGNOSTICS
 def test_command_diagnostics_are_returned_with_the_command(quickstart):
     api = _api()
     report = quickstart.apply(api.SetFrequencies(frequencies=[250.0, 50.0, 350.0, 450.0, 550.0]))

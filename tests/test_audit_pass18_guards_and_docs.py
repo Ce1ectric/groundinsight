@@ -28,6 +28,11 @@ import pytest
 import groundinsight as gi
 from groundinsight.electrical_network import ElectricalNetwork
 from groundinsight.models.core_models import ComplexNumber, Source
+from tests._warning_policy import acknowledge
+
+#: A voltage source on coupled branches; the test is about its missing source
+#: impedance.
+THEVENIN = acknowledge("THEVENIN_COUPLING")
 
 
 def _bus_type(name="bt"):
@@ -106,6 +111,7 @@ def test_a_missing_branch_impedance_is_rejected():
         gi.run_fault(net, "F1")
 
 
+@THEVENIN
 def test_a_missing_source_impedance_is_rejected():
     net = gi.create_network(name="p18_k4_src", frequencies=[50.0, 250.0])
     bt, brt = _bus_type(), _branch_type()

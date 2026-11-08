@@ -32,6 +32,11 @@ from groundinsight.simulation.outage import (
     outage_context,
     run_outage_study,
 )
+from tests._warning_policy import acknowledge
+
+#: The ring or parallel-route network of these tests splits its phase current
+#: by the proxy (PHASE_PROXY); the tests are about something else.
+RING = acknowledge("PHASE_PROXY")
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +259,7 @@ def test_outage_context_raises_on_unknown_names():
         pass
 
 
+@RING
 def test_run_outage_study_collects_base_and_scenarios():
     """A two-scenario study (base + branch outage + bus outage) must produce
     one bus / branch DataFrame per label."""
@@ -290,6 +296,7 @@ def test_run_outage_study_rejects_label_collisions():
         )
 
 
+@RING
 def test_compare_buses_produces_long_format_with_deltas():
     """The comparison helper must emit the expected columns and at least
     one non-zero delta for the disabled-branch scenario at the fault bus."""
@@ -327,6 +334,7 @@ def test_compare_buses_produces_long_format_with_deltas():
     assert not math.isclose(deltas[0], 0.0, abs_tol=1e-9)
 
 
+@RING
 def test_compare_branches_against_custom_reference():
     """Picking a non-base reference must rename the delta columns accordingly
     and yield zero on the reference scenario."""

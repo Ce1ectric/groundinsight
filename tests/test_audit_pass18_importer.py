@@ -29,6 +29,14 @@ import pytest
 import groundinsight as gi
 from groundinsight.diagnostics import collecting
 from groundinsight.models.core_models import BranchType, BusType
+from tests._warning_policy import acknowledge
+
+#: The importer fixture carries a closed bus-to-bus switch, reported as not
+#: imported unless a switch branch type is given, and one test imports with a
+#: bus type of another voltage level on purpose.
+pytestmark = acknowledge(
+    "IMPORT_SWITCH_NOT_IMPORTED", "IMPORT_VOLTAGE_LEVEL_MISMATCH"
+)
 
 
 pp = pytest.importorskip("pandapower")
