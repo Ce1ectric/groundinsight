@@ -180,3 +180,17 @@ def test_the_paths_mode_does_not_invert_phase_impedances_and_says_nothing():
     net = _network("dcp_paths", chain)
     _, messages = _run(net, phase_current_mode="paths")
     assert not [m for m in messages if isinstance(m, DCLimitWarning)]
+
+
+def test_a_phase_impedance_of_minus_infinity_at_0_hz_is_refused():
+    """The two 0 Hz rules of this pass meet here: phase conductors are part of
+    the passivity check, and a real part of minus infinity is the limit of a
+    negative resistance, not an open circuit. ``0.1 + log(f)`` per km tends to
+    minus infinity at 0 Hz; the ring makes the phase-network solve invert it.
+    Before both rules the conductor was silently opened in the 0 Hz bin."""
+    ring = {"R1": ("S", "A", 1.0, "(0.1 + log(f))*l"), "R2": ("A", "F", 1.0, INDUCTIVE_PHASE),
+            "R3": ("F", "B", 1.0, INDUCTIVE_PHASE), "R4": ("B", "S", 1.0, INDUCTIVE_PHASE)}
+    net = _network("dcp_neginf", ring, buses=("S", "A", "F", "B"))
+    with pytest.raises(ValueError, match="minus infinity") as excinfo:
+        _run(net)
+    assert "branch 'R1' (phase impedance)" in str(excinfo.value)
