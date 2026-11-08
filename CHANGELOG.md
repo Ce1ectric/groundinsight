@@ -1097,6 +1097,30 @@ migration checklist.
   assembled system one by one, but re-inserted the result at the end of
   `network.results`: with results for `F` and `F1` stored, the order became
   `F1, F` and the serialised network changed. (GUI5)
+- **The pandapower import honours open line switches.** A ring operated open
+  at a line switch (`net.switch` row with `et="l"`, `closed=False`) arrived
+  closed: only bus-to-bus switches were evaluated, so the phase-conductor
+  network got a mesh that does not exist in operation and the fault current
+  divided over both halves of the ring — 643 A of 1000 A took the route
+  through the open switch on a four-bus test ring. An open line switch
+  interrupts the phase conductor of its line at that end; the cable screen is
+  bonded to the station earth independently of the switch and stays connected
+  at both ends. `from_pandapower` now imports such a line with its
+  `default_branch_type` and `phase_impedance_formula = "nan"` (type
+  `<name>_phase_open`): it carries no fault current, and its screen stays in
+  the earthing network. It says so with the new `InputWarning`
+  `IMPORT_LINE_SWITCH_OPEN` (severity `info`; elements: the branch and the
+  switches). `preview_pandapower_import` marks the switch and its line
+  `line_switch_open`, a closed line switch `line_switch_closed` and the switch
+  of a line that is not imported `line_not_imported`. Switches at transformer
+  terminals change nothing (transformers are not imported); an open
+  bus-to-bus switch stays no connection. With one cable type on every line
+  the EPR does not depend on the switch state — the coupling relief is
+  `1 - Z_m/Z_s` however the phase current divides — but the phase and screen
+  currents do, and with them the thermal check; in a ring of mixed
+  construction the EPR moves as well. The legacy
+  `phase_current_mode="paths"` enumerates routes over every active branch and
+  does not see an open phase conductor.
 
 ### Security
 
@@ -1433,6 +1457,14 @@ migration checklist.
   advice to run a formatter over the code base is gone. (DOC5, D10)
 - `transient.md` and the DC page describe the current behaviour without
   release history; the history stays in this changelog. (D4)
+- **Import from pandapower:** the switch handling replaces the limitation and
+  its workaround; the example compares the import with the same net with
+  every switch closed. The I/O page lists the reasons `line_switch_open`,
+  `line_switch_closed` and `line_not_imported`; the warnings reference and the
+  service page list `IMPORT_LINE_SWITCH_OPEN` and the element kind `switch`.
+- `find_max_rho_scaling` and `find_max_rho_f_scaling` no longer ask for
+  "consistent paths": the default phase-current mode needs none, and the
+  legacy `"paths"` mode enumerates its own. (DOC3)
 
 ### Internal
 
@@ -1884,6 +1916,11 @@ migration checklist.
   pages and the closed forms, notebooks stored clean, executed at build,
   listed and linked with site addresses, the hooks, the project pages,
   `CONTRIBUTING.md` linked from README and docs, the README quickstart.
+- Tests: `tests/test_audit_pass19_line_switches.py` (14) — the open switch
+  against the same pandapower net with the switch closed and with the line
+  removed, against the documented construction by hand and against the
+  reference solver of `tests/_reference_mna.py` (EPR, screen and phase
+  currents to 1e-12), and the preview.
 
 ## [0.6.0] — 2026-09-01
 
