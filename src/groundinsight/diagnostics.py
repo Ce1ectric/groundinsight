@@ -271,6 +271,69 @@ def emit(
     warnings.warn(warning, stacklevel=warn_stacklevel(stacklevel + 1))
 
 
+def note(
+    category: type,
+    message: str,
+    *,
+    code: Optional[str] = None,
+    elements: Sequence[ElementRef] = (),
+) -> None:
+    """Record an informational diagnostic on the current run, without a warning.
+
+    Some findings explain a result without casting doubt on it -- a fault on
+    the bus of its only source has no reduction factor by definition, not by
+    accident. Raising those as warnings would make every study that places
+    trial faults on every bus repeat them, and a strict warnings filter would
+    turn a correct result into an error. They belong on the result only:
+    ``note`` appends a :class:`Diagnostic` with severity ``"info"`` to the
+    active :func:`collecting` sink and does nothing outside one.
+
+    Parameters
+    ----------
+    category : type
+        A subclass of :class:`GroundinsightWarning`; its name is recorded as
+        the diagnostic's ``category``.
+    message : str
+        The text shown to the user.
+    code : str, optional
+        Stable identifier; defaults to the category's ``default_code``.
+    elements : sequence of tuple of str, optional
+        ``(kind, name)`` pairs of the elements concerned.
+
+    Raises
+    ------
+    TypeError
+        If ``category`` is not a :class:`GroundinsightWarning` subclass.
+
+    Examples
+    --------
+    >>> import warnings
+    >>> with collecting() as sink:
+    ...     with warnings.catch_warnings():
+    ...         warnings.simplefilter("error")
+    ...         note(ModelAssumptionWarning, "explains a result", code="EXAMPLE_INFO")
+    >>> [(d.code, d.severity) for d in sink]
+    [('EXAMPLE_INFO', 'info')]
+    """
+    if not (isinstance(category, type) and issubclass(category, GroundinsightWarning)):
+        raise TypeError(
+            "note() takes a GroundinsightWarning subclass, got "
+            f"{category!r}"
+        )
+    sink = _SINK.get()
+    if sink is None:
+        return
+    sink.append(
+        Diagnostic(
+            code=code if code is not None else category.default_code,
+            severity="info",
+            category=category.__name__,
+            message=message,
+            elements=[(str(kind), str(name)) for kind, name in elements],
+        )
+    )
+
+
 @contextlib.contextmanager
 def collecting() -> Iterator[List[Diagnostic]]:
     """Collect the package warnings raised inside the ``with`` block.

@@ -117,7 +117,7 @@ from groundinsight.utils.impedance_calculator import (
     render_frequencies,
     short_circuit_mask,
 )
-from groundinsight.diagnostics import InputWarning, ModelAssumptionWarning, emit
+from groundinsight.diagnostics import InputWarning, ModelAssumptionWarning, emit, note
 from groundinsight.utils.earth_current import (
     NOISE_REL,
     earth_current_vanishes,
@@ -2335,7 +2335,7 @@ class ElectricalNetwork:
             f"({_shortlist(coupled)}). The stationary solver couples them with "
             f"the Norton current E/Z_src instead of the actual loop current and "
             f"uses that current as the fault current of value_current and as "
-            f"i_inj (audit finding PH1, not yet corrected). Against a fully "
+            f"i_inj (a known limitation, not yet corrected). Against a fully "
             f"coupled multi-conductor reference the EPR at the fault came out 6 "
             f"to 38 % too low on cable feeders with Z_src between 5+15j and "
             f"0.3+1j Ohm -- unconservative, and growing as Z_src falls. For a "
@@ -4297,13 +4297,22 @@ class ElectricalNetwork:
             :func:`~groundinsight.utils.earth_current.split_earth_currents`):
             ``I_E`` and ``value_current`` then describe the dominant direction
             of the earth current only.
+
+        Notes
+        -----
+        A fault on the bus of every source that feeds it leaves the earthing
+        network unexcited: the EPR and the earth-return current are zero and
+        both reduction factors are ``None``. That is recorded on the result
+        as the info diagnostic ``FAULT_AT_FEEDING_BUS`` (elements: the fault
+        and its bus) through :func:`~groundinsight.diagnostics.note`, not
+        raised as a warning.
         """
         factors: Dict[float, Optional[float]] = {}
         earth_currents: Dict[float, Optional[complex]] = {}
         feeding: Dict[float, List[str]] = {}
         earthing_voltages: Dict[float, Optional[complex]] = {}
         earthing_impedances: Dict[float, Optional[complex]] = {}
-        undefined: List[Tuple[float, float, float]] = []
+        vanished: List[Tuple[float, float, float]] = []
         spread: List[str] = []
         fault_name = self.network.active_fault
         fault_bus = self.network.faults[fault_name].bus
@@ -4361,8 +4370,7 @@ class ElectricalNetwork:
                 largest = max(
                     (abs(v) for v in electrode_currents.values()), default=0.0
                 )
-                if self._is_excited(freq):
-                    undefined.append((freq, largest, abs(i_fault)))
+                vanished.append((freq, largest, abs(i_fault)))
                 continue
 
             # Anchor for a fault bus without (non-noise) electrode current:
@@ -4431,6 +4439,9 @@ class ElectricalNetwork:
                 elements=[("fault", fault_name), ("bus", fault_bus)],
                 stacklevel=3,
             )
+        undefined = self._report_vanished_earth_current(
+            vanished, fault_name, fault_bus
+        )
         return (
             factors,
             earth_currents,
@@ -4439,6 +4450,62 @@ class ElectricalNetwork:
             earthing_impedances,
             undefined,
         )
+
+    def _report_vanished_earth_current(
+        self,
+        vanished: List[Tuple[float, float, float]],
+        fault_name: str,
+        fault_bus: str,
+    ) -> List[Tuple[float, float, float]]:
+        """
+        Sort the frequencies without an earth current into their two causes.
+
+        An electrode current that is rounding noise against the fault current
+        means one of two things. Either the earthing network is excited and
+        the current genuinely returns through the screens -- then the
+        reduction factor is undefined and the caller warns
+        (``REDUCTION_FACTOR_UNDEFINED``). Or nothing is injected at all,
+        because the fault sits on the bus of every source that feeds it: the
+        fault current closes through that station's own earthing back to the
+        source. That second case explains empty ratios without casting doubt
+        on the result, so it is recorded as the info diagnostic
+        ``FAULT_AT_FEEDING_BUS`` and not raised as a warning -- studies place
+        trial faults on every bus, the source bus included.
+
+        Parameters
+        ----------
+        vanished : list of tuple of float
+            ``(frequency, largest electrode current, |I_F|)`` of every
+            frequency whose electrode currents are all noise.
+        fault_name : str
+            The active fault.
+        fault_bus : str
+            Its bus.
+
+        Returns
+        -------
+        list of tuple of float
+            The entries of ``vanished`` at which the earthing network is
+            excited, for the caller's warning.
+        """
+        undefined = [entry for entry in vanished if self._is_excited(entry[0])]
+        unexcited = [entry[0] for entry in vanished if not self._is_excited(entry[0])]
+        if unexcited:
+            note(
+                ModelAssumptionWarning,
+                f"Fault '{fault_name}' sits on the bus of every source that "
+                f"feeds it at {', '.join(f'{freq:g}' for freq in unexcited)} Hz: "
+                f"the fault current closes through that station's own earthing "
+                f"back to the source, nothing is injected into the earthing "
+                f"network, and the EPR and the earth-return current are zero "
+                f"there. Both reduction factors (value, value_current) are "
+                f"undefined for such a fault and reported as None; U_E is 0 V "
+                f"and Z_E is still the driving-point impedance of the fault "
+                f"bus.",
+                code="FAULT_AT_FEEDING_BUS",
+                elements=[("fault", fault_name), ("bus", fault_bus)],
+            )
+        return undefined
 
     def _warn_on_reduction_factor_divergence(
         self,

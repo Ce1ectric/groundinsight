@@ -37,6 +37,7 @@ logic, it only flips the ``active`` flag and re-runs the existing
 from __future__ import annotations
 
 import logging
+import warnings
 from contextlib import contextmanager
 from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 
@@ -46,6 +47,7 @@ from pydantic import BaseModel, Field
 from groundinsight._state import restore_on_cancel
 from groundinsight.models.core_models import Network
 from groundinsight.progress import StudyHooks
+from groundinsight.utils.compat import warn_stacklevel
 
 
 logger = logging.getLogger(__name__)
@@ -511,6 +513,44 @@ def outage_context(network: Network, outage: Outage) -> Iterator[Network]:
         clear_pathfinder_cache(network)
 
 
+def _resolve_outage_mode(
+    phase_current_mode: str, auto_parallel_coefficients: Optional[bool]
+) -> str:
+    """
+    Resolve the deprecated ``auto_parallel_coefficients`` of the outage study.
+
+    The alias is resolved here instead of being forwarded: ``run_fault``
+    would raise its ``DeprecationWarning`` from inside the package, where
+    Python's default filters hide it, rather than at the line that used the
+    alias. When given, the alias wins, as it does in ``run_fault``.
+
+    Parameters
+    ----------
+    phase_current_mode : str
+        The mode passed to :func:`run_outage_study`.
+    auto_parallel_coefficients : bool or None
+        The deprecated alias; ``None`` means it was not passed.
+
+    Returns
+    -------
+    str
+        ``"auto"`` or ``"paths"`` (or ``phase_current_mode`` unchanged when
+        the alias was not passed; ``run_fault`` validates it).
+    """
+    if auto_parallel_coefficients is None:
+        return phase_current_mode
+    replacement = "auto" if auto_parallel_coefficients else "paths"
+    warnings.warn(
+        f"run_outage_study(auto_parallel_coefficients="
+        f"{auto_parallel_coefficients}) is deprecated; pass "
+        f"phase_current_mode={replacement!r} instead. The old argument still "
+        "wins when given, so this call is unaffected.",
+        DeprecationWarning,
+        stacklevel=warn_stacklevel(3),
+    )
+    return replacement
+
+
 def run_outage_study(
     network: Network,
     *,
@@ -549,8 +589,10 @@ def run_outage_study(
         Label used to identify the base case in the stored DataFrames.
         Defaults to ``"base"``.
     auto_parallel_coefficients : bool, optional
-        Deprecated alias, forwarded to :func:`run_fault`. Defaults to
-        ``None`` (not given).
+        Deprecated alias of ``phase_current_mode`` (``True`` -> ``"auto"``,
+        ``False`` -> ``"paths"``); when given it wins, as in
+        :func:`run_fault`, and raises a ``DeprecationWarning`` that points at
+        the caller of this function. Defaults to ``None`` (not given).
     phase_current_mode : {"auto", "paths"}, optional
         Forwarded to :func:`run_fault`. Defaults to ``"auto"``, which is
         the only mode that divides the source current correctly over a
@@ -632,6 +674,10 @@ def run_outage_study(
             raise ValueError(f"Duplicate scenario label '{scenario.name}'.")
         seen_labels.add(scenario.name)
 
+    phase_current_mode = _resolve_outage_mode(
+        phase_current_mode, auto_parallel_coefficients
+    )
+
     bus_results: Dict[str, pl.DataFrame] = {}
     branch_results: Dict[str, pl.DataFrame] = {}
     failures: Dict[str, str] = {}
@@ -664,7 +710,6 @@ def run_outage_study(
             run_fault(
                 network,
                 fault=fault,
-                auto_parallel_coefficients=auto_parallel_coefficients,
                 phase_current_mode=phase_current_mode,
             )
             bus_results[base_label] = network.res_buses(fault=fault)
@@ -684,7 +729,6 @@ def run_outage_study(
                     run_fault(
                         network,
                         fault=fault,
-                        auto_parallel_coefficients=auto_parallel_coefficients,
                         phase_current_mode=phase_current_mode,
                     )
                     bus_results[scenario.name] = network.res_buses(fault=fault)

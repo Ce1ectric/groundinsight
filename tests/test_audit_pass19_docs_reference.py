@@ -198,7 +198,7 @@ def scan_codes():
                         and isinstance(keyword.value, ast.Constant)
                         and isinstance(keyword.value.value, str)
                     ):
-                        if name == "emit" and node.args:
+                        if name in ("emit", "note") and node.args:
                             category = ast.unparse(node.args[0]).split(".")[-1]
                         else:
                             category = "Diagnostic"
