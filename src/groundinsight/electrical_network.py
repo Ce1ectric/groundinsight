@@ -30,11 +30,38 @@ Two strategies are available to determine the phase current I_p per branch:
    Branch.parallel_coefficient, which is the legacy knob for splitting
    current between parallel paths.
 2) Automatic distribution (auto_phase_currents=True). A reduced phase-only
-   network is solved per source with +I at the source bus and the fault bus
-   as reference. The resulting branch currents are used directly. In this
+   network is solved with +I at each source bus and the fault bus as
+   reference. The resulting branch currents are used directly. In this
    mode parallel_coefficient is ignored. This mode is topology-agnostic and
    is the intended integration point for an external phase-current source
    (e.g. pandapower single-phase short-circuit results).
+
+Sparse kernel (audit pass 19)
+-----------------------------
+Both linear systems of a frequency are sparse -- a grounding network has a
+few entries per row -- and the kernel treats them that way end to end.
+
+*Model values as arrays.* The impedance dictionaries of all buses, branches
+and voltage sources are read once per assembly into ``(elements, F)`` arrays
+(:class:`_NetworkTables`), with the 0 Hz stand-in applied to them as a
+whole. Every later stage indexes into those arrays instead of resolving one
+impedance per element and frequency in Python.
+
+*One factorisation, many right-hand sides.* The phase-conductor network is
+the same matrix for every source, so it is factorised once per frequency
+(:func:`scipy.sparse.linalg.splu`) and solved for all sources as the columns
+of one right-hand side (finding P1). It used to be a dense ``n x n`` solve
+per source and frequency -- the dominant cost of a run, growing faster than
+``n**2``.
+
+*Program order, kept on purpose.* Matrices are assembled from stamps whose
+contributions are summed entry by entry in the order the former dense loops
+added them (:func:`_assemble_csc`). What remains different is rounding: the
+admittances come from NumPy's complex division, which differs from Python's
+in the last bit for about a quarter of all values, and the factorisation is a
+sparse LU instead of LAPACK's dense one. On the badly conditioned phase
+network of a long radial feeder the sparse LU is the *more* accurate of the
+two (finding P13).
 """
 
 import logging
@@ -42,7 +69,8 @@ import math
 
 import numpy as np
 from typing import Dict, List, Optional, Tuple
-from scipy.sparse import csc_matrix
+from scipy.sparse import csc_matrix, csr_matrix
+from scipy.sparse.csgraph import connected_components
 from scipy.sparse.linalg import splu
 from groundinsight.models.core_models import (
     Network,
@@ -59,6 +87,7 @@ from groundinsight.models.core_models import (
 )
 from groundinsight.utils.impedance_calculator import (
     _render_frequencies,
+    _short_circuit_mask,
     check_passive_impedance,
     dc_substitute_impedance,
     is_short_circuit,
@@ -179,6 +208,304 @@ def _is_open_circuit(Z_complex: complex) -> bool:
     the same C double roughly an order of magnitude faster.
     """
     return math.isinf(Z_complex.real) or math.isinf(Z_complex.imag)
+
+
+def _gather_impedances(
+    dicts: List[Optional[Dict[float, ComplexNumber]]], frequencies: List[float]
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Stack impedance dictionaries into one ``(elements, frequencies)`` array.
+
+    Every vectorised step of the kernel starts here: the per-element
+    dictionaries are read once per assembly, and from then on the kernel
+    works on arrays instead of calling :meth:`ElectricalNetwork._resolved_impedance`
+    once per element and frequency.
+
+    Parameters
+    ----------
+    dicts : list of dict or None
+        One impedance dictionary per element, in element order. ``None`` or an
+        empty dictionary means "no value at any frequency".
+    frequencies : list of float
+        Column order.
+
+    Returns
+    -------
+    values : numpy.ndarray
+        Complex array of shape ``(len(dicts), len(frequencies))``. Missing
+        entries are ``nan``.
+    present : numpy.ndarray
+        Boolean array of the same shape, ``True`` where the dictionary has an
+        entry for that frequency.
+
+    Notes
+    -----
+    The real and imaginary parts are written separately. Building the
+    complex value as ``re + 1j*im`` would turn the open-end sentinel
+    ``inf + inf*j`` into ``nan + inf*j``, because ``inf * 1j`` multiplies the
+    zero real part of ``1j`` by infinity.
+    """
+    count, width = len(dicts), len(frequencies)
+    nan = math.nan
+    real: List[float] = []
+    imag: List[float] = []
+    found: List[bool] = []
+    blank_re = [nan] * width
+    blank_ok = [False] * width
+    for mapping in dicts:
+        if not mapping:
+            real.extend(blank_re)
+            imag.extend(blank_re)
+            found.extend(blank_ok)
+            continue
+        get = mapping.get
+        for freq in frequencies:
+            value = get(freq)
+            if value is None:
+                real.append(nan)
+                imag.append(nan)
+                found.append(False)
+            else:
+                real.append(value.real)
+                imag.append(value.imag)
+                found.append(True)
+    values = np.empty((count, width), dtype=complex)
+    values.real = np.asarray(real, dtype=float).reshape(count, width)
+    values.imag = np.asarray(imag, dtype=float).reshape(count, width)
+    present = np.asarray(found, dtype=bool).reshape(count, width)
+    return values, present
+
+
+def _open_mask(values: np.ndarray) -> np.ndarray:
+    """Vectorised :func:`_is_open_circuit`: ``True`` where a part is infinite."""
+    return np.isinf(values.real) | np.isinf(values.imag)
+
+
+def _reciprocal(values: np.ndarray, usable: np.ndarray) -> np.ndarray:
+    """``1/Z`` where ``usable``, zero elsewhere -- without a NumPy warning.
+
+    A NaN impedance gives a NaN admittance here exactly as Python's complex
+    division did in the scalar loops, so a failed computation still reaches
+    :meth:`ElectricalNetwork._assert_finite_system`.
+
+    Parameters
+    ----------
+    values : numpy.ndarray
+        Complex impedances.
+    usable : numpy.ndarray
+        Boolean mask of the entries to invert.
+
+    Returns
+    -------
+    numpy.ndarray
+        Complex admittances, ``0`` where ``usable`` is ``False``.
+    """
+    out = np.zeros(values.shape, dtype=complex)
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        np.divide(1.0, values, out=out, where=usable)
+    return out
+
+
+def _assemble_csc(
+    rows: np.ndarray, cols: np.ndarray, values: np.ndarray, size: int
+) -> csc_matrix:
+    """Sum matrix stamps into a CSC matrix, every entry in stamp order.
+
+    This is the dense assembly loop ``Y[r, c] += v`` without the dense
+    matrix: the stamps are mapped to their (column-major) entry, and
+    :func:`numpy.bincount` adds the contributions of each entry starting from
+    zero in the order they were stamped -- the same additions in the same
+    order as the loop, hence the same rounding. Entries that sum to exactly
+    zero are dropped, as ``csc_matrix(dense)`` did.
+
+    Parameters
+    ----------
+    rows, cols : numpy.ndarray
+        Integer row and column of every stamp.
+    values : numpy.ndarray
+        Complex value of every stamp.
+    size : int
+        Order of the square matrix.
+
+    Returns
+    -------
+    scipy.sparse.csc_matrix
+        The assembled matrix with sorted indices.
+    """
+    if values.size == 0:
+        return csc_matrix((size, size), dtype=complex)
+    keys = np.asarray(cols, dtype=np.int64) * size + np.asarray(rows, dtype=np.int64)
+    unique, inverse = np.unique(keys, return_inverse=True)
+    data = np.empty(unique.size, dtype=complex)
+    data.real = np.bincount(inverse, weights=values.real, minlength=unique.size)
+    data.imag = np.bincount(inverse, weights=values.imag, minlength=unique.size)
+    indptr = np.zeros(size + 1, dtype=np.int64)
+    np.cumsum(np.bincount(unique // size, minlength=size), out=indptr[1:])
+    matrix = csc_matrix(
+        (data, (unique % size).astype(np.int32), indptr.astype(np.int32)),
+        shape=(size, size),
+    )
+    if not np.all(data != 0):
+        matrix.eliminate_zeros()
+    return matrix
+
+
+class _NetworkTables:
+    """Everything one assembly reads from the model, gathered into arrays.
+
+    A ``run_fault`` used to touch every bus and branch once per frequency and
+    stage -- assembly, phase network, coupling terms, result rows -- each time
+    through a Python-level dictionary lookup and :meth:`ElectricalNetwork._resolved_impedance`.
+    On a 4000-bus ring at seven frequencies that was several hundred thousand
+    calls before any linear algebra happened (finding P6). The tables are
+    filled once per :class:`ElectricalNetwork` and every later stage indexes
+    into them.
+
+    Rows follow the model: ``bus_*`` arrays have one row per *active* bus in
+    :attr:`ElectricalNetwork.bus_indices` order, ``branch_*`` arrays one row
+    per branch in ``network.branches`` order, ``vs_*`` arrays one row per
+    voltage source in ``network.sources`` order.
+
+    Attributes
+    ----------
+    frequencies : list of float
+        Column order of every impedance array.
+    column : dict of float to int
+        Frequency to column.
+    bus_z_raw, bus_present : numpy.ndarray
+        Stored grounding impedances of the active buses, ``(n, F)``.
+    branch_names : list of str
+        All branches, in model order.
+    branch_from, branch_to : numpy.ndarray
+        Bus index of each end, ``-1`` where that bus is inactive or missing.
+    branch_active, branch_grounding : numpy.ndarray
+        The ``active`` flag and ``type.grounding_conductor``.
+    branch_in_net : numpy.ndarray
+        Active, with both ends active: the branches that exist in the solve.
+    self_raw, self_present : numpy.ndarray
+        Stored self impedances, ``(m, F)``.
+    mutual, mutual_present : numpy.ndarray
+        Stored mutual impedances (never resolved: they are not inverted).
+    phase_raw, phase_present : numpy.ndarray
+        Stored phase impedances; ``phase_declared`` marks branches whose
+        ``phase_impedance`` is not ``None`` at all.
+    proxy_length : numpy.ndarray
+        ``length`` where positive, else ``1.0`` -- the resistive proxy.
+    vs_names : list of str
+        Voltage sources in model order.
+    vs_bus : numpy.ndarray
+        Bus index of each voltage source, ``-1`` where inactive or missing.
+    vs_z_raw, vs_present : numpy.ndarray
+        Stored source impedances, ``(s, F)``.
+    bus_z, self_z, phase_z, vs_z : numpy.ndarray
+        The same values with the 0 Hz stand-in applied
+        (:meth:`ElectricalNetwork._resolved_impedance`, vectorised); filled
+        by :meth:`resolve`.
+    """
+
+    def __init__(self, electrical: "ElectricalNetwork"):
+        network = electrical.network
+        index = electrical.bus_indices
+        self.frequencies = [float(f) for f in network.frequencies]
+        self.column = {f: j for j, f in enumerate(self.frequencies)}
+        freqs = self.frequencies
+
+        buses = [network.buses[name] for name in index]
+        self.bus_z_raw, self.bus_present = _gather_impedances(
+            [bus.impedance for bus in buses], freqs
+        )
+
+        branches = list(network.branches.values())
+        self.branch_names = [branch.name for branch in branches]
+        self.branch_from = np.fromiter(
+            (index.get(b.from_bus, -1) for b in branches), dtype=np.int64,
+            count=len(branches),
+        )
+        self.branch_to = np.fromiter(
+            (index.get(b.to_bus, -1) for b in branches), dtype=np.int64,
+            count=len(branches),
+        )
+        self.branch_active = np.fromiter(
+            (bool(b.active) for b in branches), dtype=bool, count=len(branches)
+        )
+        self.branch_grounding = np.fromiter(
+            (bool(b.type.grounding_conductor) for b in branches), dtype=bool,
+            count=len(branches),
+        )
+        self.branch_in_net = (
+            self.branch_active & (self.branch_from >= 0) & (self.branch_to >= 0)
+        )
+        self.self_raw, self.self_present = _gather_impedances(
+            [b.self_impedance for b in branches], freqs
+        )
+        self.mutual, self.mutual_present = _gather_impedances(
+            [b.mutual_impedance for b in branches], freqs
+        )
+        self.phase_declared = np.fromiter(
+            (b.phase_impedance is not None for b in branches), dtype=bool,
+            count=len(branches),
+        )
+        self.phase_raw, self.phase_present = _gather_impedances(
+            [b.phase_impedance for b in branches], freqs
+        )
+        self.proxy_length = np.fromiter(
+            (b.length if b.length and b.length > 0 else 1.0 for b in branches),
+            dtype=float, count=len(branches),
+        )
+
+        vsources = [
+            s for s in network.sources.values() if s.source_type == "voltage"
+        ]
+        self.vs_names = [s.name for s in vsources]
+        self.vs_bus = np.fromiter(
+            (index.get(s.bus, -1) for s in vsources), dtype=np.int64,
+            count=len(vsources),
+        )
+        self.vs_z_raw, self.vs_present = _gather_impedances(
+            [s.source_impedance for s in vsources], freqs
+        )
+        self.resolve({})
+
+    def resolve(self, substitutes: Dict[float, float]) -> None:
+        """Apply the 0 Hz stand-in to every impedance that is inverted.
+
+        Vectorised :meth:`ElectricalNetwork._resolved_impedance`: where a
+        frequency has a substitute, every stored value that is a short circuit
+        in the sense of :func:`~groundinsight.utils.impedance_calculator.is_short_circuit`
+        is replaced by it. Mutual impedances are never inverted and stay raw.
+
+        Parameters
+        ----------
+        substitutes : dict of float to float
+            :attr:`ElectricalNetwork._dc_substitutes`.
+        """
+        self.bus_z = self._substituted(self.bus_z_raw, self.bus_present, substitutes)
+        self.self_z = self._substituted(
+            self.self_raw, self.self_present, substitutes
+        )
+        self.phase_z = self._substituted(
+            self.phase_raw, self.phase_present, substitutes
+        )
+        self.vs_z = self._substituted(self.vs_z_raw, self.vs_present, substitutes)
+
+    def _substituted(
+        self,
+        values: np.ndarray,
+        present: np.ndarray,
+        substitutes: Dict[float, float],
+    ) -> np.ndarray:
+        """Copy of ``values`` with the shorted entries of substituted columns
+        replaced; ``values`` itself when nothing is substituted."""
+        columns = [
+            (self.column[f], s) for f, s in substitutes.items() if f in self.column
+        ]
+        if not columns or values.size == 0:
+            return values
+        out = values.copy()
+        for j, substitute in columns:
+            col = out[:, j]
+            shorted = _short_circuit_mask(col.real, col.imag) & present[:, j]
+            col[shorted] = complex(substitute, 0.0)
+        return out
 
 
 class ElectricalNetwork:
@@ -306,6 +633,9 @@ class ElectricalNetwork:
         # Digest of the model values the matrices below were assembled from.
         # Filled once the assembly is done; see :meth:`state_fingerprint`.
         self._build_fingerprint: Optional[tuple] = None
+        # The model values of this assembly as arrays, gathered once (P6);
+        # see :class:`_NetworkTables` and :meth:`_network_tables`.
+        self._tables: Optional[_NetworkTables] = None
 
         self._initialize()
         self._build_fingerprint = self.state_fingerprint()
@@ -1413,18 +1743,102 @@ class ElectricalNetwork:
 
         return phase_currents
 
+    def _network_tables(self) -> _NetworkTables:
+        """The model arrays of this assembly, resolved for the 0 Hz stand-in.
+
+        Gathered on first use and kept for the lifetime of the
+        :class:`ElectricalNetwork`, which -- like the matrices -- describes
+        the network as it was when the object was built.
+
+        Returns
+        -------
+        _NetworkTables
+            The gathered tables.
+        """
+        if self._tables is None:
+            self._tables = _NetworkTables(self)
+            self._tables.resolve(self._dc_substitutes)
+        return self._tables
+
+    def _phase_admittances(
+        self, tables: _NetworkTables, column: int
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Phase-side admittance of every branch that exists in the solve.
+
+        The rules of the scalar implementation, applied to whole arrays: a
+        declared phase impedance at this frequency gives ``1/Z_phase`` (zero
+        for an open conductor); without one the branch falls back to the
+        documented proxy, ``1/Z_self`` when it has an intact grounding
+        conductor with a value at this frequency and ``1/length`` otherwise.
+        A broken shield (infinite ``Z_self``) takes the length proxy as well:
+        it opens the shield, not the phase conductor next to it (PH3).
+
+        Parameters
+        ----------
+        tables : _NetworkTables
+            The gathered model arrays.
+        column : int
+            Frequency column.
+
+        Returns
+        -------
+        admittance : numpy.ndarray
+            Complex admittance per branch of ``tables.branch_in_net``, in
+            branch order.
+        proxied : numpy.ndarray
+            Boolean mask over the same branches: ``True`` where the proxy was
+            used.
+        broken : numpy.ndarray
+            Boolean mask over the same branches: proxied branches with a
+            grounding conductor whose ``Z_self`` is infinite at this frequency
+            (they took the length proxy).
+
+        Raises
+        ------
+        ZeroDivisionError
+            If a declared phase impedance is exactly zero. The scalar
+            implementation inverted it with Python's complex division and
+            raised; that behaviour is kept rather than silently turned into an
+            infinite admittance.
+        """
+        rows = np.flatnonzero(tables.branch_in_net)
+        z_phase = tables.phase_z[rows, column]
+        declared = tables.phase_declared[rows] & tables.phase_present[rows, column]
+        admittance = np.zeros(rows.size, dtype=complex)
+
+        invert = declared & ~_open_mask(z_phase)
+        zero = invert & (z_phase.real == 0.0) & (z_phase.imag == 0.0)
+        if zero.any():
+            # Same exception, same message as the scalar ``1.0 / Z_phase``.
+            1.0 / complex(z_phase[zero][0])
+        admittance[invert] = _reciprocal(z_phase[invert], np.ones(invert.sum(), bool))
+
+        proxied = ~declared
+        z_self = tables.self_z[rows, column]
+        with_conductor = (
+            tables.branch_grounding[rows] & tables.self_present[rows, column]
+        )
+        shield_open = _open_mask(z_self)
+        invert = proxied & with_conductor & ~shield_open
+        admittance[invert] = _reciprocal(z_self[invert], np.ones(invert.sum(), bool))
+        broken = proxied & with_conductor & shield_open
+        by_length = proxied & ~invert
+        admittance[by_length] = 1.0 / tables.proxy_length[rows][by_length]
+        return admittance, proxied, broken
+
     def _compute_phase_currents_auto(
         self, freq: float, sources_with_path
     ) -> Dict[str, complex]:
         """
         Variant B: solve a reduced phase-only network to split source currents over parallel paths.
 
-        The phase-side admittance of each branch is approximated by ``1 / Z_self`` when
-        a grounding conductor is present and by ``1 / length`` otherwise (purely
-        resistive proxy). The fault bus is taken as the reference (``u_fault = 0``) and
-        each source injects ``scaling * source.values[freq]`` at its bus. Branch phase
-        currents are then ``(u_from - u_to) * y_phase`` per branch. Contributions from
-        all sources are superposed.
+        The phase-side admittance of each branch is the declared phase
+        impedance, or the documented proxy ``1 / Z_self`` when a grounding
+        conductor is present and ``1 / length`` otherwise (see
+        :meth:`_phase_admittances`). The fault bus is taken as the reference
+        (``u_fault = 0``) and each source injects ``scaling * source.values[freq]``
+        at its bus. Branch phase currents are then ``(u_from - u_to) * y_phase``
+        per branch. Contributions from all sources are superposed.
 
         This mode ignores ``Branch.parallel_coefficient`` because the split is derived
         from the topology. It is also the natural integration point for an external
@@ -1442,98 +1856,98 @@ class ElectricalNetwork:
         -------
         Dict[str, complex]
             Signed phase current per branch.
+
+        Raises
+        ------
+        RuntimeError
+            If the phase-conductor network around the fault bus is singular.
+
+        Notes
+        -----
+        **One factorisation, all sources at once** (audit pass 19, P1). The
+        reduced phase network is a complex Laplacian with the fault bus as
+        reference: sparse, with about ``2m + n`` entries, and the *same*
+        matrix for every source. It used to be assembled as a dense ``n x n``
+        array and solved with :func:`numpy.linalg.solve` once per source and
+        frequency, which made it the dominant cost of a run and the one that
+        grew fastest with the network: measured on a 1000-bus ring at seven
+        frequencies it took 1.19 s of 2.24 s, on a 1000-bus radial feeder with
+        three sources 2.95 s of 3.92 s (now 0.035 s and 0.050 s). It is now assembled
+        straight into CSC, factorised once per frequency with
+        :func:`scipy.sparse.linalg.splu` and solved for a right-hand side with
+        one column per source; the branch currents are one vectorised gather.
+        Superposition is kept in the original order (sources in turn), and
+        the stamps are accumulated in the original program order, so the
+        reduced matrix differs from the one the dense loop built only by the
+        last-bit rounding of NumPy's complex division.
+
+        The galvanic component of the fault bus is found with
+        :func:`scipy.sparse.csgraph.connected_components` instead of a Python
+        depth-first search. Everything observable is unchanged: the proxy
+        warning, the record of a source without phase-conductor connection
+        (reported once per run, PH9), the :class:`RuntimeError` for a
+        singular phase network, and :attr:`phase_currents` as a dictionary
+        over all branches. A phase network with a non-finite admittance is
+        solved densely as before, so a NaN propagates instead of being
+        reported as a singular factor.
         """
         fault_name = self.network.active_fault
         fault = self.network.faults[fault_name]
         fault_bus_idx = self.bus_indices[fault.bus]
         n = self.num_buses
+        tables = self._network_tables()
+        column = tables.column[float(freq)]
 
-        phase_currents: Dict[str, complex] = {
-            name: 0.0 + 0.0j for name in self.network.branches
-        }
-
-        # Assemble phase admittance matrix (one entry per branch, regardless of
-        # grounding_conductor: the phase conductor exists in both cases). Inactive
-        # branches and branches with at least one inactive endpoint are skipped --
-        # they cannot carry a phase current in the linearised model.
-        Y_phase = np.zeros((n, n), dtype=complex)
-        branch_y_phase: Dict[str, complex] = {}
-        proxied: List[str] = []
-        broken_shields: List[str] = []
-        for branch in self.network.branches.values():
-            if not branch.active:
-                continue
-            if branch.from_bus not in self.bus_indices:
-                continue
-            if branch.to_bus not in self.bus_indices:
-                continue
-            Z_phase = None
-            if branch.phase_impedance is not None:
-                Z_phase = self._resolved_impedance(
-                    branch.phase_impedance.get(freq), freq
-                )
-            if Z_phase is not None:
-                # Declared phase-conductor impedance -- the physical quantity.
-                y = 0.0 + 0.0j if _is_open_circuit(Z_phase) else 1.0 / Z_phase
-            else:
-                # No phase_impedance_formula on the type: fall back to the
-                # documented proxy and remember the branch so the fallback can
-                # be reported once per solve rather than silently.
-                proxied.append(branch.name)
-                Z_complex = self._resolved_impedance(
-                    branch.self_impedance.get(freq), freq
-                )
-                if (
-                    branch.type.grounding_conductor
-                    and Z_complex is not None
-                    and not _is_open_circuit(Z_complex)
-                ):
-                    y = 1.0 / Z_complex
-                else:
-                    # No grounding conductor -- or a broken one: an infinite
-                    # Z_self ("nan") opens the *shield*, not the phase
-                    # conductor next to it. Taking 1/Z_self = 0 here removed
-                    # the phase conductor from the phase network, sent the
-                    # whole current round the other side of a ring and hid
-                    # the cycle from the proxy warning (PH3, -39 % EPR).
-                    if branch.type.grounding_conductor and Z_complex is not None:
-                        broken_shields.append(branch.name)
-                    length = (
-                        branch.length if branch.length and branch.length > 0 else 1.0
-                    )
-                    y = complex(1.0 / length, 0.0)
-            branch_y_phase[branch.name] = y
-            fi = self.bus_indices[branch.from_bus]
-            ti = self.bus_indices[branch.to_bus]
-            Y_phase[fi, fi] += y
-            Y_phase[ti, ti] += y
-            Y_phase[fi, ti] -= y
-            Y_phase[ti, fi] -= y
+        rows = np.flatnonzero(tables.branch_in_net)
+        y, proxied_mask, broken_mask = self._phase_admittances(tables, column)
+        from_idx = tables.branch_from[rows]
+        to_idx = tables.branch_to[rows]
+        names = tables.branch_names
 
         # Restrict the solve to the galvanic component of the phase network that
         # contains the fault bus. Pinning the fault bus to zero over the *whole*
         # index range leaves any other island without a reference node, which
         # makes the reduced matrix singular -- previously that raised
         # LinAlgError and the entire source contribution was dropped in silence.
-        component = self._phase_network_component(branch_y_phase, fault_bus_idx)
+        connected = y != 0
+        graph = csr_matrix(
+            (
+                np.ones(int(connected.sum())),
+                (from_idx[connected], to_idx[connected]),
+            ),
+            shape=(n, n),
+        )
+        _, labels = connected_components(graph, directed=False)
+        in_component = labels == labels[fault_bus_idx]
 
         # The proxy only ever influences the result where there is something to
         # split: in a network without cycles every branch carries the full
         # source current regardless of its impedance. Warning about the proxy on
         # a radial network would be noise, so the warning is scoped to the
         # meshed case and emitted once per solve rather than once per frequency.
-        self._warn_phase_impedance_proxy(
-            proxied, branch_y_phase, component, broken_shields
-        )
-        keep = [i for i in sorted(component) if i != fault_bus_idx]
-        keep_pos = {bus_idx: j for j, bus_idx in enumerate(keep)}
+        # (The method returns at once when it has warned or nothing is proxied,
+        # so building its arguments is skipped in exactly those cases.)
+        if proxied_mask.any() and not self._phase_proxy_warned:
+            self._warn_phase_impedance_proxy(
+                [names[b] for b in rows[proxied_mask]],
+                dict(zip((names[b] for b in rows), y.tolist())),
+                set(np.flatnonzero(in_component).tolist()),
+                [names[b] for b in rows[broken_mask]],
+            )
+
+        keep_mask = in_component.copy()
+        keep_mask[fault_bus_idx] = False
+        keep = np.flatnonzero(keep_mask)
+        position = np.full(n, -1, dtype=np.int64)
+        position[keep] = np.arange(keep.size)
+
+        scaling = fault.scaling_at(freq)
+        columns: List[Tuple[int, complex]] = []
+        factor = None
+
         # An empty ``keep`` means the fault bus is alone in the phase network.
         # That is not an early exit: every source then fails the membership test
         # below and gets told why, instead of the function returning zeros.
-        Y_red = Y_phase[np.ix_(keep, keep)] if keep else None
-
-        scaling = fault.scaling_at(freq)
-
         for source_name in sources_with_path:
             source = self.network.sources[source_name]
             src_idx = self.bus_indices.get(source.bus)
@@ -1543,7 +1957,7 @@ class ElectricalNetwork:
             if I is None:
                 continue
 
-            if src_idx not in keep_pos:
+            if position[src_idx] < 0:
                 # The source bus is not galvanically connected to the fault bus
                 # through the phase network, so no phase current can flow between
                 # them. That is a legitimate result -- but it is also the exact
@@ -1554,41 +1968,121 @@ class ElectricalNetwork:
                 )
                 continue
 
-            i_red = np.zeros(len(keep), dtype=complex)
-            i_red[keep_pos[src_idx]] = I
+            if factor is None:
+                # Factorised when the first source needs it -- the point where
+                # the per-source dense solve used to raise for a singular network.
+                factor = self._factorise_phase_network(
+                    position, from_idx, to_idx, y, keep.size, fault.bus, freq
+                )
+            columns.append((int(position[src_idx]), I))
 
-            try:
-                u_red = np.linalg.solve(Y_red, i_red)
-            except np.linalg.LinAlgError as exc:
-                raise RuntimeError(
-                    f"The phase-conductor network around fault bus "
-                    f"'{fault.bus}' is singular at {freq} Hz even after "
-                    f"restricting the solve to the galvanic component of the "
-                    f"fault bus ({len(keep) + 1} buses). This should not happen "
-                    f"for a passive connected network; it usually means a branch "
-                    f"carries a zero or non-finite phase impedance. Check the "
-                    f"'phase_impedance_formula' of the branch types involved, or "
-                    f"switch to phase_current_mode='paths' and set "
-                    f"Branch.parallel_coefficient by hand."
-                ) from exc
+        phase_currents: Dict[str, complex] = {
+            name: 0.0 + 0.0j for name in self.network.branches
+        }
+        if not columns:
+            return phase_currents
 
-            u_full = np.zeros(n, dtype=complex)
-            for j, bus_idx in enumerate(keep):
-                u_full[bus_idx] = u_red[j]
-            # u_full[fault_bus_idx] = 0 by construction
+        rhs = np.zeros((keep.size, len(columns)), dtype=complex)
+        for col, (pos, current) in enumerate(columns):
+            rhs[pos, col] = current
+        reduced = factor(rhs)
+        potentials = np.zeros((n, len(columns)), dtype=complex)
+        potentials[keep] = reduced
+        # u_full[fault_bus_idx] = 0 by construction
 
-            for branch in self.network.branches.values():
-                if branch.name not in branch_y_phase:
-                    # Inactive branch or branch with inactive endpoint -- carries
-                    # no phase current and was excluded from Y_phase above.
-                    continue
-                y = branch_y_phase[branch.name]
-                fi = self.bus_indices[branch.from_bus]
-                ti = self.bus_indices[branch.to_bus]
-                i_branch = (u_full[fi] - u_full[ti]) * y
-                phase_currents[branch.name] += i_branch
-
+        # Superposition source by source, as the per-source loop added it.
+        total = np.zeros(rows.size, dtype=complex)
+        for col in range(len(columns)):
+            total += (potentials[from_idx, col] - potentials[to_idx, col]) * y
+        for name, value in zip((names[b] for b in rows), total.tolist()):
+            phase_currents[name] = value
         return phase_currents
+
+    def _factorise_phase_network(
+        self,
+        position: np.ndarray,
+        from_idx: np.ndarray,
+        to_idx: np.ndarray,
+        y: np.ndarray,
+        size: int,
+        fault_bus: str,
+        freq: float,
+    ):
+        """Assemble the reduced phase network and return a solver for it.
+
+        The stamps of every branch -- ``+y`` on both diagonals, ``-y`` on the
+        two off-diagonals -- are accumulated in branch order and mapped
+        through ``position``; rows and columns of buses outside the reduced
+        system (the fault bus, other islands) are dropped -- the sparse
+        counterpart of ``Y_phase[np.ix_(keep, keep)]`` of the former dense
+        assembly, with the same additions in the same order.
+
+        Parameters
+        ----------
+        position : numpy.ndarray
+            Row of each bus in the reduced system, ``-1`` if it is not part of
+            it.
+        from_idx, to_idx : numpy.ndarray
+            Bus indices of the branch ends.
+        y : numpy.ndarray
+            Phase admittance per branch.
+        size : int
+            Number of rows of the reduced system.
+        fault_bus : str
+            Name of the fault bus, for the error message.
+        freq : float
+            Frequency, for the error message.
+
+        Returns
+        -------
+        callable
+            ``solve(rhs) -> potentials`` for a ``(size,)`` or ``(size, k)``
+            right-hand side.
+
+        Raises
+        ------
+        RuntimeError
+            If the reduced system is singular.
+        """
+        pf = position[from_idx]
+        pt = position[to_idx]
+        stamp_rows = np.stack([pf, pt, pf, pt], axis=1).ravel()
+        stamp_cols = np.stack([pf, pt, pt, pf], axis=1).ravel()
+        values = (y[:, None] * np.array([1.0, 1.0, -1.0, -1.0])).ravel()
+        keep = (stamp_rows >= 0) & (stamp_cols >= 0)
+        matrix = _assemble_csc(
+            stamp_rows[keep], stamp_cols[keep], values[keep], size
+        )
+        message = (
+            f"The phase-conductor network around fault bus "
+            f"'{fault_bus}' is singular at {freq} Hz even after "
+            f"restricting the solve to the galvanic component of the "
+            f"fault bus ({size + 1} buses). This should not happen "
+            f"for a passive connected network; it usually means a branch "
+            f"carries a zero or non-finite phase impedance. Check the "
+            f"'phase_impedance_formula' of the branch types involved, or "
+            f"switch to phase_current_mode='paths' and set "
+            f"Branch.parallel_coefficient by hand."
+        )
+        if not np.all(np.isfinite(matrix.data)):
+            # A NaN or infinite admittance: SuperLU would call that "exactly
+            # singular", LAPACK propagates it. Keep the historic behaviour.
+            dense = matrix.toarray()
+
+            def solve_dense(rhs):
+                try:
+                    return np.linalg.solve(dense, rhs)
+                except np.linalg.LinAlgError as exc:
+                    raise RuntimeError(message) from exc
+
+            # The dense solve raised per source, i.e. at the first solve.
+            solve_dense(np.zeros((size, 1), dtype=complex))
+            return solve_dense
+        try:
+            lu = splu(matrix)
+        except RuntimeError as exc:
+            raise RuntimeError(message) from exc
+        return lu.solve
 
     def _warn_phase_impedance_proxy(
         self,
@@ -1675,51 +2169,6 @@ class ElectricalNetwork:
             + [("fault", str(fault_name))],
             stacklevel=5,
         )
-
-    def _phase_network_component(
-        self, branch_y_phase: Dict[str, complex], start_idx: int
-    ) -> set:
-        """
-        Return the bus indices galvanically reachable from ``start_idx``.
-
-        Connectivity is taken from the phase-side admittances assembled for the
-        current frequency: a branch connects its two buses when its phase
-        admittance is non-zero. An open-circuited branch (``y = 0``) therefore
-        splits the network here exactly as it does in the physical model.
-
-        Parameters
-        ----------
-        branch_y_phase : Dict[str, complex]
-            Phase admittance per branch name, as assembled by
-            :meth:`_compute_phase_currents_auto`.
-        start_idx : int
-            Bus index to start the traversal from (the fault bus).
-
-        Returns
-        -------
-        set
-            Bus indices in the same galvanic component as ``start_idx``,
-            including ``start_idx`` itself.
-        """
-        adjacency: Dict[int, set] = {}
-        for branch_name, y in branch_y_phase.items():
-            if y == 0:
-                continue
-            branch = self.network.branches[branch_name]
-            fi = self.bus_indices[branch.from_bus]
-            ti = self.bus_indices[branch.to_bus]
-            adjacency.setdefault(fi, set()).add(ti)
-            adjacency.setdefault(ti, set()).add(fi)
-
-        seen = {start_idx}
-        stack = [start_idx]
-        while stack:
-            current = stack.pop()
-            for neighbour in adjacency.get(current, ()):
-                if neighbour not in seen:
-                    seen.add(neighbour)
-                    stack.append(neighbour)
-        return seen
 
     def _add_mutual_currents(self, i_vector, freq, phase_currents):
         """
