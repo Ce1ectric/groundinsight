@@ -1208,7 +1208,7 @@ def ring4000():
 
 @pytest.mark.slow
 def test_ring_4000_at_seven_frequencies_runs_in_seconds(ring4000):
-    """P1/P2: the dense kernel needs 23-28 s here (extrapolated from 1000 to
+    """P1/P2: the dense kernel needs 20-28 s here (extrapolated from 1000 to
     2500 buses / measured in the audit); see below for the memory."""
     seconds = _cpu_seconds(lambda: gi.run_fault(ring4000, "F"))
     assert seconds < 3.0, f"{seconds:.2f} s"
@@ -1225,7 +1225,7 @@ def test_ring_4000_at_seven_frequencies_stays_below_400_mb(ring4000):
 
 @pytest.mark.slow
 def test_radial_4000_with_three_sources_runs_in_seconds():
-    """P1: 143-210 s with the dense kernel, which repeated the phase solve
+    """P1: 143-200 s with the dense kernel, which repeated the phase solve
     per source (audit / extrapolated from 1000 and 2000 buses)."""
     net = radial(4000, F=7, n_sources=3)
     seconds = _cpu_seconds(lambda: gi.run_fault(net, "F"))
@@ -1242,8 +1242,9 @@ def test_mesh_50x50_with_four_sources_runs_in_seconds():
 
 @pytest.mark.slow
 def test_bus_response_and_cuts_on_large_rings_run_in_fractions_of_a_second():
-    """P7: 2.8 s each on a 2000-bus ring with the dense solves (measured
-    interleaved against the base implementation)."""
+    """P7: 5.6 s (bus_response, with its dense earthing columns) and 2.8 s
+    (analyze_cuts) on a 2000-bus ring with the dense solves, measured
+    interleaved against the base implementation."""
     net = ring(2000, F=7)
     gi.run_fault(net, "F")
     fault_bus = net.faults["F"].bus

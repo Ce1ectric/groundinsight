@@ -516,7 +516,7 @@ def _unit_injection(
     i_vector = np.zeros(len(ordered), dtype=complex)
     i_vector[index[fault_bus]] = 1.0
     # A sparse LU of the matrix (audit pass 19, P7): the dense solve on a copy
-    # of a dense ``Y`` was cubic in the number of buses -- 3.0 s on a
+    # of a dense ``Y`` was cubic in the number of buses -- 2.8 s on a
     # 2000-bus ring at seven frequencies -- for a system with a handful of
     # entries per row.
     try:

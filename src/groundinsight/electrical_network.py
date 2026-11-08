@@ -823,9 +823,9 @@ class _NetworkTables:
         so the insertion order of the model does not matter. The values enter
         a BLAKE2 digest as raw bytes instead of a tuple of Python floats with
         one entry per element and frequency. Built from tables the assembly
-        has gathered anyway, the digest costs 5 ms on a 4000-bus ring at
+        has gathered anyway, the digest costs about 5 ms on a 4000-bus ring at
         seven frequencies, where the separate pass over the model that built
-        the tuple took 27 ms on every build (finding P6). Negative zeros are
+        the tuple took about 26 ms on every build (finding P6). Negative zeros are
         folded into zeros first, so that ``0.0`` and ``-0.0`` compare equal as
         they did in the tuple.
 
@@ -1058,9 +1058,9 @@ class ElectricalNetwork:
         and frequency, built in a separate pass over the model on every
         assembly (finding P6). The coverage is the same, including values
         stored at frequencies the network is not solved at. A call here reads
-        the model afresh and costs about what the tuple did (38 ms against
-        27 ms on a 4000-bus ring at seven frequencies); the fingerprint of a
-        build reuses the tables of the assembly and costs 5 ms.
+        the model afresh and costs about what the tuple did (both about 25 ms
+        on a 4000-bus ring at seven frequencies); the fingerprint of a build
+        reuses the tables of the assembly and costs about 5 ms.
         """
         return _NetworkTables(self, fingerprint_only=True).fingerprint(
             self.network.active_fault
@@ -2393,8 +2393,8 @@ class ElectricalNetwork:
         array and solved with :func:`numpy.linalg.solve` once per source and
         frequency, which made it the dominant cost of a run and the one that
         grew fastest with the network: measured on a 1000-bus ring at seven
-        frequencies it took 1.19 s of 2.24 s, on a 1000-bus radial feeder with
-        three sources 2.95 s of 3.92 s (now 0.035 s and 0.050 s). It is now assembled
+        frequencies it took 0.60 s of 1.06 s, on a 1000-bus radial feeder with
+        three sources 1.29 s of 1.66 s (now 0.011 s and 0.010 s). It is now assembled
         straight into CSC, factorised once per frequency with
         :func:`scipy.sparse.linalg.splu` and solved for a right-hand side with
         one column per source; the branch currents are one vectorised gather.

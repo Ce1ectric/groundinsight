@@ -862,8 +862,8 @@ def bus_response(
         # is what makes ``r_epr`` evaluable per electrode (it is the denominator
         # of the reduction factor). The factorisation is a sparse LU of the
         # assembled matrix (audit pass 19, P7): the dense solve on a copy of a
-        # dense ``Y`` was cubic in the number of buses -- 3.1 s on a 2000-bus
-        # ring at seven frequencies.
+        # dense ``Y`` was cubic in the number of buses -- 5.6 s on a 2000-bus
+        # ring at seven frequencies, the dense earthing columns included.
         i_no_mutual = electrical.i_vectors_no_mutual.get(freq)
         rhs = [np.asarray(i_vector, dtype=complex), unit]
         if i_no_mutual is not None:
