@@ -256,3 +256,114 @@ def test_reduction_factor_without_cached_factors_matches(solved_ring):
         got = clone.results["F"].reduction_factor.value[freq]
         want = solved_ring.results["F"].reduction_factor.value[freq]
         assert got == pytest.approx(want, rel=1e-13)
+
+
+# ---------------------------------------------------------------------------
+# ARC9 -- creating an element is atomic
+# ---------------------------------------------------------------------------
+
+#: Formulas that pass every check made on the type and only fail when they
+#: are evaluated for an element: a negative resistance (passivity check) and
+#: ``0 * log(0)`` at 50 Hz (NaN check). The NaN has to come from the
+#: evaluation -- SymPy simplifies ``0/(f - 50)`` to ``0`` already when parsing.
+_BUS_FORMULAS_FAILING_ON_EVALUATION = ["-rho", "rho*0.01 + (f - 50)*log(f - 50)"]
+
+
+@pytest.mark.parametrize("formula", _BUS_FORMULAS_FAILING_ON_EVALUATION)
+def test_failed_create_bus_leaves_network_unchanged(formula):
+    net = build_ring()
+    before = net.model_dump()
+    bad = _bus_type(name="bad", formula=formula)
+    with pytest.raises(ValueError):
+        gi.create_bus(name="x", type=bad, network=net)
+    assert net.model_dump() == before
+    assert "x" not in net.buses
+    # The name is free again: the same call with a working type succeeds.
+    gi.create_bus(name="x", type=_bus_type(), network=net)
+    assert net.buses["x"].impedance == compute_impedance(
+        BUS_FORMULA, FREQUENCIES, {"rho": 100.0}
+    )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        # fails in the first step (self impedance, passivity)
+        {"self_impedance_formula": "-l"},
+        # fails in the last step, after self/mutual/phase were evaluated
+        {"R_self_formula": "j*l"},
+    ],
+    ids=["first_step", "last_step"],
+)
+def test_failed_create_branch_leaves_network_unchanged(overrides):
+    net = build_ring()
+    before = net.model_dump()
+    bad = _cable_type(name="bad", **overrides)
+    with pytest.raises(ValueError):
+        gi.create_branch(
+            name="x", type=bad, from_bus="a", to_bus="c", length=1.0, network=net
+        )
+    assert net.model_dump() == before
+    assert "x" not in net.branches
+    gi.create_branch(
+        name="x", type=_cable_type(), from_bus="a", to_bus="c", length=2.0, network=net
+    )
+    assert net.branches["x"].self_impedance == compute_impedance(
+        SELF_FORMULA, FREQUENCIES, {"rho": 100.0, "l": 2.0}
+    )
+
+
+def test_failed_add_leaves_the_element_object_untouched():
+    """A derivation that fails half-way must not leave the element object
+    half-derived either -- it may be reused by the caller."""
+    net = build_ring()
+    branch = gi.Branch(
+        name="x", type=_cable_type(name="bad", R_self_formula="j*l"),
+        length=1.0, from_bus="a", to_bus="c",
+        self_impedance={}, mutual_impedance={},
+    )
+    snapshot = branch.model_dump()
+    with pytest.raises(ValueError):
+        net.add_branch(branch)
+    assert branch.model_dump() == snapshot
+
+
+def test_failed_overwrite_keeps_the_previous_element():
+    net = build_ring()
+    original = net.buses["b"]
+    before = net.model_dump()
+    replacement = gi.Bus(name="b", type=_bus_type(name="bad", formula="-rho"), impedance={})
+    with pytest.raises(ValueError):
+        net.add_bus(replacement, overwrite=True)
+    assert net.buses["b"] is original
+    assert net.model_dump() == before
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda net: gi.create_source(name="s2", bus="nowhere", values={50.0: 1.0}, network=net),
+        lambda net: gi.create_source(name="s2", bus="a", values={50.0: "x"}, network=net),
+        lambda net: gi.create_fault(name="F2", bus="nowhere", scalings={}, network=net),
+        lambda net: gi.create_fault(name="F2", bus="a", scalings={50.0: -1.0}, network=net),
+        lambda net: gi.create_branch(
+            name="x", type=_cable_type(), from_bus="a", to_bus="nowhere",
+            length=1.0, network=net,
+        ),
+    ],
+    ids=["source_bus", "source_values", "fault_bus", "fault_scalings", "branch_bus"],
+)
+def test_failed_create_source_fault_branch_leave_network_unchanged(call):
+    net = build_ring()
+    before = net.model_dump()
+    with pytest.raises(ValueError):
+        call(net)
+    assert net.model_dump() == before
+
+
+def test_create_fault_active_without_network_is_a_clear_error():
+    """``active=True`` needs a network to activate the fault in; it used to
+    fail with ``AttributeError: 'NoneType' object has no attribute
+    'set_active_fault'``."""
+    with pytest.raises(ValueError, match="active=True"):
+        gi.create_fault(name="F", bus="a", scalings={}, active=True)

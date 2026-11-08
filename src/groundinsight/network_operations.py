@@ -272,8 +272,9 @@ def create_fault(
     ------
     ValueError
         If the specified bus does not exist in the provided network, if
-        ``t_k_s`` is not a positive duration, or if ``n_factor`` lies
-        outside ``(0, 1]``.
+        ``t_k_s`` is not a positive duration, if ``n_factor`` lies
+        outside ``(0, 1]``, or if ``active=True`` is passed without a
+        network. The network is unchanged in every case.
 
     Examples
     --------
@@ -292,6 +293,13 @@ def create_fault(
     >>> fault.name
     'Fault1'
     """
+    if active and network is None:
+        raise ValueError(
+            f"create_fault(name='{name}', active=True) needs a network: a "
+            "fault can only be the active one *in* a network. Pass "
+            "network=..., or leave active=False and call "
+            "network.set_active_fault(...) once the fault has been added."
+        )
     if network:
         if bus not in network.buses:
             raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
@@ -301,7 +309,6 @@ def create_fault(
         description=description,
         bus=bus,
         scalings=scalings,
-        active=False,
         t_k_s=t_k_s,
         n_factor=n_factor,
     )

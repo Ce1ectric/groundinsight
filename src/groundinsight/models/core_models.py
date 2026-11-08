@@ -15,7 +15,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing import Any, Optional, List, Dict, Literal, Union
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Tuple, Union
 from groundinsight.diagnostics import Diagnostic, GroundinsightWarning
 from groundinsight.utils.validations import validate_impedance_formula_value
 from groundinsight.utils.impedance_calculator import (
@@ -702,25 +702,60 @@ class Bus(ValidatedAssignmentModel):
     L: Optional[Dict[float, float]] = None
     C: Optional[Dict[float, float]] = None
 
+    #: Fields that :meth:`calculate_impedance` computes from ``type``,
+    #: ``specific_earth_resistance`` and the network frequencies.
+    DERIVED_FIELDS: ClassVar[Tuple[str, ...]] = ("impedance", "R", "L", "C")
+
     def calculate_impedance(self, frequencies: List[float]):
         """
         Calculates impedance and -- if specified by the type -- the lumped
         RLC parameters for each frequency.
 
         ``impedance`` is always recomputed from ``type.impedance_formula``.
-        Each of ``R``, ``L`` and ``C`` is recomputed only if the matching
-        formula is set on the type; otherwise the attribute is left as
-        ``None``. Utilizes the external ``impedance_calculator`` to avoid
-        storing non-pickleable functions.
+        Each of ``R``, ``L`` and ``C`` is computed from the matching formula
+        of the type, and set to ``None`` when the type has none. Utilizes the
+        external ``impedance_calculator`` to avoid storing non-pickleable
+        functions.
+
+        The update is atomic: every value is computed first and only then
+        written, so a formula that fails to evaluate leaves the bus exactly as
+        it was.
 
         Parameters
         ----------
         frequencies : List[float]
             A list of frequencies at which to
             evaluate the formulas.
+
+        Raises
+        ------
+        ValueError
+            If a formula cannot be evaluated or yields a grounding impedance
+            that cannot be inverted into an admittance.
         """
-        rho = self.specific_earth_resistance
-        params = {"rho": rho}
+        self._apply_derived(self._derive(frequencies))
+
+    def _derive(self, frequencies: List[float]) -> Dict[str, Any]:
+        """
+        Compute every derived field without writing any of them.
+
+        Parameters
+        ----------
+        frequencies : List[float]
+            Frequencies at which to evaluate the formulas.
+
+        Returns
+        -------
+        Dict[str, Any]
+            One entry per name in :attr:`DERIVED_FIELDS`. ``R``, ``L`` and
+            ``C`` are ``None`` when the type declares no formula for them.
+
+        Raises
+        ------
+        ValueError
+            As documented for :meth:`calculate_impedance`.
+        """
+        params = {"rho": self.specific_earth_resistance}
 
         # Mandatory frequency-domain impedance.
         impedance = compute_impedance(
@@ -737,21 +772,34 @@ class Bus(ValidatedAssignmentModel):
             formula_str=self.type.impedance_formula,
             params=params,
         )
-        self.impedance = impedance
+        derived: Dict[str, Any] = {"impedance": impedance}
 
-        # Optional lumped RLC -- skipped silently when no formula is set.
-        if self.type.R_formula is not None:
-            self.R = compute_real_value(
-                self.type.R_formula, frequencies, params, name=f"{self.name}.R"
+        # Optional lumped RLC -- None when the type declares no formula.
+        for field, formula in (
+            ("R", self.type.R_formula),
+            ("L", self.type.L_formula),
+            ("C", self.type.C_formula),
+        ):
+            derived[field] = (
+                None
+                if formula is None
+                else compute_real_value(
+                    formula, frequencies, params, name=f"{self.name}.{field}"
+                )
             )
-        if self.type.L_formula is not None:
-            self.L = compute_real_value(
-                self.type.L_formula, frequencies, params, name=f"{self.name}.L"
-            )
-        if self.type.C_formula is not None:
-            self.C = compute_real_value(
-                self.type.C_formula, frequencies, params, name=f"{self.name}.C"
-            )
+        return derived
+
+    def _apply_derived(self, derived: Dict[str, Any]) -> None:
+        """
+        Write values computed by :meth:`_derive`.
+
+        Parameters
+        ----------
+        derived : Dict[str, Any]
+            Field name to value, as returned by :meth:`_derive`.
+        """
+        for field, value in derived.items():
+            setattr(self, field, value)
 
     @field_validator("impedance", mode="before")
     def validate_impedance(cls, value):
@@ -941,6 +989,19 @@ class Branch(ValidatedAssignmentModel):
     R_mutual: Optional[Dict[float, float]] = None
     M_mutual: Optional[Dict[float, float]] = None
 
+    #: Fields that :meth:`calculate_impedance` computes from ``type``,
+    #: ``length``, ``specific_earth_resistance`` and the network frequencies.
+    DERIVED_FIELDS: ClassVar[Tuple[str, ...]] = (
+        "self_impedance",
+        "mutual_impedance",
+        "phase_impedance",
+        "R_self",
+        "L_self",
+        "C_self",
+        "R_mutual",
+        "M_mutual",
+    )
+
     def calculate_impedance(self, frequencies: List[float]):
         """
         Calculate self/mutual impedance and -- if specified by the type --
@@ -948,26 +1009,79 @@ class Branch(ValidatedAssignmentModel):
 
         ``self_impedance`` and ``mutual_impedance`` are always recomputed.
         Each of ``phase_impedance``, ``R_self``, ``L_self``, ``C_self``,
-        ``R_mutual``, ``M_mutual`` is recomputed only if the matching
-        formula is set on the branch type; otherwise the attribute is left
-        as ``None``.
+        ``R_mutual``, ``M_mutual`` is computed from the matching formula of
+        the branch type, and set to ``None`` when the type has none.
+
+        The update is atomic: every value is computed first and only then
+        written, so a formula that fails to evaluate -- in any of the steps --
+        leaves the branch exactly as it was.
 
         Parameters
         ----------
         frequencies : List[float]
             A list of frequencies at which to
             evaluate the formulas.
-        """
-        self._calculate_self_impedance(frequencies)
-        self._calculate_mutual_impedance(frequencies)
-        self._calculate_phase_impedance(frequencies)
-        self._calculate_rlc_parameters(frequencies)
 
-    def _calculate_phase_impedance(self, frequencies: List[float]):
+        Raises
+        ------
+        ValueError
+            If a formula cannot be evaluated, if the self impedance of a
+            grounding conductor cannot be inverted into an admittance, or if
+            an RLCM formula yields a non-real value.
+        """
+        self._apply_derived(self._derive(frequencies))
+
+    def _params(self) -> Dict[str, float]:
+        """Formula parameters of this branch: ``rho`` and the length ``l``."""
+        return {"rho": self.specific_earth_resistance, "l": self.length}
+
+    def _derive(self, frequencies: List[float]) -> Dict[str, Any]:
+        """
+        Compute every derived field without writing any of them.
+
+        Parameters
+        ----------
+        frequencies : List[float]
+            Frequencies at which to evaluate the formulas.
+
+        Returns
+        -------
+        Dict[str, Any]
+            One entry per name in :attr:`DERIVED_FIELDS`; the optional ones
+            are ``None`` when the type declares no formula for them.
+
+        Raises
+        ------
+        ValueError
+            As documented for :meth:`calculate_impedance`.
+        """
+        derived: Dict[str, Any] = {
+            "self_impedance": self._calculate_self_impedance(frequencies),
+            "mutual_impedance": self._calculate_mutual_impedance(frequencies),
+            "phase_impedance": self._calculate_phase_impedance(frequencies),
+        }
+        derived.update(self._calculate_rlc_parameters(frequencies))
+        return derived
+
+    def _apply_derived(self, derived: Dict[str, Any]) -> None:
+        """
+        Write values computed by :meth:`_derive`.
+
+        Parameters
+        ----------
+        derived : Dict[str, Any]
+            Field name to value, as returned by :meth:`_derive`.
+        """
+        for field, value in derived.items():
+            setattr(self, field, value)
+
+    def _calculate_phase_impedance(
+        self, frequencies: List[float]
+    ) -> Optional[Dict[float, "ComplexNumber"]]:
         """
         Evaluate the optional phase-conductor impedance formula.
 
-        Left at ``None`` when the branch type declares no
+        ``None`` when the branch type declares no
         ``phase_impedance_formula``. The value is consumed only by the
         automatic phase-current distribution and never enters the nodal
         admittance matrix, so it is *not* checked for passivity -- a
@@ -978,16 +1092,22 @@ class Branch(ValidatedAssignmentModel):
         ----------
         frequencies : List[float]
             Frequencies at which to evaluate.
+
+        Returns
+        -------
+        Optional[Dict[float, ComplexNumber]]
+            The phase impedance per frequency, or ``None``.
         """
         formula = self.type.phase_impedance_formula
         if formula is None:
-            return
-        params = {"rho": self.specific_earth_resistance, "l": self.length}
-        self.phase_impedance = compute_impedance(
-            formula_str=formula, frequencies=frequencies, params=params
+            return None
+        return compute_impedance(
+            formula_str=formula, frequencies=frequencies, params=self._params()
         )
 
-    def _calculate_rlc_parameters(self, frequencies: List[float]):
+    def _calculate_rlc_parameters(
+        self, frequencies: List[float]
+    ) -> Dict[str, Optional[Dict[float, float]]]:
         """
         Evaluate the optional lumped RLCM formulas of the branch type.
 
@@ -998,57 +1118,52 @@ class Branch(ValidatedAssignmentModel):
         ----------
         frequencies : List[float]
             Frequencies at which to evaluate.
+
+        Returns
+        -------
+        Dict[str, Optional[Dict[float, float]]]
+            ``R_self``, ``L_self``, ``C_self``, ``R_mutual`` and ``M_mutual``,
+            each ``None`` when the type declares no formula for it.
         """
-        rho = self.specific_earth_resistance
-        l = self.length
-        params = {"rho": rho, "l": l}
+        params = self._params()
+        values: Dict[str, Optional[Dict[float, float]]] = {}
+        for field in ("R_self", "L_self", "C_self", "R_mutual", "M_mutual"):
+            formula = getattr(self.type, f"{field}_formula")
+            values[field] = (
+                None
+                if formula is None
+                else compute_real_value(
+                    formula, frequencies, params, name=f"{self.name}.{field}"
+                )
+            )
+        return values
 
-        if self.type.R_self_formula is not None:
-            self.R_self = compute_real_value(
-                self.type.R_self_formula, frequencies, params,
-                name=f"{self.name}.R_self",
-            )
-        if self.type.L_self_formula is not None:
-            self.L_self = compute_real_value(
-                self.type.L_self_formula, frequencies, params,
-                name=f"{self.name}.L_self",
-            )
-        if self.type.C_self_formula is not None:
-            self.C_self = compute_real_value(
-                self.type.C_self_formula, frequencies, params,
-                name=f"{self.name}.C_self",
-            )
-        if self.type.R_mutual_formula is not None:
-            self.R_mutual = compute_real_value(
-                self.type.R_mutual_formula, frequencies, params,
-                name=f"{self.name}.R_mutual",
-            )
-        if self.type.M_mutual_formula is not None:
-            self.M_mutual = compute_real_value(
-                self.type.M_mutual_formula, frequencies, params,
-                name=f"{self.name}.M_mutual",
-            )
-
-    def _calculate_self_impedance(self, frequencies: List[float]):
+    def _calculate_self_impedance(
+        self, frequencies: List[float]
+    ) -> Dict[float, "ComplexNumber"]:
         """
         Calculates self impedance for each frequency using the self impedance formula.
 
         Utilizes the external `impedance_calculator` to perform the computation.
-        The results are stored in the `self_impedance` attribute.
 
         Parameters
         ----------
         frequencies : List[float]
             A list of frequencies at which to calculate self impedance.
+
+        Returns
+        -------
+        Dict[float, ComplexNumber]
+            The self impedance per frequency.
+
+        Raises
+        ------
+        ValueError
+            If the formula fails, or if the branch has a grounding conductor
+            and the value cannot be inverted into an admittance.
         """
         formula = self.type.self_impedance_formula
-        rho = self.specific_earth_resistance
-        l = self.length
-
-        # Prepare parameters dictionary
-        params = {"rho": rho, "l": l}
-
-        # Compute self impedance
+        params = self._params()
         self_impedance = compute_impedance(
             formula_str=formula, frequencies=frequencies, params=params
         )
@@ -1062,30 +1177,30 @@ class Branch(ValidatedAssignmentModel):
                 formula_str=formula,
                 params=params,
             )
-        self.self_impedance = self_impedance
+        return self_impedance
 
-    def _calculate_mutual_impedance(self, frequencies: List[float]):
+    def _calculate_mutual_impedance(
+        self, frequencies: List[float]
+    ) -> Dict[float, "ComplexNumber"]:
         """
         Calculates mutual impedance for each frequency using the mutual impedance formula.
 
         Utilizes the external `impedance_calculator` to perform the computation.
-        The results are stored in the `mutual_impedance` attribute.
 
         Parameters
         ----------
         frequencies : List[float]
             A list of frequencies at which to calculate mutual impedance.
+
+        Returns
+        -------
+        Dict[float, ComplexNumber]
+            The mutual impedance per frequency.
         """
-        formula = self.type.mutual_impedance_formula
-        rho = self.specific_earth_resistance
-        l = self.length
-
-        # Prepare parameters dictionary
-        params = {"rho": rho, "l": l}
-
-        # Compute mutual impedance
-        self.mutual_impedance = compute_impedance(
-            formula_str=formula, frequencies=frequencies, params=params
+        return compute_impedance(
+            formula_str=self.type.mutual_impedance_formula,
+            frequencies=frequencies,
+            params=self._params(),
         )
 
     @field_validator("self_impedance", mode="before")
@@ -2197,22 +2312,28 @@ class Network(ValidatedAssignmentModel):
         Raises
         ------
         ValueError
-            If a bus with the same name already exists and overwrite is False.
+            If a bus with the same name already exists and overwrite is False,
+            or if the impedances cannot be derived from the bus type. In both
+            cases neither the network nor ``bus`` is changed.
         """
-        if bus.name in self.buses:
-            if overwrite:
-                logger.warning(
-                    "Bus '%s' already exists in the network. Overwriting.",
-                    bus.name,
-                )
-            else:
-                raise ValueError(
-                    f"Bus with name '{bus.name}' already exists in the network '{self.name}'. If you want to overwrite, set overwrite=True."
-                )
+        replacing = bus.name in self.buses
+        if replacing and not overwrite:
+            raise ValueError(
+                f"Bus with name '{bus.name}' already exists in the network '{self.name}'. If you want to overwrite, set overwrite=True."
+            )
 
+        # Derive first, insert second: a formula that fails to evaluate must
+        # leave the network as it was (ARC9). Inserting before deriving used
+        # to leave a bus without impedances behind, which the next run_fault
+        # then reported as "bus 'x' carries no impedance".
+        derived = bus._derive(self.frequencies)
+        bus._apply_derived(derived)
         self.buses[bus.name] = bus
-        # Trigger impedance calculation when a bus is added
-        bus.calculate_impedance(self.frequencies)
+        if replacing:
+            logger.warning(
+                "Bus '%s' already exists in the network. Overwriting.",
+                bus.name,
+            )
 
     def add_branch(self, branch: Branch, overwrite: bool = False):
         """
@@ -2228,18 +2349,16 @@ class Network(ValidatedAssignmentModel):
         Raises
         ------
         ValueError
-            If a branch with the same name already exists, or if the connected buses are not in the network.
+            If a branch with the same name already exists, if the connected
+            buses are not in the network, or if the impedances cannot be
+            derived from the branch type. In every case neither the network
+            nor ``branch`` is changed.
         """
-        if branch.name in self.branches:
-            if overwrite:
-                logger.warning(
-                    "Branch '%s' already exists in the network. Overwriting.",
-                    branch.name,
-                )
-            else:
-                raise ValueError(
-                    f"Branch with name '{branch.name}' already exists in the network '{self.name}'. If you want to overwrite, set overwrite=True."
-                )
+        replacing = branch.name in self.branches
+        if replacing and not overwrite:
+            raise ValueError(
+                f"Branch with name '{branch.name}' already exists in the network '{self.name}'. If you want to overwrite, set overwrite=True."
+            )
 
         # Validate that the from_bus and to_bus are in the network
         if branch.from_bus not in self.buses:
@@ -2250,9 +2369,15 @@ class Network(ValidatedAssignmentModel):
             raise ValueError(
                 f"to_bus '{branch.to_bus}' is not in the network '{self.name}'"
             )
+        # Derive first, insert second -- see add_bus (ARC9).
+        derived = branch._derive(self.frequencies)
+        branch._apply_derived(derived)
         self.branches[branch.name] = branch
-        # Trigger impedance calculation when a branch is added
-        branch.calculate_impedance(self.frequencies)
+        if replacing:
+            logger.warning(
+                "Branch '%s' already exists in the network. Overwriting.",
+                branch.name,
+            )
 
     def add_fault(self, fault: Fault, overwrite: bool = False):
         """
