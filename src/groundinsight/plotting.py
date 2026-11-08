@@ -42,8 +42,8 @@ first.
 import logging
 from contextlib import contextmanager
 
-from typing import Iterable, List, Dict, Optional, Sequence, Tuple, TYPE_CHECKING
-from .models.core_models import Result, ComplexNumber
+from typing import Iterable, List, Optional, Sequence, Tuple, TYPE_CHECKING
+from .models.core_models import Result
 
 if TYPE_CHECKING:
     import matplotlib.pyplot as plt

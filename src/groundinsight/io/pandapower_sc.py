@@ -761,10 +761,7 @@ def apply_shortcircuit_characteristics(
     # neutral default (pandapower does not model ``n``, so a 1.0 in the
     # frame is the argument default of read_shortcircuit_results and says
     # nothing about this fault).
-    if t_k_s is not None:
-        t_k = float(t_k_s)
-    else:
-        t_k = row.get("t_k_s")
+    t_k = float(t_k_s) if t_k_s is not None else row.get("t_k_s")
     if n_factor is not None:
         n_val = float(n_factor)
     else:

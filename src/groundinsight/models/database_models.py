@@ -37,6 +37,8 @@ the database. ``PathDB.segments`` in particular is order-sensitive: the solver w
 segments from the source bus onwards and fails if consecutive segments do not connect.
 """
 
+from typing import Optional
+
 from sqlalchemy import (
     Column,
     Integer,
@@ -309,7 +311,7 @@ class BusDB(Base):
         )
 
     @classmethod
-    def from_pydantic(cls, bus: Bus, network_name: str = None, position: int = 0):
+    def from_pydantic(cls, bus: Bus, network_name: Optional[str] = None, position: int = 0):
         """Build a ``BusDB`` row from a Pydantic :class:`Bus`.
 
         Parameters
@@ -551,7 +553,7 @@ class BranchDB(Base):
         )
 
     @classmethod
-    def from_pydantic(cls, branch: Branch, network_name: str = None, position: int = 0):
+    def from_pydantic(cls, branch: Branch, network_name: Optional[str] = None, position: int = 0):
         """Build a ``BranchDB`` row from a Pydantic :class:`Branch`.
 
         Parameters
@@ -680,7 +682,7 @@ class FaultDB(Base):
         return fault
 
     @classmethod
-    def from_pydantic(cls, fault: Fault, network_name: str = None, position: int = 0):
+    def from_pydantic(cls, fault: Fault, network_name: Optional[str] = None, position: int = 0):
         """Build a ``FaultDB`` row from a Pydantic :class:`Fault`.
 
         Parameters
@@ -803,7 +805,7 @@ class SourceDB(Base):
         )
 
     @classmethod
-    def from_pydantic(cls, source: Source, network_name: str = None, position: int = 0):
+    def from_pydantic(cls, source: Source, network_name: Optional[str] = None, position: int = 0):
         """Build a ``SourceDB`` row from a Pydantic :class:`Source`.
 
         Parameters
@@ -958,7 +960,7 @@ class PathDB(Base):
         )
 
     @classmethod
-    def from_pydantic(cls, path: Path, network_name: str = None, position: int = 0):
+    def from_pydantic(cls, path: Path, network_name: Optional[str] = None, position: int = 0):
         """Build a ``PathDB`` row from a Pydantic :class:`Path`.
 
         Parameters

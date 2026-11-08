@@ -81,6 +81,7 @@ specially -- and is faster, because the file is parsed once.)
 """
 
 import codecs
+import contextlib
 import errno
 import json
 import locale
@@ -469,10 +470,8 @@ def _atomic_write(target: str, payload: bytes) -> None:
             os.chmod(temporary, existing_mode)
         os.replace(temporary, target)
     except BaseException:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(temporary)
-        except OSError:
-            pass
         raise
     _fsync_directory(directory)
 

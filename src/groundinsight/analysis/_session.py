@@ -181,7 +181,7 @@ class BusImpedanceSession:
         self._i_vectors = list(parts.i_vectors)
 
     @classmethod
-    def attach(cls, network: Network, fault: str) -> Optional["BusImpedanceSession"]:
+    def attach(cls, network: Network, fault: str) -> Optional[BusImpedanceSession]:
         """
         A session for the system ``run_fault`` just solved, or ``None``.
 
@@ -214,7 +214,7 @@ class BusImpedanceSession:
             return None
         return cls(electrical, parts, fault_row)
 
-    def same_matrix_as(self, other: "BusImpedanceSession") -> bool:
+    def same_matrix_as(self, other: BusImpedanceSession) -> bool:
         """``True`` if both sessions assemble the same ``Y`` for the same impedances.
 
         Two fault locations of one network share their nodal matrix unless a

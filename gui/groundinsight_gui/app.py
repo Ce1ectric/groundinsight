@@ -193,7 +193,7 @@ class AppOptions:
         return dict(self.templates) if self.templates else dict(EXAMPLES)
 
 
-def build_app(options: AppOptions = AppOptions()) -> None:
+def build_app(options: AppOptions = AppOptions()) -> None:  # noqa: B008 -- frozen dataclass
     """
     Register the app's page with NiceGUI.
 

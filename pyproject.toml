@@ -143,6 +143,10 @@ ignore = [
     # Summary lines describe what an object is or returns ("Driving-point
     # impedance of ..."); the imperative mood is not the house style.
     "D401",
+    # Yoda conditions: SIM300 takes every upper-case name for a constant, so
+    # the natural "actual == expected" of bus.R, row.I_F_A or row.U_E_V is
+    # flagged, and the only remedy would be the reversed order it warns about.
+    "SIM300",
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -171,6 +175,9 @@ extend-ignore-names = [
 # The how-to scripts of the documentation print their results: what a page
 # states as the output is what the script prints.
 "docs/snippets/**" = ["T20"]
+# NiceGUI builds a page by nesting with-blocks: the nesting is the element
+# tree (a menu inside a button), which one combined with-statement hides.
+"gui/groundinsight_gui/**" = ["SIM117"]
 # The numerical kernels write their matrices in MNA notation (G, B, A_CL,
 # K_mut, ...); the names follow the equations, not PEP 8.
 "src/groundinsight/simulation/transient.py" = ["N806"]

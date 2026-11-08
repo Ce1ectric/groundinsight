@@ -813,7 +813,7 @@ def _build(
     # --- sources and their values ----------------------------------------------
     source_rows = _unique_names(frames["sources"], "sources", "name", problems)
     source_types: Dict[str, str] = {}
-    for row, record in _rows(frames["sources"]):
+    for _row, record in _rows(frames["sources"]):
         if record["name"] is not None:
             source_types.setdefault(record["name"], record["source_type"] or "current")
     collected: Dict[str, Dict[str, Dict[float, complex]]] = {}

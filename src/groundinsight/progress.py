@@ -62,7 +62,7 @@ ProgressCallback = Callable[[int, int, str], None]
 CancelCallback = Callable[[], bool]
 
 
-class StudyCancelled(RuntimeError):
+class StudyCancelled(RuntimeError):  # noqa: N818 -- published name (gi.StudyCancelled)
     """
     A study stopped because its ``should_cancel()`` callback returned true.
 

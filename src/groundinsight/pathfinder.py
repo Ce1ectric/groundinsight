@@ -50,7 +50,7 @@ from typing import Any, Dict, FrozenSet, Hashable, List, Optional, Set, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .models.core_models import Network, Bus, Branch, Path
+from .models.core_models import Network, Branch, Path
 
 TopologyKey = Tuple[
     int, str, int, int, FrozenSet[str], FrozenSet[str], FrozenSet[Tuple[str, str]]
@@ -159,7 +159,7 @@ class PathfinderCache:
     def __init__(self, owner: Optional[Network] = None) -> None:
         self._owner = weakref.ref(owner) if owner is not None else None
         self._lock = threading.RLock()
-        self._tables: Dict[str, "OrderedDict[Hashable, Any]"] = {
+        self._tables: Dict[str, OrderedDict[Hashable, Any]] = {
             name: OrderedDict() for name in _TABLES
         }
         _register(self)
@@ -339,7 +339,7 @@ def _live_caches() -> List[PathfinderCache]:
         return list(_LIVE_CACHES.values())
 
 
-class _PathLimitExceeded(Exception):
+class _PathLimitExceededError(Exception):
     """Internal signal raised inside the DFS when the path cap is hit."""
 
 
@@ -742,7 +742,7 @@ class PathFinder:
         self._max_paths = self.settings.max_paths
         try:
             self._dfs(source_bus_name, fault_bus_name, visited_buses, path, all_paths)
-        except _PathLimitExceeded:
+        except _PathLimitExceededError:
             raise ValueError(
                 f"Enumerating the simple paths from bus '{source_bus_name}' to "
                 f"bus '{fault_bus_name}' exceeded the limit of {self._max_paths} "
@@ -874,7 +874,7 @@ class PathFinder:
             # Found a path
             all_paths.append(list(path))
             if len(all_paths) > self._max_paths:
-                raise _PathLimitExceeded
+                raise _PathLimitExceededError
             return
 
         visited_buses.add(current_bus)

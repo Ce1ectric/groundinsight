@@ -55,7 +55,7 @@ assumption behind a phase-current proxy, arrive with the result in
 
 import logging
 import math
-from typing import Callable, Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .diagnostics import Diagnostic, collecting, unique
 from .models.core_models import (
@@ -657,16 +657,19 @@ def _check_faults(report: _Report) -> None:
                     "scaling, or none at all (factor 1.0 everywhere).",
                     [("fault", name)],
                 )
-        if report.sources and report.consistent:
-            if not report.network.sources_reaching(name):
-                report.add(
-                    "FAULT_NOT_REACHED",
-                    f"No source reaches fault '{name}' over active buses and "
-                    "branches; every potential would be 0 V. That is the right "
-                    "answer for an outage that islands the fault, and a "
-                    "modelling error otherwise.",
-                    [("fault", name)],
-                )
+        if (
+            report.sources
+            and report.consistent
+            and not report.network.sources_reaching(name)
+        ):
+            report.add(
+                "FAULT_NOT_REACHED",
+                f"No source reaches fault '{name}' over active buses and "
+                "branches; every potential would be 0 V. That is the right "
+                "answer for an outage that islands the fault, and a "
+                "modelling error otherwise.",
+                [("fault", name)],
+            )
 
 
 class _UnionFind:

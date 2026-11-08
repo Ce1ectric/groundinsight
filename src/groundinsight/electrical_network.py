@@ -97,7 +97,6 @@ from scipy.sparse.csgraph import connected_components
 from scipy.sparse.linalg import splu
 from groundinsight.models.core_models import (
     Network,
-    Bus,
     Branch,
     ResultGroundingImpedance,
     Source,
@@ -115,6 +114,13 @@ from groundinsight.utils.impedance_calculator import (
     is_short_circuit,
     render_frequencies,
     short_circuit_mask,
+)
+from groundinsight.diagnostics import InputWarning, ModelAssumptionWarning, emit
+from groundinsight.utils.earth_current import (
+    NOISE_REL,
+    earth_current_vanishes,
+    earthing_voltage,
+    split_earth_currents,
 )
 
 
@@ -146,15 +152,6 @@ def _shortlist(names, limit: int = 5) -> str:
         return ", ".join(names)
     shown = ", ".join(names[:limit])
     return f"{shown}, ... ({len(names)} in total)"
-
-
-from groundinsight.diagnostics import InputWarning, ModelAssumptionWarning, emit
-from groundinsight.utils.earth_current import (
-    NOISE_REL,
-    earth_current_vanishes,
-    earthing_voltage,
-    split_earth_currents,
-)
 
 
 def _render_points(points: List[Tuple[float, float, float]], unit: str) -> str:
@@ -2543,7 +2540,7 @@ class ElectricalNetwork:
             if path.fault == fault_name and path.source in self.network.sources:
                 sources.add(path.source)
         # Preserve insertion order of self.network.sources for determinism
-        return [s for s in self.network.sources.keys() if s in sources]
+        return [s for s in self.network.sources if s in sources]
 
     def compute_phase_currents(
         self, freq: float, sources_with_path
@@ -4543,7 +4540,6 @@ class ElectricalNetwork:
             raise ValueError("No active fault set in the network.")
 
         fault_bus = self.network.faults[fault_name].bus
-        fault_bus_idx = self.bus_indices[fault_bus]
 
         grounding_impedances = (
             {}

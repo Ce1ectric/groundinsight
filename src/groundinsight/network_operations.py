@@ -21,7 +21,7 @@ from typing import Optional, List, Dict
 logger = logging.getLogger(__name__)
 
 
-def create_network(name: str, frequencies: List, description: str = None) -> Network:
+def create_network(name: str, frequencies: List, description: Optional[str] = None) -> Network:
     """
     Create a new network with the given name and description.
 
@@ -58,7 +58,7 @@ def create_bus(
     name: str,
     type: BusType,
     specific_earth_resistance: Optional[float] = 100,
-    description: str = None,
+    description: Optional[str] = None,
     network: Optional[Network] = None,
 ) -> Bus:
     """
@@ -127,7 +127,7 @@ def create_branch(
     to_bus: str,
     length: float,
     specific_earth_resistance: Optional[float] = 100,
-    description: str = None,
+    description: Optional[str] = None,
     network: Optional[Network] = None,
     parallel_coefficient: Optional[float] = 1.0,
 ) -> Branch:
@@ -229,7 +229,7 @@ def create_fault(
     bus: str,
     scalings: Optional[Dict] = None,
     active: bool = False,
-    description: str = None,
+    description: Optional[str] = None,
     network: Optional[Network] = None,
     t_k_s: Optional[float] = None,
     n_factor: float = 1.0,
@@ -308,9 +308,8 @@ def create_fault(
             "network=..., or leave active=False and call "
             "network.set_active_fault(...) once the fault has been added."
         )
-    if network:
-        if bus not in network.buses:
-            raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
+    if network and bus not in network.buses:
+        raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
 
     fault = Fault(
         name=name,
@@ -377,7 +376,7 @@ def create_source(
     name: str,
     bus: str,
     values: Dict,
-    description: str = None,
+    description: Optional[str] = None,
     network: Optional[Network] = None,
     i_k_a: Optional[float] = None,
     r_to_x: Optional[float] = None,
@@ -439,9 +438,8 @@ def create_source(
     >>> source.name
     'Source1'
     """
-    if network:
-        if bus not in network.buses:
-            raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
+    if network and bus not in network.buses:
+        raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
 
     source = Source(
         name=name,
@@ -462,7 +460,7 @@ def create_voltage_source(
     bus: str,
     voltage: Dict,
     source_impedance: Dict,
-    description: str = None,
+    description: Optional[str] = None,
     network: Optional[Network] = None,
 ) -> Source:
     """
@@ -516,9 +514,8 @@ def create_voltage_source(
     ...     network=network,
     ... )  # doctest: +SKIP
     """
-    if network:
-        if bus not in network.buses:
-            raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
+    if network and bus not in network.buses:
+        raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
 
     source = Source(
         name=name,
@@ -972,7 +969,7 @@ def create_network_assistant(
     branch_type: BranchType,
     branch_length: List,
     specific_earth_resistance: float,
-    description: str = None,
+    description: Optional[str] = None,
 ) -> Network:
     """
     Create a linear network with a uniform bus and branch type.
@@ -1062,7 +1059,7 @@ def create_network_assistant(
     for i in range(number_buses):
         # create a bus with the name "bus"+i+1
         bus_name = f"bus{i+1}"
-        bus = create_bus(bus_name, bus_type, specific_earth_resistance, network=net)
+        create_bus(bus_name, bus_type, specific_earth_resistance, network=net)
         if i > 0:
             # create a branch with the name "branch"+i which connectes the buses from idx i-1 and i
             branch_name = f"branch{i}"

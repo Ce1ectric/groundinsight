@@ -78,7 +78,8 @@ from groundinsight.utils.impedance_calculator import (
 )
 import polars as pl
 
-if TYPE_CHECKING:  # the pathfinder imports this module
+if TYPE_CHECKING:  # both modules import this one
+    from groundinsight.electrical_network import ElectricalNetwork
     from groundinsight.pathfinder import PathfinderCache, PathfinderSettings
 
 
@@ -924,8 +925,8 @@ class ComplexNumber(BaseModel):
             try:
                 c = complex(value.replace(" ", "").replace("i", "j"))
                 return {"real": c.real, "imag": c.imag}
-            except ValueError:
-                raise ValueError(f"Invalid complex number string: {value}")
+            except ValueError as error:
+                raise ValueError(f"Invalid complex number string: {value}") from error
         elif isinstance(value, (np.generic, numbers.Complex)):
             # NumPy scalars reach the models straight from the solver arrays;
             # ``np.complex128`` happens to subclass ``complex`` but
@@ -1030,8 +1031,8 @@ class ComplexNumber(BaseModel):
             raise ValueError("Modulo operation is not supported for complex numbers.")
         try:
             power = complex(self._convert_to_complex_number(power))
-        except TypeError:
-            raise TypeError(f"Unsupported type for exponentiation: {type(power)}")
+        except TypeError as error:
+            raise TypeError(f"Unsupported type for exponentiation: {type(power)}") from error
         base = complex(self.real, self.imag)
         result = base**power
         return ComplexNumber(real=result.real, imag=result.imag)
@@ -1039,8 +1040,8 @@ class ComplexNumber(BaseModel):
     def __rpow__(self, other):
         try:
             other = complex(self._convert_to_complex_number(other))
-        except TypeError:
-            raise TypeError(f"Unsupported type for exponentiation: {type(other)}")
+        except TypeError as error:
+            raise TypeError(f"Unsupported type for exponentiation: {type(other)}") from error
         exponent = complex(self.real, self.imag)
         result = other**exponent
         return ComplexNumber(real=result.real, imag=result.imag)

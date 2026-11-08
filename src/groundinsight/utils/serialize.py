@@ -72,4 +72,4 @@ def deserialize_impedance(impedance_json):
             float(freq): ComplexNumber(**imp) for freq, imp in impedance_json.items()
         }
     except (TypeError, ValueError) as e:
-        raise ValueError(f"Error deserializing impedance: {e}")
+        raise ValueError(f"Error deserializing impedance: {e}") from e

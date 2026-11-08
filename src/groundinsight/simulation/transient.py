@@ -374,7 +374,7 @@ class ResultTransient(BaseModel):
         }
         time = np.asarray(self.time_s, dtype=float)
 
-        frames: List["pl.DataFrame"] = []
+        frames: List[pl.DataFrame] = []
         for kind, table in (
             ("epr", self.epr_t),
             ("i_branch", self.i_branch_t),

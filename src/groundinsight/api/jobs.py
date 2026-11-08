@@ -83,7 +83,7 @@ class JobTimeout(JobCancelled):
     """The job's runtime limit stopped it."""
 
 
-class JobFailed(RuntimeError):
+class JobFailed(RuntimeError):  # noqa: N818 -- published name (groundinsight.api)
     """The job raised; the original exception is the ``__cause__`` where it
     is available (thread backend).
 

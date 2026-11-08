@@ -204,7 +204,7 @@ def find_max_rho_scaling(
     tol_rel: float = 1e-3,
     max_iter: int = 60,
     monotonicity_grid: int = 9,
-    run_fault_kwargs: Dict[str, Any] = None,
+    run_fault_kwargs: Optional[Dict[str, Any]] = None,
     progress: Optional[Callable[[int, int, str], None]] = None,
     should_cancel: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, Any]:

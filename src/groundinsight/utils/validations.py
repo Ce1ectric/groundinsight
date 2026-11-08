@@ -756,7 +756,7 @@ def _validate_impedance_formula_uncached(value: str) -> str:
         # Sympify the formula with the local variables
         sympify(value, locals=locals_dict)
     except Exception as e:
-        raise ValueError(f"Invalid impedance formula: {e}")
+        raise ValueError(f"Invalid impedance formula: {e}") from e
     return value
 
 
