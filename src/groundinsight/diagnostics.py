@@ -69,6 +69,18 @@ class Diagnostic(BaseModel):
         The network elements the message is about, as ``(kind, name)`` pairs;
         ``kind`` is one of ``"bus"``, ``"branch"``, ``"source"``, ``"fault"``,
         ``"bus_type"``, ``"branch_type"`` or ``"network"``.
+
+    Examples
+    --------
+    >>> import warnings
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_quickstart
+    >>> with warnings.catch_warnings():
+    ...     warnings.simplefilter("ignore", gi.InputWarning)
+    ...     result = gi.run_fault(build_quickstart(), "fault_at_remote_bus")
+    >>> diagnostic = result.diagnostics[0]
+    >>> diagnostic.code, diagnostic.category, diagnostic.severity, diagnostic.elements
+    ('SCALINGS_INCOMPLETE', 'InputWarning', 'warning', [('fault', 'fault_at_remote_bus')])
     """
 
     model_config = ConfigDict(frozen=True)
@@ -107,6 +119,16 @@ class GroundinsightWarning(UserWarning):
     the filters, so the record is made even when the warning is ignored or
     shown only once -- the result always carries its full set of messages,
     independent of how the caller configured the warning machinery.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> warning = gi.InputWarning("no scaling at 250 Hz", code="SCALINGS_INCOMPLETE",
+    ...                           elements=[("fault", "F1")])
+    >>> warning.code, warning.elements, warning.severity
+    ('SCALINGS_INCOMPLETE', (('fault', 'F1'),), 'warning')
+    >>> isinstance(warning, gi.GroundinsightWarning)
+    True
     """
 
     default_code: str = "GROUNDINSIGHT"
@@ -163,6 +185,20 @@ class ModelAssumptionWarning(GroundinsightWarning):
 
     Example: the phase current of a ring is split with a proxy impedance
     because the branch types declare no ``phase_impedance_formula``.
+
+    Examples
+    --------
+    A ring without phase-conductor impedances solves with a heuristic phase
+    split; the result carries the diagnostic whether or not the warning is shown:
+
+    >>> import warnings
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_mv_ring
+    >>> with warnings.catch_warnings():
+    ...     warnings.simplefilter("ignore", gi.ModelAssumptionWarning)
+    ...     result = gi.run_fault(build_mv_ring(), "F1")
+    >>> [d.code for d in result.diagnostics]
+    ['PHASE_PROXY']
     """
 
     default_code = "MODEL_ASSUMPTION"
@@ -173,6 +209,19 @@ class InputWarning(GroundinsightWarning):
 
     Example: ``Fault.scalings`` does not cover every network frequency, so the
     missing ones are scaled with the documented default of 1.0.
+
+    Examples
+    --------
+    The quickstart fault gives a scaling at 50 Hz only:
+
+    >>> import warnings
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_quickstart
+    >>> with warnings.catch_warnings(record=True) as caught:
+    ...     warnings.simplefilter("always")
+    ...     result = gi.run_fault(build_quickstart(), "fault_at_remote_bus")
+    >>> [w.category.__name__ for w in caught], [d.code for d in result.diagnostics]
+    (['InputWarning'], ['SCALINGS_INCOMPLETE'])
     """
 
     default_code = "INPUT"

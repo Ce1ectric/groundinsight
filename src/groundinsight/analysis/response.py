@@ -181,6 +181,19 @@ class BusResponse(BaseModel):
         at ``bus``, and ``Z_E = Z_B + z_fault_ideal`` with ``z_fault_ideal``
         the driving point at the fault bus for an ideal electrode at ``bus``.
         Present only at such frequencies.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> _ = gi.run_fault(net, "fault")
+    >>> response = gi.bus_response(net, fault="fault")
+    >>> response.bus, round(abs(response.z_network[50.0]), 4)
+    ('bus3', 1.0965)
+    >>> frame = response.sweep([0.5, 1.0, 2.0])
+    >>> [round(v, 2) for v in frame["EPR_V"]]
+    [11.73, 18.03, 24.28]
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -865,10 +878,17 @@ def bus_response(
 
     Examples
     --------
-    >>> gi.run_fault(net, "F1")  # doctest: +SKIP
-    >>> response = gi.bus_response(net, fault="F1")  # doctest: +SKIP
-    >>> response.extremes()  # doctest: +SKIP
-    >>> response.evaluate(7.5)   # any electrode, no solve  # doctest: +SKIP
+    The fault bus of the minimal network, with its own electrode as the free
+    parameter -- every electrode is evaluated without another solve:
+
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> _ = gi.run_fault(net, "fault")
+    >>> response = gi.bus_response(net, fault="fault", bus="bus3")
+    >>> row = response.evaluate(1.0)
+    >>> round(row["EPR_V"].item(), 2)
+    18.03
     """
     if fault not in network.results:
         raise ValueError(

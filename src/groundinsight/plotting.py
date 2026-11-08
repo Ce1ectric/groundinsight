@@ -964,6 +964,13 @@ def plot_branch_current_transient(
     Without ``ax`` and without ``close`` the returned figure is registered
     with ``pyplot`` and stays open until the caller closes it; pass
     ``close=True`` when plotting in a loop.
+
+    Examples
+    --------
+    ``result`` comes from :meth:`TransientStudy.solve`:
+
+    >>> import groundinsight as gi
+    >>> fig = gi.plot_branch_current_transient(result, branches=["L1"])  # doctest: +SKIP
     """
     available = list(result.i_branch_t.keys())
     selection = branches or available

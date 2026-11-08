@@ -103,6 +103,14 @@ class SweepPoint(BaseModel):
     parameters : dict of str to object, optional
         Free-form values copied into every result row as columns, so a plot can
         be made against the physical parameter rather than against the label.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> point = gi.SweepPoint(label="wet", bus_rho={"bus2": 30.0},
+    ...                       parameters={"rho_Ohm_m": 30.0})
+    >>> point.label, point.bus_rho
+    ('wet', {'bus2': 30.0})
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -131,6 +139,17 @@ class SweepResult(BaseModel):
     failures : dict of str to str
         Points that raised, mapped to the exception text. They are absent from
         the frames; the sweep does not abort on one bad point.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> study = gi.run_sweep(build_minimal(), fault="fault",
+    ...                      points=[gi.SweepPoint(label="base")])
+    >>> study.labels, study.failures
+    (['base'], {})
+    >>> study.buses().columns[:3]
+    ['point', 'bus_name', 'fault']
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -244,6 +263,15 @@ def rho_f_points(
         the solver rejects as non-passive. The offending label and frequency are
         named, because an unconstrained least-squares fit can land there and the
         failure is otherwise reported far from its cause.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> points = gi.rho_f_points(bus="bus3",
+    ...                          k_vectors={"dry": (2.0, 0.0, 0.0, 0.0, 0.0)},
+    ...                          frequencies=[50.0], rho=100.0)
+    >>> [p.label for p in points], sorted(points[0].bus_impedance)
+    (['dry'], ['bus3'])
     """
     points: List[SweepPoint] = []
     for label, k in k_vectors.items():
@@ -485,6 +513,18 @@ def run_sweep(
         If ``progress`` or ``should_cancel`` is not callable.
     StudyCancelled
         If ``should_cancel()`` returned true; the network is as found.
+
+    Examples
+    --------
+    >>> import polars as pl
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> points = [gi.SweepPoint(label=f"Z={z}", bus_impedance={"bus3": {50.0: z}},
+    ...                         parameters={"Z_bus3_Ohm": z}) for z in (0.5, 1.0, 2.0)]
+    >>> study = gi.run_sweep(build_minimal(), fault="fault", points=points)
+    >>> frame = study.buses().filter((pl.col("bus_name") == "bus3") & pl.col("is_rms"))
+    >>> [round(v, 2) for v in frame["EPR_V"]]
+    [11.73, 18.03, 24.28]
     """
     if on_error not in ("record", "raise"):
         raise ValueError(

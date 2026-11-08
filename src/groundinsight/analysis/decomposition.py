@@ -170,6 +170,13 @@ class Cut(BaseModel):
         active, carry a grounding conductor and be incident to the fault bus.
     description : str, optional
         Free text carried through to the result frame.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> cut = gi.Cut(name="towards_source", branches=["b23"])
+    >>> cut.name, cut.branches
+    ('towards_source', ['b23'])
     """
 
     name: str
@@ -253,6 +260,17 @@ class CutAnalysis(BaseModel):
     kcl_residual : dict of float to float
         ``|i_fault - i_local - sum(i_shield)| / |i_fault|``. Zero to machine
         precision confirms the split accounts for the whole fault current.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> _ = gi.run_fault(net, "fault")
+    >>> analysis = gi.analyze_cuts(net, fault="fault",
+    ...                            cuts=[gi.Cut(name="line", branches=["b23"])])
+    >>> analysis.has_currents, round(analysis.current_share["line"][50.0], 4)
+    (True, 0.8411)
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -733,15 +751,15 @@ def analyze_cuts(
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> gi.run_fault(net, "F1")  # doctest: +SKIP
-    >>> analysis = gi.analyze_cuts(  # doctest: +SKIP
-    ...     net,
-    ...     fault="F1",
-    ...     cuts=[gi.Cut(name="left", branches=["L12"]),
-    ...           gi.Cut(name="right", branches=["L23"])],
-    ... )
-    >>> analysis.to_polars()  # doctest: +SKIP
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> _ = gi.run_fault(net, "fault")
+    >>> analysis = gi.analyze_cuts(net, fault="fault",
+    ...                            cuts=[gi.Cut(name="line", branches=["b23"])])
+    >>> frame = analysis.to_polars()
+    >>> frame.select("cut", "frequency_Hz", "Z_side_Ohm").rows()
+    [('line', 50.0, 1.0965183384578927)]
     """
     if fault not in network.faults:
         raise ValueError(

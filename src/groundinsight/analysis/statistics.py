@@ -82,7 +82,12 @@ def summarize(
 
     Examples
     --------
-    >>> summarize(study.buses(), "EPR_V", by=["bus_name"])  # doctest: +SKIP
+    >>> import polars as pl
+    >>> from groundinsight.analysis import summarize
+    >>> frame = pl.DataFrame({"bus_name": ["A", "A", "B"], "EPR_V": [10.0, 30.0, 5.0]})
+    >>> summary = summarize(frame, "EPR_V", by=["bus_name"])
+    >>> summary.select("bus_name", "n", "mean", "max").rows()
+    [('A', 2, 20.0, 30.0), ('B', 1, 5.0, 5.0)]
     """
     missing = [c for c in [value, *(by or [])] if c not in frame.columns]
     if missing:
@@ -182,8 +187,11 @@ def classify(
 
     Examples
     --------
-    >>> classify(study.buses(), "EPR_V", [80.0, 150.0],  # doctest: +SKIP
-    ...          labels=["ok", "check", "exceeded"])
+    >>> import polars as pl
+    >>> from groundinsight.analysis import classify
+    >>> frame = pl.DataFrame({"EPR_V": [12.0, 80.0, 450.0]})
+    >>> classify(frame, "EPR_V", [75.0, 300.0])["class"].to_list()
+    ['<= 75', '75 - 300', '> 300']
     """
     if value not in frame.columns:
         raise ValueError(

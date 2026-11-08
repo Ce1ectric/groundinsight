@@ -366,8 +366,13 @@ def set_active_fault(
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> gi.set_active_fault(net, "F1", keep_results=True)  # doctest: +SKIP
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> _ = gi.create_fault(name="near", bus="bus2", scalings={50.0: 1.0}, network=net)
+    >>> gi.set_active_fault(net, "near")
+    >>> net.active_fault, net.faults["near"].active, net.faults["fault"].active
+    ('near', True, False)
     """
     network.set_active_fault(fault, keep_results=keep_results)
 
@@ -506,13 +511,15 @@ def create_voltage_source(
     Examples
     --------
     >>> import groundinsight as gi
-    >>> network = gi.create_network(name="TestNetwork", frequencies=[50])
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
     >>> source = gi.create_voltage_source(
-    ...     name="VSrc1", bus="Bus1",
-    ...     voltage={50: 20000.0 + 0.0j},
-    ...     source_impedance={50: 0.5 + 0.1j},
-    ...     network=network,
-    ... )  # doctest: +SKIP
+    ...     name="grid", bus="bus1",
+    ...     voltage={50: 11547.0}, source_impedance={50: 0.5 + 2.0j},
+    ...     network=net,
+    ... )
+    >>> source.source_type, sorted(net.sources)
+    ('voltage', ['grid', 'src'])
     """
     if network and bus not in network.buses:
         raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
@@ -566,8 +573,14 @@ def create_paths(network: Network):
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> gi.create_paths(network=network)  # doctest: +SKIP
+    Paths are what ``phase_current_mode="paths"`` reads:
+
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> gi.create_paths(net)
+    >>> [path.name for path in net.paths.values()]
+    ['path_1']
     """
     _assert_network_is_excited(network)
     network.define_paths()
@@ -659,8 +672,13 @@ def build_electrical_network(network: Network, auto_phase_currents: bool = False
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> gi.build_electrical_network(network)  # doctest: +SKIP
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> net.set_active_fault("fault")
+    >>> gi.build_electrical_network(net)
+    >>> net.electrical_network.bus_indices
+    {'bus1': 0, 'bus2': 1, 'bus3': 2}
     """
     from groundinsight.electrical_network import ElectricalNetwork
 
@@ -887,8 +905,16 @@ def run_fault(
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> gi.run_fault(network, fault="Fault1")  # doctest: +SKIP
+    >>> import polars as pl
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> result = gi.run_fault(net, "fault")
+    >>> result is net.results["fault"]
+    True
+    >>> epr = net.res_buses("fault").filter(pl.col("is_rms"))
+    >>> [(row["bus_name"], round(row["EPR_V"], 2)) for row in epr.iter_rows(named=True)]
+    [('bus1', 18.03), ('bus2', 0.0), ('bus3', 18.03)]
     """
     auto_phase_currents = _resolve_phase_current_mode(
         phase_current_mode, auto_parallel_coefficients
@@ -1024,12 +1050,17 @@ def create_network_assistant(
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> network = gi.create_network_assistant(  # doctest: +SKIP
-    ...     name="Linear30", frequencies=[50, 250], number_buses=30,
-    ...     bus_type=bus_type, branch_type=branch_type,
-    ...     branch_length=[1.0] * 29, specific_earth_resistance=100.0,
-    ... )
+    >>> import groundinsight as gi
+    >>> station = gi.BusType(name="station", system_type="Substation",
+    ...                      voltage_level=20.0, impedance_formula="rho * 0.01")
+    >>> cable = gi.BranchType(name="cable", grounding_conductor=True,
+    ...                       self_impedance_formula="(0.25 + j * f * 0.012) * l",
+    ...                       mutual_impedance_formula="j * f * 0.012 * l")
+    >>> net = gi.create_network_assistant(
+    ...     name="Linear5", frequencies=[50.0], number_buses=5, bus_type=station,
+    ...     branch_type=cable, branch_length=[1.0] * 4, specific_earth_resistance=100.0)
+    >>> list(net.buses), list(net.branches)
+    (['bus1', 'bus2', 'bus3', 'bus4', 'bus5'], ['branch1', 'branch2', 'branch3', 'branch4'])
     """
     if isinstance(number_buses, bool) or not isinstance(number_buses, int):
         raise ValueError(

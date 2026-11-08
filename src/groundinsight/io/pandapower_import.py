@@ -1361,6 +1361,15 @@ def preview_pandapower_import(
     ------
     NotImplementedError
         If ``include_trafos=True``.
+
+    Examples
+    --------
+    >>> import polars as pl
+    >>> import pandapower.networks as pn  # doctest: +SKIP
+    >>> import groundinsight as gi
+    >>> frame = gi.preview_pandapower_import(  # doctest: +SKIP
+    ...     pn.example_simple(), voltage_level_kV=20.0)
+    >>> frame.filter(pl.col("status") == "skip")  # doctest: +SKIP
     """
     require_pandapower()
 

@@ -340,6 +340,21 @@ class FaultShortCircuitData(BaseModel):
         Names of sources that inject current at ``frequency`` but carry no
         60909 data; they are part of the linear solve but excluded from
         the ``kappa`` aggregation.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> net = gi.create_network(name="demo", frequencies=[50.0])
+    >>> bt = gi.BusType(name="b", system_type="s", voltage_level=20.0,
+    ...                 impedance_formula="rho*0 + 1.0")
+    >>> _ = gi.create_bus(name="B1", type=bt, network=net)
+    >>> _ = gi.create_source(name="S1", bus="B1", values={50.0: 1000.0},
+    ...                      network=net, r_to_x=0.1)
+    >>> _ = gi.create_fault(name="F1", bus="B1", scalings={50.0: 1.0},
+    ...                     network=net, t_k_s=0.5)
+    >>> data = gi.resolve_fault_sc_characteristics(net, "F1")
+    >>> data.fault_name, data.i_k_a, round(data.kappa, 4), data.homogeneous
+    ('F1', 1000.0, 1.746, True)
     """
 
     fault_name: str

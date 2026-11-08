@@ -492,6 +492,16 @@ def set_pathfinder_cache_size(maxsize: int) -> int:
     Changes :func:`default_pathfinder_settings` and trims the memo of every
     live network to its own effective size at once, so a smaller default is
     respected immediately by the networks that follow it.
+
+    Examples
+    --------
+    The replacement gives one network settings of its own:
+
+    >>> import groundinsight as gi
+    >>> net = gi.create_network(name="n", frequencies=[50.0])
+    >>> net.pathfinder_settings = gi.PathfinderSettings(cache_size=64)
+    >>> net.pathfinder_settings.cache_size
+    64
     """
     global _process_defaults
 
@@ -525,6 +535,15 @@ def get_pathfinder_cache_size() -> int:
     -----
     DeprecationWarning
         Always.
+
+    Examples
+    --------
+    The replacement reads the settings of one network:
+
+    >>> import groundinsight as gi
+    >>> net = gi.create_network(name="n", frequencies=[50.0])
+    >>> net.pathfinder_settings.cache_size
+    256
     """
     _deprecated_switch("get_pathfinder_cache_size", "network.pathfinder_settings.cache_size")
     return _process_defaults.cache_size
@@ -546,6 +565,16 @@ def clear_pathfinder_cache(network: Optional[Network] = None) -> None:
     rewiring never reads a stale entry; :meth:`Network.invalidate_paths` calls
     the scoped form anyway, to release the memory. Other networks keep their
     memo -- it is theirs.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> gi.create_paths(net)
+    >>> gi.clear_pathfinder_cache(net)
+    >>> len(net.paths)
+    1
     """
     if network is None:
         for cache in _live_caches():

@@ -362,13 +362,26 @@ def find_max_rho_scaling(
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> res = gi.find_max_rho_scaling(  # doctest: +SKIP
-    ...     network=net, fault="flt",
-    ...     bus_names=["b0", "b1"], u_limit=200.0,
-    ... )
-    >>> if not res["converged"]:  # doctest: +SKIP
-    ...     print(res["status"], res["c_bracket"])
+    Two stations whose electrodes follow the soil (``rho * 0.01``): by which
+    factor ``c`` may the resistivity around both change before the EPR at the
+    fault exceeds 5 V?
+
+    >>> import groundinsight as gi
+    >>> net = gi.create_network(name="station", frequencies=[50.0])
+    >>> grid = gi.BusType(name="grid", system_type="Substation", voltage_level=20.0,
+    ...                   impedance_formula="rho * 0.01")
+    >>> line = gi.BranchType(name="line", grounding_conductor=True,
+    ...                      self_impedance_formula="0.25 * l",
+    ...                      mutual_impedance_formula="0 * l")
+    >>> for name in ("B1", "B2"):
+    ...     _ = gi.create_bus(name=name, type=grid, network=net)
+    >>> _ = gi.create_branch(name="L1", type=line, from_bus="B1", to_bus="B2",
+    ...                      length=1.0, network=net)
+    >>> _ = gi.create_source(name="S1", bus="B1", values={50.0: 100.0}, network=net)
+    >>> _ = gi.create_fault(name="F1", bus="B2", network=net)
+    >>> report = gi.find_max_rho_scaling(net, "F1", ["B1", "B2"], u_limit=5.0)
+    >>> report["status"], round(report["c_max"], 3), report["u_epr_rms_at_c_max"] <= 5.0
+    ('converged', 0.083, True)
     """
     validate_limit(u_limit, "u_limit")
     validate_tol_rel(tol_rel)

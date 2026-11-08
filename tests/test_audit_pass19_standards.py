@@ -285,3 +285,153 @@ def test_the_field_check_sees_the_models():
     assert _declared_fields(gi.Bus) == _model_fields(gi.Bus)
     assert "dto_schema_version" in _declared_fields(schemas.BaseDTO)
     assert "dto_schema_version" not in _declared_fields(schemas.KeyFigureRowDTO)
+
+
+# ---------------------------------------------------------------------------
+# STD1 -- every object of groundinsight.__all__ has examples that run
+# ---------------------------------------------------------------------------
+
+#: Objects whose examples need not run the object, and why. Four reasons
+#: count: the example writes or reads a file, draws a figure or needs the
+#: optional pandapower extra (it is then marked ``+SKIP``), or the object is
+#: deprecated and the example shows its replacement instead. The list
+#: shrinks; it does not grow without one of these reasons.
+EXAMPLES_NEED_NOT_RUN = {
+    "get_pathfinder_cache_size": "deprecated, the example shows the replacement",
+    "set_pathfinder_cache_size": "deprecated, the example shows the replacement",
+    "plot_bus_voltages": "draws a figure",
+    "plot_branch_currents": "draws a figure",
+    "plot_bus_currents": "draws a figure",
+    "plot_epr_transient": "draws a figure",
+    "plot_branch_current_transient": "draws a figure",
+    "from_pandapower": "needs the pandapower extra",
+    "preview_pandapower_import": "needs the pandapower extra",
+    "read_shortcircuit_results": "needs the pandapower extra",
+    "apply_shortcircuit_characteristics": "needs the pandapower extra",
+    "close_dbsession": "uses a database file",
+    "save_bustype_to_db": "uses a database file",
+    "load_bustypes_from_db": "uses a database file",
+    "save_branchtype_to_db": "uses a database file",
+    "load_branchtypes_from_db": "uses a database file",
+    "save_network_to_db": "uses a database file",
+    "load_network_from_db": "uses a database file",
+    "migrate_database": "uses a database file",
+    "needs_migration": "uses a database file",
+    "start_dbsession": "uses a database file",
+    "save_network_to_json": "uses a project file",
+    "load_network_from_json": "uses a project file",
+}
+
+
+def _documented_api() -> Dict[str, Any]:
+    """
+    The functions, classes and modules of ``groundinsight.__all__``.
+
+    Returns
+    -------
+    dict of str to object
+        Name to object; the data constants of ``__all__`` (dicts, lists)
+        carry no docstring of their own and are left out.
+    """
+    import groundinsight as gi
+
+    return {
+        name: getattr(gi, name)
+        for name in gi.__all__
+        if inspect.isclass(getattr(gi, name))
+        or inspect.isfunction(inspect.unwrap(getattr(gi, name)))
+        or inspect.ismodule(getattr(gi, name))
+    }
+
+
+def _doctest_examples(name: str, obj: Any) -> list:
+    """
+    The doctest examples of ``obj``'s own docstring.
+
+    Parameters
+    ----------
+    name : str
+        Name used for the doctest.
+    obj : object
+        Function, class or module.
+
+    Returns
+    -------
+    list of doctest.Example
+        The examples, without those of members.
+    """
+    import doctest
+
+    finder = doctest.DocTestFinder(recurse=False)
+    return [example for test in finder.find(obj, name, globs={}) for example in test.examples]
+
+
+def _runs_the_object(name: str, obj: Any, examples: list) -> bool:
+    """
+    Whether one example that is not ``+SKIP`` exercises ``obj``.
+
+    An import does not count. For a function the statement has to name it;
+    a class or module is exercised by any other statement (an example
+    usually works with an instance).
+
+    Parameters
+    ----------
+    name : str
+        The name of the object in ``groundinsight.__all__``.
+    obj : object
+        Function, class or module.
+    examples : list of doctest.Example
+        Its examples.
+
+    Returns
+    -------
+    bool
+        ``True`` when such an example exists.
+    """
+    import doctest
+
+    for example in examples:
+        source = example.source.strip()
+        if example.options.get(doctest.SKIP) or source.startswith(("import ", "from ")):
+            continue
+        if inspect.isclass(obj) or inspect.ismodule(obj) or name in source:
+            return True
+    return False
+
+
+def test_every_public_object_has_an_examples_section():
+    """numpydoc's parser finds an ``Examples`` section on every object."""
+    NumpyDocString = pytest.importorskip("numpydoc.docscrape").NumpyDocString
+
+    missing = []
+    for name, obj in _documented_api().items():
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            section = NumpyDocString(inspect.getdoc(obj) or "")["Examples"]
+        if not "".join(section).strip():
+            missing.append(name)
+    assert not missing, missing
+
+
+def test_public_examples_run_unless_they_need_files_plots_or_pandapower():
+    """Second method, doctest's own finder: an example of every object runs
+    it (not ``+SKIP``, not just an import), except for the listed reasons."""
+    not_run = [
+        name
+        for name, obj in _documented_api().items()
+        if name not in EXAMPLES_NEED_NOT_RUN
+        and not _runs_the_object(name, obj, _doctest_examples(name, obj))
+    ]
+    assert not not_run, not_run
+
+
+def test_the_skip_allowlist_names_only_skipped_public_objects():
+    """The allowlist shrinks: an entry whose examples run, or that is not
+    public any more, has to go."""
+    api = _documented_api()
+    stale = [
+        name
+        for name in EXAMPLES_NEED_NOT_RUN
+        if name not in api or _runs_the_object(name, api[name], _doctest_examples(name, api[name]))
+    ]
+    assert not stale, stale

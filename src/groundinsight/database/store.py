@@ -755,6 +755,12 @@ def close_dbsession() -> None:
     Never raises. Logs at ``WARNING`` if no session is active and at ``INFO``
     when one was closed. :class:`Database` objects created directly are not
     affected.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> gi.start_dbsession("grid.db")  # doctest: +SKIP
+    >>> gi.close_dbsession()  # doctest: +SKIP
     """
     global _default
     with _default_guard:
@@ -787,6 +793,14 @@ def save_bustype_to_db(bus_type: BusType, overwrite: bool = False) -> None:
         If the database session is not started.
     ValueError
         If the BusType already exists and ``overwrite`` is ``False``.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> station = gi.BusType(name="station", system_type="Substation",
+    ...                      voltage_level=20.0, impedance_formula="rho * 0.01")
+    >>> gi.start_dbsession("grid.db")  # doctest: +SKIP
+    >>> gi.save_bustype_to_db(station)  # doctest: +SKIP
     """
     _require_default().save_bustype(bus_type, overwrite=overwrite)
 
@@ -804,6 +818,13 @@ def load_bustypes_from_db() -> Dict[str, BusType]:
     ------
     RuntimeError
         If the database session is not started.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> gi.start_dbsession("grid.db")  # doctest: +SKIP
+    >>> sorted(gi.load_bustypes_from_db())  # doctest: +SKIP
+    ['station']
     """
     return _require_default().load_bustypes()
 
@@ -826,6 +847,15 @@ def save_branchtype_to_db(branch_type: BranchType, overwrite: bool = False) -> N
         If the database session is not started.
     ValueError
         If the BranchType already exists and ``overwrite`` is ``False``.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> cable = gi.BranchType(name="cable", grounding_conductor=True,
+    ...                       self_impedance_formula="(0.25 + j * f * 0.012) * l",
+    ...                       mutual_impedance_formula="j * f * 0.012 * l")
+    >>> gi.start_dbsession("grid.db")  # doctest: +SKIP
+    >>> gi.save_branchtype_to_db(cable)  # doctest: +SKIP
     """
     _require_default().save_branchtype(branch_type, overwrite=overwrite)
 
@@ -843,6 +873,13 @@ def load_branchtypes_from_db() -> Dict[str, BranchType]:
     ------
     RuntimeError
         If the database session is not started.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> gi.start_dbsession("grid.db")  # doctest: +SKIP
+    >>> sorted(gi.load_branchtypes_from_db())  # doctest: +SKIP
+    ['cable']
     """
     return _require_default().load_branchtypes()
 
@@ -874,6 +911,14 @@ def save_network_to_db(
         If the Network already exists and ``overwrite`` is ``False``, or if a
         shared type definition would be rewritten and ``overwrite_types`` is
         ``False``.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> gi.start_dbsession("grid.db")  # doctest: +SKIP
+    >>> gi.save_network_to_db(net, overwrite=True)  # doctest: +SKIP
     """
     _require_default().save_network(
         network, overwrite=overwrite, overwrite_types=overwrite_types
@@ -900,6 +945,14 @@ def load_network_from_db(name: str) -> Network:
         If the database session is not started.
     ValueError
         If the Network with the specified name does not exist.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> gi.start_dbsession("grid.db")  # doctest: +SKIP
+    >>> net = gi.load_network_from_db("SmokeTest")  # doctest: +SKIP
+    >>> sorted(net.buses)  # doctest: +SKIP
+    ['bus1', 'bus2', 'bus3']
     """
     return _require_default().load_network(name)
 

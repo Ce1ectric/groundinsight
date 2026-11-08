@@ -106,6 +106,16 @@ class NetworkFrequencyOrderWarning(GroundinsightWarning):
     Suppress with ``warnings.simplefilter('ignore',
     NetworkFrequencyOrderWarning)``; surface only once per Python
     process by combining it with ``simplefilter('once', ...)``.
+
+    Examples
+    --------
+    >>> import warnings
+    >>> import groundinsight as gi
+    >>> with warnings.catch_warnings(record=True) as caught:
+    ...     warnings.simplefilter("always")
+    ...     net = gi.create_network(name="n", frequencies=[250.0, 50.0])
+    >>> [w.category.__name__ for w in caught]
+    ['NetworkFrequencyOrderWarning']
     """
 
     default_code = "FREQUENCY_ORDER"
@@ -142,6 +152,12 @@ class TransientModelWarning(GroundinsightWarning):
     -----
     Suppress with ``warnings.simplefilter('ignore', TransientModelWarning)``;
     turn into an error with ``simplefilter('error', TransientModelWarning)``.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> issubclass(gi.TransientModelWarning, gi.GroundinsightWarning)
+    True
     """
 
     default_code = "TRANSIENT_MODEL"
@@ -855,6 +871,17 @@ class ComplexNumber(BaseModel):
     network with an open end unreadable to anything but Python. The
     validator already accepts those strings, so the round-trip is
     symmetric.
+
+    Examples
+    --------
+    >>> from groundinsight import ComplexNumber
+    >>> z = ComplexNumber(real=3.0, imag=4.0)
+    >>> abs(z), complex(z)
+    (5.0, (3+4j))
+    >>> z * 2
+    ComplexNumber(real=6.0, imag=8.0)
+    >>> ComplexNumber.model_validate("1+2j")
+    ComplexNumber(real=1.0, imag=2.0)
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -1286,6 +1313,15 @@ class BusType(_ReadOnlyType):
     been evaluated into the impedances of the buses that use it. Create a
     changed type with ``model_copy(update=...)`` and assign it per bus with
     :meth:`Network.update_bus`, which re-derives the bus.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> station = gi.BusType(name="station", system_type="Substation",
+    ...                      voltage_level=20.0,
+    ...                      impedance_formula="rho * 0.01 + j * f * 0.002")
+    >>> station.impedance_formula
+    'rho * 0.01 + j * f * 0.002'
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -1392,6 +1428,17 @@ class Bus(_NetworkElement):
     C : dict of float to float, optional
         Evaluated lumped capacitance to remote earth per frequency in
         Farad. Populated only if ``type.C_formula`` is set.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> station = gi.BusType(name="station", system_type="Substation",
+    ...                      voltage_level=20.0, impedance_formula="rho * 0.01")
+    >>> net = gi.create_network(name="n", frequencies=[50.0])
+    >>> bus = gi.create_bus(name="B1", type=station, network=net,
+    ...                     specific_earth_resistance=200.0)
+    >>> bus.impedance
+    {50.0: ComplexNumber(real=2.0, imag=0.0)}
     """
 
     model_config = ConfigDict(
@@ -1629,6 +1676,15 @@ class BranchType(_ReadOnlyType):
     been evaluated into the impedances of the branches that use it. Create a
     changed type with ``model_copy(update=...)`` and assign it per branch
     with :meth:`Network.update_branch`, which re-derives the branch.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> cable = gi.BranchType(name="cable", grounding_conductor=True,
+    ...                       self_impedance_formula="(0.25 + j * f * 0.012) * l",
+    ...                       mutual_impedance_formula="j * f * 0.012 * l")
+    >>> cable.grounding_conductor, cable.phase_impedance_formula is None
+    (True, True)
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -1740,6 +1796,15 @@ class Branch(_NetworkElement):
         Mutual resistance (Ohm) and mutual inductance (H) per frequency, from
         the matching ``*_formula`` of the type; ``None`` without it. Read
         only by the state-space transient solver.
+
+    Examples
+    --------
+    >>> from groundinsight.api.examples import build_minimal
+    >>> branch = build_minimal().branches["b12"]
+    >>> branch.from_bus, branch.to_bus, branch.length
+    ('bus1', 'bus2', 1.0)
+    >>> branch.self_impedance[50.0], branch.mutual_impedance[50.0]
+    (ComplexNumber(real=0.25, imag=0.6), ComplexNumber(real=0.0, imag=0.6))
     """
 
     model_config = ConfigDict(
@@ -2122,6 +2187,13 @@ class Fault(_NetworkElement):
     reacting to that fault. The IEC 60909 quantities that describe the
     *feeding* side (``I_k''``, ``R/X``, ``kappa``) live on
     :class:`Source` instead.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> fault = gi.Fault(name="F1", bus="B3", scalings={50.0: 1.0}, t_k_s=0.5)
+    >>> fault.scaling_at(50.0), fault.t_k_s, fault.active
+    (1.0, 0.5, False)
     """
 
     model_config = ConfigDict(
@@ -2391,6 +2463,13 @@ class Source(_NetworkElement):
     cannot be mixed. If a data source gives peak amplitudes, divide the
     AC components by ``sqrt(2)`` before filling ``values``. See
     :meth:`groundinsight.electrical_network.ElectricalNetwork._calculate_rms`.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> source = gi.Source(name="S1", bus="B1", values={50.0: 1000.0, 250.0: 50.0})
+    >>> source.source_type, source.values[250.0]
+    ('current', ComplexNumber(real=50.0, imag=0.0))
     """
 
     model_config = ConfigDict(
@@ -2570,6 +2649,14 @@ class ResultBus(BaseModel):
     i_inj_freq : dict of float to ComplexNumber
         Mapping of frequency to complex injection values. Defaults to an
         empty mapping for backwards compatibility.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> bus = gi.run_fault(build_minimal(), "fault").buses[2]
+    >>> bus.name, round(bus.uepr, 2), round(abs(bus.uepr_freq[50.0]), 2)
+    ('bus3', 18.03, 18.03)
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -2599,6 +2686,14 @@ class ResultBranch(BaseModel):
         amperes.
     i_s_freq : dict of float to ComplexNumber
         Mapping of frequency to complex shield current values.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> branch = gi.run_fault(build_minimal(), "fault").branches[0]
+    >>> branch.name, round(branch.i_s, 2)
+    ('b12', 84.11)
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -2827,6 +2922,16 @@ class Result(BaseModel):
         compares it with the network's current inputs. ``None`` for results
         stored by an older version or assembled by hand, which are never
         reported stale (their provenance is unknown).
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> result = gi.run_fault(build_minimal(), "fault")
+    >>> [bus.name for bus in result.buses], result.diagnostics
+    (['bus1', 'bus2', 'bus3'], [])
+    >>> round(result.reduction_factor.value_current[50.0], 4)
+    0.1803
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -2941,6 +3046,16 @@ class Path(BaseModel):
     segments : list of Branch
         Ordered list of branches that make up the path, traversed from
         ``source`` to ``fault``.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> gi.create_paths(net)
+    >>> path = next(iter(net.paths.values()))
+    >>> path.source, path.fault, [segment.name for segment in path.segments]
+    ('src', 'fault', ['b12', 'b23'])
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -3219,6 +3334,21 @@ class Network(ValidatedAssignmentModel):
     comparison is by content (see :attr:`Result.input_digest`): restoring
     an input restores the result's status, which is how ``outage_context``
     and the studies leave the flags as they found them.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> import polars as pl
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> sorted(net.buses), list(net.faults)
+    (['bus1', 'bus2', 'bus3'], ['fault'])
+    >>> _ = gi.run_fault(net, "fault")
+    >>> net.stale_results()
+    []
+    >>> rms = net.res_fault("fault").filter(pl.col("is_rms"))
+    >>> round(rms["EPR_fault_V"].item(), 2)
+    18.03
     """
 
     model_config = ConfigDict(

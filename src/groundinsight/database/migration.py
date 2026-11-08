@@ -198,6 +198,14 @@ class MigrationReport(BaseModel):
         :class:`~groundinsight.models.core_models.Network`, almost always
         because a column the database allows to be ``NULL`` is mandatory in the
         Pydantic model. The other networks in the file are unaffected.
+
+    Examples
+    --------
+    >>> from groundinsight import MigrationReport
+    >>> report = MigrationReport(migrated=True, path="grid.db", kind="legacy",
+    ...                          networks=["netA"])
+    >>> report.needs_attention
+    False
     """
 
     migrated: bool = False

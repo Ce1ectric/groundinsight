@@ -240,6 +240,12 @@ class DCLimitWarning(GroundinsightWarning):
     a fifth case: it is the limit of a negative resistance, there is no
     defensible value to continue with, and :func:`check_passive_impedance`
     refuses it like any negative real part.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> issubclass(gi.DCLimitWarning, gi.GroundinsightWarning)
+    True
     """
 
     default_code = "DC_LIMIT"

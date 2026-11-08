@@ -154,6 +154,15 @@ def evaluate_max_epr_under_k(
     ValueError
         If ``bus_names`` is empty, ``k`` does not have length 5, or any
         name is not in the network.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> eprs = gi.evaluate_max_epr_under_k(build_minimal(), ["bus3"],
+    ...                                    (0.01, 0.0, 0.0, 0.0, 0.0))
+    >>> {bus: round(epr, 2) for bus, epr in eprs.items()}
+    {'bus3': 18.03}
     """
     return _evaluate_max_epr_under_k(
         network,
@@ -497,11 +506,12 @@ def find_max_rho_f_scaling(
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> res = gi.find_max_rho_f_scaling(  # doctest: +SKIP
-    ...     network=net, bus_names=["b0", "b1"], u_limit=200.0,
-    ...     k_ref=(0.01, 0.0, 0.0, 0.0, 0.0),
-    ... )
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> report = gi.find_max_rho_f_scaling(build_minimal(), ["bus3"], u_limit=10.0,
+    ...                                    k_ref=(0.01, 0.0, 0.0, 0.0, 0.0))
+    >>> report["status"], report["max_epr_rms_at_c_max"] <= 10.0
+    ('converged', True)
     """
     validate_limit(u_limit, "u_limit")
     validate_tol_rel(tol_rel)

@@ -96,6 +96,16 @@ class ReferenceCase:
     ----------
     name, quantity, conditions, tolerance
         The constructor arguments of the same name.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> case = gi.REFERENCE_CASES[0]
+    >>> isinstance(case, gi.ReferenceCase)
+    True
+    >>> row = case.evaluate()
+    >>> row["case"] == case.name, row["agrees"]
+    (True, True)
     """
 
     __slots__ = ("name", "quantity", "conditions", "tolerance", "_run")
@@ -491,8 +501,10 @@ def run_reference_cases(
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> gi.run_reference_cases()  # doctest: +SKIP
+    >>> import groundinsight as gi
+    >>> table = gi.run_reference_cases()
+    >>> table.height == len(gi.REFERENCE_CASES), table["agrees"].all()
+    (True, True)
     """
     rows = [case.evaluate() for case in (cases or REFERENCE_CASES)]
     frame = pl.DataFrame(rows)

@@ -104,6 +104,18 @@ class Outage(BaseModel):
         Names of branches to deactivate.
     description : str, optional
         Free-form description for documentation.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> outage = gi.Outage(name="no_bus2", disabled_buses=["bus2"])
+    >>> with gi.outage_context(net, outage):
+    ...     net.buses["bus2"].active
+    False
+    >>> net.buses["bus2"].active
+    True
     """
 
     name: str
@@ -146,6 +158,16 @@ class OutageStudyResult(BaseModel):
         was run with ``on_error="record"``. They are absent from
         ``bus_results`` / ``branch_results`` and from :meth:`labels`.
         Always empty for ``on_error="raise"``, which is the default.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> study = gi.run_outage_study(
+    ...     build_minimal(), fault="fault",
+    ...     scenarios=[gi.Outage(name="no_bus2", disabled_buses=["bus2"])])
+    >>> study.labels()
+    ['base', 'no_bus2']
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -420,9 +442,16 @@ def outage_context(network: Network, outage: Outage) -> Iterator[Network]:
 
     Examples
     --------
-    >>> with outage_context(net, Outage(name="b12", disabled_branches=["B12"])):  # doctest: +SKIP
-    ...     gi.run_fault(net, "F1")
-    ...     df = net.res_buses(fault="F1")
+    Take ``bus2`` out of service for one solve; the network is restored on
+    leaving the block:
+
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> with gi.outage_context(net, gi.Outage(name="no_bus2", disabled_buses=["bus2"])):
+    ...     result = gi.run_fault(net, "fault")
+    >>> net.buses["bus2"].active, [bus.name for bus in result.buses]
+    (True, ['bus1', 'bus3'])
     """
     from groundinsight.pathfinder import clear_pathfinder_cache  # local import
 
@@ -575,15 +604,14 @@ def run_outage_study(
 
     Examples
     --------
-    >>> study = run_outage_study(  # doctest: +SKIP
-    ...     net, fault="F1",
-    ...     scenarios=[
-    ...         Outage(name="b12_open", disabled_branches=["B12"]),
-    ...         Outage(name="bus5_isolated", disabled_buses=["bus5"]),
-    ...     ],
-    ... )
-    >>> study.compare_buses()       # doctest: +SKIP
-    >>> study.compare_branches()    # doctest: +SKIP
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> study = gi.run_outage_study(
+    ...     build_minimal(), fault="fault",
+    ...     scenarios=[gi.Outage(name="no_bus2", disabled_buses=["bus2"])])
+    >>> compared = study.compare_buses()
+    >>> sorted(compared["scenario"].unique())
+    ['base', 'no_bus2']
     """
     if on_error not in ("raise", "record"):
         raise ValueError(

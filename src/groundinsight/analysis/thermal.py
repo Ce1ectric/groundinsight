@@ -696,6 +696,13 @@ def admissible_short_circuit_current(
     ------
     ValueError
         If ``cross_section_mm2`` or ``t_k_s`` is not strictly positive.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> k = gi.iec60949_k("Cu", theta_initial_C=20.0, theta_final_C=200.0)
+    >>> round(gi.admissible_short_circuit_current(k, 35.0, 1.0))
+    5785
     """
     if cross_section_mm2 <= 0:
         raise ValueError(
@@ -840,8 +847,17 @@ def check_conductor_limits(
 
     Examples
     --------
-    >>> gi.check_conductor_limits(net, "F1", t_k_s=0.5, r_to_x=0.1)  # doctest: +SKIP
-    >>> gi.check_conductor_limits(net, "F1")  # all inputs from the model  # doctest: +SKIP
+    Without thermal data on the branch types every branch is reported with its
+    currents, and the judgement is ``None``:
+
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> _ = gi.run_fault(net, "fault")
+    >>> frame = gi.check_conductor_limits(net, "fault", t_k_s=0.5, kappa=1.8)
+    >>> [(row["branch_name"], round(row["I_s_rms_A"], 2), row["within_limit"])
+    ...  for row in frame.iter_rows(named=True)]
+    [('b12', 84.11, None), ('b23', 84.11, None)]
     """
     sc = _resolve_sc_inputs(
         network, fault, t_k_s, kappa, r_to_x, n_factor, frequency, aggregation
@@ -1113,10 +1129,18 @@ def check_node_limits(
 
     Examples
     --------
-    >>> gi.run_fault(net, "F1")                       # doctest: +SKIP
-    >>> gi.check_node_limits(net, "F1").filter(       # doctest: +SKIP
-    ...     pl.col("element") == "electrode"
-    ... )
+    The electrode currents of the minimal network; without thermal data on the
+    bus type the judgement is ``None``:
+
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> _ = gi.run_fault(net, "fault")
+    >>> frame = gi.check_node_limits(net, "fault", t_k_s=0.5, kappa=1.8,
+    ...                              elements=["electrode"])
+    >>> [(row["bus_name"], round(row["I_rms_A"], 2), row["within_limit"])
+    ...  for row in frame.iter_rows(named=True)]
+    [('bus1', 18.03, None), ('bus2', 0.0, None), ('bus3', 18.03, None)]
     """
     unknown = [e for e in elements if e not in _NODE_ELEMENTS]
     if unknown:

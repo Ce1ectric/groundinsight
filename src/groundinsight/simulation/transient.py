@@ -329,6 +329,30 @@ class ResultTransient(BaseModel):
     The list-typed fields use plain Python lists for JSON
     serialisability. Convert to ``numpy.ndarray`` at the call site if you
     need vectorised post-processing.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> net = gi.create_network(name="station", frequencies=[50.0])
+    >>> grid = gi.BusType(name="grid", system_type="Substation", voltage_level=20.0,
+    ...                   impedance_formula="rho * 0.01")
+    >>> line = gi.BranchType(name="line", grounding_conductor=True,
+    ...                      self_impedance_formula="0.25 * l",
+    ...                      mutual_impedance_formula="0 * l")
+    >>> for name in ("B1", "B2"):
+    ...     _ = gi.create_bus(name=name, type=grid, network=net)
+    >>> _ = gi.create_branch(name="L1", type=line, from_bus="B1", to_bus="B2",
+    ...                      length=1.0, network=net)
+    >>> _ = gi.create_source(name="S1", bus="B1", values={50.0: 100.0}, network=net)
+    >>> _ = gi.create_fault(name="F1", bus="B2", network=net)
+    >>> from groundinsight.simulation import waveforms
+    >>> study = gi.TransientStudy(net, fault="F1")
+    >>> study.set_source_waveform("S1", waveforms.step(100.0, t_on=0.01, t_off=0.03))
+    >>> result = study.solve(t_end=0.05, dt=1e-3)
+    >>> result.solver, result.fault, len(result.time_s)
+    ('fft', 'F1', 50)
+    >>> sorted(result.epr_t)
+    []
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -428,19 +452,28 @@ class TransientStudy:
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> from groundinsight.simulation import waveforms  # doctest: +SKIP
-    >>> study = gi.TransientStudy(network, fault='F1')  # doctest: +SKIP
-    >>> study.set_source_waveform(  # doctest: +SKIP
-    ...     'src',
-    ...     waveforms.sinusoidal_with_dc_offset(
-    ...         amplitude=1e3, frequency_hz=50.0,
-    ...         t_on=0.02, t_off=0.12,
-    ...         dc_amplitude=500.0, dc_decay_tau=0.05,
-    ...     ),
-    ... )
-    >>> study.set_observation(buses=['bus_fault'], branches=['line1'])  # doctest: +SKIP
-    >>> result = study.solve(t_end=0.2, dt=1e-4)  # doctest: +SKIP
+    A 100 A pulse into a resistive two-station network:
+
+    >>> import groundinsight as gi
+    >>> net = gi.create_network(name="station", frequencies=[50.0])
+    >>> grid = gi.BusType(name="grid", system_type="Substation", voltage_level=20.0,
+    ...                   impedance_formula="rho * 0.01")
+    >>> line = gi.BranchType(name="line", grounding_conductor=True,
+    ...                      self_impedance_formula="0.25 * l",
+    ...                      mutual_impedance_formula="0 * l")
+    >>> for name in ("B1", "B2"):
+    ...     _ = gi.create_bus(name=name, type=grid, network=net)
+    >>> _ = gi.create_branch(name="L1", type=line, from_bus="B1", to_bus="B2",
+    ...                      length=1.0, network=net)
+    >>> _ = gi.create_source(name="S1", bus="B1", values={50.0: 100.0}, network=net)
+    >>> _ = gi.create_fault(name="F1", bus="B2", network=net)
+    >>> from groundinsight.simulation import waveforms
+    >>> study = gi.TransientStudy(net, fault="F1")
+    >>> study.set_source_waveform("S1", waveforms.step(100.0, t_on=0.01, t_off=0.03))
+    >>> study.set_observation(buses=["B2"], branches=["L1"])
+    >>> result = study.solve(t_end=0.05, dt=1e-3)
+    >>> round(max(abs(v) for v in result.epr_t["B2"]), 2)
+    11.11
     """
 
     @renamed_parameters(fault_name="fault")
