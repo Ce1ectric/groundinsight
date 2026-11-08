@@ -446,3 +446,24 @@ def test_the_documented_schema_matches_the_pinned_one():
         assert documented == list(schema), table
         bold = re.findall(r"\*\*`([A-Za-z0-9_]+)`\*\*", line)
         assert bold == list(REQUIRED_COLUMNS[table]), table
+
+
+def test_a_bad_cell_is_reported_once_and_an_empty_required_cell_is_named():
+    """A cell that cannot be converted is one problem, not two (the model
+    would add "Field required" for the value that never arrived); an empty
+    required cell says so instead of passing pydantic's generic text."""
+    tables = _tables()
+    branches = tables["branches"].with_columns(pl.col("length").cast(pl.Utf8))
+    branches = branches.with_columns(
+        pl.when(pl.col("name") == "SA").then(pl.lit("1,0")).otherwise(pl.col("length"))
+        .alias("length"),
+        pl.when(pl.col("name") == "AF").then(pl.lit(None)).otherwise(pl.col("to_bus"))
+        .alias("to_bus"),
+    )
+    with pytest.raises(ValueError) as caught:
+        gi.network_from_tables(_with(tables, "branches", branches))
+    lines = [line for line in str(caught.value).splitlines() if line.startswith("  - ")]
+    assert lines == [
+        "  - branches, row 1, column 'length': '1,0' is not a number (use a decimal point).",
+        "  - branches, row 2, column 'to_bus': the value is empty; this column is required.",
+    ]

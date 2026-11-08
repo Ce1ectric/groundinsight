@@ -208,6 +208,10 @@ class _Problems:
 
     def __init__(self) -> None:
         self.lines: List[str] = []
+        # Rows with a cell that could not be converted. They are reported
+        # once, by the conversion, and then skipped: building them would only
+        # add a second message about the value that never arrived.
+        self.bad_rows: set = set()
 
     def add(
         self,
@@ -363,10 +367,12 @@ def _cast(
                     index,
                     column,
                 )
+                problems.bad_rows.add((table, index))
                 out.append(None)
             continue
         if isinstance(value, bool):
             problems.add(table, f"{value!r} is not a number.", index, column)
+            problems.bad_rows.add((table, index))
             out.append(None)
             continue
         try:
@@ -374,6 +380,7 @@ def _cast(
         except (TypeError, ValueError):
             hint = " (use a decimal point)" if isinstance(value, str) and "," in value else ""
             problems.add(table, f"{value!r} is not a number{hint}.", index, column)
+            problems.bad_rows.add((table, index))
             out.append(None)
             continue
         out.append(number)
@@ -441,14 +448,14 @@ def _unique_names(
     Returns
     -------
     dict of str to int
-        Name to 1-based row of its first occurrence.
+        Name to 1-based row of its first occurrence. Empty names are left to
+        :func:`_skip_row`.
     """
     first: Dict[str, int] = {}
     for row, record in _rows(frame):
         name = record[key]
         if name is None:
-            problems.add(table, f"the {key} is empty.", row, key)
-            continue
+            continue  # reported by _skip_row
         if name in first:
             problems.add(
                 table,
@@ -458,6 +465,39 @@ def _unique_names(
             continue
         first[name] = row
     return first
+
+
+def _skip_row(
+    record: Dict[str, Any], table: str, row: int, problems: _Problems
+) -> bool:
+    """
+    Whether a row cannot be built: a cell failed to convert or a required cell is empty.
+
+    Parameters
+    ----------
+    record : dict
+        The coerced row.
+    table : str
+        Table name.
+    row : int
+        1-based row.
+    problems : _Problems
+        Receives one problem per empty required cell; failed conversions are
+        already in it.
+
+    Returns
+    -------
+    bool
+        ``True`` if the row must be skipped.
+    """
+    skip = (table, row) in problems.bad_rows
+    for column in REQUIRED_COLUMNS[table]:
+        if record.get(column) is None and (table, row) not in problems.bad_rows:
+            problems.add(
+                table, "the value is empty; this column is required.", row, column
+            )
+            skip = True
+    return skip
 
 
 def _model(
@@ -656,14 +696,13 @@ def _build(
     meta_rows = _rows(frames["network"])
     if frames["network"] is not None and len(meta_rows) != 1:
         problems.add("network", f"needs exactly one row, has {len(meta_rows)}.")
-    if meta_rows:
+    if meta_rows and not _skip_row(meta_rows[0][1], "network", 1, problems):
         meta.update(meta_rows[0][1])
     network_name = name if name is not None else (meta["name"] or "network")
 
     frequencies: List[float] = []
     for row, record in _rows(frames["frequencies"]):
-        if record["frequency_Hz"] is None:
-            problems.add("frequencies", "the frequency is empty.", row, "frequency_Hz")
+        if _skip_row(record, "frequencies", row, problems):
             continue
         frequencies.append(record["frequency_Hz"])
     network: Optional[Network] = None
@@ -683,7 +722,9 @@ def _build(
     bus_type_names = _unique_names(frames["bus_types"], "bus_types", "name", problems)
     bus_types: Dict[str, BusType] = {}
     for row, record in _rows(frames["bus_types"]):
-        if record["name"] is None or row != bus_type_names.get(record["name"]):
+        if _skip_row(record, "bus_types", row, problems):
+            continue
+        if row != bus_type_names.get(record["name"]):
             continue
         instance = _model(BusType, record, "bus_types", row, problems)
         if instance is not None:
@@ -693,7 +734,9 @@ def _build(
     )
     branch_types: Dict[str, BranchType] = {}
     for row, record in _rows(frames["branch_types"]):
-        if record["name"] is None or row != branch_type_names.get(record["name"]):
+        if _skip_row(record, "branch_types", row, problems):
+            continue
+        if row != branch_type_names.get(record["name"]):
             continue
         instance = _model(BranchType, record, "branch_types", row, problems)
         if instance is not None:
@@ -704,7 +747,7 @@ def _build(
     seen: set = set()
     for row, record in _rows(frames["buses"]):
         bus_name = record["name"]
-        if bus_name is None or bus_name in seen:
+        if _skip_row(record, "buses", row, problems) or bus_name in seen:
             continue
         seen.add(bus_name)
         type_name = record["type"]
@@ -731,7 +774,7 @@ def _build(
     seen = set()
     for row, record in _rows(frames["branches"]):
         branch_name = record["name"]
-        if branch_name is None or branch_name in seen:
+        if _skip_row(record, "branches", row, problems) or branch_name in seen:
             continue
         seen.add(branch_name)
         ok = True
@@ -775,6 +818,8 @@ def _build(
             source_types.setdefault(record["name"], record["source_type"] or "current")
     collected: Dict[str, Dict[str, Dict[float, complex]]] = {}
     for row, record in _rows(frames["source_values"]):
+        if _skip_row(record, "source_values", row, problems):
+            continue
         owner = record["source"]
         quantity = record["quantity"]
         frequency = record["frequency_Hz"]
@@ -792,14 +837,6 @@ def _build(
                 "quantity",
             )
             continue
-        if frequency is None or record["real"] is None:
-            problems.add(
-                "source_values",
-                "frequency_Hz and real must not be empty.",
-                row,
-                "frequency_Hz" if frequency is None else "real",
-            )
-            continue
         bucket = collected.setdefault(owner, {}).setdefault(quantity, {})
         if frequency in bucket:
             problems.add(
@@ -813,7 +850,7 @@ def _build(
     seen = set()
     for row, record in _rows(frames["sources"]):
         source_name = record["name"]
-        if source_name is None or source_name in seen:
+        if _skip_row(record, "sources", row, problems) or source_name in seen:
             continue
         seen.add(source_name)
         if record["bus"] not in bus_names:
@@ -841,17 +878,11 @@ def _build(
     fault_rows = _unique_names(frames["faults"], "faults", "name", problems)
     scalings: Dict[str, Dict[float, float]] = {}
     for row, record in _rows(frames["fault_scalings"]):
+        if _skip_row(record, "fault_scalings", row, problems):
+            continue
         owner = record["fault"]
         if owner not in fault_rows:
             problems.add("fault_scalings", f"fault {owner!r} is not in faults.", row, "fault")
-            continue
-        if record["frequency_Hz"] is None or record["scaling"] is None:
-            problems.add(
-                "fault_scalings",
-                "frequency_Hz and scaling must not be empty.",
-                row,
-                "frequency_Hz" if record["frequency_Hz"] is None else "scaling",
-            )
             continue
         bucket = scalings.setdefault(owner, {})
         if record["frequency_Hz"] in bucket:
@@ -866,7 +897,7 @@ def _build(
     seen = set()
     for row, record in _rows(frames["faults"]):
         fault_name = record["name"]
-        if fault_name is None or fault_name in seen:
+        if _skip_row(record, "faults", row, problems) or fault_name in seen:
             continue
         seen.add(fault_name)
         if record["bus"] not in bus_names:
