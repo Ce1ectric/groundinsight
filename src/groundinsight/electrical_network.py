@@ -388,6 +388,83 @@ def _reciprocal(values: np.ndarray, usable: np.ndarray) -> np.ndarray:
     return out
 
 
+def _component_labels(matrix) -> np.ndarray:
+    """
+    Connected groups of buses of a nodal matrix, from its off-diagonal entries.
+
+    Two buses belong together when the matrix couples them: a shield with a
+    non-zero admittance at that frequency, or -- in the solved matrix -- the
+    loop closure of a voltage source. An electrode sits on the diagonal and
+    couples nothing. Whether a group reaches remote earth is then a question
+    of structure, answered without a tolerance: it does if and only if one of
+    its buses has a finite, non-zero electrode admittance. The linear solver
+    cannot be asked instead. The matrix of a floating group of two or more
+    buses is singular only up to rounding -- every row of a shield stamp sums
+    to zero in exact arithmetic, not in floating point -- and ``splu`` then
+    returns potentials of 1e15 Ohm per ampere and more instead of raising.
+
+    Parameters
+    ----------
+    matrix : scipy.sparse.spmatrix
+        A square nodal matrix.
+
+    Returns
+    -------
+    numpy.ndarray
+        Integer group label per row.
+    """
+    coo = matrix.tocoo()
+    link = (coo.row != coo.col) & (coo.data != 0)
+    graph = csr_matrix(
+        (np.ones(int(link.sum())), (coo.row[link], coo.col[link])),
+        shape=matrix.shape,
+    )
+    _, labels = connected_components(graph, directed=False)
+    return labels
+
+
+def _restricted_columns(
+    matrix, rows: np.ndarray, units: List[int]
+) -> Optional[np.ndarray]:
+    """
+    Unit-injection columns of ``matrix``, solved on one group of buses only.
+
+    The buses outside ``rows`` are decoupled from it by construction (see
+    :func:`_component_labels`), so the columns inside the group do not
+    depend on them -- and a floating group elsewhere in the matrix cannot
+    make this solve singular.
+
+    Parameters
+    ----------
+    matrix : scipy.sparse.spmatrix
+        Square nodal matrix.
+    rows : numpy.ndarray
+        Boolean mask of the group.
+    units : list of int
+        Rows (inside the group) at which one ampere is injected, one column
+        each.
+
+    Returns
+    -------
+    numpy.ndarray or None
+        ``(n, len(units))`` voltages, zero outside the group; ``None`` if the
+        group's matrix is numerically singular or the solve is not finite.
+    """
+    index = np.flatnonzero(rows)
+    sub = csc_matrix(matrix.tocsr()[index][:, index])
+    rhs = np.zeros((index.size, len(units)), dtype=complex)
+    rhs[np.searchsorted(index, units), np.arange(len(units))] = 1.0
+    try:
+        solved = splu(sub).solve(rhs)
+    except (np.linalg.LinAlgError, RuntimeError):
+        return None
+    if not np.all(np.isfinite(solved)):
+        return None
+    columns = np.zeros((matrix.shape[0], len(units)), dtype=complex)
+    columns[index] = solved
+    return columns
+
+
 class _StampPattern:
     """The sparsity structure of a matrix assembled from a fixed list of stamps.
 
@@ -2289,6 +2366,27 @@ class ElectricalNetwork:
             self._bus_admittance = _reciprocal(tables.bus_z, usable)
         return tables.bus_z[:, column], self._bus_admittance[:, column]
 
+    def _earthed_buses(self, freq: float) -> np.ndarray:
+        """
+        Buses with a path to remote earth of their own at ``freq``.
+
+        The admittance is the one the assembly stamped (0 Hz stand-in
+        applied), so a missing, open (``"nan"``) or non-finite electrode does
+        not count.
+
+        Parameters
+        ----------
+        freq : float
+            A frequency of the network.
+
+        Returns
+        -------
+        numpy.ndarray
+            Boolean mask in :attr:`bus_indices` order.
+        """
+        _, admittance = self._grounding_shunts(freq)
+        return np.isfinite(admittance) & (admittance != 0)
+
     def _phase_admittances(
         self, tables: _NetworkTables, column: int
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -3359,7 +3457,7 @@ class ElectricalNetwork:
         # Z_E of EN 50522 (F4): the driving-point impedance of the earthing
         # network at the fault bus. Computed first, because it is also the
         # yardstick of the noise rule for the EPR-based factor below.
-        z_driving_point, z_isolated = self._earthing_driving_points(fault_bus_idx)
+        z_driving_point, z_undefined = self._earthing_driving_points(fault_bus_idx)
 
         # Step 4: Compute reduction factors
         epr_undefined: List[Tuple[float, float, float]] = []
@@ -3418,7 +3516,7 @@ class ElectricalNetwork:
         ) = self._compute_current_reduction_factors()
 
         self._report_undefined_reduction_quantities(
-            fault_name, fault_bus, epr_undefined, group_undefined, z_isolated
+            fault_name, fault_bus, epr_undefined, group_undefined, z_undefined
         )
 
         # The two definitions answer different questions and only coincide in
@@ -3524,7 +3622,7 @@ class ElectricalNetwork:
 
     def _earthing_driving_points(
         self, bus_idx: int
-    ) -> Tuple[Dict[float, Optional[complex]], List[float]]:
+    ) -> Tuple[Dict[float, Optional[complex]], Dict[float, List[str]]]:
         """
         Driving-point impedance of the earthing network at one bus, per frequency.
 
@@ -3532,8 +3630,16 @@ class ElectricalNetwork:
         electrode and shield as assembled (0 Hz substitutes included), no
         coupling, no Thevenin loop closure. Without a voltage source ``Y_E``
         *is* the solved matrix and the value costs one triangular solve on
-        the factorisation ``solve_network`` kept; with one, the sparse ``Y_E``
-        (:meth:`_earthing_admittance_sparse`) is factorised on its own.
+        the factorisation ``solve_network`` kept. With one, the loop closures
+        are taken out (:meth:`_earthing_admittance_sparse`), and whether the
+        bus still reaches remote earth is decided by structure: the group of
+        buses connected to it through shields must hold an electrode
+        (:func:`_component_labels`). If it does, only that group is
+        factorised, so a floating group elsewhere -- the bus of a voltage
+        source without electrode, say -- does not make the value undefined.
+        If it does not, the value is ``None``: the matrix of such a group is
+        singular only up to rounding, and the solver used to return about
+        4.5e15 Ohm for it.
 
         Parameters
         ----------
@@ -3542,35 +3648,37 @@ class ElectricalNetwork:
 
         Returns
         -------
-        tuple of (dict of float to complex or None, list of float)
-            The impedance per frequency, and the frequencies at which the bus
-            has no path to remote earth through the earthing network alone
-            (only through a Thevenin loop) -- ``None`` there.
+        tuple of (dict of float to complex or None, dict of float to list of str)
+            The impedance per frequency, and for every frequency at which it
+            is undefined the buses of the group around ``bus_idx`` -- empty
+            when the group holds an electrode but its matrix is numerically
+            singular.
         """
         values: Dict[float, Optional[complex]] = {}
-        isolated: List[float] = []
+        undefined: Dict[float, List[str]] = {}
+        names = list(self.bus_indices)
         for freq in self.network.frequencies:
             if freq not in self.Y_sparse:
                 values[freq] = None
                 continue
             if not self.thevenin_loop_admittances(freq):
+                # Y_E is the solved matrix, and solve_network has accepted it.
                 values[freq] = self._solved_driving_point(freq, bus_idx)
                 continue
-            unit = np.zeros(self.num_buses, dtype=complex)
-            unit[bus_idx] = 1.0
-            try:
-                lu = splu(self._earthing_admittance_sparse(freq))
-                value = complex(lu.solve(unit)[bus_idx])
-            except (np.linalg.LinAlgError, RuntimeError):
-                value = None
-            if value is None or not (
-                math.isfinite(value.real) and math.isfinite(value.imag)
-            ):
+            earthing = self._earthing_admittance_sparse(freq)
+            labels = _component_labels(earthing)
+            group = labels == labels[bus_idx]
+            if not np.any(group & self._earthed_buses(freq)):
                 values[freq] = None
-                isolated.append(freq)
+                undefined[freq] = [names[i] for i in np.flatnonzero(group)]
                 continue
-            values[freq] = value
-        return values, isolated
+            columns = _restricted_columns(earthing, group, [bus_idx])
+            if columns is None:
+                values[freq] = None
+                undefined[freq] = []
+                continue
+            values[freq] = complex(columns[bus_idx, 0])
+        return values, undefined
 
     def _report_undefined_reduction_quantities(
         self,
@@ -3578,18 +3686,20 @@ class ElectricalNetwork:
         fault_bus: str,
         epr_undefined: List[Tuple[float, float, float]],
         group_undefined: List[Tuple[float, float, float]],
-        z_isolated: Optional[List[float]] = None,
+        z_undefined: Optional[Dict[float, List[str]]] = None,
     ) -> None:
         """
         Say once per run where a reduction quantity was reported as ``None``.
 
         The first two conditions are a vanishing reference (audit finding
         P9): the quotient or the group would otherwise be built from rounding
-        noise. The third is a fault bus that reaches remote earth only through
-        the loop closure of a voltage source, so the earthing network alone
-        presents an infinite impedance there (F4). Collected over all
-        frequencies so that a sweep over fifty harmonics produces one message
-        per condition, not fifty.
+        noise. The third is a fault bus whose group in the earthing network --
+        the buses connected to it through shields -- holds no electrode, so it
+        reaches remote earth only through the loop closure of a voltage source
+        and the earthing network alone presents an infinite impedance there
+        (F4); decided by structure, see :meth:`_earthing_driving_points`.
+        Collected over all frequencies so that a sweep over fifty harmonics
+        produces one message per condition, not fifty.
 
         Parameters
         ----------
@@ -3602,21 +3712,44 @@ class ElectricalNetwork:
             is undefined.
         group_undefined : list of tuple of float
             ``(frequency, max|I_a|, |I_F|)`` where no earth-return group exists.
-        z_isolated : list of float, optional
-            Frequencies at which ``Z_E`` is undefined.
+        z_undefined : dict of float to list of str, optional
+            Frequencies at which ``Z_E`` is undefined, with the buses of the
+            electrode-less group around the fault bus (an empty list where the
+            group holds an electrode but its matrix is numerically singular).
         """
         elements = [("fault", fault_name), ("bus", fault_bus)]
-        if z_isolated:
+        floating = {f: buses for f, buses in (z_undefined or {}).items() if buses}
+        singular = sorted(f for f, buses in (z_undefined or {}).items() if not buses)
+        if floating:
+            group: List[str] = []
+            for buses in floating.values():
+                group.extend(b for b in buses if b not in group)
+            others = [b for b in group if b != fault_bus]
+            connected = (
+                f" and the buses connected to it through shields "
+                f"({_shortlist(others)})" if others else ""
+            )
             emit(
                 ModelAssumptionWarning,
                 f"Fault '{fault_name}': at "
-                f"{_render_frequencies(z_isolated)} the fault bus "
-                f"'{fault_bus}' reaches remote earth only through the loop "
-                f"closure of a voltage source, not through any electrode or "
-                f"shield. The earthing network alone presents an infinite "
-                f"impedance there, so the earthing impedance Z_E (the "
+                f"{_render_frequencies(sorted(floating))} the fault bus "
+                f"'{fault_bus}'{connected} carry no electrode, so the fault "
+                f"side reaches remote earth only through the loop closure of a "
+                f"voltage source. The earthing network alone presents an "
+                f"infinite impedance there, so the earthing impedance Z_E (the "
                 f"driving-point impedance of the earthing network at the fault "
                 f"bus) is reported as None.",
+                code="EARTHING_IMPEDANCE_UNDEFINED",
+                elements=elements + [("bus", b) for b in others],
+                stacklevel=4,
+            )
+        if singular:
+            emit(
+                ModelAssumptionWarning,
+                f"Fault '{fault_name}': at {_render_frequencies(singular)} the "
+                f"earthing network around the fault bus '{fault_bus}' is "
+                f"numerically singular although it holds an electrode, so the "
+                f"earthing impedance Z_E is reported as None.",
                 code="EARTHING_IMPEDANCE_UNDEFINED",
                 elements=elements,
                 stacklevel=4,
@@ -3968,7 +4101,8 @@ class ElectricalNetwork:
                 )
                 continue
 
-            # The fault bus reaches remote earth only through a Thevenin loop:
+            # The fault bus reaches remote earth only through a Thevenin loop
+            # (no bus connected to it through shields carries an electrode):
             # the earthing network alone presents no finite impedance there.
             grounding_impedances[freq] = None
 

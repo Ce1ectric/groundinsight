@@ -97,6 +97,7 @@ from pydantic import BaseModel, Field
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import splu
 
+from groundinsight.electrical_network import _component_labels, _restricted_columns
 from groundinsight.models.core_models import Network
 from groundinsight.utils.earth_current import (
     NOISE_REL,
@@ -164,6 +165,14 @@ class BusResponse(BaseModel):
     z_bus_open : dict of float to complex
         Driving-point impedance at ``bus`` in that network -- ``Z0_bb``; equal
         to :attr:`z_network` when the network has no voltage source.
+    z_fault_ideal : dict of float to complex
+        Where the electrode at ``bus`` is the only one of the fault side --
+        no other electrode is connected to the fault bus through shields --
+        the three open-network values above do not exist (that network
+        floats). All of the fault current then leaves through the electrode
+        at ``bus``, and ``Z_E = Z_B + z_fault_ideal`` with ``z_fault_ideal``
+        the driving point at the fault bus for an ideal electrode at ``bus``.
+        Present only at such frequencies.
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -183,6 +192,7 @@ class BusResponse(BaseModel):
     z_fault_open: Dict[float, complex] = Field(default_factory=dict)
     z_fault_transfer: Dict[float, complex] = Field(default_factory=dict)
     z_bus_open: Dict[float, complex] = Field(default_factory=dict)
+    z_fault_ideal: Dict[float, complex] = Field(default_factory=dict)
 
     # -- the curve ------------------------------------------------------------
 
@@ -313,18 +323,32 @@ class BusResponse(BaseModel):
         freq : float
             Frequency in Hz.
 
+        Where the electrode at ``bus`` is the only one of the fault side
+        (:attr:`z_fault_ideal`), every ampere leaves through it and
+        ``Z_FF = Z_B + z_fault_ideal``: finite for every electrode, undefined
+        without one.
+
         Returns
         -------
         complex or None
-            ``None`` when the response carries no earthing-network columns for
-            ``freq`` (the fault bus reaches remote earth only through a
-            Thevenin loop).
+            ``None`` where ``Z_E`` does not exist: the fault side reaches
+            remote earth only through the loop closure of a voltage source --
+            whatever the electrode at ``bus``, or because ``z_bus`` is ``None``
+            and the electrode at ``bus`` was its only path.
         """
         z_ff = self.z_fault_open.get(freq)
         z_fb = self.z_fault_transfer.get(freq)
         z_bb = self.z_bus_open.get(freq)
         if z_ff is None or z_fb is None or z_bb is None:
-            return None
+            ideal = self.z_fault_ideal.get(freq)
+            if ideal is None:
+                return None
+            y = self.admittance(z_bus)
+            if y == 0:
+                return None
+            if np.isinf(y.real):
+                return ideal
+            return ideal + 1.0 / y
         y = self.admittance(z_bus)
         if np.isinf(y.real):
             if z_bb == 0:
@@ -812,6 +836,7 @@ def bus_response(
     z_fault_open: Dict[float, complex] = {}
     z_fault_transfer: Dict[float, complex] = {}
     z_bus_open: Dict[float, complex] = {}
+    z_fault_ideal: Dict[float, complex] = {}
     fault_bus = network.faults[fault].bus
 
     for freq in frequencies:
@@ -836,22 +861,27 @@ def bus_response(
         if electrode[k]:
             Y0 = _subtract_from_diagonal(Y0, k, admittances[k])
 
-        # The check is structural, not a tolerance: at least one *other* bus has
-        # to carry a finite, non-zero grounding impedance once the target's
-        # shunt is gone. Leaving it to the linear solver is not enough --
-        # measured on the exactly singular case, numpy returns a finite but
-        # meaningless -2.25e15 instead of raising, the same inconsistency the
-        # DC work found in scipy's splu.
+        # The check is structural, not a tolerance: at least one *other* bus of
+        # the target's group -- the buses the solved matrix couples it to,
+        # through shields or a voltage source's loop closure -- has to carry a
+        # finite, non-zero grounding impedance once the target's shunt is
+        # gone. Leaving it to the linear solver is not enough -- measured on
+        # the exactly singular case, numpy returns a finite but meaningless
+        # -2.25e15 instead of raising, the same inconsistency the DC work
+        # found in scipy's splu -- and an earthed bus elsewhere in the
+        # network does not help a group that is not connected to it.
         others = electrode.copy()
         others[k] = False
-        if not others.any():
+        labels = _component_labels(Y0)
+        if not np.any(others & (labels == labels[k])):
             raise ValueError(
                 f"With the electrode at bus '{target}' removed, no other bus of "
-                f"network '{network.name}' has a finite grounding impedance at "
-                f"{freq} Hz, so there is no path to reference earth. There is "
-                f"nothing to characterise independently of that electrode: at "
-                f"this location the network's behaviour *is* the electrode. "
-                f"Pick a bus that has at least one other earthed bus behind it."
+                f"network '{network.name}' connected to it has a finite "
+                f"grounding impedance at {freq} Hz, so there is no path to "
+                f"reference earth. There is nothing to characterise "
+                f"independently of that electrode: at this location the "
+                f"network's behaviour *is* the electrode. Pick a bus that has "
+                f"at least one other earthed bus behind it."
             )
 
         unit = np.zeros(len(order), dtype=complex)
@@ -906,7 +936,11 @@ def bus_response(
             electrical, Y0, factor, k, index[fault_bus], freq
         )
         if earth_columns is not None:
-            z_fault_open[freq], z_fault_transfer[freq], z_bus_open[freq] = earth_columns
+            kind, values = earth_columns
+            if kind == "open":
+                z_fault_open[freq], z_fault_transfer[freq], z_bus_open[freq] = values
+            else:
+                z_fault_ideal[freq] = values
 
         total_source = electrical.total_source_currents.get(freq)
         if total_source is not None:
@@ -934,28 +968,42 @@ def bus_response(
         z_fault_open=z_fault_open,
         z_fault_transfer=z_fault_transfer,
         z_bus_open=z_bus_open,
+        z_fault_ideal=z_fault_ideal,
     )
 
 
 def _earthing_columns(electrical, Y0: csc_matrix, factor, bus_idx: int,
                       fault_idx: int, freq: float):
     """
-    ``(Z0_FF, Z0_Fb, Z0_bb)`` of the earthing network with one electrode removed.
+    The earthing network's response at the fault bus, one electrode removed.
 
     ``Y0`` is the solved matrix with the shunt at ``bus_idx`` taken out; the
     Thevenin loop closures of voltage sources are taken out as well, because
     they belong to the fault loop and not to the earthing network whose
-    driving point ``Z_E`` is (decision F4). Without a voltage source that
-    matrix *is* ``Y0`` and the two unit columns come from the factorisation
-    the caller already holds; with one, the sparse earthing matrix
-    (:meth:`~groundinsight.electrical_network.ElectricalNetwork._remove_loop_closures`)
-    is factorised on its own. Both are sparse (audit pass 19, P7): a dense
-    copy and solve here would be cubic in the number of buses.
+    driving point ``Z_E`` is (decision F4). Whether that network still earths
+    the fault side is decided by structure, not by the solver: the group of
+    buses connected to the fault bus through shields
+    (:func:`~groundinsight.electrical_network._component_labels`) has to hold
+    an electrode other than the one at ``bus_idx``. Its matrix is singular
+    only up to rounding otherwise, and a solve returns about 1e15 Ohm.
+
+    * The group holds another electrode: the open-network values
+      ``(Z0_FF, Z0_Fb, Z0_bb)`` of the Möbius form. Without a voltage source
+      ``Y0`` is that network, and the two unit columns come from the
+      factorisation the caller holds; with one, only the groups involved are
+      factorised (:func:`~groundinsight.electrical_network._restricted_columns`),
+      so a floating group elsewhere -- a source bus without electrode --
+      cannot spoil them.
+    * The electrode at ``bus_idx`` is the group's only one: the driving point
+      at the fault bus for an *ideal* electrode there (``bus_idx`` as the
+      reference node). Every ampere injected at the fault bus leaves through
+      that electrode, so ``Z_E = Z_B + `` this value for every electrode.
+    * Neither: the fault side floats whatever the electrode at ``bus_idx``.
 
     Parameters
     ----------
     electrical : ElectricalNetwork
-        The assembled system, for its Thevenin stamps.
+        The assembled system, for its Thevenin stamps and electrodes.
     Y0 : scipy.sparse.csc_matrix
         Solved matrix without the electrode at ``bus_idx``.
     factor : scipy.sparse.linalg.SuperLU
@@ -967,23 +1015,65 @@ def _earthing_columns(electrical, Y0: csc_matrix, factor, bus_idx: int,
 
     Returns
     -------
-    tuple of complex or None
-        ``None`` if the fault bus reaches remote earth through nothing but a
-        Thevenin loop once the electrode is gone.
+    tuple or None
+        ``("open", (Z0_FF, Z0_Fb, Z0_bb))``, ``("ideal", Z1_FF)``, or ``None``
+        where ``Z_E`` does not exist for any electrode at ``bus_idx`` (or a
+        group's matrix is numerically singular).
     """
-    units = np.zeros((Y0.shape[0], 2), dtype=complex)
-    units[bus_idx, 0] = 1.0
-    units[fault_idx, 1] = 1.0
-    try:
-        if electrical.thevenin_loop_admittances(freq):
-            factor = splu(electrical._remove_loop_closures(Y0, freq))
-        columns = factor.solve(units)
-    except (np.linalg.LinAlgError, RuntimeError):
+    loops = electrical.thevenin_loop_admittances(freq)
+    earthing = electrical._remove_loop_closures(Y0, freq) if loops else Y0
+    labels = _component_labels(earthing)
+    fault_group = labels == labels[fault_idx]
+    earthed = electrical._earthed_buses(freq).copy()
+    earthed[bus_idx] = False
+
+    if not np.any(fault_group & earthed):
+        if not fault_group[bus_idx]:
+            return None
+        if bus_idx == fault_idx:
+            return ("ideal", 0.0 + 0.0j)
+        grounded_at_bus = fault_group.copy()
+        grounded_at_bus[bus_idx] = False
+        columns = _restricted_columns(earthing, grounded_at_bus, [fault_idx])
+        if columns is None:
+            return None
+        return ("ideal", complex(columns[fault_idx, 0]))
+
+    if not loops:
+        units = np.zeros((Y0.shape[0], 2), dtype=complex)
+        units[bus_idx, 0] = 1.0
+        units[fault_idx, 1] = 1.0
+        try:
+            columns = factor.solve(units)
+        except (np.linalg.LinAlgError, RuntimeError):
+            return None
+        if not np.all(np.isfinite(columns)):
+            return None
+        return ("open", (
+            complex(columns[fault_idx, 1]),
+            complex(columns[fault_idx, 0]),
+            complex(columns[bus_idx, 0]),
+        ))
+
+    if fault_group[bus_idx]:
+        columns = _restricted_columns(earthing, fault_group, [bus_idx, fault_idx])
+        if columns is None:
+            return None
+        return ("open", (
+            complex(columns[fault_idx, 1]),
+            complex(columns[fault_idx, 0]),
+            complex(columns[bus_idx, 0]),
+        ))
+    # The varied bus lies outside the fault side: its electrode cannot change
+    # Z_E (Z0_Fb = 0). Z0_bb is its own group's driving point -- infinite
+    # where that group floats without the electrode.
+    fault_column = _restricted_columns(earthing, fault_group, [fault_idx])
+    if fault_column is None:
         return None
-    if not np.all(np.isfinite(columns)):
-        return None
-    return (
-        complex(columns[fault_idx, 1]),
-        complex(columns[fault_idx, 0]),
-        complex(columns[bus_idx, 0]),
-    )
+    bus_group = labels == labels[bus_idx]
+    z_bus = complex(np.inf, 0.0)
+    if np.any(bus_group & earthed):
+        bus_column = _restricted_columns(earthing, bus_group, [bus_idx])
+        if bus_column is not None:
+            z_bus = complex(bus_column[bus_idx, 0])
+    return ("open", (complex(fault_column[fault_idx, 0]), 0.0 + 0.0j, z_bus))

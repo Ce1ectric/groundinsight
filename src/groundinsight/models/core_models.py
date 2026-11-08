@@ -2282,7 +2282,9 @@ class ResultReductionFactor(BaseModel):
         long homogeneous run it tends to the ladder limit
         ``-Z'/2 + sqrt(Z'^2/4 + Z_e*Z')``. Equal to
         ``ResultGroundingImpedance.value``. ``None`` only when the fault bus
-        reaches remote earth through nothing but a Thevenin loop
+        reaches remote earth through nothing but a Thevenin loop -- no bus
+        connected to it through shields carries an electrode -- which is
+        decided by that structure, not by the solver
         (``EARTHING_IMPEDANCE_UNDEFINED``).
     u_earthing_group : dict of float to complex, optional
         Diagnostic: the current-weighted mean potential of the earth group

@@ -739,6 +739,15 @@ form) and `gi.analyze_cuts(...)` (without voltage sources) reproduce it. Note
 that it is not the station electrodes in parallel either — the shield sections
 between them add to it.
 
+`Z_E` is `None` (with a `ModelAssumptionWarning` `EARTHING_IMPEDANCE_UNDEFINED`)
+where the fault side reaches remote earth only through the loop closure of a
+voltage source: no bus connected to the fault bus through shields carries an
+electrode. That is decided from the structure of the earthing network, not
+from the solver — the matrix of such a group of buses is singular only up to
+rounding and a solve returns a meaningless 1e15 Ω. In `bus_response`, where
+the electrode at the studied bus is the fault side's only one, every ampere
+leaves through it: `Z_E = Z_B + BusResponse.z_fault_ideal`.
+
 The quotient of the earth group's mean potential by `I_E`, which was the
 grounding impedance from 0.6.0 until audit pass 19, is kept as
 `z_earthing_group`; on a long homogeneous run it is 45 % below `Z_E`. The

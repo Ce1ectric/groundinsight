@@ -515,6 +515,94 @@ def solve_oneway(
     }
 
 
+class FloatingEarthError(np.linalg.LinAlgError):
+    """The buses connected to a bus through shields carry no electrode.
+
+    Such a group has no path to remote earth, so its potentials -- and a
+    driving-point impedance seen from it -- are undefined. Raised by
+    :func:`driving_point_impedance` after its own search for the group,
+    before any matrix is factorised.
+    """
+
+
+def earthing_group(net: dict, bus: str) -> List[str]:
+    """Buses connected to ``bus`` through shields, found by a graph search.
+
+    Edges are the shield branches of :func:`_shield_branches` -- active, with
+    a grounding conductor and a finite shield impedance between two active
+    buses. Electrodes and Thevenin loop closures connect nothing here: the
+    group is the part of the earthing network that ``bus`` belongs to.
+
+    Parameters
+    ----------
+    net : dict
+        Reference network.
+    bus : str
+        Start bus.
+
+    Returns
+    -------
+    list of str
+        The group, in declaration order.
+    """
+    buses = _active_buses(net)
+    bus_index = {b: i for i, b in enumerate(buses)}
+    edges = [
+        (net["branches"][n]["a"], net["branches"][n]["b"])
+        for n in _shield_branches(net, bus_index)
+    ]
+    group = _components(buses, edges, bus)
+    return [b for b in buses if b in group]
+
+
+def has_electrode(net: dict, bus: str) -> bool:
+    """``True`` if ``bus`` has a finite electrode impedance (a path to earth)."""
+    z = net["buses"][bus]["z"]
+    return z is not None and not _isinf(z)
+
+
+def driving_point_system(net: dict, bus: str) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    """The MNA system of the earthing group of ``bus``, one ampere injected there.
+
+    Unknowns: the potential of every bus of :func:`earthing_group` and the
+    current of every shield inside it -- the formulation of
+    :func:`solve_oneway`, without source, coupling or Thevenin loop.
+
+    Parameters
+    ----------
+    net : dict
+        Reference network.
+    bus : str
+        Bus at which the current is injected.
+
+    Returns
+    -------
+    tuple of (numpy.ndarray, numpy.ndarray, list of str)
+        Matrix, right-hand side, and the bus names of the first rows.
+    """
+    buses = earthing_group(net, bus)
+    bus_index = {b: i for i, b in enumerate(buses)}
+    n_bus = len(buses)
+    shields = _shield_branches(net, bus_index)
+    size = n_bus + len(shields)
+    A = np.zeros((size, size), dtype=complex)
+    rhs = np.zeros(size, dtype=complex)
+    for b in buses:
+        if has_electrode(net, b):
+            A[bus_index[b], bus_index[b]] += 1.0 / complex(net["buses"][b]["z"])
+    for k, n in enumerate(shields):
+        d = net["branches"][n]
+        ia, ib = bus_index[d["a"]], bus_index[d["b"]]
+        column = n_bus + k
+        A[ia, column] += 1.0
+        A[ib, column] -= 1.0
+        A[column, ia] += 1.0
+        A[column, ib] -= 1.0
+        A[column, column] -= complex(d["zs"])
+    rhs[bus_index[bus]] = 1.0
+    return A, rhs, buses
+
+
 def driving_point_impedance(net: dict, bus: str) -> complex:
     """Driving-point impedance of the earthing network at ``bus``.
 
@@ -522,7 +610,9 @@ def driving_point_impedance(net: dict, bus: str) -> complex:
     earth, with no source, no coupling and no Thevenin loop: the unknowns are
     the potentials and the shield currents, exactly as in
     :func:`solve_oneway`, so the result shares no code with a nodal
-    admittance matrix.
+    admittance matrix. Only the earthing group of ``bus`` is solved (the rest
+    of the network cannot influence it), and a group without any electrode
+    is refused before a matrix is factorised.
 
     Parameters
     ----------
@@ -535,30 +625,20 @@ def driving_point_impedance(net: dict, bus: str) -> complex:
     -------
     complex
         ``u[bus]`` per ampere injected at ``bus``.
+
+    Raises
+    ------
+    FloatingEarthError
+        If no bus of the earthing group of ``bus`` has an electrode.
     """
-    buses = _active_buses(net)
-    bus_index = {b: i for i, b in enumerate(buses)}
-    n_bus = len(buses)
-    shields = _shield_branches(net, bus_index)
-    size = n_bus + len(shields)
-    A = np.zeros((size, size), dtype=complex)
-    rhs = np.zeros(size, dtype=complex)
-    for b in buses:
-        z = net["buses"][b]["z"]
-        if z is not None and not _isinf(z):
-            A[bus_index[b], bus_index[b]] += 1.0 / complex(z)
-    for k, n in enumerate(shields):
-        d = net["branches"][n]
-        ia, ib = bus_index[d["a"]], bus_index[d["b"]]
-        column = n_bus + k
-        A[ia, column] += 1.0
-        A[ib, column] -= 1.0
-        A[column, ia] += 1.0
-        A[column, ib] -= 1.0
-        A[column, column] -= complex(d["zs"])
-    rhs[bus_index[bus]] = 1.0
+    group = earthing_group(net, bus)
+    if not any(has_electrode(net, b) for b in group):
+        raise FloatingEarthError(
+            f"the earthing group of '{bus}' ({', '.join(group)}) has no electrode"
+        )
+    A, rhs, buses = driving_point_system(net, bus)
     x = np.linalg.solve(A, rhs)
-    return complex(x[bus_index[bus]])
+    return complex(x[buses.index(bus)])
 
 
 # ---------------------------------------------------------------------------
