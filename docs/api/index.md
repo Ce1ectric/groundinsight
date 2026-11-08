@@ -15,7 +15,9 @@ classes and their signatures.
   behalf of someone else: `solve` (a fault solve that leaves the network
   untouched), `check_network` (every problem as structured diagnostics,
   never an exception) and the canonical parameter names with their
-  deprecated aliases.
+  deprecated aliases; the service layer `groundinsight.api` for front ends
+  (project sessions, undoable edit commands, jobs, JSON-safe DTOs) and the
+  `groundinsight` command line.
 - [Core models](core_models.md) — Pydantic data classes for `Bus`, `Branch`,
   `Source`, `Fault`, `Network`, the different `Result*` containers and the
   `ComplexNumber` helper.

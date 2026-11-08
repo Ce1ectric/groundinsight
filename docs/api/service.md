@@ -13,6 +13,8 @@ during a calculation without the side effects of the interactive API:
 | How do I get a network from a spreadsheet, and back? | [`gi.network_from_tables` / `Network.to_tables`](io.md#networks-as-tables) |
 | Which spelling of a parameter is the current one? | [canonical names](#canonical-parameter-names) |
 | Which conditions qualify a result, by code? | [diagnostic codes](#diagnostic-codes) |
+| How does a GUI or a server hold a project, edit it with undo and run jobs? | [`groundinsight.api`](#service-layer-for-front-ends-groundinsightapi) |
+| How do I solve or check a project file without writing Python? | [`groundinsight run` / `check`](#command-line) |
 
 ## Solve without side effects
 
@@ -249,6 +251,168 @@ gi.run_fault(net, "F1")                   # positional: unchanged
 gi.run_fault(net, fault_name="F1")        # works, DeprecationWarning
 ```
 
+## Service layer for front ends: `groundinsight.api`
+
+`groundinsight.api` is what a front end imports -- the NiceGUI app of the
+separate `groundinsight-gui` distribution, the [command line](#command-line),
+a later REST server. It wraps the functions above into what a user interface
+needs and a notebook does not, and adds no physics:
+
+| Building block | What it does |
+|---|---|
+| `ProjectSession` | One open project: open/save, edit commands with undo/redo and a revision counter, a type catalogue, resource limits, results, jobs. |
+| Commands (`AddBus`, `UpdateBranch`, `RemoveFault`, `SetFrequencies`, ...) | Every edit, atomic and undoable, through the library's editing API. |
+| `JobRunner` | Solves and studies off the caller's thread, in a thread or a process, with progress, cancel and a runtime limit. |
+| DTOs (`FaultResultDTO`, `NetworkTablesDTO`, `JobStatusDTO`, ...) | The only data shape towards a front end: JSON-safe, versioned, with JSON schemas. |
+| `EXAMPLES` | The documented example networks (`quickstart`, `minimal`, `mv_ring`) as project templates. |
+
+The names are exported from `groundinsight.api`, not from the top-level
+namespace, which stays the library's.
+
+### Design rules
+
+The service-layer tests hold these rules; a front end built on the layer
+inherits them.
+
+| # | Rule |
+|---|---|
+| R1 | A front end imports `groundinsight.api` and the top-level `groundinsight` namespace only (the GUI and the command line are checked for it). |
+| R2 | No physics in a front end: every number comes from a DTO, the front end only formats it. |
+| R3 | DTOs are the only data shape between library and front end: pydantic models, strictly JSON-safe (a non-finite number is `null`), each with `dto_schema_version`. |
+| R4 | Every change is a command: atomic (a rejected command changes nothing, not even the revision), undoable, through the library's editing API. |
+| R5 | Library work that can take longer than a moment runs as a job, never in a user interface's event loop. |
+| R6 | The diagnostics of a run belong to its result: they arrive in the DTO with code, severity and the elements they concern. |
+| R7 | The project file is the library's network JSON -- UTF-8, written atomically, with `schema_version` -- without stored results and without view state. |
+| R8 | The service layer imports no UI or web toolkit and keeps no module state: one session per user and project, two sessions never share state. |
+| R9 | Every number a front end shows is checked against the library two independent ways (the DTOs of the documented examples against the `res_*` frames of `run_fault` and against an independent reference solver; thread against process execution). |
+| R10 | A result is bound to the revision it was computed from; whether it is stale is the library's verdict (`Network.is_result_stale`), so undoing an edit makes a result current again. |
+
+### A session
+
+```python
+from groundinsight.api import ProjectSession, UpdateBus
+
+session = ProjectSession.from_example("quickstart")   # or .from_file("projekt.json")
+result = session.solve("fault_at_remote_bus")          # a FaultResultDTO
+rms = result.key_figures.rms()                         # the RMS row of res_fault
+print(rms.EPR_fault_V, rms.I_E_A, [d.code for d in result.diagnostics])
+
+report = session.apply(UpdateBus(name="bus_fault",
+                                 fields={"specific_earth_resistance": 250.0}))
+report.revision, session.is_stale("fault_at_remote_bus")    # (1, True)
+session.undo()
+session.is_stale("fault_at_remote_bus")                      # False: current again
+
+session.save("projekt.json")      # UTF-8, atomic, schema-versioned, no results
+session.close()
+```
+
+A session owns one network. Front ends read it through the DTO methods --
+`summary()`, `tables()` (the ten tables of `Network.to_tables`, plus catalogue
+types nobody uses yet), `check()` (the pre-flight check), `result(fault)` --
+and change it only through `apply(command)`. `revision` identifies an input
+state: a new command gets a new number, undo and redo return to the number of
+the state they restore. `dirty` compares it with the last opened or saved
+revision.
+
+Opening and saving use the library's project-file functions, so a file
+written by the GUI opens in a notebook and the other way round. Results are
+left out of the file (they are derived and go stale with the next edit); a
+file that carries results keeps them on open, and the library says whether
+they are stale. A server keeps projects in a `ProjectStore` instead: a
+`MemoryStore`, or a `DatabaseStore` over a `gi.Database`
+(`ProjectSession.from_store(store, key)`, `session.save_to(store, key)`).
+
+The constructor takes the resource limits a server sets per user:
+`max_buses`, `max_branches` (a larger file is refused on open, a command that
+would exceed them is rejected), `max_job_runtime_s` (every job of the session)
+and `max_undo` (history depth).
+
+### Commands
+
+| Element | Add | Update (`fields`) | Remove |
+|---|---|---|---|
+| bus | `AddBus` | `UpdateBus` (`Network.update_bus`) | `RemoveBus` |
+| branch | `AddBranch` | `UpdateBranch` (`Network.update_branch`) | `RemoveBranch` |
+| source | `AddSource` | `UpdateSource` (a validated replacement) | `RemoveSource` |
+| fault | `AddFault` | `UpdateFault` (validated, then assigned) | `RemoveFault` |
+| bus type | `AddBusType` | `UpdateBusType` | `RemoveBusType` |
+| branch type | `AddBranchType` | `UpdateBranchType` | `RemoveBranchType` |
+| frequencies | -- | `SetFrequencies` | -- |
+
+A command calls the library's own editing API, so the library validates the
+input and re-derives the impedances; a rejected command raises `CommandError`
+and changes nothing -- not the network, not the revision, not the history.
+Undo runs the inverse operations through the same API and restores what the
+library dropped as a side effect (the stored result and active state of a
+removed fault, the position of a re-added element): after an undo the
+serialised network is identical to the one before the command. Elements refer
+to types by name; types are read-only in the library, so a type edit creates
+a changed copy and swaps it into every element of that type, all or nothing.
+The commands are pydantic models with a discriminator `op`, so
+`parse_command({"op": "update_bus", "name": "b1", "fields": {"active": False}})`
+builds one from JSON.
+
+### Jobs
+
+```python
+handle = session.submit_solve("F1")              # returns at once
+status = handle.status()                         # JobStatusDTO: state, progress, elapsed
+dto = handle.result(timeout=60)                  # FaultResultDTO, or JobCancelled/JobTimeout/JobFailed
+```
+
+`session.submit(request)` takes a job request -- `SolveRequestDTO`,
+`SolveAllRequestDTO`, `SweepRequestDTO`, `OutageStudyRequestDTO`,
+`MaxRhoRequestDTO` -- and runs it on a snapshot of the network taken at
+submission, so editing can go on meanwhile. Progress and cancellation use the
+studies' `progress`/`should_cancel` hooks ([above](#progress-and-cancellation));
+`handle.cancel()` and the runtime limit both end a study at its next unit
+boundary with `gi.StudyCancelled` (`JobCancelled` and `JobTimeout` subclass
+it). `JobRunner(backend="process")` runs jobs in a spawned process instead of
+a thread: it costs the interpreter start, needs inputs that pickle, and can
+stop a job hard. Both backends run the same task code and return identical
+DTOs. A job that completes stores its fault results on the network; a result
+computed from an older revision is stale at once, and it never replaces a
+current one.
+
+### DTOs and JSON schemas
+
+Every DTO is a pydantic model with `dto_schema_version`; `model_dump_json()`
+is the wire format and never contains `NaN` or `Infinity`.
+`groundinsight.api.schemas.json_schemas()` returns the JSON schema of every
+DTO plus `Command` (all edit commands) and `JobRequest` (all job requests) --
+the request and response schemas of a future REST API. The key figures are
+the rows of `Network.res_fault` (`KeyFigureRowDTO` has its columns), the
+per-element results those of `res_buses`/`res_branches`, the element tables
+those of `Network.to_tables`.
+
+## Command line
+
+Installing groundinsight installs the console script `groundinsight`;
+`python -m groundinsight` is the same without the script.
+
+```bash
+groundinsight run projekt.json --fault F1                # readable report
+groundinsight run projekt.json --fault F1 --format json  # FaultResultDTO
+groundinsight run projekt.json --format csv              # res_fault rows; the only fault
+groundinsight check projekt.json                         # the pre-flight check
+```
+
+`run` opens the file in a `ProjectSession`, runs the pre-flight check for the
+fault, solves it and prints the result: `table` (default) the key figures per
+frequency and RMS with the diagnostics, `json` the `FaultResultDTO`, `csv` the
+key-figure rows with the columns of `RES_FAULT_SCHEMA` (the diagnostics then
+go to stderr). `--phase-current-mode paths` selects the legacy mode. Without
+`--fault`, a project with exactly one fault solves that one. `check` prints
+every finding of `check_network`, as `table`, `json` (`CheckReportDTO`) or
+`csv`.
+
+| Exit code | Meaning |
+|---|---|
+| 0 | Success. |
+| 1 | A diagnostic of severity `error`: the check found the network unsolvable as described (`run` then solves nothing and prints the check), the solve failed, or the result carries an error record. |
+| 2 | A usage error: invalid arguments, a file that is not a project, an unknown fault, or `run` without `--fault` on a project with several faults. |
+
 ## API reference
 
 ::: groundinsight.service
@@ -260,3 +424,19 @@ gi.run_fault(net, fault_name="F1")        # works, DeprecationWarning
 ::: groundinsight.diagnostics
 
 ::: groundinsight.utils.compat
+
+### `groundinsight.api`
+
+::: groundinsight.api.session
+
+::: groundinsight.api.commands
+
+::: groundinsight.api.jobs
+
+::: groundinsight.api.schemas
+
+::: groundinsight.api.examples
+
+### Command line
+
+::: groundinsight.cli
