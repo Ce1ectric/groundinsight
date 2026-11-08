@@ -1,7 +1,7 @@
 # tests/test_audit_pass19_transient.py
 
 """
-Audit pass 19 -- transient solver: PH2.
+Audit pass 19 -- transient solver: PH2 and PH-L1.
 
 * **PH2** -- the state-space solver distributed the phase current over the
   routes of a ring with the enumerated source-to-fault paths and
@@ -11,29 +11,39 @@ Audit pass 19 -- transient solver: PH2.
   against 166.6 V from the stationary default ``"auto"`` (+103 %), without a
   warning. The solver now takes the split from the same phase-network solve
   as ``"auto"`` and folds it into the coupling of each branch.
+* **PH-L1** -- the warning the FFT solver raises for the mutual coupling it
+  does not evaluate said "expect a *lower* EPR". Measured, the FFT EPR without
+  coupling is *higher* (77.6 V against 49.2 V), at the fault bus and as the
+  network maximum -- conservative there.
 
 Second methods (house rule): the stationary phasor solver
-(``run_fault(..., phase_current_mode="auto")``) and the independent MNA
+(``run_fault(..., phase_current_mode="auto")``), the independent MNA
 reference in :mod:`tests._transient_reference` (branch currents of shield
 *and* phase conductor as unknowns, trapezoidal integration, phase network
-integrated as states).
+integrated as states) and the closed form ``1/|1 - Z_m/Z_s|`` for a single
+coupled branch.
 """
 
 import logging
 import math
+import pathlib
 import warnings
 
 import numpy as np
 import pytest
 
 import groundinsight as gi
+from groundinsight import diagnostics
 from groundinsight.diagnostics import ModelAssumptionWarning
+from groundinsight.models.core_models import TransientModelWarning
+from groundinsight.simulation import waveforms
 from groundinsight.simulation.transient import TransientStudy
 
 from tests import _transient_reference as ref
 
 
 W50 = 2.0 * math.pi * 50.0
+DOCS = pathlib.Path(__file__).resolve().parents[1] / "docs"
 
 
 # ---------------------------------------------------------------------------
@@ -384,3 +394,98 @@ def test_two_current_sources_are_split_independently():
         model, waves={"s": _sine(), "s2": _sine(abs(i_b), float(np.angle(i_b)))},
     )
     assert _max_rel(_phasors(result, rn.bus_R), stationary) < 1e-5
+
+
+# ---------------------------------------------------------------------------
+# PH-L1 -- the FFT warning names the right direction
+# ---------------------------------------------------------------------------
+
+
+def _two_bus_coupled(name, *, coupled=True):
+    """The PH-L1 case: one coupled cable link between two 5-Ohm buses."""
+    bus_type = gi.BusType(name=f"bt_{name}", system_type="S", voltage_level=20.0,
+                          impedance_formula="rho*0 + 5", R_formula="rho*0 + 5")
+    r_m, m = (0.05, 2e-3) if coupled else (0.0, 0.0)
+    branch_type = gi.BranchType(
+        name=f"brt_{name}", grounding_conductor=True,
+        self_impedance_formula="((rho*0+0.5) + I*2*pi*f*5e-3)*l",
+        mutual_impedance_formula=f"((rho*0+{r_m}) + I*2*pi*f*{m})*l",
+        R_self_formula="(rho*0+0.5)*l", L_self_formula="(rho*0+5e-3)*l",
+        R_mutual_formula=f"(rho*0+{r_m})*l", M_mutual_formula=f"(rho*0+{m})*l",
+    )
+    net = gi.create_network(name=name, frequencies=[50.0])
+    gi.create_bus(name="b1", type=bus_type, network=net)
+    gi.create_bus(name="b2", type=bus_type, network=net)
+    gi.create_branch(name="link", type=branch_type, from_bus="b1", to_bus="b2",
+                     length=1.0, network=net)
+    gi.create_source(name="src", bus="b1", values={50.0: 100.0}, network=net)
+    gi.create_fault(name="F1", bus="b2", scalings={50.0: 1.0}, network=net)
+    return net
+
+
+def _steady_rms(result, bus, t_min=0.5):
+    t = np.asarray(result.time_s)
+    u = np.asarray(result.epr_t[bus])
+    return float(np.sqrt(np.mean(u[t >= t_min] ** 2)))
+
+
+def test_fft_without_coupling_is_higher_and_the_warning_says_so():
+    """PH-L1 acceptance: number and text.
+
+    FFT 77.6 V, state space 49.2 V, ``run_fault`` 49.2 V. Second methods: the
+    stationary solver with the mutual impedance set to zero reproduces the FFT
+    value, and for a single coupled branch the ratio is exactly
+    ``1/|1 - Z_m/Z_s|`` (the coupling scales every injection by ``1 - k``).
+    """
+    net = _two_bus_coupled("pl1")
+    study = TransientStudy(net, fault_name="F1")
+    study.set_source_waveform("src", waveforms.sinusoidal_with_dc_offset(
+        amplitude=100.0 * math.sqrt(2.0), frequency_hz=50.0, t_on=0.0))
+    study.set_observation(buses=["b1", "b2"])
+    with pytest.warns(TransientModelWarning) as record:
+        res_fft = study.solve(t_end=1.0, dt=2e-4, solver="fft")
+    res_ss = study.solve(t_end=1.0, dt=2e-4, solver="state_space")
+
+    fft, ss = _steady_rms(res_fft, "b2"), _steady_rms(res_ss, "b2")
+    assert fft > ss
+    assert fft == pytest.approx(77.634, abs=2e-3)
+
+    coupled = _stationary(net)
+    uncoupled = _stationary(_two_bus_coupled("pl1_off", coupled=False))
+    assert fft == pytest.approx(abs(uncoupled["b2"]), rel=1e-4)
+    assert ss == pytest.approx(abs(coupled["b2"]), rel=2e-3)
+    z_s = complex(0.5, W50 * 5e-3)
+    z_m = complex(0.05, W50 * 2e-3)
+    assert abs(uncoupled["b2"]) / abs(coupled["b2"]) == pytest.approx(
+        1.0 / abs(1.0 - z_m / z_s), rel=1e-12)
+
+    messages = [w.message for w in record if "mutual coupling" in str(w.message)]
+    assert len(messages) == 1
+    text = str(messages[0])
+    assert "higher" in text and "conservative" in text
+    assert "lower earth potential rise" not in text
+    assert messages[0].code == "TRANSIENT_MODEL"
+    assert messages[0].elements == (("branch", "link"),)
+
+
+def test_fft_coupling_warning_is_collected_as_a_diagnostic():
+    net = _two_bus_coupled("pl1_diag")
+    study = TransientStudy(net, fault_name="F1")
+    study.set_source_waveform("src", waveforms.step(amplitude=100.0))
+    study.set_observation(buses=["b2"])
+    with diagnostics.collecting() as sink, warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        study.solve(t_end=0.05, dt=1e-4, solver="fft")
+    coupling = [d for d in sink if "mutual coupling" in d.message]
+    assert len(coupling) == 1
+    assert coupling[0].code == "TRANSIENT_MODEL"
+    assert coupling[0].category == "TransientModelWarning"
+    assert coupling[0].elements == [("branch", "link")]
+
+
+def test_transient_chapter_states_the_direction_of_the_missing_coupling():
+    """The chapter said the missing FFT coupling *under*-estimates the EPR."""
+    text = (DOCS / "transient.md").read_text(encoding="utf-8")
+    assert "under*-estimating" not in text
+    notes = text.split("*Mutual coupling — not modelled.*", 1)[1].split("\n\n", 1)[0]
+    assert "higher" in notes and "conservative" in notes

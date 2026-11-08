@@ -30,8 +30,10 @@ Design choices recorded in the Phase 3 discussion:
   ignores mutual impedance and says so: meeting a coupled branch it
   raises a :class:`~groundinsight.models.core_models.TransientModelWarning`,
   because the same network solved stationarily or with the state-space
-  solver returns a different peak (17 % on the two-branch reference
-  case) and a silent 17 % is indistinguishable from a modelling result.
+  solver returns a lower EPR at the fault (49.2 V against 77.6 V on a
+  coupled two-bus cable link) and a silent difference of that size is
+  indistinguishable from a modelling result. The FFT answer is the
+  conservative one at the fault bus.
 * Only sources that can actually reach the fault inject. The stationary
   solver filters its sources through the source-to-fault paths; the FFT
   solver reproduces that with a breadth-first reachability search over
@@ -831,9 +833,25 @@ class TransientStudy:
         branch *self* impedances only; ``BranchType.mutual_impedance_formula``
         and the lumped ``R_mutual`` / ``M_mutual`` never enter it. The
         stationary solver and the state-space solver both do evaluate them, so
-        the same network answers differently depending on which one is asked
-        (+17 % on the peak EPR of the two-branch reference case with
-        ``M_mutual = 8e-4 H``). That difference has to be visible.
+        the same network answers differently depending on which one is asked.
+        That difference has to be visible, and its direction has to be right.
+
+        Without the coupling no induced share of the fault current returns
+        through the shields, so the EPR at the fault bus and the maximum over
+        the network come out *higher* -- the FFT answer is conservative there.
+        Measured: 77.6 V against 49.2 V in the steady state of a coupled
+        two-bus cable link, exactly ``1/|1 - Z_m/Z_s|`` for one coupled
+        branch; +44 % to +101 % on the post-inception peak of a fully offset
+        fault current in four networks (two-bus link, chain, two rings);
+        higher at the fault bus and as network maximum in all of 600 random
+        chains and meshes with Carson-like parameters, while 6 % of the other
+        buses came out lower. Up to audit pass 18 the message said "lower"
+        and was not tied to any element (PH-L1).
+
+        Warns
+        -----
+        TransientModelWarning
+            Code ``TRANSIENT_MODEL``; elements: every coupled branch.
         """
         coupled: List[str] = []
         for name, branch in self.network.branches.items():
@@ -856,21 +874,29 @@ class TransientStudy:
                 coupled.append(name)
         if not coupled:
             return
-        shown = ", ".join(sorted(coupled)[:3])
+        coupled = sorted(coupled)
+        shown = ", ".join(coupled[:3])
         if len(coupled) > 3:
             shown += f", ... ({len(coupled)} branches in total)"
-        warnings.warn(
-            f"The FFT transient solver does not evaluate mutual coupling, but "
-            f"the network carries it on: {shown}. The phase current along "
-            f"each source-to-fault path is itself time-dependent, which the "
-            f"frequency-domain injection cannot express; the Norton-equivalent "
-            f"mutual currents of the stationary solver are therefore missing "
-            f"from this result. Expect a lower earth potential rise than "
-            f"gi.run_fault(...) reports for the same network (+17 % on the "
-            f"reference case). Use solver='state_space', which does model the "
-            f"coupling for current sources.",
+        emit(
             TransientModelWarning,
-            stacklevel=3,
+            f"The FFT transient solver does not evaluate mutual coupling, but "
+            f"the network carries it on: {shown}. Its admittance matrices "
+            f"hold the self impedances only, so the Norton-equivalent mutual "
+            f"currents of the stationary solver are missing from this result. "
+            f"Expect a higher earth potential rise at the fault bus, and a "
+            f"higher maximum over the network, than gi.run_fault(...) and the "
+            f"state-space solver report for the same network: without the "
+            f"coupling no induced share of the fault current returns through "
+            f"the shields, so the result is conservative there (+58 % in the "
+            f"steady state of a coupled two-bus cable link, i.e. "
+            f"1/|1 - Z_m/Z_s| for one coupled branch; +44 % on the peak of a "
+            f"fully offset fault current). A bus away from the fault can still "
+            f"come out lower. Use solver='state_space', which does model the "
+            f"coupling for current sources.",
+            code="TRANSIENT_MODEL",
+            elements=[("branch", name) for name in coupled],
+            stacklevel=4,
         )
 
     def _warn_about_fault_scalings(self) -> None:

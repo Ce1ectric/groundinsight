@@ -104,16 +104,19 @@ is parsed exactly once.
 *Mutual coupling — not modelled.* The FFT solver builds $Y(f_m)$ from the
 bus grounding impedances and the branch **self** impedances only.
 `BranchType.mutual_impedance_formula` and the lumped `R_mutual` / `M_mutual`
-never enter it: the phase current along each source-to-fault path is itself
-a function of time, so the Norton-equivalent mutual injection the stationary
-solver adds is not a fixed function of the source spectrum. On a two-branch
-reference case with $M = 0.8\,\mathrm{mH}$ the missing term is worth 17 % of
-the peak EPR, in the direction of *under*-estimating it. Since 0.6.1 the
-solver raises a `TransientModelWarning` as soon as it meets a coupled branch,
-so the difference is visible rather than inferred from this page. Use
-`solver="state_space"`, which does model the coupling for current sources
-(see [Mutual coupling](#mutual-coupling) below), or accept the FFT answer as
-a self-impedance-only result.
+never enter it, so the Norton-equivalent mutual injection the stationary
+solver adds is missing. Without it no induced share of the fault current
+returns through the shields, and the EPR comes out *higher* at the fault bus
+and as the maximum over the network — the FFT answer is conservative there:
+77.6 V against 49.2 V in the steady state of a coupled two-bus cable link,
+i.e. $1/|1 - Z_m/Z_s|$ for one coupled branch, and +44 % on the peak of a
+fully offset fault current. A bus away from the fault can come out lower.
+Since 0.6.1 the solver raises a `TransientModelWarning` (code
+`TRANSIENT_MODEL`, the coupled branches as elements) as soon as it meets a
+coupled branch, so the difference is visible rather than inferred from this
+page. Use `solver="state_space"`, which does model the coupling for current
+sources (see [Mutual coupling](#mutual-coupling) below), or accept the FFT
+answer as a self-impedance-only result.
 
 *Source filtering.* Only sources with a galvanic connection to the fault bus
 inject. The stationary solver applies the same rule through its
