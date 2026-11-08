@@ -35,6 +35,10 @@ On cancellation the network is restored to the state it had when the study was
 called -- its serialised form, stored results, active fault, paths and
 assembled electrical network -- and nothing is returned. Both callbacks run in
 the study's own thread; a GUI hands the values over to its event loop itself.
+A callback must not edit the network while the study runs: the study
+restores it afterwards anyway, and the inverse searches re-solve their trials
+on the assembly of their first solve (:mod:`groundinsight.analysis._session`),
+which an edit in between would not reach.
 An exception raised *by* a callback propagates unchanged, after the study's
 usual clean-up.
 
