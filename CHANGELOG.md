@@ -447,6 +447,7 @@ migration checklist.
   the GUI tests check the shown values against `res_fault`/`res_buses` of an
   independently solved twin and against the reference solver. Released
   together with the library under the same version, pinned to it.
+- **`groundinsight.diagnostics.note()` records an informational diagnostic on the current run without raising a warning.** Some findings explain a result rather than cast doubt on it; raising them as warnings would make every study that places trial faults on every bus repeat them, and a strict warnings filter would turn a correct result into an error. `note` appends a `Diagnostic` with severity `"info"` to the active `collecting()` sink and does nothing outside one.
 
 ### Changed
 
@@ -1121,6 +1122,9 @@ migration checklist.
   construction the EPR moves as well. The legacy
   `phase_current_mode="paths"` enumerates routes over every active branch and
   does not see an open phase conductor.
+- **A fault on the bus of every source that feeds it now says why its reduction factors are empty.** Source and fault put `+I` and `-I` on the same row, so nothing is injected into the earthing network: the EPR and the earth-return current are zero and both reduction factors are `None` by definition. The run was silent about it; it now records the info diagnostic `FAULT_AT_FEEDING_BUS` (elements: the fault and its bus) on the result. `U_E` is 0 V, `Z_E` remains the driving-point impedance.
+- **`run_outage_study(auto_parallel_coefficients=...)` warns at its caller.** The deprecated keyword was forwarded to `run_fault`, whose `DeprecationWarning` then pointed at a line inside the package, where Python's default filters hide it. The study resolves the alias itself; the old argument still wins when given.
+- **Warning texts name limitations, not internal audit identifiers** (`THEVENIN_COUPLING`).
 
 ### Security
 
