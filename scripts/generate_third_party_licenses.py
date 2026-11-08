@@ -1,3 +1,4 @@
+# scripts/generate_third_party_licenses.py
 """Generate ``THIRD_PARTY_NOTICES.md`` from the installed distributions.
 
 This script enumerates every Poetry runtime dependency declared under

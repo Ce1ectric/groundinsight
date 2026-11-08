@@ -435,3 +435,82 @@ def test_the_skip_allowlist_names_only_skipped_public_objects():
         if name not in api or _runs_the_object(name, api[name], _doctest_examples(name, api[name]))
     ]
     assert not stale, stale
+
+
+# ---------------------------------------------------------------------------
+# STD2 -- module header and module docstring
+# ---------------------------------------------------------------------------
+
+#: The trees the conventions apply to: package, tests, maintainer scripts,
+#: the GUI distribution, the how-to scripts of the documentation.
+LINT_TREES = ("src/groundinsight", "tests", "scripts", "gui", "docs/snippets")
+
+
+def _python_modules() -> List[str]:
+    """
+    Every Python file of the lint trees, relative to the repository root.
+
+    Returns
+    -------
+    list of str
+        POSIX paths, sorted; caches and hidden directories left out.
+    """
+    found = []
+    for tree in LINT_TREES:
+        for path in (ROOT / tree).rglob("*.py"):
+            rel = path.relative_to(ROOT)
+            if any(part.startswith((".", "__pycache__")) for part in rel.parts):
+                continue
+            found.append(rel.as_posix())
+    return sorted(found)
+
+
+def _accepted_headers(rel: str) -> Set[str]:
+    """
+    The first lines a module may start with.
+
+    Package modules name their path inside the package (``# utils/serialize.py``,
+    also ``# groundinsight/utils/serialize.py``); everything else names its
+    path from the repository root (``# tests/test_json.py``).
+
+    Parameters
+    ----------
+    rel : str
+        Repository-relative POSIX path of the module.
+
+    Returns
+    -------
+    set of str
+        The accepted header comments.
+    """
+    if rel.startswith("src/groundinsight/"):
+        inner = rel[len("src/groundinsight/"):]
+        return {f"# {inner}", f"# groundinsight/{inner}"}
+    if rel.startswith("gui/groundinsight_gui/"):
+        return {f"# {rel[len('gui/'):]}"}
+    return {f"# {rel}"}
+
+
+@pytest.mark.parametrize("rel", _python_modules())
+def test_module_starts_with_its_path_and_has_a_docstring(rel):
+    """Line 1 is ``# <path>.py``; the module docstring says why it exists."""
+    import ast
+
+    text = (ROOT / rel).read_text(encoding="utf-8")
+    first = text.split("\n", 1)[0]
+    assert first in _accepted_headers(rel), f"line 1 of {rel} is {first!r}"
+    docstring = ast.get_docstring(ast.parse(text))
+    assert docstring and len(docstring.split()) >= 5, f"{rel} has no module docstring"
+
+
+def test_module_headers_name_their_own_file():
+    """Second method: the path in each header, resolved from the package
+    root or the repository root, is the file itself."""
+    bases = (ROOT / "src" / "groundinsight", ROOT / "src", ROOT / "gui", ROOT)
+    wrong = []
+    for rel in _python_modules():
+        first = (ROOT / rel).read_text(encoding="utf-8").split("\n", 1)[0]
+        named = first[2:] if first.startswith("# ") else ""
+        if not any((base / named).resolve() == (ROOT / rel).resolve() for base in bases if named):
+            wrong.append(f"{rel}: {first!r}")
+    assert not wrong, wrong

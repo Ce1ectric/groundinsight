@@ -1,4 +1,10 @@
-# test_impedance_serialization.py
+# tests/test_serialize.py
+"""
+Impedance tables to JSON and back (``groundinsight.utils.serialize``).
+
+Both directions, empty tables, and that a round trip in either order returns
+what went in.
+"""
 
 from groundinsight.models.core_models import ComplexNumber
 from groundinsight.utils.serialize import (

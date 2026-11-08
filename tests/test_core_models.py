@@ -1,4 +1,11 @@
 # tests/test_core_models.py
+"""
+The Pydantic models one by one: construction, validation and arithmetic.
+
+``ComplexNumber`` arithmetic and conversions, the formula fields of the types,
+the derived impedance dictionaries of buses and branches, faults, sources,
+paths, results and the ``Network`` container with its accessors.
+"""
 
 import pytest
 from groundinsight.models.core_models import (

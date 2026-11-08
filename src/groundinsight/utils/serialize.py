@@ -1,3 +1,16 @@
+# utils/serialize.py
+
+"""
+Impedance tables as JSON.
+
+A frequency-keyed impedance table (``Dict[float, ComplexNumber]``) has no
+JSON form of its own: JSON objects take string keys only and know neither
+complex numbers nor infinity. These two functions define the string-keyed
+form, with non-finite components spelled out as strings so that an
+open-end impedance (infinite) survives a JSON document that a strict
+parser -- SQLite's ``json_valid()`` -- accepts.
+"""
+
 from groundinsight.models.core_models import ComplexNumber, json_safe_float
 
 

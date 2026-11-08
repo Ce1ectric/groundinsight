@@ -1,4 +1,4 @@
-# impedance_calculator.py
+# utils/impedance_calculator.py
 
 """
 Frequency-domain evaluation of impedance formula strings.

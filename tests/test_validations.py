@@ -1,3 +1,12 @@
+# tests/test_validations.py
+"""
+Validation of impedance formulas and numeric dictionaries.
+
+What the formula validator accepts and rejects, and which values
+``validate_numerics_dict`` takes for a number: ints, floats, numeric and
+complex strings, ``{"real": ..., "imag": ...}`` mappings.
+"""
+
 import pytest
 from groundinsight.utils.validations import validate_impedance_formula_value, validate_numerics_dict
 

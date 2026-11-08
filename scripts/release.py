@@ -1,3 +1,4 @@
+# scripts/release.py
 """Release automation for groundinsight.
 
 This script bumps the project version in every location where it is

@@ -1,3 +1,4 @@
+# tests/test_logging.py
 """
 Tests for the logging migration.
 

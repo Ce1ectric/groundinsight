@@ -1,3 +1,11 @@
+# tests/test_impedance_calculator.py
+"""
+Evaluation of an impedance formula over frequencies.
+
+A formula without the frequencies or parameters it needs is rejected with
+``ValueError`` instead of evaluating to something.
+"""
+
 import pytest
 from groundinsight.utils.impedance_calculator import compute_impedance
 

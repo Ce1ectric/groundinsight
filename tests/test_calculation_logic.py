@@ -1,3 +1,13 @@
+# tests/test_calculation_logic.py
+"""
+Numbers of complete fault solves on hand-built networks.
+
+A nine-bus feeder with parallel branches, an overhead section and faults at
+every bus pins the reduction factor at one location; the Thevenin source is
+checked against the current source it must approach for a large source
+impedance, and for the current it must deliver with a finite one.
+"""
+
 import polars as pl
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType

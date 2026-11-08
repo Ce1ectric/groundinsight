@@ -1,4 +1,4 @@
-# src/groundinsight/analysis/_session.py
+# analysis/_session.py
 """
 Study sessions: re-solve a solved fault after its bus impedances changed (P4).
 

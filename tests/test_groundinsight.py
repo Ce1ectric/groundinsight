@@ -1,3 +1,12 @@
+# tests/test_groundinsight.py
+"""
+The public API end to end: build a network, solve a fault, plot the result.
+
+The factory functions, path definition and fault activation are exercised on
+small networks; the plot helpers are called with their default and their
+``"all"`` selections.
+"""
+
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType
 

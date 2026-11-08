@@ -1,3 +1,12 @@
+# tests/test_database.py
+"""
+Round trips through the SQLite store with the module-level session.
+
+Types, networks, voltage sources and the lumped RLC parameters are saved and
+loaded again and compared field by field; without a started session every
+store function raises ``RuntimeError``.
+"""
+
 import contextlib
 
 import groundinsight as gi
