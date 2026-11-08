@@ -207,6 +207,38 @@ RES_ALL_IMPEDANCES_SCHEMA: Dict[str, Any] = {
 }
 
 
+RES_FAULT_SCHEMA: Dict[str, Any] = {
+    "fault": pl.Utf8,
+    "fault_bus": pl.Utf8,
+    "frequency_Hz": pl.Float64,
+    "is_rms": pl.Boolean,
+    "I_F_A": pl.Float64,
+    "I_F_degree": pl.Float64,
+    "EPR_fault_V": pl.Float64,
+    "EPR_fault_degree": pl.Float64,
+    "EPR_max_V": pl.Float64,
+    "EPR_max_bus": pl.Utf8,
+    "r_epr": pl.Float64,
+    "r_current": pl.Float64,
+    "I_E_A": pl.Float64,
+    "U_E_V": pl.Float64,
+    "Z_E_Ohm": pl.Float64,
+    "Z_E_degree": pl.Float64,
+    "n_diagnostics": pl.Int64,
+}
+"""Column layout of :meth:`Network.res_fault`, in output order.
+
+The key figures of one fault at the fault location, one row per network
+frequency plus one RMS row (``is_rms`` true, ``frequency_Hz`` null). Pinned
+for the same reason as the other result tables, and because a GUI or a report
+template binds to the names: ``I_F`` the fault current, ``EPR_fault`` the
+earth potential rise at the fault bus, ``EPR_max`` the largest one in the
+network and its bus, ``r_epr`` and ``r_current`` the EPR-based and the
+current-based reduction factor, ``I_E`` the earth-return current, ``U_E`` and
+``Z_E`` the earthing voltage and impedance of EN 50522, ``n_diagnostics`` the
+number of records in ``Result.diagnostics``.
+"""
+
 def _magnitude_angle(
     value: Optional["ComplexNumber"], magnitude_key: str, angle_key: str
 ) -> Dict[str, Optional[float]]:
@@ -216,8 +248,8 @@ def _magnitude_angle(
     Parameters
     ----------
     value : Optional[ComplexNumber]
-        The phasor, or ``None`` when the result carries no entry for this
-        frequency.
+        The phasor (a ``ComplexNumber`` or a plain ``complex``), or ``None``
+        when the result carries no entry for this frequency.
     magnitude_key, angle_key : str
         Column names to produce.
 
@@ -243,6 +275,157 @@ def _magnitude_angle(
         angle_key: float(np.angle(as_complex) * 180 / np.pi),
     }
 
+
+def _phasor(mapping: Optional[Dict[float, Any]], frequency: float) -> Optional[complex]:
+    """
+    One entry of a per-frequency result mapping, as a complex number.
+
+    Parameters
+    ----------
+    mapping : dict of float to ComplexNumber or complex, optional
+        A result field such as ``ResultReductionFactor.i_fault``; ``None`` for
+        a result that has no such field.
+    frequency : float
+        The frequency in Hz.
+
+    Returns
+    -------
+    complex or None
+        The value, or ``None`` where the mapping has no entry or the entry is
+        ``None`` (undefined at this frequency).
+    """
+    if not mapping:
+        return None
+    value = mapping.get(float(frequency))
+    if value is None:
+        return None
+    if isinstance(value, complex):
+        return value
+    return complex(value.real, value.imag)
+
+
+def _root_sum_of_squares(values: List[Optional[complex]]) -> Optional[float]:
+    """
+    RMS magnitude over frequencies, ``sqrt(sum |x(f)|**2)``.
+
+    Parameters
+    ----------
+    values : list of complex or None
+        One phasor per frequency; ``None`` where the quantity is undefined.
+
+    Returns
+    -------
+    float or None
+        The root sum of squares of the defined values, ``None`` when no
+        frequency has one. An undefined entry adds nothing: the per-frequency
+        quantities summed here (fault current, earth current, earthing
+        voltage) are undefined only where they are zero or vanish in rounding
+        noise.
+    """
+    defined = [abs(value) ** 2 for value in values if value is not None]
+    if not defined:
+        return None
+    return math.sqrt(sum(defined))
+
+
+def _fault_key_figures(network: "Network", fault: str, result: "Result") -> pl.DataFrame:
+    """
+    The rows of :meth:`Network.res_fault` for a stored result.
+
+    Parameters
+    ----------
+    network : Network
+        The network; its frequencies give the rows.
+    fault : str
+        Name of the fault.
+    result : Result
+        The stored result of ``fault``.
+
+    Returns
+    -------
+    polars.DataFrame
+        The table with the schema :data:`RES_FAULT_SCHEMA`.
+    """
+    factor = result.reduction_factor
+    fault_bus = factor.fault_bus if factor is not None else network.faults[fault].bus
+    buses = list(result.buses)
+    fault_result = next((bus for bus in buses if bus.name == fault_bus), None)
+    n_diagnostics = len(result.diagnostics)
+
+    def from_factor(field: str, frequency: float) -> Optional[complex]:
+        return _phasor(getattr(factor, field), frequency) if factor is not None else None
+
+    def ratio(field: str, frequency: float) -> Optional[float]:
+        if factor is None:
+            return None
+        value = getattr(factor, field).get(float(frequency))
+        return None if value is None else float(value)
+
+    rows: List[Dict[str, Any]] = []
+    fault_currents: List[Optional[complex]] = []
+    earth_currents: List[Optional[complex]] = []
+    earthing_voltages: List[Optional[complex]] = []
+    for frequency in network.frequencies:
+        frequency = float(frequency)
+        i_fault = from_factor("i_fault", frequency)
+        i_earth = from_factor("i_earth", frequency)
+        u_earthing = from_factor("u_earthing", frequency)
+        u_fault = (
+            _phasor(fault_result.uepr_freq, frequency) if fault_result is not None else None
+        )
+        # The largest EPR and its bus; the first bus in result order on a tie.
+        top_bus, top = None, None
+        for bus in buses:
+            potential = _phasor(bus.uepr_freq, frequency)
+            if potential is not None and (top is None or abs(potential) > top):
+                top_bus, top = bus.name, abs(potential)
+        fault_currents.append(i_fault)
+        earth_currents.append(i_earth)
+        earthing_voltages.append(u_earthing)
+        rows.append(
+            {
+                "fault": fault,
+                "fault_bus": fault_bus,
+                "frequency_Hz": frequency,
+                "is_rms": False,
+                **_magnitude_angle(i_fault, "I_F_A", "I_F_degree"),
+                **_magnitude_angle(u_fault, "EPR_fault_V", "EPR_fault_degree"),
+                "EPR_max_V": top,
+                "EPR_max_bus": top_bus,
+                "r_epr": ratio("value", frequency),
+                "r_current": ratio("value_current", frequency),
+                "I_E_A": None if i_earth is None else abs(i_earth),
+                "U_E_V": None if u_earthing is None else abs(u_earthing),
+                **_magnitude_angle(from_factor("z_earthing", frequency), "Z_E_Ohm",
+                                   "Z_E_degree"),
+                "n_diagnostics": n_diagnostics,
+            }
+        )
+    # The RMS row: the stored RMS EPR per bus, root sums of squares otherwise;
+    # ratios, impedances and angles have no RMS value.
+    top_rms = max(buses, key=lambda bus: bus.uepr, default=None)
+    rows.append(
+        {
+            "fault": fault,
+            "fault_bus": fault_bus,
+            "frequency_Hz": None,
+            "is_rms": True,
+            "I_F_A": _root_sum_of_squares(fault_currents),
+            "I_F_degree": None,
+            "EPR_fault_V": fault_result.uepr if fault_result is not None else None,
+            "EPR_fault_degree": None,
+            "EPR_max_V": top_rms.uepr if top_rms is not None else None,
+            "EPR_max_bus": top_rms.name if top_rms is not None else None,
+            "r_epr": None,
+            "r_current": None,
+            "I_E_A": _root_sum_of_squares(earth_currents),
+            "U_E_V": _root_sum_of_squares(earthing_voltages),
+            "Z_E_Ohm": None,
+            "Z_E_degree": None,
+            "n_diagnostics": n_diagnostics,
+        }
+    )
+    return pl.DataFrame(rows, schema=RES_FAULT_SCHEMA)
 
 class _NetworkLink:
     """
@@ -4053,6 +4236,115 @@ class Network(ValidatedAssignmentModel):
             )
 
         return pl.DataFrame(data, schema=RES_BRANCHES_SCHEMA)
+
+    def res_fault(self, fault: str) -> pl.DataFrame:
+        """
+        The key figures of one fault at the fault location, as one table.
+
+        Reads the stored result of ``fault`` -- nothing is solved -- and puts
+        the numbers an assessment starts from side by side: the fault current,
+        the earth potential rise at the fault bus and the largest one in the
+        network, both reduction factors, the earth-return current and the
+        earthing voltage and impedance of EN 50522. They used to be spread
+        over ``ResultBus``, ``ResultReductionFactor``,
+        ``ResultGroundingImpedance`` and ``Network.faults`` (findings USE1,
+        GUI6).
+
+        Parameters
+        ----------
+        fault : str
+            Name of a fault of this network with a stored result.
+
+        Returns
+        -------
+        polars.DataFrame
+            One row per network frequency and one RMS row (``is_rms`` true,
+            ``frequency_Hz`` null), with the pinned schema
+            :data:`RES_FAULT_SCHEMA`:
+
+            ``fault``, ``fault_bus``
+                The fault and the bus the result was computed for.
+            ``I_F_A``, ``I_F_degree``
+                The fault current ``I_F`` (``ResultReductionFactor.i_fault``).
+            ``EPR_fault_V``, ``EPR_fault_degree``
+                The EPR at the fault bus (``ResultBus.uepr_freq``).
+            ``EPR_max_V``, ``EPR_max_bus``
+                The largest EPR in the network and its bus (the first one in
+                result order on a tie).
+            ``r_epr``, ``r_current``
+                The EPR-based reduction factor ``value`` and the
+                current-based one ``value_current`` (``|I_E| / |I_F|``).
+            ``I_E_A``
+                The earth-return current ``|I_E|`` (``i_earth``).
+            ``U_E_V``
+                The earthing voltage ``|U_E|`` of EN 50522, the EPR at the
+                fault bus (``u_earthing``).
+            ``Z_E_Ohm``, ``Z_E_degree``
+                The earthing impedance ``Z_E``, the driving-point impedance
+                of the earthing network at the fault bus (``z_earthing``,
+                equal to ``ResultGroundingImpedance.value``).
+            ``n_diagnostics``
+                The number of records in ``Result.diagnostics``, the same on
+                every row: anything above zero qualifies how the row is read.
+
+            A value the result marks as undefined (``None``) is null. The RMS
+            row holds the stored RMS EPR of the fault bus and the largest one
+            of any bus, and the root sum of squares over the frequencies of
+            ``I_F``, ``I_E`` and ``U_E``; ratios, impedances and angles have
+            no RMS value and are null there.
+
+        Raises
+        ------
+        ValueError
+            If ``fault`` is not a fault of this network.
+        RuntimeError
+            If the network holds no result for ``fault``.
+
+        Notes
+        -----
+        The table reports the *stored* result. If the network was edited
+        after it was computed, :meth:`stale_results` lists the fault; the
+        numbers are still those of the result, including the frequencies it
+        was computed at (a network frequency the result does not cover gives
+        a row of nulls). A result stored before decision F4 carries no
+        EN 50522 earthing quantities and no fault current, and those columns
+        stay null rather than being filled from the former group values.
+
+        Examples
+        --------
+        >>> import groundinsight as gi
+        >>> net = gi.create_network(name="demo", frequencies=[50.0, 250.0])
+        >>> bus_type = gi.BusType(name="BT", system_type="MV", voltage_level=20.0,
+        ...                       impedance_formula="0.01*rho")
+        >>> cable = gi.BranchType(name="K", grounding_conductor=True,
+        ...                       self_impedance_formula="(0.25+0.6*j*f/50)*l",
+        ...                       mutual_impedance_formula="0.6*j*f/50*l")
+        >>> _ = gi.create_bus(name="b0", type=bus_type, network=net)
+        >>> _ = gi.create_bus(name="b1", type=bus_type, network=net)
+        >>> _ = gi.create_branch(name="k", type=cable, from_bus="b0", to_bus="b1",
+        ...                      length=1.0, network=net)
+        >>> _ = gi.create_source(name="q", bus="b0", values={50.0: 100.0, 250.0: 10.0},
+        ...                      network=net)
+        >>> _ = gi.create_fault(name="ef", bus="b1", network=net)
+        >>> _ = gi.run_fault(net, "ef")
+        >>> table = net.res_fault("ef")
+        >>> table.shape, table["is_rms"].to_list()
+        ((3, 17), [False, False, True])
+        """
+        if fault not in self.faults:
+            raise ValueError(
+                f"Fault '{fault}' does not exist in network '{self.name}' "
+                f"(faults: {sorted(self.faults)})."
+            )
+        result = self.results.get(fault)
+        if result is None:
+            raise RuntimeError(
+                f"Network '{self.name}' holds no result for fault '{fault}'. "
+                f"gi.run_fault(network, '{fault}') solves and stores one; "
+                f"gi.solve(network, '{fault}') returns one without touching the "
+                f"network -- keep it with network.results['{fault}'] = result."
+            )
+        return _fault_key_figures(self, fault, result)
 
     def res_all_impedances(self) -> pl.DataFrame:
         """

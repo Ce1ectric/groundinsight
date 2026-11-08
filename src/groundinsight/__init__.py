@@ -35,6 +35,7 @@ from .models.core_models import (
     Network,
     NetworkFrequencyOrderWarning,
     Path,
+    RES_FAULT_SCHEMA,
     Result,
     ResultBranch,
     ResultBus,
@@ -175,6 +176,8 @@ __all__ = [
     "Result",
     "ResultBus",
     "ResultBranch",
+    # Column layout of Network.res_fault, the key figures of one fault.
+    "RES_FAULT_SCHEMA",
     "ComplexNumber",
     "create_network",
     "create_bus",
