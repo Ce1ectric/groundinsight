@@ -30,9 +30,13 @@ The cases
     The earth-return current ``I_E`` of a six-station chain, re-derived from a
     nodal system assembled here from the model's own impedances. It replaces
     the ``U_E = 3*I_0 * Z_E * r`` check of 0.6.0, which was a tautology: the
-    implementation *defines* ``Z_E = U_E / I_E`` and ``r = |I_E| / |I_F|``, so
-    the product returns ``U_E`` algebraically and the case agreed to 1e-16
-    whatever the model did.
+    implementation *defined* ``Z_E = U_E / I_E`` and ``r = |I_E| / |I_F|``, so
+    the product returned ``U_E`` algebraically and the case agreed to 1e-16
+    whatever the model did. Since audit pass 19 ``Z_E`` is the driving-point
+    impedance at the fault bus and the chain is a physical statement (pinned
+    on a long chain by the test suite); the old pair is kept as
+    ``u_earthing_group`` / ``z_earthing_group``, on which it is still closed
+    by construction.
 ``ladder_input_impedance``
     A chain of bonded stations is a ladder network, and a long one presents
     ``Z_in = -Z'/2 + sqrt(Z'^2/4 + Z_e*Z')`` at its end.
@@ -280,9 +284,10 @@ def _en50522_chain() -> Tuple[float, float]:
 
     What this case does *not* do, and used to. Until 0.6.1 it checked
     ``U_E = 3*I_0 * Z_E * r`` with all three factors read out of one result.
-    That identity is closed by construction in the implementation -- ``Z_E`` is
-    defined as ``U_E / I_E`` and ``r`` as ``|I_E| / |I_F|``, so ``Z_E * r * I_F``
-    reduces to ``U_E`` algebraically -- and the case therefore agreed to
+    That identity was closed by construction in the implementation -- ``Z_E``
+    was defined as ``U_E / I_E`` and ``r`` as ``|I_E| / |I_F|``, so
+    ``Z_E * r * I_F`` reduced to ``U_E`` algebraically (as it still does for
+    ``z_earthing_group``) -- and the case therefore agreed to
     machine precision whatever the model did. Multiplying every electrode
     current by three made the reported deviation *smaller*. A tautology that
     reports 1e-16 is worse than no case at all, because the row it writes says
