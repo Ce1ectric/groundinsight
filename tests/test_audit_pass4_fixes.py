@@ -23,6 +23,7 @@ import numpy as np
 import pytest
 
 import groundinsight as gi
+from groundinsight.diagnostics import collecting
 from groundinsight.models.core_models import (
     BranchType,
     BusType,
@@ -431,23 +432,23 @@ def _defaults_20kV():
     )
 
 
-def test_pandapower_empty_network_emits_warning(pp_module, caplog):
-    """Mis-set voltage_level_kV produces an empty Network with a warning."""
+def test_pandapower_empty_network_emits_warning(pp_module):
+    """Mis-set voltage_level_kV produces an empty Network with a warning
+    (an InputWarning IMPORT_EMPTY since audit pass 19, formerly a log line)."""
     net = _minimal_pp_net_two_buses_one_line(pp_module, vn_kv_b=20.0)
     defaults = _defaults_20kV()
-    with caplog.at_level(
-        logging.WARNING, logger="groundinsight.io.pandapower_import"
-    ):
+    with collecting() as records:
         result = gi.from_pandapower(
             net, defaults=defaults, voltage_level_kV=0.4
         )
     assert len(result.buses) == 0
     assert any(
-        "empty or branch-less" in r.getMessage() for r in caplog.records
+        r.code == "IMPORT_EMPTY" and "empty or branch-less" in r.message
+        for r in records
     )
 
 
-def test_pandapower_self_loop_skipped_with_warning(pp_module, caplog):
+def test_pandapower_self_loop_skipped_with_warning(pp_module):
     """Pandapower line with from_bus == to_bus must be skipped, not imported."""
     pp = pp_module
     net = pp.create_empty_network()
@@ -464,17 +465,17 @@ def test_pandapower_self_loop_skipped_with_warning(pp_module, caplog):
         name="self",
     )
     defaults = _defaults_20kV()
-    with caplog.at_level(
-        logging.WARNING, logger="groundinsight.io.pandapower_import"
-    ):
+    with collecting() as records:
         result = gi.from_pandapower(
             net, defaults=defaults, voltage_level_kV=20.0
         )
     assert len(result.branches) == 0
-    assert any("self-loop" in r.getMessage() for r in caplog.records)
+    assert any(
+        r.code == "IMPORT_LINE_SKIPPED" and "self-loop" in r.message for r in records
+    )
 
 
-def test_pandapower_vn_kv_none_skipped_with_warning(pp_module, caplog):
+def test_pandapower_vn_kv_none_skipped_with_warning(pp_module):
     """Bus with vn_kv=None must be skipped explicitly, not silently zeroed."""
     pp = pp_module
     net = pp.create_empty_network()
@@ -484,15 +485,16 @@ def test_pandapower_vn_kv_none_skipped_with_warning(pp_module, caplog):
     # importer reads via row.get() and must cope with corrupted nets.
     net.bus.at[1, "vn_kv"] = None
     defaults = _defaults_20kV()
-    with caplog.at_level(
-        logging.WARNING, logger="groundinsight.io.pandapower_import"
-    ):
+    with collecting() as records:
         result = gi.from_pandapower(
             net, defaults=defaults, voltage_level_kV=20.0
         )
     assert "B0" in result.buses
     assert "B1" not in result.buses
-    assert any("unparsable vn_kv" in r.getMessage() for r in caplog.records)
+    assert any(
+        r.code == "IMPORT_BUS_SKIPPED" and "unparsable vn_kv" in r.message
+        for r in records
+    )
 
 
 def test_preview_pandapower_import_has_include_trafos(pp_module):

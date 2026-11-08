@@ -3530,6 +3530,14 @@ class ElectricalNetwork:
         This method calculates how much the presence of mutual currents affects the Earth Potential Rise (EPR).
         The reduction factors are stored in the network's results object.
 
+        Warns
+        -----
+        ModelAssumptionWarning
+            ``REDUCTION_FACTOR_UNDEFINED`` (elements: the fault and its bus)
+            for a frequency at which the EPR-based reduction factor is
+            undefined -- the no-mutual EPR of the fault bus is rounding noise,
+            or the solve without mutual coupling failed there.
+
         Notes
         -----
         The no-mutual system uses the *same* ``Y(f)`` that
@@ -3581,11 +3589,25 @@ class ElectricalNetwork:
                 self.u_vectors_no_mutual[freq] = u_vector
 
             except (np.linalg.LinAlgError, RuntimeError) as e:
-                logger.error(
-                    "Error solving network equations at frequency %s without mutual currents: %s",
+                # Result-relevant: the EPR-based reduction factor of this
+                # frequency is reported as None, and the reader has to know
+                # why (GUI4). The traceback stays available at DEBUG level.
+                logger.debug(
+                    "Solve without mutual currents failed at %s Hz.",
                     freq,
-                    e,
                     exc_info=True,
+                )
+                emit(
+                    ModelAssumptionWarning,
+                    f"Fault '{fault_name}': the solve without mutual coupling "
+                    f"failed at {freq:g} Hz ({type(e).__name__}: {e}), so the "
+                    f"EPR-based reduction factor (ResultReductionFactor.value) "
+                    f"is undefined there and reported as None. The solution "
+                    f"with coupling -- the EPR and every current -- is not "
+                    f"affected.",
+                    code="REDUCTION_FACTOR_UNDEFINED",
+                    elements=[("fault", fault_name), ("bus", fault_bus)],
+                    stacklevel=3,
                 )
                 continue
 
@@ -3990,6 +4012,16 @@ class ElectricalNetwork:
             empty list) where the frequency carries no fault current or no
             earth-return group exists; the last element lists those
             frequencies of the second kind as ``(frequency, max|I_a|, |I_F|)``.
+
+        Warns
+        -----
+        ModelAssumptionWarning
+            ``EARTH_GROUP_SPREAD`` (elements: the fault and its bus), once per
+            run, when at some frequency the electrode currents are spread in
+            angle (separation below 0.9 -- see
+            :func:`~groundinsight.utils.earth_current.split_earth_currents`):
+            ``I_E`` and ``value_current`` then describe the dominant direction
+            of the earth current only. A log line until audit pass 19 (GUI4).
         """
         factors: Dict[float, Optional[float]] = {}
         earth_currents: Dict[float, Optional[complex]] = {}
@@ -3997,7 +4029,9 @@ class ElectricalNetwork:
         earthing_voltages: Dict[float, Optional[complex]] = {}
         earthing_impedances: Dict[float, Optional[complex]] = {}
         undefined: List[Tuple[float, float, float]] = []
-        fault_bus = self.network.faults[self.network.active_fault].bus
+        spread: List[str] = []
+        fault_name = self.network.active_fault
+        fault_bus = self.network.faults[fault_name].bus
 
         for freq in self.network.frequencies:
             factors[freq] = None
@@ -4095,19 +4129,24 @@ class ElectricalNetwork:
                     ", ".join(split.feeding_buses),
                 )
             if split.separation < 0.9:
-                logger.warning(
-                    "The electrode currents at %s Hz are spread in angle "
-                    "(separation %.3f), so splitting them into one group that "
-                    "feeds the soil and one that returns it is less sharp than "
-                    "usual. The earth-return current %.4g A and the reduction "
-                    "factor %.4f built from it describe the dominant direction "
-                    "only. Buses counted as feeding: %s.",
-                    freq,
-                    split.separation,
-                    abs(split.i_earth),
-                    factors[freq],
-                    ", ".join(split.feeding_buses),
+                spread.append(
+                    f"{freq:g} Hz: separation {split.separation:.3f}, "
+                    f"I_E = {abs(split.i_earth):.4g} A, r_I = {factors[freq]:.4f}, "
+                    f"feeding {', '.join(split.feeding_buses)}"
                 )
+        if spread:
+            emit(
+                ModelAssumptionWarning,
+                f"Fault '{fault_name}': the electrode currents are spread in "
+                f"angle, so splitting them into one group that feeds the soil "
+                f"and one that returns it is less sharp than usual. The "
+                f"earth-return current I_E and the current-based reduction "
+                f"factor built from it (value_current) describe the dominant "
+                f"direction only -- {'; '.join(spread)}.",
+                code="EARTH_GROUP_SPREAD",
+                elements=[("fault", fault_name), ("bus", fault_bus)],
+                stacklevel=3,
+            )
         return (
             factors,
             earth_currents,

@@ -49,7 +49,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
 from groundinsight._state import restore_on_cancel
-from groundinsight.diagnostics import ModelAssumptionWarning, emit
+from groundinsight.diagnostics import InputWarning, ModelAssumptionWarning, emit
 from groundinsight.electrical_network import ElectricalNetwork
 from groundinsight.models.core_models import Network, TransientModelWarning
 from groundinsight.progress import StudyHooks
@@ -1057,6 +1057,14 @@ class TransientStudy:
         list of str
             The subset of ``source_names`` that can reach ``fault_bus``,
             in the order of ``network.sources``.
+
+        Warns
+        -----
+        InputWarning
+            Code ``TRANSIENT_SOURCE_NOT_CONNECTED`` (elements: the sources)
+            when a source with a waveform has no galvanic connection to the
+            fault bus and therefore injects nothing. A log line until audit
+            pass 19 (GUI4).
         """
         adjacency: Dict[str, List[str]] = {name: [] for name in bus_index}
         for branch in self.network.branches.values():
@@ -1088,12 +1096,14 @@ class TransientStudy:
             else:
                 dropped.append(name)
         if dropped:
-            logger.warning(
-                "Transient FFT solve: source(s) %s have no galvanic "
-                "connection to fault bus '%s' and do not inject, matching "
-                "the stationary solver's path filter.",
-                dropped,
-                fault_bus,
+            emit(
+                InputWarning,
+                f"Transient FFT solve: source(s) {dropped} have no galvanic "
+                f"connection to fault bus '{fault_bus}' and do not inject, "
+                f"matching the stationary solver's path filter.",
+                code="TRANSIENT_SOURCE_NOT_CONNECTED",
+                elements=[("source", name) for name in dropped],
+                stacklevel=3,
             )
         return keeping
 
@@ -1611,6 +1621,10 @@ class TransientStudy:
         ModelAssumptionWarning
             ``TRANSIENT_PHASE_SPLIT`` when the split depends on frequency;
             see :meth:`_warn_about_frequency_dependent_split`.
+        TransientModelWarning
+            ``TRANSIENT_COUPLING_SKIPPED`` (elements: the voltage sources) when
+            voltage sources reach the fault: the coupling is modelled for
+            current-source phase currents only.
         """
         network = self.network
         reaching = set(network.sources_reaching(self.fault_name))
@@ -1624,12 +1638,15 @@ class TransientStudy:
             else:
                 voltage_skipped.append(name)
         if voltage_skipped:
-            logger.warning(
-                "State-space mutual coupling skipped for voltage "
-                "sources: %s. The state-space solver currently models "
-                "the Carson-style coupling only for current-source "
-                "phase currents.",
-                voltage_skipped,
+            emit(
+                TransientModelWarning,
+                f"State-space mutual coupling skipped for voltage sources: "
+                f"{voltage_skipped}. The state-space solver currently models "
+                f"the Carson-style coupling only for current-source phase "
+                f"currents.",
+                code="TRANSIENT_COUPLING_SKIPPED",
+                elements=[("source", name) for name in voltage_skipped],
+                stacklevel=3,
             )
         if not current_sources or not coupled:
             return {}
@@ -1834,6 +1851,17 @@ class TransientStudy:
         stationary phase-network solve (``phase_current_mode="auto"``) at
         ``f_eval`` times the current-source waveform; see
         :meth:`_phase_split` and :meth:`_folded_coupling`.
+
+        Warns
+        -----
+        InputWarning
+            ``TRANSIENT_BRANCH_SKIPPED`` for grounding branches without
+            ``R_self``/``L_self``, which the state-space model leaves out.
+        TransientModelWarning
+            ``TRANSIENT_RESISTIVE_COUPLING_IGNORED`` for purely resistive
+            branches that carry mutual data, and
+            ``TRANSIENT_COUPLING_SKIPPED`` (from :meth:`_phase_split`) for
+            voltage sources. Log lines until audit pass 19 (GUI4).
         """
         if not self._source_waveforms:
             raise ValueError(
@@ -1992,17 +2020,25 @@ class TransientStudy:
             else:
                 skipped.append(name)
         if skipped:
-            logger.warning(
-                "State-space solver skipped %d branches without R_self/L_self: %s",
-                len(skipped), skipped,
+            emit(
+                InputWarning,
+                f"State-space solver skipped {len(skipped)} branches without "
+                f"R_self/L_self: {skipped}",
+                code="TRANSIENT_BRANCH_SKIPPED",
+                elements=[("branch", name) for name in skipped],
+                stacklevel=3,
             )
         if mutual_dropped:
-            logger.warning(
-                "State-space solver ignored mutual coupling on %d purely "
-                "resistive branch(es) (R_mutual/M_mutual set but no L_self > 0): "
-                "%s. The Carson-style mutual term is currently modelled only for "
-                "inductive branches.",
-                len(mutual_dropped), mutual_dropped,
+            emit(
+                TransientModelWarning,
+                f"State-space solver ignored mutual coupling on "
+                f"{len(mutual_dropped)} purely resistive branch(es) "
+                f"(R_mutual/M_mutual set but no L_self > 0): {mutual_dropped}. "
+                f"The Carson-style mutual term is currently modelled only for "
+                f"inductive branches.",
+                code="TRANSIENT_RESISTIVE_COUPLING_IGNORED",
+                elements=[("branch", name) for name in mutual_dropped],
+                stacklevel=3,
             )
 
         # --- pi-section lumping of branch shunt capacitance --------------

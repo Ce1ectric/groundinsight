@@ -70,7 +70,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 import polars as pl
 
-from ..diagnostics import ModelAssumptionWarning, emit
+from ..diagnostics import InputWarning, ModelAssumptionWarning, emit
 from ..models.core_models import Network
 from ..utils.compat import renamed_parameters
 from ._guards import require_complete_results
@@ -304,7 +304,8 @@ _NODE_SCHEMA: Dict[str, Any] = {
 
 
 def _warn_half_declared(
-    incomplete: Sequence[Tuple[str, str]], fault_name: str, kind: str
+    incomplete: Sequence[Tuple[str, str]], fault_name: str, kind: str,
+    element_kind: str,
 ) -> None:
     """
     Warn about elements that carry *one* half of their thermal data.
@@ -324,16 +325,31 @@ def _warn_half_declared(
         Name of the fault being checked, for the message.
     kind : str
         Already-pluralised noun for the message, e.g. ``"branch(es)"``.
+    element_kind : str
+        Diagnostic element kind, ``"branch"`` or ``"bus"``; a node element
+        label ``"bus/element"`` refers to its bus.
+
+    Warns
+    -----
+    InputWarning
+        Code ``THERMAL_DATA_INCOMPLETE``, elements the half-declared branches
+        or buses and the fault. A log line until audit pass 19 (GUI4): an
+        unassessed row reads like a passed one, so the reader of the table
+        has to know.
     """
     if not incomplete:
         return
     detail = ", ".join(f"{label} (missing {field})" for label, field in incomplete)
-    logger.warning(
-        "%d %s carry only half of their thermal data and were NOT assessed "
-        "for fault '%s': %s. Declare both the material and the cross-section, "
-        "or neither -- rows with 'within_limit = None' are unassessed, not "
-        "passed.",
-        len(incomplete), kind, fault_name, detail,
+    names = list(dict.fromkeys(label.split("/")[0] for label, _ in incomplete))
+    emit(
+        InputWarning,
+        f"{len(incomplete)} {kind} carry only half of their thermal data and "
+        f"were NOT assessed for fault '{fault_name}': {detail}. Declare both "
+        f"the material and the cross-section, or neither -- rows with "
+        f"'within_limit = None' are unassessed, not passed.",
+        code="THERMAL_DATA_INCOMPLETE",
+        elements=[(element_kind, name) for name in names] + [("fault", fault_name)],
+        stacklevel=3,
     )
 
 
@@ -811,6 +827,16 @@ def check_conductor_limits(
         silently report the missing branches as free of violations. Re-run
         :func:`groundinsight.run_fault` in that case.
 
+    Warns
+    -----
+    InputWarning
+        ``THERMAL_DATA_INCOMPLETE`` for branches whose type declares only one
+        of material and cross-section (their rows stay unassessed), and
+        ``SC_DATA_INCOMPLETE`` from :func:`resolve_fault_sc_characteristics`.
+    ModelAssumptionWarning
+        ``THERMAL_DC_EXCLUDED`` (see below), and ``SC_KAPPA_MIXED`` from
+        :func:`resolve_fault_sc_characteristics`.
+
     Examples
     --------
     >>> gi.check_conductor_limits(net, "F1", t_k_s=0.5, r_to_x=0.1)  # doctest: +SKIP
@@ -891,7 +917,7 @@ def check_conductor_limits(
             }
         )
 
-    _warn_half_declared(incomplete, fault, "branch(es)")
+    _warn_half_declared(incomplete, fault, "branch(es)", "branch")
     _warn_dc_excluded(rows, fault, "branch_name", "branch")
 
     violations = [r["branch_name"] for r in rows if r["within_limit"] is False]
@@ -1066,6 +1092,17 @@ def check_node_limits(
         unresolvable ``kappa``, both ``kappa`` and ``r_to_x`` given, or a
         stored result that does not cover every *active* bus).
 
+    Warns
+    -----
+    InputWarning
+        ``THERMAL_DATA_INCOMPLETE`` for buses whose type declares only one of
+        material and cross-section for an element (those rows stay
+        unassessed), and ``SC_DATA_INCOMPLETE`` from
+        :func:`resolve_fault_sc_characteristics`.
+    ModelAssumptionWarning
+        ``THERMAL_DC_EXCLUDED`` and ``SC_KAPPA_MIXED``, as for
+        :func:`check_conductor_limits`.
+
     Notes
     -----
     A bus that is *both* the fault bus and the only source bus gets
@@ -1188,7 +1225,7 @@ def check_node_limits(
                 }
             )
 
-    _warn_half_declared(incomplete, fault, "node element(s)")
+    _warn_half_declared(incomplete, fault, "node element(s)", "bus")
     _warn_dc_excluded(rows, fault, "bus_name", "bus")
 
     violations = [

@@ -98,6 +98,7 @@ from ..analysis.shortcircuit import (
     peak_short_circuit_current,
     thermal_equivalent_current,
 )
+from ..diagnostics import InputWarning, emit
 from ..models.core_models import ComplexNumber, Network
 from ..utils.compat import renamed_parameters
 from .pandapower_import import _bus_index_to_name, _require_pandapower
@@ -257,8 +258,8 @@ def _adopt_fault_value(
     express "the short-circuit run says nothing about this", and the value
     already on the fault (typically the project's real clearing time)
     survives. When a value *is* replaced by a different one, the change is
-    announced with a ``logger.warning`` naming both, so that a protection
-    setting can never be swapped out silently.
+    announced with an ``InputWarning`` ``SC_VALUE_REPLACED`` naming both, so
+    that a protection setting can never be swapped out silently.
 
     Parameters
     ----------
@@ -269,11 +270,17 @@ def _adopt_fault_value(
     new_value : float, optional
         The value to adopt, or ``None`` to keep the current one.
     fault_name : str
-        Name of the fault, for the log message.
+        Name of the fault, for the message.
 
     Returns
     -------
     None
+
+    Warns
+    -----
+    InputWarning
+        Code ``SC_VALUE_REPLACED`` (elements: the fault) when a different
+        stored value is replaced. A log line until audit pass 19 (GUI4).
     """
     if new_value is None:
         return
@@ -282,10 +289,15 @@ def _adopt_fault_value(
     if old_value is not None and not math.isclose(
         float(old_value), new_value, rel_tol=1e-12, abs_tol=0.0
     ):
-        logger.warning(
-            "Fault '%s': %s replaced by the short-circuit result, %r -> %r. "
-            "Pass %s=... explicitly if the previous value was the intended one.",
-            fault_name, attribute, float(old_value), new_value, attribute,
+        emit(
+            InputWarning,
+            f"Fault '{fault_name}': {attribute} replaced by the short-circuit "
+            f"result, {float(old_value)!r} -> {new_value!r}. Pass "
+            f"{attribute}=... explicitly if the previous value was the intended "
+            f"one.",
+            code="SC_VALUE_REPLACED",
+            elements=[("fault", fault_name)],
+            stacklevel=3,
         )
     setattr(fault, attribute, new_value)
 
@@ -346,15 +358,25 @@ def _kappa_for_row(
     or C), which is more accurate than the closed form whenever the fault
     is fed through several branches. It is therefore preferred, and only
     the missing case falls back to ``1.02 + 0.98 * exp(-3 * R/X)``.
+
+    Warns
+    -----
+    InputWarning
+        Code ``SC_KAPPA_OUT_OF_RANGE`` (elements: the bus) when pandapower's
+        ``ip``/``ikss`` imply a ``kappa`` outside ``(1, 2]`` and the closed
+        form is used instead.
     """
     if ip_ka is not None and i_k_a not in (None, 0.0):
         kappa = (ip_ka * 1000.0) / (math.sqrt(2.0) * i_k_a)
         if 1.0 < kappa <= 2.0 + 1e-9:
             return min(kappa, 2.0), "pandapower"
-        logger.warning(
-            "pandapower ip/ikss at bus '%s' implies kappa=%.4f outside (1, 2]; "
-            "falling back to the IEC closed form.",
-            bus_label, kappa,
+        emit(
+            InputWarning,
+            f"pandapower ip/ikss at bus '{bus_label}' implies kappa={kappa:.4f} "
+            f"outside (1, 2]; falling back to the IEC closed form.",
+            code="SC_KAPPA_OUT_OF_RANGE",
+            elements=[("bus", bus_label)],
+            stacklevel=3,
         )
     if r_to_x is None:
         return None, "unavailable"
@@ -426,6 +448,14 @@ def read_shortcircuit_results(
     ValueError
         If ``net`` carries no short-circuit results, or if ``buses``
         references indices absent from them.
+
+    Warns
+    -----
+    InputWarning
+        ``SC_KAPPA_OUT_OF_RANGE`` (a bus whose ``ip``/``ikss`` imply a
+        ``kappa`` outside ``(1, 2]``; the closed form is used) and
+        ``SC_KAPPA_MISSING`` (buses for which no ``kappa`` can be derived).
+        Log lines until audit pass 19 (GUI4).
 
     Notes
     -----
@@ -536,11 +566,15 @@ def read_shortcircuit_results(
 
     unavailable = [r["bus_name"] for r in rows if r["kappa_origin"] == "unavailable"]
     if unavailable:
-        logger.warning(
-            "No kappa could be derived for %d bus(es) (%s): neither ip_ka nor a "
-            "usable R/X is available. For fault='1ph' make sure the zero-sequence "
-            "data (x0x_max, r0x0_max, vk0_percent, r0_ohm_per_km, ...) is complete.",
-            len(unavailable), unavailable,
+        emit(
+            InputWarning,
+            f"No kappa could be derived for {len(unavailable)} bus(es) "
+            f"({unavailable}): neither ip_ka nor a usable R/X is available. For "
+            f"fault='1ph' make sure the zero-sequence data (x0x_max, r0x0_max, "
+            f"vk0_percent, r0_ohm_per_km, ...) is complete.",
+            code="SC_KAPPA_MISSING",
+            elements=[("bus", name) for name in unavailable],
+            stacklevel=2,
         )
 
     return pl.DataFrame(rows, schema=_SC_SCHEMA)
@@ -633,6 +667,16 @@ def apply_shortcircuit_characteristics(
         are given, if no matching row is found in ``sc_results``, or if
         no source is eligible for the update.
 
+    Warns
+    -----
+    InputWarning
+        ``SC_ROW_AMBIGUOUS`` (several short-circuit rows match; the first one
+        is used), ``SC_SPLIT_EQUAL`` (the sources inject nothing at the
+        frequency, so ``I_k''`` is split equally), ``SC_VOLTAGE_SOURCE_SKIPPED``
+        (a voltage source keeps its values) and ``SC_VALUE_REPLACED`` (a
+        different ``t_k_s`` or ``n_factor`` on the fault was replaced). Log
+        lines until audit pass 19 (GUI4).
+
     Notes
     -----
     Only the *linear* quantities are distributed. ``i_p`` and ``I_th`` are
@@ -651,7 +695,7 @@ def apply_shortcircuit_characteristics(
     instead of resetting it to a pandapower placeholder — a shortened
     ``T_k`` raises the admissible current by ``1/sqrt(t_k)`` and would make
     an undersized conductor pass. Whenever a value *is* replaced by a
-    different one, a ``logger.warning`` names both.
+    different one, an ``InputWarning`` ``SC_VALUE_REPLACED`` names both.
 
     Examples
     --------
@@ -691,9 +735,13 @@ def apply_shortcircuit_characteristics(
             "if the groundinsight bus names differ from the pandapower ones."
         )
     if matches.height > 1:
-        logger.warning(
-            "%d short-circuit rows match %s; using the first one.",
-            matches.height, selector,
+        emit(
+            InputWarning,
+            f"{matches.height} short-circuit rows match {selector}; using the "
+            f"first one.",
+            code="SC_ROW_AMBIGUOUS",
+            elements=[("fault", fault), ("bus", target)],
+            stacklevel=2,
         )
     row = matches.to_dicts()[0]
 
@@ -769,10 +817,14 @@ def apply_shortcircuit_characteristics(
     else:
         shares = {name: 1.0 / len(names) for name in names}
         if len(names) > 1:
-            logger.warning(
-                "Sources %s inject nothing at f=%.4g Hz; splitting I_k'' equally. "
-                "Set the relative infeed shares first if the split is not uniform.",
-                names, frequency,
+            emit(
+                InputWarning,
+                f"Sources {names} inject nothing at f={frequency:.4g} Hz; "
+                f"splitting I_k'' equally. Set the relative infeed shares first "
+                f"if the split is not uniform.",
+                code="SC_SPLIT_EQUAL",
+                elements=[("source", name) for name in names] + [("fault", fault)],
+                stacklevel=2,
             )
 
     rows: List[Dict[str, Any]] = []
@@ -792,10 +844,14 @@ def apply_shortcircuit_characteristics(
             src.values = values
             updated = True
         elif set_source_values:
-            logger.warning(
-                "Source '%s' is a voltage source; its injection was not "
-                "overwritten (set_source_values only applies to current sources).",
-                name,
+            emit(
+                InputWarning,
+                f"Source '{name}' is a voltage source; its injection was not "
+                f"overwritten (set_source_values only applies to current "
+                f"sources).",
+                code="SC_VOLTAGE_SOURCE_SKIPPED",
+                elements=[("source", name)],
+                stacklevel=2,
             )
 
         rows.append(

@@ -123,7 +123,11 @@ class TransientModelWarning(GroundinsightWarning):
       time-domain source waveform replaces,
     * a mutual inductance larger than the branch's own ``L_self``, which is
       not physically realisable for two coupled conductors and is almost
-      always a mH/H unit slip.
+      always a mH/H unit slip,
+    * the state-space solver meeting a voltage source that reaches the fault,
+      whose coupling it does not model (code ``TRANSIENT_COUPLING_SKIPPED``),
+      or a purely resistive branch carrying mutual data
+      (``TRANSIENT_RESISTIVE_COUPLING_IGNORED``).
 
     Notes
     -----

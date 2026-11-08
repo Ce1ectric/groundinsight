@@ -179,10 +179,14 @@ def test_overwrite_fault_and_source_emit_warning(caplog):
 # --- network_operations: parallel-coefficient warning -----------------------
 
 
-def test_parallel_coefficient_warning_is_logged(caplog):
+def test_parallel_coefficient_warning_is_logged():
     """
-    The parallel-coefficient guidance message is a WARNING on the
-    ``groundinsight.network_operations`` logger.
+    The parallel-coefficient guidance message reaches the caller.
+
+    It was a WARNING on the ``groundinsight.network_operations`` logger, which
+    the library's default ``NullHandler`` swallows; since audit pass 19 (GUI4)
+    it is a ``ModelAssumptionWarning`` with the code
+    ``PARALLEL_COEFFICIENT_DEFAULT``, stored in ``Result.diagnostics``.
 
     Since the phase-current default became ``phase_current_mode="auto"`` the
     warning is scoped to the legacy path-based mode: ``auto`` splits the ring
@@ -241,25 +245,22 @@ def test_parallel_coefficient_warning_is_logged(caplog):
         network=net,
     )
 
-    def _parallel_warnings():
+    def _parallel_warnings(result):
         return [
-            r
-            for r in caplog.records
-            if r.levelno == logging.WARNING
-            and "parallel_coefficient" in r.getMessage()
+            d
+            for d in result.diagnostics
+            if d.code == "PARALLEL_COEFFICIENT_DEFAULT"
+            and "parallel_coefficient" in d.message
         ]
 
-    with caplog.at_level(logging.WARNING, logger="groundinsight.network_operations"):
-        gi.run_fault(net, fault_name="F1", phase_current_mode="paths")
-    assert _parallel_warnings(), (
-        "Expected a WARNING about parallel_coefficient for a ring solved in "
+    result = gi.run_fault(net, fault_name="F1", phase_current_mode="paths")
+    assert _parallel_warnings(result), (
+        "Expected a warning about parallel_coefficient for a ring solved in "
         "the legacy path-based mode."
     )
 
-    caplog.clear()
-    with caplog.at_level(logging.WARNING, logger="groundinsight.network_operations"):
-        gi.run_fault(net, fault_name="F1")
-    assert not _parallel_warnings(), (
+    result = gi.run_fault(net, fault_name="F1")
+    assert not _parallel_warnings(result), (
         "The default phase_current_mode='auto' splits the ring from the "
         "topology, so there is nothing to warn about."
     )

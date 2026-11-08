@@ -63,6 +63,7 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from ..diagnostics import InputWarning, ModelAssumptionWarning, emit
 from ..models.core_models import Network
 from ..utils.compat import renamed_parameters
 
@@ -524,6 +525,18 @@ def resolve_fault_sc_characteristics(
         If ``fault`` is unknown or ``aggregation`` is not one of the
         supported modes.
 
+    Warns
+    -----
+    ModelAssumptionWarning
+        Code ``SC_KAPPA_MIXED`` (elements: the sources with a ``kappa`` and the
+        fault) when the feeding sources have different R/X: the non-linear
+        IEC 60909 factors are applied once, with the aggregated ``kappa``.
+    InputWarning
+        Code ``SC_DATA_INCOMPLETE`` (elements: the sources without IEC 60909
+        data and the fault) when part of the current comes from sources that
+        carry no ``r_to_x`` or ``kappa``: ``kappa_eff`` then describes only
+        the remaining share and ``i_p`` applies it to the whole current.
+
     Examples
     --------
     >>> import groundinsight as gi
@@ -621,38 +634,37 @@ def resolve_fault_sc_characteristics(
             kappa_eff = sum(kappa_list) / len(kappa_list)
 
     if not homogeneous:
-        logger.warning(
-            "Fault %r is fed by sources with different R/X (kappa between "
-            "%.4f and %.4f). The non-linear IEC 60909 factors are applied "
-            "once, with the %s kappa = %.4f. Use the transient solver for an "
-            "exact mixed-R/X result.",
-            fault,
-            min(kappa_list),
-            max(kappa_list),
-            aggregation,
-            kappa_eff,
+        emit(
+            ModelAssumptionWarning,
+            f"Fault {fault!r} is fed by sources with different R/X (kappa "
+            f"between {min(kappa_list):.4f} and {max(kappa_list):.4f}). The "
+            f"non-linear IEC 60909 factors are applied once, with the "
+            f"{aggregation} kappa = {kappa_eff:.4f}. Use the transient solver "
+            f"for an exact mixed-R/X result.",
+            code="SC_KAPPA_MIXED",
+            elements=[("source", name) for name in kappas] + [("fault", fault)],
+            stacklevel=3,
         )
     if without_kappa:
         share = weight_without_kappa / i_k_total if i_k_total > 0 else 0.0
-        logger.warning(
-            "Fault %r: source(s) %s inject %.0f %% of the current at %.1f Hz "
-            "but carry no IEC 60909 data. They are excluded from the kappa "
-            "aggregation and included in i_k_a, so kappa_eff = %.4f is the "
-            "figure of the remaining %.0f %% and i_p applies it to the whole "
-            "current.%s",
-            fault,
-            ", ".join(without_kappa),
-            100.0 * share,
-            frequency,
-            kappa_eff,
-            100.0 * (1.0 - share),
-            (
-                " That is the majority of the current, so i_p and I_th rest "
-                "mostly on an assumption: give those sources an r_to_x or a "
-                "kappa, or pass kappa explicitly."
-                if share > 0.5
-                else ""
-            ),
+        majority = (
+            " That is the majority of the current, so i_p and I_th rest "
+            "mostly on an assumption: give those sources an r_to_x or a "
+            "kappa, or pass kappa explicitly."
+            if share > 0.5
+            else ""
+        )
+        emit(
+            InputWarning,
+            f"Fault {fault!r}: source(s) {', '.join(without_kappa)} inject "
+            f"{100.0 * share:.0f} % of the current at {frequency:.1f} Hz but "
+            f"carry no IEC 60909 data. They are excluded from the kappa "
+            f"aggregation and included in i_k_a, so kappa_eff = {kappa_eff:.4f} "
+            f"is the figure of the remaining {100.0 * (1.0 - share):.0f} % and "
+            f"i_p applies it to the whole current.{majority}",
+            code="SC_DATA_INCOMPLETE",
+            elements=[("source", name) for name in without_kappa] + [("fault", fault)],
+            stacklevel=3,
         )
 
     r_to_x_eff = None

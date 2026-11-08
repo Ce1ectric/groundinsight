@@ -12,6 +12,7 @@ during a calculation without the side effects of the interactive API:
 | How far is this study, and can I stop it? | [`progress` / `should_cancel`](#progress-and-cancellation) |
 | How do I get a network from a spreadsheet, and back? | [`gi.network_from_tables` / `Network.to_tables`](io.md#networks-as-tables) |
 | Which spelling of a parameter is the current one? | [canonical names](#canonical-parameter-names) |
+| Which conditions qualify a result, by code? | [diagnostic codes](#diagnostic-codes) |
 
 ## Solve without side effects
 
@@ -152,6 +153,78 @@ exception raised by a callback propagates unchanged.
 search announces the evaluations its bracket and tolerance require — a
 log-bisection needs the same number of halvings wherever the threshold lies —
 and ends below that when it stops early (a fully admissible bracket).
+
+## Diagnostic codes
+
+Every condition that changes how a result has to be read is raised as a
+structured warning — a subclass of `gi.GroundinsightWarning` with a stable
+`code`, a `severity` and the `elements` it is about — and not only logged:
+the library's logging default is a `NullHandler`, so a log line reaches
+nobody who has not configured logging. Inside `run_fault` (and `gi.solve`)
+the records are collected into `Result.diagnostics`; around any other call
+a program collects them with `groundinsight.diagnostics.collecting()`:
+
+```python
+from groundinsight.diagnostics import collecting
+
+with collecting() as records:
+    network = gi.from_pandapower(pp_net, defaults=defaults, voltage_level_kV=20.0)
+for record in records:
+    print(record.code, record.elements, record.message)
+```
+
+A program that reads warnings from its log can route them there with
+`logging.captureWarnings(True)`: they arrive at the logger `py.warnings` as
+formatted text, while code and elements stay with the records.
+
+What stays a log line reports what the library does — sessions, migrations,
+caches, costs — or summarises something the returned object already carries
+(a `status` field, a `failures` map, a table column). The codes, with the
+category and the function whose docstring describes the condition:
+
+| Code | Category | Raised by |
+|---|---|---|
+| `DC_LIMIT` | `DCLimitWarning` | impedance evaluation at 0 Hz |
+| `EARTH_GROUP_SPREAD` | `ModelAssumptionWarning` | `run_fault`: electrode currents spread in angle, `I_E` and `r_current` describe the dominant direction only |
+| `EARTH_GROUP_UNDEFINED` | `ModelAssumptionWarning` | `run_fault`: no electrode carries a non-noise share of the fault current |
+| `EARTHING_IMPEDANCE_UNDEFINED` | `ModelAssumptionWarning` | `run_fault`: `Z_E` undefined at a frequency |
+| `FREQUENCY_ORDER` | `NetworkFrequencyOrderWarning` | `Network.frequencies` not strictly increasing |
+| `IMPORT_BUS_SKIPPED` | `InputWarning` | `from_pandapower` / preview: a bus with an unparsable `vn_kv` |
+| `IMPORT_ELEMENT_NOT_IMPORTED` | `InputWarning` | `from_pandapower`: transformers and impedance elements |
+| `IMPORT_EMPTY` | `InputWarning` | `from_pandapower`: no bus or no branch imported |
+| `IMPORT_LENGTH_DEFAULT` | `InputWarning` | `from_pandapower` / preview: a line without usable length got the fallback |
+| `IMPORT_LINE_SKIPPED` | `InputWarning` | `from_pandapower` / preview: a self-loop, or a length that cannot be imported |
+| `IMPORT_SWITCH_NOT_IMPORTED` | `InputWarning` | `from_pandapower`: closed bus-to-bus switches without `switch_branch_type` |
+| `IMPORT_VOLTAGE_LEVEL_MISMATCH` | `InputWarning` | `from_pandapower`: the default bus type declares another voltage level |
+| `PARALLEL_COEFFICIENT_DEFAULT` | `ModelAssumptionWarning` | `run_fault(phase_current_mode="paths")`: parallel routes with default coefficients |
+| `PHASE_PROXY` | `ModelAssumptionWarning` | `run_fault`: a meshed phase network split with proxy impedances |
+| `PROJECT_FILE_LEGACY_ENCODING` | `InputWarning` | `load_network_from_json`: a file that is not UTF-8 |
+| `REDUCTION_FACTOR_UNDEFINED` | `ModelAssumptionWarning` | `run_fault`: `r_epr` undefined at a frequency |
+| `SC_DATA_INCOMPLETE` | `InputWarning` | `resolve_fault_sc_characteristics`: sources without IEC 60909 data |
+| `SC_KAPPA_MISSING` | `InputWarning` | `read_shortcircuit_results`: no `kappa` derivable for a bus |
+| `SC_KAPPA_MIXED` | `ModelAssumptionWarning` | `resolve_fault_sc_characteristics`: sources of different R/X |
+| `SC_KAPPA_OUT_OF_RANGE` | `InputWarning` | `read_shortcircuit_results`: pandapower's `ip`/`ikss` imply `kappa` outside (1, 2] |
+| `SC_ROW_AMBIGUOUS` | `InputWarning` | `apply_shortcircuit_characteristics`: several matching rows |
+| `SC_SPLIT_EQUAL` | `InputWarning` | `apply_shortcircuit_characteristics`: `I_k''` split equally |
+| `SC_VALUE_REPLACED` | `InputWarning` | `apply_shortcircuit_characteristics`: a different `t_k_s` / `n_factor` replaced |
+| `SC_VOLTAGE_SOURCE_SKIPPED` | `InputWarning` | `apply_shortcircuit_characteristics`: a voltage source keeps its values |
+| `SCALINGS_INCOMPLETE` | `InputWarning` | `run_fault`: a fault's scalings miss network frequencies |
+| `SOURCE_FREQUENCY_GAP` | `InputWarning` | `run_fault`: a source misses network frequencies |
+| `SOURCE_FREQUENCY_OUTSIDE_NETWORK` | `InputWarning` | `Network.add_source`: values at frequencies the network does not solve |
+| `SOURCE_WITHOUT_PHASE_PATH` | `ModelAssumptionWarning` | `run_fault`: a source with no phase-conductor path to the fault |
+| `THERMAL_DATA_INCOMPLETE` | `InputWarning` | `check_conductor_limits` / `check_node_limits`: half-declared thermal data |
+| `THERMAL_DC_EXCLUDED` | `ModelAssumptionWarning` | `check_conductor_limits` / `check_node_limits`: 0 Hz left out of the adiabatic check |
+| `THEVENIN_COUPLING` | `ModelAssumptionWarning` | `run_fault`: a Thevenin source drives coupled branches |
+| `TRANSIENT_BRANCH_SKIPPED` | `InputWarning` | `TransientStudy.solve` (state space): branches without `R_self`/`L_self` |
+| `TRANSIENT_COUPLING_SKIPPED` | `TransientModelWarning` | `TransientStudy.solve` (state space): coupling of voltage sources |
+| `TRANSIENT_MODEL` | `TransientModelWarning` | `TransientStudy.solve`: the model is narrower than the input |
+| `TRANSIENT_PHASE_SPLIT` | `ModelAssumptionWarning` | `TransientStudy.solve` (state space): frequency-dependent phase split |
+| `TRANSIENT_RESISTIVE_COUPLING_IGNORED` | `TransientModelWarning` | `TransientStudy.solve` (state space): mutual data on resistive branches |
+| `TRANSIENT_SOURCE_NOT_CONNECTED` | `InputWarning` | `TransientStudy.solve` (FFT): a source without connection to the fault |
+
+`gi.check_network` returns its own codes, listed [above](#pre-flight-check);
+`SCALINGS_INCOMPLETE`, `SOURCE_FREQUENCY_GAP` and
+`SOURCE_FREQUENCY_OUTSIDE_NETWORK` mean the same there.
 
 ## Canonical parameter names
 

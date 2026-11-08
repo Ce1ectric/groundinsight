@@ -39,6 +39,7 @@ import polars as pl
 import pytest
 
 import groundinsight as gi
+from groundinsight.diagnostics import collecting
 from groundinsight.models.core_models import (
     ComplexNumber,
     ResultGroundingImpedance,
@@ -313,6 +314,10 @@ def test_elements_argument_can_restrict_the_frame():
 # cross-section means the user began describing the conductor and believes it
 # is being assessed. Such a row carries ``within_limit = None``, which is
 # visually indistinguishable from a pass, so it must be announced.
+#
+# Since audit pass 19 (GUI4) the announcement is an InputWarning with the code
+# THERMAL_DATA_INCOMPLETE instead of a log line, so it is read from the
+# collected diagnostics.
 # ---------------------------------------------------------------------------
 
 
@@ -323,21 +328,19 @@ def test_elements_argument_can_restrict_the_frame():
         ({"cross_section_mm2": 50.0}, "conductor_material"),
     ],
 )
-def test_a_half_declared_branch_is_not_assessed_but_is_announced(
-    caplog, kwargs, missing
-):
+def test_a_half_declared_branch_is_not_assessed_but_is_announced(kwargs, missing):
     net = _chain(_bare_bus_type(), _bare_branch_type())
     net.branches["A-B"].type = gi.BranchType(name="half", **kwargs, **_BRANCH_KW)
     gi.run_fault(net, "F")
 
-    with caplog.at_level("WARNING", logger="groundinsight"):
+    with collecting() as records:
         df = gi.check_conductor_limits(net, "F")
 
     row = df.filter(pl.col("branch_name") == "A-B").to_dicts()[0]
     assert row["within_limit"] is None, "half data must never produce a verdict"
     assert row["I_th_A"] > 0.0, "the current is still reported"
 
-    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    warnings = [r.message for r in records if r.code == "THERMAL_DATA_INCOMPLETE"]
     assert len(warnings) == 1
     assert "A-B" in warnings[0]
     assert missing in warnings[0], "the message names the field that is missing"
@@ -354,13 +357,13 @@ def test_a_half_declared_branch_is_not_assessed_but_is_announced(
     ],
 )
 def test_a_half_declared_node_element_is_not_assessed_but_is_announced(
-    caplog, kwargs, missing
+    kwargs, missing
 ):
     net = _chain(_bare_bus_type(), _bare_branch_type())
     net.buses["B"].type = gi.BusType(name="half", **kwargs, **_BUS_KW)
     gi.run_fault(net, "F")
 
-    with caplog.at_level("WARNING", logger="groundinsight"):
+    with collecting() as records:
         df = gi.check_node_limits(net, "F")
 
     element = "earthing_conductor" if "earthing" in missing else "electrode"
@@ -369,22 +372,22 @@ def test_a_half_declared_node_element_is_not_assessed_but_is_announced(
     ).to_dicts()[0]
     assert row["within_limit"] is None
 
-    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    warnings = [r.message for r in records if r.code == "THERMAL_DATA_INCOMPLETE"]
     assert len(warnings) == 1
     assert f"B/{element}" in warnings[0]
     assert missing in warnings[0]
 
 
-def test_the_half_declared_warning_does_not_fire_on_complete_data(caplog):
+def test_the_half_declared_warning_does_not_fire_on_complete_data():
     """The warning must stay specific, or it becomes noise that gets filtered out."""
     net = _chain(_full_bus_type(), _full_branch_type())
-    with caplog.at_level("WARNING", logger="groundinsight"):
+    with collecting() as records:
         gi.check_conductor_limits(net, "F")
         gi.check_node_limits(net, "F")
-    assert "half of their thermal data" not in caplog.text
+    assert not [r for r in records if r.code == "THERMAL_DATA_INCOMPLETE"]
 
 
-def test_the_half_declared_warning_lists_every_offender_once(caplog):
+def test_the_half_declared_warning_lists_every_offender_once():
     """Two broken branches produce one warning naming both, not two warnings."""
     net = _chain(_bare_bus_type(), _bare_branch_type())
     for branch in ("A-B", "B-C"):
@@ -393,10 +396,10 @@ def test_the_half_declared_warning_lists_every_offender_once(caplog):
         )
     gi.run_fault(net, "F")
 
-    with caplog.at_level("WARNING", logger="groundinsight"):
+    with collecting() as records:
         gi.check_conductor_limits(net, "F")
 
-    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    warnings = [r.message for r in records if r.code == "THERMAL_DATA_INCOMPLETE"]
     assert len(warnings) == 1
     assert "A-B" in warnings[0] and "B-C" in warnings[0]
     assert warnings[0].startswith("2 branch(es)")

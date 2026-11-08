@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import polars as pl
 
+from groundinsight.diagnostics import InputWarning, emit
 from groundinsight.models.core_models import Branch, Bus, Network
 
 from .defaults import ImportDefaults
@@ -71,7 +72,7 @@ _FATAL_LINE_REASONS = (
 )
 
 #: Fallback length in km for a line whose ``length_km`` is missing. Applied
-#: only together with a ``logger.warning`` -- see :func:`_length_km`.
+#: only together with an ``InputWarning`` -- see :func:`_length_km`.
 _MISSING_LENGTH_FALLBACK_KM = 1.0
 
 #: Output schema of :func:`preview_pandapower_import`, in output order.
@@ -233,8 +234,8 @@ def _length_km(row, *, name: str, pp_index: int) -> float:
     length_km`` contract documented on :func:`from_pandapower` holds
     exactly. Only a *missing* length (absent column, ``None``, ``NaN``,
     ``inf`` or an unparsable value) falls back to
-    ``_MISSING_LENGTH_FALLBACK_KM``, and that fallback is announced with a
-    ``logger.warning`` rather than applied silently: a fabricated
+    ``_MISSING_LENGTH_FALLBACK_KM``, and that fallback is announced with an
+    ``InputWarning`` ``IMPORT_LENGTH_DEFAULT`` rather than applied silently: a fabricated
     kilometre of conductor rescales every self and mutual impedance of the
     branch (``Z ~ ... * l``) and there is nothing in the resulting model
     that would betray it.
@@ -260,15 +261,17 @@ def _length_km(row, *, name: str, pp_index: int) -> float:
     """
     length = _parse_length_km(row.get("length_km"))
     if length is None:
-        logger.warning(
-            "Line row #%d (%s) has no usable length_km (%r) — falling back to "
-            "%.3f km. Every self and mutual impedance of this branch scales "
-            "with the length, so set an explicit length_km in pandapower or "
-            "retype the branch after the import.",
-            pp_index,
-            name,
-            row.get("length_km"),
-            _MISSING_LENGTH_FALLBACK_KM,
+        emit(
+            InputWarning,
+            f"Line row #{pp_index} ({name}) has no usable length_km "
+            f"({row.get('length_km')!r}) — falling back to "
+            f"{_MISSING_LENGTH_FALLBACK_KM:.3f} km. Every self and mutual "
+            f"impedance of this branch scales with the length, so set an "
+            f"explicit length_km in pandapower or retype the branch after the "
+            f"import.",
+            code="IMPORT_LENGTH_DEFAULT",
+            elements=[("branch", name)],
+            stacklevel=3,
         )
         return _MISSING_LENGTH_FALLBACK_KM
     return length
@@ -302,8 +305,8 @@ def _classify_buses(
     Split ``net.bus`` into kept indices and skipped rows.
 
     Buses whose ``vn_kv`` value is missing, ``None`` or ``NaN`` are
-    skipped with the dedicated ``vn_kv_unparsable`` reason and a
-    ``logger.warning(...)`` so the user notices unexpected data instead
+    skipped with the dedicated ``vn_kv_unparsable`` reason and an
+    ``InputWarning`` ``IMPORT_BUS_SKIPPED`` so the user notices unexpected data instead
     of having it silently re-classified as a voltage-level mismatch.
 
     Returns
@@ -320,11 +323,13 @@ def _classify_buses(
         raw_vn = row.get("vn_kv")
         vn = _parse_vn_kv(raw_vn)
         if vn is None:
-            logger.warning(
-                "Bus row #%d (%s) has unparsable vn_kv=%r — skipped.",
-                int(idx),
-                name,
-                raw_vn,
+            emit(
+                InputWarning,
+                f"Bus row #{int(idx)} ({name}) has unparsable vn_kv={raw_vn!r} "
+                f"— skipped.",
+                code="IMPORT_BUS_SKIPPED",
+                elements=[("bus", name)],
+                stacklevel=3,
             )
             skipped.append(
                 {
@@ -379,6 +384,13 @@ def _classify_lines(
         (``None`` when unusable) -- the missing-length fallback of
         :func:`_length_km` is deliberately not applied to a row that is
         not imported.
+
+    Warns
+    -----
+    InputWarning
+        ``IMPORT_LINE_SKIPPED`` (elements: the line) for a self-loop and for
+        a line whose length cannot be imported. Log lines until audit pass 19
+        (GUI4).
     """
     kept: List[int] = []
     skipped: List[Dict[str, Any]] = []
@@ -434,11 +446,13 @@ def _classify_lines(
             # Self-loops would map to a Branch(from_bus=X, to_bus=X) and
             # trip Network.add_branch validators only on some code
             # paths; skip them explicitly with a clear reason.
-            logger.warning(
-                "Line row #%d (%s) is a self-loop on bus %r — skipped.",
-                int(idx),
-                line_name_by_index[int(idx)],
-                bus_name_by_index[from_idx],
+            emit(
+                InputWarning,
+                f"Line row #{int(idx)} ({line_name_by_index[int(idx)]}) is a "
+                f"self-loop on bus {bus_name_by_index[from_idx]!r} — skipped.",
+                code="IMPORT_LINE_SKIPPED",
+                elements=[("branch", line_name_by_index[int(idx)])],
+                stacklevel=3,
             )
             skipped.append(
                 {
@@ -466,13 +480,14 @@ def _classify_lines(
                 if length == 0.0
                 else _PREVIEW_LINE_REASON_NEGATIVE_LENGTH
             )
-            logger.warning(
-                "Line row #%d (%s) has length_km=%r, which cannot be imported "
-                "as a branch (%s).",
-                int(idx),
-                line_name_by_index[int(idx)],
-                raw_length,
-                reason,
+            emit(
+                InputWarning,
+                f"Line row #{int(idx)} ({line_name_by_index[int(idx)]}) has "
+                f"length_km={raw_length!r}, which cannot be imported as a "
+                f"branch ({reason}).",
+                code="IMPORT_LINE_SKIPPED",
+                elements=[("branch", line_name_by_index[int(idx)])],
+                stacklevel=3,
             )
             skipped.append(
                 {
@@ -623,30 +638,52 @@ def _unmodelled_elements(net) -> List[Dict[str, Any]]:
 def _warn_about_unimported(
     switch_skips: List[Dict[str, Any]], unmodelled: List[Dict[str, Any]]
 ) -> None:
-    """Say out loud what was left out, grouped by reason."""
+    """
+    Say out loud what was left out, grouped by reason.
+
+    Parameters
+    ----------
+    switch_skips : list of dict
+        The skipped switch records of the import.
+    unmodelled : list of dict
+        The transformer and impedance records the grounding model has no
+        representation for.
+
+    Warns
+    -----
+    InputWarning
+        ``IMPORT_SWITCH_NOT_IMPORTED`` (elements: the buses the closed
+        switches would bond) and ``IMPORT_ELEMENT_NOT_IMPORTED`` (transformer
+        and impedance elements). Log lines until audit pass 19 (GUI4).
+    """
     bonds = [e for e in switch_skips
              if e["reason"] == _PREVIEW_SWITCH_REASON_NOT_IMPORTED]
     if bonds:
-        logger.warning(
-            "%d closed bus-to-bus switch(es) were not imported: %s. A closed "
-            "switch bonds two grounding systems; without it the bus behind it "
-            "has no galvanic connection and the solver reports 0 V for it, "
-            "which reads as a safe station. Set "
-            "ImportDefaults.switch_branch_type to import them as short "
-            "branches.",
-            len(bonds),
-            ", ".join(sorted(e["name"] for e in bonds)),
+        bonded = sorted({e[end] for e in bonds for end in ("from_bus", "to_bus")
+                         if e.get(end)})
+        emit(
+            InputWarning,
+            f"{len(bonds)} closed bus-to-bus switch(es) were not imported: "
+            f"{', '.join(sorted(e['name'] for e in bonds))}. A closed switch "
+            f"bonds two grounding systems; without it the bus behind it has no "
+            f"galvanic connection and the solver reports 0 V for it, which "
+            f"reads as a safe station. Set ImportDefaults.switch_branch_type to "
+            f"import them as short branches.",
+            code="IMPORT_SWITCH_NOT_IMPORTED",
+            elements=[("bus", name) for name in bonded],
+            stacklevel=3,
         )
     for kind in ("trafo", "impedance"):
         rows = [e for e in unmodelled if e["kind"] == kind]
         if rows:
-            logger.warning(
-                "%d %s element(s) were not imported (%s). They connect buses "
-                "that the grounding model has no representation for; check "
-                "preview_pandapower_import() for the full list.",
-                len(rows),
-                kind,
-                rows[0]["reason"],
+            emit(
+                InputWarning,
+                f"{len(rows)} {kind} element(s) were not imported "
+                f"({rows[0]['reason']}). They connect buses that the grounding "
+                f"model has no representation for; check "
+                f"preview_pandapower_import() for the full list.",
+                code="IMPORT_ELEMENT_NOT_IMPORTED",
+                stacklevel=3,
             )
 
 
@@ -752,20 +789,28 @@ def _check_voltage_level_consistency(defaults, voltage_level_kV: float) -> None:
         The import defaults.
     voltage_level_kV : float
         The level being imported.
+
+    Warns
+    -----
+    InputWarning
+        ``IMPORT_VOLTAGE_LEVEL_MISMATCH`` (elements: the default bus type).
+        A log line until audit pass 19 (GUI4).
     """
     declared = getattr(defaults.default_bus_type, "voltage_level", None)
     if declared is None:
         return
     if not math.isclose(float(declared), float(voltage_level_kV), rel_tol=1e-9):
-        logger.warning(
-            "ImportDefaults.default_bus_type '%s' declares voltage_level=%g kV "
-            "but the import selects %g kV. Every imported bus will carry the "
-            "type's value, which is what a touch-voltage assessment reads. "
-            "Give the type the level you are importing, or confirm that it is "
-            "meant to be shared across levels.",
-            defaults.default_bus_type.name,
-            float(declared),
-            float(voltage_level_kV),
+        emit(
+            InputWarning,
+            f"ImportDefaults.default_bus_type '{defaults.default_bus_type.name}' "
+            f"declares voltage_level={float(declared):g} kV but the import "
+            f"selects {float(voltage_level_kV):g} kV. Every imported bus will "
+            f"carry the type's value, which is what a touch-voltage assessment "
+            f"reads. Give the type the level you are importing, or confirm that "
+            f"it is meant to be shared across levels.",
+            code="IMPORT_VOLTAGE_LEVEL_MISMATCH",
+            elements=[("bus_type", defaults.default_bus_type.name)],
+            stacklevel=3,
         )
 
 
@@ -859,8 +904,8 @@ def from_pandapower(
 
     ``length = length_km`` holds literally: a length is never rescaled.
     A line whose ``length_km`` is missing (``None`` / ``NaN`` / ``inf`` /
-    unparsable) is imported with a fallback of 1.0 km **and** a
-    ``logger.warning`` naming the row, because that fallback silently
+    unparsable) is imported with a fallback of 1.0 km **and** an
+    ``InputWarning`` ``IMPORT_LENGTH_DEFAULT`` naming the row, because that fallback silently
     rescales every impedance of the branch. A line whose ``length_km`` is
     zero or negative is not importable at all and raises ``ValueError``;
     see :func:`_reject_unusable_lengths` for the reasoning and
@@ -899,6 +944,21 @@ def from_pandapower(
         imported carries a zero or negative ``length_km``.
     NotImplementedError
         If ``include_trafos=True``.
+
+    Warns
+    -----
+    InputWarning
+        Whatever the import had to decide on the user's behalf, each with the
+        elements concerned: ``IMPORT_LENGTH_DEFAULT`` (a line without usable
+        length got the fallback length), ``IMPORT_BUS_SKIPPED`` (a bus with
+        an unparsable ``vn_kv``), ``IMPORT_LINE_SKIPPED`` (a self-loop, or a
+        line whose length cannot be imported), ``IMPORT_SWITCH_NOT_IMPORTED``
+        (closed bus-to-bus switches without ``switch_branch_type``),
+        ``IMPORT_ELEMENT_NOT_IMPORTED`` (transformers and impedance
+        elements), ``IMPORT_VOLTAGE_LEVEL_MISMATCH`` (the default bus type
+        declares another voltage level) and ``IMPORT_EMPTY`` (no bus or no
+        branch was imported). Log lines until audit pass 19 (GUI4); a GUI
+        collects them with :func:`groundinsight.diagnostics.collecting`.
 
     Examples
     --------
@@ -1004,13 +1064,15 @@ def from_pandapower(
         # Promote the zero-bus / zero-branch case to a warning so the
         # user notices that the import produced an unusable result
         # (typically because of a wrong ``voltage_level_kV`` argument).
-        logger.warning(
-            "Imported pandapower net into '%s': %d buses, %d branches at %.3f kV — "
-            "result is empty or branch-less; verify the voltage_level_kV argument.",
-            network.name,
-            len(network.buses),
-            len(network.branches),
-            float(voltage_level_kV),
+        emit(
+            InputWarning,
+            f"Imported pandapower net into '{network.name}': "
+            f"{len(network.buses)} buses, {len(network.branches)} branches at "
+            f"{float(voltage_level_kV):.3f} kV — result is empty or "
+            f"branch-less; verify the voltage_level_kV argument.",
+            code="IMPORT_EMPTY",
+            elements=[("network", network.name)],
+            stacklevel=2,
         )
     else:
         logger.info(

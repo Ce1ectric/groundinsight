@@ -22,12 +22,12 @@ Audit pass 18 -- the IEC 60909 inputs of the two thermal checks.
 
 from __future__ import annotations
 
-import logging
 import math
 
 import pytest
 
 import groundinsight as gi
+from groundinsight.diagnostics import collecting
 from groundinsight.models.core_models import BranchType, BusType
 
 
@@ -196,14 +196,15 @@ def test_the_node_check_splits_the_dc_bin_the_same_way():
 # --- A17: what the aggregation actually averages ------------------------------
 
 
-def test_the_uncovered_current_share_is_named_in_the_warning(caplog):
+def test_the_uncovered_current_share_is_named_in_the_warning():
     net = _network([50.0], {50.0: 1000.0})
     gi.create_source("SRC2", "A", {50.0: 3000.0}, network=net)
     net.sources["SRC"].r_to_x = 0.1
     gi.run_fault(net, "F")
-    with caplog.at_level(logging.WARNING, logger="groundinsight"):
+    with collecting() as records:
         gi.resolve_fault_sc_characteristics(net, "F")
-    messages = [r.getMessage() for r in caplog.records]
+    # An InputWarning SC_DATA_INCOMPLETE since audit pass 19 (GUI4).
+    messages = [r.message for r in records if r.code == "SC_DATA_INCOMPLETE"]
     uncovered = [m for m in messages if "no IEC 60909 data" in m]
     assert uncovered, messages
     assert "%" in uncovered[0]

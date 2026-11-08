@@ -27,6 +27,7 @@ import polars as pl
 import pytest
 
 import groundinsight as gi
+from groundinsight.diagnostics import collecting
 from groundinsight.models.core_models import BranchType, BusType
 
 
@@ -103,14 +104,16 @@ def _net_with_a_switch_only_bus():
 # ---------------------------------------------------------------------------
 
 
-def test_a_closed_switch_is_reported_when_it_cannot_be_imported(caplog):
+def test_a_closed_switch_is_reported_when_it_cannot_be_imported():
     net = _net_with_a_switch_only_bus()
-    with caplog.at_level("WARNING", logger="groundinsight.io.pandapower_import"):
+    with collecting() as records:
         network = gi.from_pandapower(
             net, defaults=_defaults(), voltage_level_kV=20.0
         )
-    assert "closed bus-to-bus switch" in caplog.text
-    assert "switch_branch_type" in caplog.text
+    # An InputWarning since audit pass 19 (GUI4), formerly a log line.
+    text = " ".join(r.message for r in records if r.code == "IMPORT_SWITCH_NOT_IMPORTED")
+    assert "closed bus-to-bus switch" in text
+    assert "switch_branch_type" in text
     # Historical behaviour is preserved: the bond is still not invented.
     assert "D" in network.buses
     assert all(
@@ -238,13 +241,17 @@ def test_phase_impedance_is_derived_from_the_line_data():
     )
 
 
-def test_a_voltage_level_mismatch_between_type_and_argument_is_reported(caplog):
+def test_a_voltage_level_mismatch_between_type_and_argument_is_reported():
     net = _net_with_a_switch_only_bus()
     defaults = _defaults(default_bus_type=_bus_type(voltage_level=0.4))
-    with caplog.at_level("WARNING", logger="groundinsight.io.pandapower_import"):
+    with collecting() as records:
         gi.from_pandapower(net, defaults=defaults, voltage_level_kV=20.0)
-    assert "voltage_level" in caplog.text
-    assert "0.4" in caplog.text and "20" in caplog.text
+    # An InputWarning since audit pass 19 (GUI4), formerly a log line.
+    text = " ".join(
+        r.message for r in records if r.code == "IMPORT_VOLTAGE_LEVEL_MISMATCH"
+    )
+    assert "voltage_level" in text
+    assert "0.4" in text and "20" in text
 
 
 def test_rounding_noise_in_vn_kv_no_longer_empties_the_import():

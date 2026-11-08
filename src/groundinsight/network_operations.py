@@ -12,7 +12,7 @@ calculations and updates.
 import logging
 import warnings
 
-from .diagnostics import collecting, unique
+from .diagnostics import ModelAssumptionWarning, collecting, emit, unique
 from .models.core_models import Network, Bus, BusType, Branch, BranchType, Fault, Source
 from .utils.compat import renamed_parameters
 from typing import Optional, List, Dict
@@ -744,6 +744,15 @@ def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
         ``True`` when the automatic phase-network solve is active, in which case
         nothing is warned about.
 
+    Warns
+    -----
+    ModelAssumptionWarning
+        Code ``PARALLEL_COEFFICIENT_DEFAULT``, ``elements`` the sources that
+        reach the active fault over more than one path. Collected into
+        ``Result.diagnostics`` by :func:`run_fault`; until audit pass 19 it was
+        a log line, which the library's default ``NullHandler`` swallowed
+        (finding GUI4).
+
     Examples
     --------
         >>> import groundinsight as gi
@@ -775,15 +784,18 @@ def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
     if not default_coefficients:
         return
 
-    logger.warning(
-        "Source(s) %s reach fault '%s' over more than one path while "
+    emit(
+        ModelAssumptionWarning,
+        f"Source(s) {', '.join(repr(s) for s in sorted(parallel_sources))} "
+        f"reach fault '{active_fault}' over more than one path while "
         "parallel_coefficient is still 1.0 or None. In phase_current_mode="
         "'paths' every one of those paths carries the FULL source current, so "
         "the current is multiplied instead of split -- a symmetric ring "
         "collapses to EPR = 0, r = 0 and Z_G = None. Use the default "
         "phase_current_mode='auto', or set parallel_coefficient per branch.",
-        ", ".join(f"'{s}'" for s in sorted(parallel_sources)),
-        active_fault,
+        code="PARALLEL_COEFFICIENT_DEFAULT",
+        elements=[("source", s) for s in sorted(parallel_sources)],
+        stacklevel=3,
     )
 
 
@@ -850,6 +862,17 @@ def run_fault(
         ``phase_current_mode`` is not one of the two accepted values.
     RuntimeError
         If there is an error during the network calculations.
+
+    Warns
+    -----
+    ModelAssumptionWarning
+        Among others (every package warning of the run is collected into
+        ``Result.diagnostics``): ``PARALLEL_COEFFICIENT_DEFAULT`` when
+        ``phase_current_mode="paths"`` meets a source that reaches the fault
+        over several paths with default parallel coefficients, and
+        ``EARTH_GROUP_SPREAD`` when the electrode currents are spread in angle
+        so that ``I_E`` and ``value_current`` describe the dominant direction
+        only.
 
     Notes
     -----
