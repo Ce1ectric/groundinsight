@@ -68,10 +68,6 @@ __all__ = ["CHECK_CODES", "check_network"]
 _ERROR = "error"
 _WARNING = "warning"
 
-#: Every code :func:`check_network` produces itself, with its severity and
-#: meaning. Package warnings collected during the check (``FREQUENCY_ORDER``,
-#: ``DC_LIMIT``) keep their own codes. Programs branch on the code, never on
-#: the message text.
 CHECK_CODES: Dict[str, Tuple[str, str]] = {
     "NOT_A_NETWORK": (_ERROR, "The argument is not a Network."),
     "CHECK_FAILED": (
@@ -162,6 +158,10 @@ CHECK_CODES: Dict[str, Tuple[str, str]] = {
         "earth; its potential is undefined.",
     ),
 }
+"""Every code :func:`check_network` produces itself, mapped to its severity
+(``"error"`` or ``"warning"``) and meaning. Package warnings collected during
+the check (``FREQUENCY_ORDER``, ``DC_LIMIT``) keep their own codes. Programs
+branch on the code, never on the message text."""
 
 ElementRef = Tuple[str, str]
 

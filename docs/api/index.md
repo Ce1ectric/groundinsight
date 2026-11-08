@@ -11,6 +11,11 @@ classes and their signatures.
 - [Network operations](network_operations.md) — high-level factory functions
   for creating networks, buses, branches, sources, faults, paths, and for
   running fault calculations.
+- [Service functions](service.md) — calls for code that holds a network on
+  behalf of someone else: `solve` (a fault solve that leaves the network
+  untouched), `check_network` (every problem as structured diagnostics,
+  never an exception) and the canonical parameter names with their
+  deprecated aliases.
 - [Core models](core_models.md) — Pydantic data classes for `Bus`, `Branch`,
   `Source`, `Fault`, `Network`, the different `Result*` containers and the
   `ComplexNumber` helper.

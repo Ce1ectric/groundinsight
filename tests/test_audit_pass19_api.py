@@ -1190,3 +1190,18 @@ def test_every_check_code_is_upper_snake_and_has_a_severity():
 
 def test_check_network_is_exported():
     assert "check_network" in gi.__all__
+
+
+def test_the_documented_code_table_matches_the_registry():
+    """``docs/api/service.md`` lists every check code with its severity; a
+    code added to or dropped from the registry must not leave the page
+    behind."""
+    import pathlib
+    import re
+
+    page = pathlib.Path(__file__).resolve().parents[1] / "docs" / "api" / "service.md"
+    text = page.read_text(encoding="utf-8")
+    rows = dict(re.findall(r"^\| `([A-Z_]+)` \| (error|warning) \|", text, re.M))
+    assert rows == {
+        code: severity for code, (severity, _) in gi.checks.CHECK_CODES.items()
+    }

@@ -163,6 +163,7 @@ nav:
   - API reference:
       - Overview: api/index.md
       - Network operations: api/network_operations.md
+      - Service functions: api/service.md
       - Core models: api/core_models.md
       - Electrical network: api/electrical_network.md
       - Pathfinder: api/pathfinder.md
