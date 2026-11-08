@@ -14,6 +14,8 @@ version: 2
 updates:
   # GitHub Actions — the case this file exists for. Runner deprecations show
   # up here as ordinary version bumps well before they break a workflow.
+  # Since audit pass 19 (SEC3) every action is pinned to a commit SHA with a
+  # "# vX.Y.Z" comment; Dependabot rewrites both, so the pins do not freeze.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

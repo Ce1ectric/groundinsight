@@ -14,6 +14,19 @@ on:
         required: true
         type: string
 
+# Least privilege (audit pass 19, SEC4): read-only by default. publish-pypi
+# and github-release each ask for the one write scope they need; test and
+# build only read. Checkouts drop the token from .git/config
+# (persist-credentials: false) because no job here pushes with git.
+#
+# Every action is pinned to a full commit SHA with the release as a comment
+# (SEC3). The publish step runs with id-token: write, so a moving reference
+# there -- pypa's branch release/v1 -- would let whoever moves it decide what
+# runs with the token that publishes to PyPI. Dependabot updates SHA and
+# comment together.
+permissions:
+  contents: read
+
 jobs:
   # A tag can be pushed from a machine where the suite was never run, and the
   # publish is irreversible: a version number on PyPI cannot be reused. The
@@ -25,17 +38,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
 
       - name: Set up Python 3.14
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.14"
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
+        uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
         with:
           virtualenvs-create: true
           virtualenvs-in-project: true
@@ -52,17 +66,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
 
       - name: Set up Python 3.14
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.14"
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
+        uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
         with:
           virtualenvs-create: true
           virtualenvs-in-project: true
@@ -110,7 +125,7 @@ jobs:
         run: poetry build
 
       - name: Upload distributions
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
           path: dist/
@@ -123,16 +138,16 @@ jobs:
       name: pypi
       url: https://pypi.org/p/groundinsight
     permissions:
-      id-token: write
+      id-token: write # OIDC token for PyPI Trusted Publishing, nothing else
     steps:
       - name: Download distributions
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: dist
           path: dist
 
       - name: Publish package to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           # The workflow can be re-run for an existing tag, so a partially
           # completed upload must not turn the retry into a hard failure.
@@ -143,22 +158,23 @@ jobs:
     needs: publish-pypi
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # creates the GitHub release and attaches the dists
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref_name }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Download distributions
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: dist
           path: dist
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: dist/*
           generate_release_notes: true
