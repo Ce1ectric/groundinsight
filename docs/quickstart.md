@@ -179,6 +179,10 @@ restored = gi.load_network_from_db(name="QuickstartNet")
 gi.close_dbsession()
 ```
 
+The JSON project file is UTF-8 on every platform, is written atomically (a
+failed save leaves the previous file intact) and carries a `schema_version`;
+see [Project files (JSON)](api/io.md#project-files-json).
+
 That is the full workflow. The [Concepts](concepts.md) page explains the model
 behind the scenes; the [Examples](examples/index.md) section contains
 runnable notebooks covering more realistic network topologies.

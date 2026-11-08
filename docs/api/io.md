@@ -19,6 +19,10 @@ IEC 60909 excitation of the grounding model. The two are independent:
 a hand-built `Network` can take the short-circuit import just as well,
 as long as its bus names match.
 
+The package's own file format — the JSON project file written by
+`gi.save_network_to_json` — is described at the end of this page under
+[Project files (JSON)](#project-files-json).
+
 ## Physical / modelling context
 
 Distribution-network databases (pandapower, PowerFactory, NEPLAN,
@@ -239,3 +243,59 @@ setups based on existing distribution-network models.
 ## API reference
 
 ::: groundinsight.io
+
+## Project files (JSON)
+
+`gi.save_network_to_json(network, path)` writes one network to a *project
+file*, and `gi.load_network_from_json(path)` reads it back. The file is the
+network's own `model_dump_json(indent=4)` with two header keys in front:
+
+```json
+{
+    "schema_version": 1,
+    "groundinsight_version": "2026.11.0",
+    "name": "Umspannwerk Süd",
+    "description": null,
+    "frequencies": [50.0, 250.0],
+    ...
+}
+```
+
+- **UTF-8 on every platform.** Names such as `"Umspannwerk Süd Ω"` are
+  stored as UTF-8 regardless of the locale; up to 0.6.0 the locale decided,
+  which on Windows (cp1252) meant a `UnicodeEncodeError` for `Ω`/`ρ` and
+  mojibake for a file written on macOS. A UTF-8 byte-order mark is accepted
+  on reading. A file that is not UTF-8 can only come from 0.6.0 or earlier on
+  a non-UTF-8 system; it is read with the platform's preferred encoding, as
+  0.6.0 did, and an `InputWarning` with the code
+  `PROJECT_FILE_LEGACY_ENCODING` says so. Saving it again writes UTF-8.
+- **Atomic.** The network is serialised completely, written to a temporary
+  file in the target directory, flushed and `fsync`-ed, and only then moved
+  over the target with `os.replace`. A failure at any point leaves an
+  existing project file byte-identical. The replaced file keeps its
+  permission bits, a read-only file is refused, and a symbolic link keeps
+  pointing at the saved file.
+- **Versioned.** `schema_version` is the version of the file layout,
+  `groundinsight_version` the release that wrote it (see the table below).
+
+| `schema_version` | Written by | Content |
+|---|---|---|
+| *(absent)* | 0.6.0 and earlier | the model dump only — read unchanged |
+| `1` | the first release after 0.6.0 and later | the two header keys plus the model dump |
+
+A file with a newer `schema_version` than the running release supports is
+refused with a `ValueError` that names both versions, instead of being read
+with whatever the newer release added silently dropped. The version is
+incremented whenever a release writes something an earlier release would
+ignore or misread.
+
+The header keys sit next to the model fields rather than in an envelope on
+purpose: `Network` ignores unknown keys, so
+`gi.Network.model_validate_json(text)` still reads a project file — and a
+0.6.0 installation still opens a file written by a newer release of the same
+schema. `load_network_from_json` removes the two keys before validation and
+therefore does not depend on that. The names `schema_version` and
+`groundinsight_version` are reserved; `Network` never gets fields of that
+name.
+
+::: groundinsight.io.project_file

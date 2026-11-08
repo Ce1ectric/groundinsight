@@ -34,12 +34,6 @@ from .database.migration import (
 from typing import Optional
 from typing import Dict
 
-# ``pathlib.Path`` is imported under an alias on purpose. Imported plainly it
-# became ``groundinsight.Path``, so ``gi.Path`` -- which every reader takes
-# for the source-to-fault :class:`~groundinsight.models.core_models.Path` of
-# this package -- was the standard library's filesystem path. ``gi.Path`` is
-# the domain model now; the filesystem one is private to this module.
-from pathlib import Path as _Path
 from .models.core_models import (
     Branch,
     BranchType,
@@ -121,6 +115,10 @@ from .io import (
     preview_pandapower_import,
     read_shortcircuit_results,
     apply_shortcircuit_characteristics,
+)
+from .io.project_file import (
+    load_network_from_json,
+    save_network_to_json,
 )
 from .analysis import (
     Cut,
@@ -823,56 +821,3 @@ def load_network_from_db(name: str) -> Network:
     finally:
         db_session.close()
     return network
-
-
-def save_network_to_json(network: Network, path: str):
-    """
-    Save a Network instance to a JSON file.
-
-    Serialises the Network instance into JSON format and writes it to the
-    specified file path.
-
-    Parameters
-    ----------
-    network : Network
-        The Network instance to serialise and save.
-    path : str
-        The file path where the JSON file will be saved.
-
-    Raises
-    ------
-    IOError
-        If there is an error writing to the file.
-    """
-    path = _Path(path)
-    with path.open("w") as f:
-        f.write(network.model_dump_json(indent=4))
-
-
-def load_network_from_json(path: str) -> Network:
-    """
-    Load a Network instance from a JSON file.
-
-    Parameters
-    ----------
-    path : str
-        The file path of the JSON file to load.
-
-    Returns
-    -------
-    Network
-        The deserialised Network instance.
-
-    Raises
-    ------
-    IOError
-        If there is an error reading the file.
-    ValueError
-        If the JSON content is invalid or does not conform to the Network
-        model.
-    """
-    path = _Path(path)
-    with path.open("r") as f:
-        json_string = f.read()
-        model_instance = Network.model_validate_json(json_string)
-    return model_instance
