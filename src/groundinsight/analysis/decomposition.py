@@ -757,8 +757,9 @@ def analyze_cuts(
     >>> analysis = gi.analyze_cuts(net, fault="fault",
     ...                            cuts=[gi.Cut(name="line", branches=["b23"])])
     >>> frame = analysis.to_polars()
-    >>> frame.select("cut", "frequency_Hz", "Z_side_Ohm").rows()
-    [('line', 50.0, 1.0965183384578927)]
+    >>> [(cut, f, round(z, 9)) for cut, f, z in
+    ...  frame.select("cut", "frequency_Hz", "Z_side_Ohm").rows()]
+    [('line', 50.0, 1.096518338)]
     """
     if fault not in network.faults:
         raise ValueError(

@@ -628,6 +628,19 @@ def test_a_radial_feeder_gets_the_exact_kcl_currents():
     assert err_kernel <= 1e-10
 
 
+#: The refined reference needs a long double wider than float64. x86-64 Linux
+#: has the 80-bit extended format; on macOS (Apple silicon) and Windows
+#: ``numpy.longdouble`` is float64, so the "refinement" adds no digits and the
+#: reference is no better than the kernel it is meant to judge.
+EXTENDED_PRECISION = bool(np.finfo(np.longdouble).eps < np.finfo(np.float64).eps)
+needs_extended_precision = pytest.mark.skipif(
+    not EXTENDED_PRECISION,
+    reason="numpy.longdouble is float64 on this platform; the refined "
+    "reference needs the 80-bit extended format (x86-64 Linux)",
+)
+
+
+@needs_extended_precision
 def test_the_refined_reference_reproduces_the_closed_form_ring_split():
     """The checker is checked: the clongdouble-refined oracle is exact on a
     uniform ring, where the split is known in closed form."""
@@ -638,6 +651,7 @@ def test_the_refined_reference_reproduces_the_closed_form_ring_split():
     assert _relative(refined.i_phase, closed) <= 1e-15
 
 
+@needs_extended_precision
 @pytest.mark.parametrize(
     "name,builder",
     [

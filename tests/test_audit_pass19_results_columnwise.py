@@ -210,11 +210,17 @@ def test_numpy_abs_of_a_complex_array_is_not_python_abs():
 @pytest.mark.slow
 def test_res_buses_of_a_4000_bus_ring_takes_milliseconds():
     """P11: 32 000 rows. Measured interleaved in one process: 0.16 s row-wise
-    (more than a quarter of the solve that produced it), 0.03 s column-wise."""
+    (more than a quarter of the solve that produced it), 0.03 s column-wise.
+
+    The bound is relative to the solve on the same machine, because CI
+    runners are two to four times slower than a workstation and an absolute
+    bound measures the runner, not the code."""
     net = perf.ring(4000, F=7)
+    start = time.perf_counter()
     gi.run_fault(net, "F")
-    start = time.process_time()
+    solve = time.perf_counter() - start
+    start = time.perf_counter()
     frame = net.res_buses(fault="F")
-    seconds = time.process_time() - start
+    seconds = time.perf_counter() - start
     assert frame.height == 4000 * 8
-    assert seconds < 0.1, f"{seconds:.3f} s"
+    assert seconds < 0.2 * solve, f"{seconds:.3f} s against a {solve:.3f} s solve"

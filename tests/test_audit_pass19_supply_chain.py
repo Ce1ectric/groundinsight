@@ -192,6 +192,12 @@ def test_lock_was_resolved_for_the_declared_python_range():
     assert _lock()["metadata"]["python-versions"] == declared
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the lock check does not depend on the platform and runs on the "
+    "Linux and macOS jobs; on the Windows runners Poetry is installed for bash "
+    "and is not on the PATH a native process sees",
+)
 def test_poetry_accepts_the_lock_file(require_tool):
     """Poetry's own verdict on the lock (content hash over ``pyproject.toml``).
 

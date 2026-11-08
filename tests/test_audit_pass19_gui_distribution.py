@@ -111,7 +111,9 @@ def _release_guard() -> str:
 
 
 def _run_guard(workdir: pathlib.Path, tag: str) -> subprocess.CompletedProcess:
-    env = dict(os.environ, RELEASE_TAG=tag)
+    # PYTHONIOENCODING: on Windows a child's pipe uses the ANSI code page, and
+    # the guard's non-ASCII message would not decode as UTF-8 (stdout None).
+    env = dict(os.environ, RELEASE_TAG=tag, PYTHONIOENCODING="utf-8")
     return subprocess.run(
         [sys.executable, "-c", _release_guard()], cwd=workdir, env=env,
         capture_output=True, text=True, encoding="utf-8", timeout=120,

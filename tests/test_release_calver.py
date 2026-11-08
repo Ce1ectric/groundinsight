@@ -290,7 +290,7 @@ def test_repository_version_sources_agree_and_follow_the_scheme():
     # The script keeps exactly these in lockstep.
     locations = release._version_locations(ROOT)
     assert {release._read_current_version(loc) for loc in locations} == set(found.values())
-    assert sorted(str(loc.path.relative_to(ROOT)) for loc in locations) == sorted(
+    assert sorted(loc.path.relative_to(ROOT).as_posix() for loc in locations) == sorted(
         [*sources, "gui/pyproject.toml"]
     )
     version = next(iter(found.values()))
