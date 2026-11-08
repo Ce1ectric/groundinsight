@@ -660,6 +660,22 @@ def test_thermal_checks_accept_all_four_old_names(check):
     )
 
 
+@pytest.mark.parametrize("check", ["check_conductor_limits", "check_node_limits"])
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"t_k_s": -0.5}, r"^t_k_s must be strictly positive"),
+        ({"t_k_s": 0.5, "n_factor": 3.0}, r"^n_factor must lie in \(0, 1\]"),
+    ],
+)
+def test_thermal_range_errors_name_the_canonical_keyword(check, kwargs, message):
+    """USE8: a range error names the keyword the caller passes, not the
+    pre-canonical one."""
+    net = _thermal_network()
+    with pytest.raises(ValueError, match=message):
+        getattr(gi, check)(net, "F", kappa=1.8, **kwargs)
+
+
 def test_iec60909_primitives_accept_the_old_names():
     log_k = math.log(1.8 - 1.0)
     m_closed = (math.exp(4 * 50.0 * 0.5 * log_k) - 1.0) / (2 * 50.0 * 0.5 * log_k)

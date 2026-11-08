@@ -533,7 +533,7 @@ def _resolve_sc_inputs(
             )
     t_k = float(t_k)
     if t_k <= 0:
-        raise ValueError(f"t_k must be strictly positive, got {t_k!r}.")
+        raise ValueError(f"t_k_s must be strictly positive, got {t_k!r}.")
 
     # --- AC heat factor n ----------------------------------------------
     if n is None:
@@ -541,8 +541,8 @@ def _resolve_sc_inputs(
     n = float(n)
     if not (math.isfinite(n) and 0.0 < n <= 1.0):
         raise ValueError(
-            f"n must lie in (0, 1], got {n!r}. It is the AC-decay heat "
-            f"factor of IEC 60909-0: 1.0 for a far-from-generator fault and "
+            f"n_factor must lie in (0, 1], got {n!r}. It is the AC-decay heat "
+            f"factor n of IEC 60909-0: 1.0 for a far-from-generator fault and "
             f"below that where the AC component decays. A value above one "
             f"raises I_th without any physical reading (n = 3 by 70 %), and "
             f"a negative one reaches sqrt(m + n) as a bare math domain "

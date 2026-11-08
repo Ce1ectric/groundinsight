@@ -76,7 +76,9 @@ def test_an_out_of_range_kappa_is_refused(kappa):
 @pytest.mark.parametrize("n", [-2.0, 0.0, 1.5, 3.0, float("nan")])
 def test_an_out_of_range_n_is_refused(n):
     net = _network([50.0], {50.0: 1000.0})
-    with pytest.raises(ValueError, match=r"n must lie in \(0, 1\]"):
+    # Since audit pass 19 (USE8) the message names the canonical keyword
+    # n_factor; the call keeps the deprecated n and so exercises the alias.
+    with pytest.raises(ValueError, match=r"n_factor must lie in \(0, 1\]"):
         gi.check_conductor_limits(net, "F", t_k=0.5, r_to_x=0.1, n=n)
 
 
