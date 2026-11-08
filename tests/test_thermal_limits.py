@@ -204,12 +204,11 @@ def test_thermal_fields_survive_sqlite_roundtrip(tmp_path):
     from groundinsight.database.crud import save_network, load_network
 
     net = _thermal_network(50.0)
-    gi.start_dbsession(str(tmp_path / "thermal.db"))
-    try:
-        save_network(net, gi.session, overwrite=True)
-        loaded = load_network(net.name, gi.session)
-    finally:
-        gi.close_dbsession()
+    database = gi.Database(tmp_path / "thermal.db")
+    with database.session() as session:
+        save_network(net, session, overwrite=True)
+        loaded = load_network(net.name, session)
+    database.close()
 
     bt = loaded.branches["c1"].type
     assert bt.conductor_material == "Cu"

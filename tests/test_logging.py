@@ -17,6 +17,7 @@ import logging
 import pytest
 
 import groundinsight as gi
+from groundinsight.database.store import default_database
 from groundinsight.models.core_models import (
     BusType,
     BranchType,
@@ -278,7 +279,7 @@ def test_db_session_already_started_emits_warning(tmp_path, caplog):
     # Defensive: another test in the suite may have left a session
     # behind. The audit-pass-4 contract makes the cross-test contamination
     # explicit by raising RuntimeError otherwise, so close pre-emptively.
-    if gi.engine is not None:
+    if default_database() is not None:
         gi.close_dbsession()
 
     db_path = tmp_path / "log_test.db"
@@ -304,7 +305,7 @@ def test_db_session_already_started_emits_warning(tmp_path, caplog):
 
 def test_no_db_session_to_close_emits_warning(caplog):
     # Make sure no session is active before the test.
-    if gi.engine is not None:
+    if default_database() is not None:
         gi.close_dbsession()
 
     with caplog.at_level(logging.WARNING, logger="groundinsight"):

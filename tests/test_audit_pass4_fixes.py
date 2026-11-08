@@ -215,10 +215,11 @@ def test_start_dbsession_same_path_warns_and_reuses(tmp_path, caplog):
 def test_start_dbsession_force_disposes_old_engine(tmp_path):
     db_a = tmp_path / "a.db"
     db_b = tmp_path / "b.db"
-    gi.start_dbsession(str(db_a))
+    first = gi.start_dbsession(str(db_a))
     try:
-        gi.start_dbsession(str(db_b), force=True)
-        assert "b.db" in str(gi.engine.url)
+        second = gi.start_dbsession(str(db_b), force=True)
+        assert "b.db" in str(second.engine.url)
+        assert first.closed  # the old engine went with its database
     finally:
         gi.close_dbsession()
 

@@ -243,20 +243,21 @@ def test_cache_does_not_falsely_hit_after_id_recycle():
 # Pass-5 finding 3 — ``db_session`` is importable and is the same handle.
 # ---------------------------------------------------------------------------
 
-#: These tests exercise the deprecated session aliases on purpose.
-_LEGACY_ALIASES = pytest.mark.filterwarnings(
-    r"ignore:groundinsight\.(session|db_session|engine|SessionLocal) is "
-    r"deprecated:DeprecationWarning"
-)
+
+def _alias(name: str, module=gi):
+    """Read a deprecated session alias and assert its ``DeprecationWarning``."""
+    with pytest.deprecated_call(match=rf"groundinsight\.{name} is deprecated"):
+        return getattr(module, name)
 
 
-@_LEGACY_ALIASES
 def test_db_session_importable_from_top_level():
     """``from groundinsight import db_session`` must not raise."""
     # Re-import path: by attribute first.
-    assert hasattr(gi, "db_session")
+    with pytest.deprecated_call():
+        assert hasattr(gi, "db_session")
     # And via from-import semantics.
-    from groundinsight import db_session  # noqa: F401  -- import must succeed
+    with pytest.deprecated_call():
+        from groundinsight import db_session  # noqa: F401  -- import must succeed
 
 
 def test_db_session_importable_but_no_longer_in_dunder_all():
@@ -267,7 +268,6 @@ def test_db_session_importable_but_no_longer_in_dunder_all():
         from groundinsight import db_session  # noqa: F401
 
 
-@_LEGACY_ALIASES
 def test_db_session_alias_tracks_session(tmp_path):
     """After ``start_dbsession`` both names point at the same scoped session."""
     db_path = tmp_path / "alias.db"
@@ -277,8 +277,8 @@ def test_db_session_alias_tracks_session(tmp_path):
         # module object once, so attribute access stays current — but
         # the symmetric assertion is the contract we ship).
         import groundinsight as gi_ref
-        assert gi_ref.session is gi_ref.db_session
-        assert gi_ref.session is not None
+        assert _alias("session", gi_ref) is _alias("db_session", gi_ref)
+        assert _alias("session", gi_ref) is not None
     finally:
         gi.close_dbsession()
 
@@ -310,18 +310,17 @@ def test_close_dbsession_survives_a_failing_engine_dispose(
         gi.load_bustypes_from_db()
 
 
-@_LEGACY_ALIASES
 def test_close_dbsession_removes_a_live_legacy_session(tmp_path):
     """The successor of the "session live, engine missing" half-state: a
     thread-local session handed out through ``gi.session`` is removed too."""
     gi.close_dbsession()
     database = gi.start_dbsession(str(tmp_path / "legacy.db"))
-    legacy = gi.session
+    legacy = _alias("session")
     legacy().execute(__import__("sqlalchemy").text("SELECT 1"))  # open it
     gi.close_dbsession()  # must not raise
     assert database.closed
-    assert gi.session is None
-    assert gi.db_session is None
+    assert _alias("session") is None
+    assert _alias("db_session") is None
 
 
 def test_close_dbsession_with_no_state_just_warns(caplog):

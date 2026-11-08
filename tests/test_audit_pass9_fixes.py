@@ -207,13 +207,11 @@ def test_results_survive_sqlite_roundtrip(tmp_path):
     gi.run_fault(net, "F")
     epr = _rms_epr(net, "F", "b3")
 
-    db = str(tmp_path / "pass9.db")
-    gi.start_dbsession(db)
-    try:
-        save_network(net, gi.session, overwrite=True)
-        loaded = load_network(net.name, gi.session)
-    finally:
-        gi.close_dbsession()
+    database = gi.Database(tmp_path / "pass9.db")
+    with database.session() as session:
+        save_network(net, session, overwrite=True)
+        loaded = load_network(net.name, session)
+    database.close()
 
     assert "F" in loaded.results
     reloaded_epr = next(rb.uepr for rb in loaded.results["F"].buses if rb.name == "b3")

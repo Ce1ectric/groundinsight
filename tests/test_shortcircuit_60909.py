@@ -378,12 +378,11 @@ def test_characteristics_survive_sqlite_roundtrip(tmp_path):
     from groundinsight.database.crud import load_network, save_network
 
     net = _characterised_network()
-    gi.start_dbsession(str(tmp_path / "sc.db"))
-    try:
-        save_network(net, gi.session, overwrite=True)
-        loaded = load_network(net.name, gi.session)
-    finally:
-        gi.close_dbsession()
+    database = gi.Database(tmp_path / "sc.db")
+    with database.session() as session:
+        save_network(net, session, overwrite=True)
+        loaded = load_network(net.name, session)
+    database.close()
 
     assert loaded.sources["src"].i_k_a == pytest.approx(4321.0)
     assert loaded.sources["src"].kappa == pytest.approx(1.75)
@@ -396,12 +395,11 @@ def test_sources_without_characteristics_still_roundtrip(tmp_path):
     from groundinsight.database.crud import load_network, save_network
 
     net = _gi_net()
-    gi.start_dbsession(str(tmp_path / "plain.db"))
-    try:
-        save_network(net, gi.session, overwrite=True)
-        loaded = load_network(net.name, gi.session)
-    finally:
-        gi.close_dbsession()
+    database = gi.Database(tmp_path / "plain.db")
+    with database.session() as session:
+        save_network(net, session, overwrite=True)
+        loaded = load_network(net.name, session)
+    database.close()
 
     assert loaded.sources["src"].i_k_a is None
     assert loaded.sources["src"].kappa is None

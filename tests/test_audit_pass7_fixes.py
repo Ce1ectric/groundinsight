@@ -51,11 +51,16 @@ import pytest
 
 import groundinsight as gi
 
-#: These tests exercise the deprecated session aliases on purpose.
-_LEGACY_ALIASES = pytest.mark.filterwarnings(
-    r"ignore:groundinsight\.(session|db_session|engine|SessionLocal) is "
-    r"deprecated:DeprecationWarning"
-)
+
+
+def _alias(name: str, module=gi):
+    """Read a deprecated session alias and assert its ``DeprecationWarning``.
+
+    The aliases are what these tests are about, so every access checks the
+    warning instead of silencing it.
+    """
+    with pytest.deprecated_call(match=rf"groundinsight\.{name} is deprecated"):
+        return getattr(module, name)
 
 
 # ---------------------------------------------------------------------------
@@ -89,21 +94,19 @@ def test_the_central_setter_is_gone_with_the_globals() -> None:
     assert "db_session" not in vars(gi)
 
 
-@_LEGACY_ALIASES
 def test_both_aliases_are_none_without_a_session(clean_session) -> None:
-    assert gi.session is None
-    assert gi.db_session is None
+    assert _alias("session") is None
+    assert _alias("db_session") is None
 
 
-@_LEGACY_ALIASES
 def test_both_aliases_are_the_same_object_while_a_session_is_active(
     clean_session, tmp_db_path: str
 ) -> None:
     gi.start_dbsession(tmp_db_path)
-    first = gi.session
+    first = _alias("session")
     assert first is not None
-    assert gi.db_session is first
-    assert gi.session is first  # stable, not a new object per access
+    assert _alias("db_session") is first
+    assert _alias("session") is first  # stable, not a new object per access
 
 
 # ---------------------------------------------------------------------------
@@ -111,19 +114,17 @@ def test_both_aliases_are_the_same_object_while_a_session_is_active(
 # ---------------------------------------------------------------------------
 
 
-@_LEGACY_ALIASES
 def test_start_dbsession_binds_both_aliases(
     clean_session, tmp_db_path: str
 ) -> None:
     """A successful ``start_dbsession`` must leave ``session`` and
     ``db_session`` pointing at the *same* scoped-session object."""
     gi.start_dbsession(tmp_db_path)
-    assert gi.session is not None
-    assert gi.db_session is not None
-    assert gi.session is gi.db_session
+    assert _alias("session") is not None
+    assert _alias("db_session") is not None
+    assert _alias("session") is _alias("db_session")
 
 
-@_LEGACY_ALIASES
 def test_close_dbsession_clears_both_aliases(
     clean_session, tmp_db_path: str
 ) -> None:
@@ -131,11 +132,10 @@ def test_close_dbsession_clears_both_aliases(
     leaving an asymmetric state."""
     gi.start_dbsession(tmp_db_path)
     gi.close_dbsession()
-    assert gi.session is None
-    assert gi.db_session is None
+    assert _alias("session") is None
+    assert _alias("db_session") is None
 
 
-@_LEGACY_ALIASES
 def test_force_rebind_keeps_aliases_in_sync(
     clean_session, tmp_path: Path
 ) -> None:
@@ -145,11 +145,11 @@ def test_force_rebind_keeps_aliases_in_sync(
     first = str(tmp_path / "first.db")
     second = str(tmp_path / "second.db")
     gi.start_dbsession(first)
-    first_session = gi.session
+    first_session = _alias("session")
     gi.start_dbsession(second, force=True)
-    assert gi.session is gi.db_session
-    assert gi.session is not first_session  # was rebound
-    assert gi.session is not None
+    assert _alias("session") is _alias("db_session")
+    assert _alias("session") is not first_session  # was rebound
+    assert _alias("session") is not None
 
 
 # ---------------------------------------------------------------------------
@@ -224,15 +224,9 @@ def test_show_versions_reports_peer_when_present(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-@_LEGACY_ALIASES
 def test_fresh_import_starts_with_aliases_aligned(clean_session) -> None:
     """A clean import must start with ``session`` and ``db_session``
     both bound to ``None`` (the documented quiescent state)."""
     mod = importlib.reload(gi)
-    try:
-        assert mod.session is None
-        assert mod.db_session is None
-    finally:
-        # leave the live module untouched for the rest of the suite
-        if mod.session is not None or mod.engine is not None:
-            mod.close_dbsession()
+    assert _alias("session", mod) is None
+    assert _alias("db_session", mod) is None
