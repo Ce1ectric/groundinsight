@@ -826,6 +826,33 @@ def _value_names(formula: str) -> Tuple[str, ...]:
     return tuple(names)
 
 
+@lru_cache(maxsize=1024)
+def _unknown_symbols(formula: str, parameters: Tuple[str, ...]) -> Tuple[str, ...]:
+    """
+    Value names of ``formula`` outside ``parameters`` and the constants.
+
+    Cached, because every element derived from a type re-checks the type's
+    formulas (see :func:`check_formula_symbols`).
+
+    Parameters
+    ----------
+    formula : str
+        The formula.
+    parameters : Tuple[str, ...]
+        The parameters the evaluator binds.
+
+    Returns
+    -------
+    Tuple[str, ...]
+        The unknown names in order of appearance; empty for the open-end
+        sentinel and for a formula that only uses known names.
+    """
+    if _is_open_end_sentinel(formula):
+        return ()
+    permitted = set(parameters) | set(FORMULA_CONSTANTS)
+    return tuple(name for name in _value_names(formula) if name not in permitted)
+
+
 def check_formula_symbols(
     formula: str, allowed: Iterable[str], *, context: str = "formula"
 ) -> str:
@@ -875,13 +902,13 @@ def check_formula_symbols(
     ...
     ValueError: formula uses the unknown symbol 'L' (did you mean 'l'?). ...
     """
-    if not isinstance(formula, str) or _is_open_end_sentinel(formula):
+    if not isinstance(formula, str):
         return formula
     parameters = tuple(allowed)
-    permitted = set(parameters) | set(FORMULA_CONSTANTS)
-    unknown = [name for name in _value_names(formula) if name not in permitted]
+    unknown = _unknown_symbols(formula, parameters)
     if not unknown:
         return formula
+    permitted = set(parameters) | set(FORMULA_CONSTANTS)
 
     hints = []
     for name in unknown:

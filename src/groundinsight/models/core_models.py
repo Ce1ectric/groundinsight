@@ -1,9 +1,45 @@
 # models/core_models.py
+"""
+Pydantic models of a grounding network: types, elements, faults, sources,
+results and the :class:`Network` container.
 
+Types (:class:`BusType`, :class:`BranchType`) carry formula strings; elements
+(:class:`Bus`, :class:`Branch`) carry the impedance dictionaries *derived*
+from those formulas at the network's frequencies. Derived data is only worth
+having while it matches its inputs, so the models keep three invariants:
+
+* **Derived data follows its inputs.** Assigning an input of an element that
+  belongs to a network (``specific_earth_resistance``, ``length``, ``type``)
+  re-derives the element through the same code path as ``Network.add_*``;
+  assigning ``Network.frequencies`` re-derives every element. A failing
+  derivation leaves everything as it was. Types are read-only, because a
+  type is evaluated into every element that uses it -- a changed type is a
+  new type, assigned per element.
+* **Stored results know whether they are current.** Every result carries a
+  digest of the inputs it was computed from (:attr:`Result.input_digest`);
+  :meth:`Network.stale_results` compares it with the inputs the network has
+  now. The comparison is by content, so undoing an edit -- or a study that
+  restores the network -- makes a result current again, and the digest
+  survives JSON and the database.
+* **Names are keys.** An element belongs to one network and is found by its
+  name; renaming an attached element, rewiring it to a bus the network does
+  not have, or removing a bus that is still referenced is refused.
+  :meth:`Network.update_bus` / :meth:`Network.update_branch` and the
+  ``remove_*`` methods change a network consistently.
+
+Elements know their network through a weak back-reference that compares
+equal to every other (:class:`_NetworkLink`), so it changes neither equality
+nor serialisation, and copies or pickles of a network point at the copy.
+"""
+
+import hashlib
 import logging
 import math
 import numbers
+import sys
 import warnings
+import weakref
+from array import array
 
 import numpy as np
 from pydantic import (
@@ -16,7 +52,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing import Any, ClassVar, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, ClassVar, Dict, FrozenSet, List, Literal, Optional, Tuple, Union
 from groundinsight.diagnostics import Diagnostic, GroundinsightWarning
 from groundinsight.utils.validations import (
     BRANCH_FORMULA_SYMBOLS,
@@ -201,6 +237,62 @@ def _magnitude_angle(
     }
 
 
+class _NetworkLink:
+    """
+    Weak back-reference from an element to the :class:`Network` holding it.
+
+    An element has to know its network to re-derive itself when one of its
+    inputs is assigned, and to refuse a rename or a rewiring the network
+    cannot follow. A plain reference would not do: pydantic compares private
+    attributes in ``__eq__`` (comparing two buses would compare their whole
+    networks, and recurse back into the buses), and it would keep a network
+    alive through any element still referenced elsewhere. So the link is
+    weak, compares equal to every other link, and is never serialised:
+
+    * ``copy.deepcopy`` resolves it through the copy memo -- when the whole
+      network is copied the link points at the copy, when only the element
+      is copied it is detached;
+    * ``pickle`` stores a detached link; :meth:`Network.__setstate__`
+      re-attaches the elements of an unpickled network;
+    * a shallow copy shares the link, but :meth:`_NetworkElement._owning_network`
+      also checks that the network still holds *this* object under its name,
+      so a copy, a replaced element or a removed one counts as detached.
+    """
+
+    __slots__ = ("_ref",)
+
+    def __init__(self, network: Optional["Network"] = None) -> None:
+        self._ref = weakref.ref(network) if network is not None else None
+
+    def get(self) -> Optional["Network"]:
+        """
+        The linked network, or ``None`` when detached or collected.
+
+        Returns
+        -------
+        Optional[Network]
+            The network, if it is still alive.
+        """
+        return self._ref() if self._ref is not None else None
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _NetworkLink)
+
+    def __hash__(self) -> int:
+        return hash(_NetworkLink)
+
+    def __copy__(self) -> "_NetworkLink":
+        return self
+
+    def __deepcopy__(self, memo: Dict[int, Any]) -> "_NetworkLink":
+        network = self.get()
+        copied = memo.get(id(network)) if network is not None else None
+        return _NetworkLink(copied if isinstance(copied, BaseModel) else None)
+
+    def __reduce__(self):
+        return (_NetworkLink, ())
+
+
 class ValidatedAssignmentModel(BaseModel):
     """
     Base class whose rejected assignments leave the object unchanged.
@@ -220,6 +312,11 @@ class ValidatedAssignmentModel(BaseModel):
     :meth:`Source._validate_source_mode`. The previous value, and the
     ``__pydantic_fields_set__`` bookkeeping that goes with it, are restored
     before the exception is re-raised.
+
+    Subclasses hook into an assignment through
+    :meth:`_before_field_assignment` (may refuse it before anything is
+    written) and :meth:`_after_field_assignment` (runs after the validated
+    write; if it raises, the field is rolled back the same way).
     """
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -227,11 +324,13 @@ class ValidatedAssignmentModel(BaseModel):
         if name not in fields:
             super().__setattr__(name, value)
             return
+        self._before_field_assignment(name, value)
         had_value = name in self.__dict__
         previous = self.__dict__.get(name)
         was_set = name in self.__pydantic_fields_set__
         try:
             super().__setattr__(name, value)
+            self._after_field_assignment(name)
         except Exception:
             if had_value:
                 self.__dict__[name] = previous
@@ -242,6 +341,133 @@ class ValidatedAssignmentModel(BaseModel):
             else:
                 self.__pydantic_fields_set__.discard(name)
             raise
+
+    def _before_field_assignment(self, name: str, value: Any) -> None:
+        """
+        Refuse an assignment before anything is written. No-op by default.
+
+        Parameters
+        ----------
+        name : str
+            The field being assigned.
+        value : Any
+            The value as passed, not yet validated.
+        """
+
+    def _after_field_assignment(self, name: str) -> None:
+        """
+        React to a validated assignment; raising rolls the field back.
+
+        No-op by default.
+
+        Parameters
+        ----------
+        name : str
+            The field that was assigned.
+        """
+
+
+class _NetworkElement(ValidatedAssignmentModel):
+    """
+    Base of the elements a :class:`Network` keeps by name.
+
+    Implements the edit invariants of an element that belongs to a network
+    (see the module docstring): a rename is refused, a bus reference must
+    name a bus of the network, and an input of the derived impedances
+    re-derives them -- atomically, through :meth:`calculate_impedance`, the
+    code path of ``Network.add_*``. On an element that belongs to no network
+    none of this happens.
+    """
+
+    #: Name of the :class:`Network` field that holds this kind of element.
+    _COLLECTION: ClassVar[str] = ""
+    #: How this kind of element is named in messages.
+    _KIND: ClassVar[str] = "element"
+    #: Fields the derived impedance dictionaries are computed from.
+    _DERIVATION_INPUTS: ClassVar[FrozenSet[str]] = frozenset()
+    #: Fields that name a bus of the network.
+    _BUS_REFERENCES: ClassVar[Tuple[str, ...]] = ()
+
+    _network_link: _NetworkLink = PrivateAttr(default_factory=_NetworkLink)
+
+    def _owning_network(self) -> Optional["Network"]:
+        """
+        The network this element belongs to, or ``None``.
+
+        An element belongs to a network when it is linked to it *and* the
+        network holds this very object under the element's name -- so a
+        copy, a replaced or a removed element counts as detached.
+
+        Returns
+        -------
+        Optional[Network]
+            The owning network.
+        """
+        network = self._network_link.get()
+        if network is None:
+            return None
+        if getattr(network, self._COLLECTION).get(self.name) is not self:
+            return None
+        return network
+
+    def _before_field_assignment(self, name: str, value: Any) -> None:
+        """
+        Refuse renaming an element that belongs to a network.
+
+        Parameters
+        ----------
+        name : str
+            The field being assigned.
+        value : Any
+            The new value.
+
+        Raises
+        ------
+        ValueError
+            If ``name == "name"``, the value differs from the current name
+            and the element belongs to a network.
+        """
+        if name != "name" or value == self.name:
+            return
+        network = self._owning_network()
+        if network is not None:
+            raise ValueError(
+                f"Cannot rename {self._KIND} '{self.name}' to {value!r}: it "
+                f"belongs to network '{network.name}', which keeps it under "
+                "its name (branches, sources, faults and results refer to it "
+                "by that name). Remove it and add a renamed copy instead."
+            )
+
+    def _after_field_assignment(self, name: str) -> None:
+        """
+        Keep an element that belongs to a network consistent with it.
+
+        Parameters
+        ----------
+        name : str
+            The field that was assigned.
+
+        Raises
+        ------
+        ValueError
+            If a bus reference names a bus the network does not have, or if
+            the impedances cannot be derived from the new input. The field is
+            then rolled back by :meth:`ValidatedAssignmentModel.__setattr__`.
+        """
+        if name not in self._BUS_REFERENCES and name not in self._DERIVATION_INPUTS:
+            return
+        network = self._owning_network()
+        if network is None:
+            return
+        if name in self._BUS_REFERENCES:
+            bus = getattr(self, name)
+            if bus not in network.buses:
+                raise ValueError(
+                    f"{self._KIND.capitalize()} '{self.name}': {name} '{bus}' is "
+                    f"not a bus of network '{network.name}'."
+                )
+        if name in self._DERIVATION_INPUTS:
+            self.calculate_impedance(network.frequencies)
 
 
 # data types
@@ -507,6 +733,36 @@ class ComplexNumber(BaseModel):
         return ComplexNumber(real=converted.real, imag=converted.imag)
 
 
+class _ReadOnlyType(BaseModel):
+    """
+    Base of :class:`BusType` and :class:`BranchType`: read-only after construction.
+
+    A type is evaluated into every element that uses it; the elements keep
+    the result, not the formula. Changing a type in place would therefore
+    leave the impedances of all those elements describing the *old* type,
+    with nothing to tell which ones -- and after a JSON or database round
+    trip every element holds its own copy of the type anyway, so "all
+    elements of this type" is not even well defined. A changed type is a new
+    type: create it with ``model_copy(update=...)`` and assign it to the
+    elements that should use it (``network.update_bus(name, type=new)``),
+    which re-derives them.
+    """
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in type(self).model_fields:
+            kind = type(self).__name__
+            element = "bus" if kind == "BusType" else "branch"
+            raise ValueError(
+                f"{kind} {getattr(self, 'name', '')!r} is read-only: it has been "
+                f"evaluated into the impedances of every {element} that uses it, "
+                "and changing it in place would leave those impedances stale. "
+                f"Create a changed type with new_type = this_type.model_copy("
+                f"update={{{name!r}: ...}}) and assign it with "
+                f"network.update_{element}(name, type=new_type)."
+            )
+        super().__setattr__(name, value)
+
+
 def _check_type_symbols(
     element_type: BaseModel, kind: str, allowed: Tuple[str, ...], element: str
 ) -> None:
@@ -571,7 +827,7 @@ def _formula_context(kind: str, info: ValidationInfo) -> str:
 
 
 # user interface
-class BusType(BaseModel):
+class BusType(_ReadOnlyType):
     """
     Represents the type of a bus, including its default impedance formula.
 
@@ -668,6 +924,11 @@ class BusType(BaseModel):
     is rejected when the type is created, with the case-insensitive match as
     a suggestion (see
     :func:`~groundinsight.utils.validations.check_formula_symbols`).
+
+    **Read-only.** A bus type cannot be changed after construction: it has
+    been evaluated into the impedances of the buses that use it. Create a
+    changed type with ``model_copy(update=...)`` and assign it per bus with
+    :meth:`Network.update_bus`, which re-derives the bus.
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -744,7 +1005,7 @@ class BusType(BaseModel):
         return f"BusType(name={self.name}, system_type={self.system_type}, voltage_level={self.voltage_level})"
 
 
-class Bus(ValidatedAssignmentModel):
+class Bus(_NetworkElement):
     """
     Represents a grounding bus within the network.
 
@@ -778,6 +1039,12 @@ class Bus(ValidatedAssignmentModel):
 
     model_config = ConfigDict(
         ser_json_inf_nan="constants", validate_assignment=True
+    )
+
+    _COLLECTION: ClassVar[str] = "buses"
+    _KIND: ClassVar[str] = "bus"
+    _DERIVATION_INPUTS: ClassVar[FrozenSet[str]] = frozenset(
+        {"type", "specific_earth_resistance"}
     )
 
     name: str
@@ -888,6 +1155,10 @@ class Bus(ValidatedAssignmentModel):
             Field name to value, as returned by :meth:`_derive`.
         """
         for field, value in derived.items():
+            # ``None`` over ``None`` is the common case for the optional
+            # fields; skipping it saves a validated assignment per field.
+            if value is None and self.__dict__.get(field) is None:
+                continue
             setattr(self, field, value)
 
     def _params(self) -> Dict[str, float]:
@@ -912,7 +1183,7 @@ class Bus(ValidatedAssignmentModel):
         )
 
 
-class BranchType(BaseModel):
+class BranchType(_ReadOnlyType):
     """
     Represents the type of a branch, including its impedance formulas.
 
@@ -983,6 +1254,11 @@ class BranchType(BaseModel):
     ``Rho`` -- is rejected when the type is created, with the
     case-insensitive match as a suggestion (see
     :func:`~groundinsight.utils.validations.check_formula_symbols`).
+
+    **Read-only.** A branch type cannot be changed after construction: it has
+    been evaluated into the impedances of the branches that use it. Create a
+    changed type with ``model_copy(update=...)`` and assign it per branch
+    with :meth:`Network.update_branch`, which re-derives the branch.
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -1044,7 +1320,7 @@ class BranchType(BaseModel):
         return f"BranchType(name={self.name}, grounding_conductor={self.grounding_conductor})"
 
 
-class Branch(ValidatedAssignmentModel):
+class Branch(_NetworkElement):
     """
     Represents a branch (conductor) connecting two buses in the network.
 
@@ -1085,6 +1361,13 @@ class Branch(ValidatedAssignmentModel):
     model_config = ConfigDict(
         ser_json_inf_nan="constants", validate_assignment=True
     )
+
+    _COLLECTION: ClassVar[str] = "branches"
+    _KIND: ClassVar[str] = "branch"
+    _DERIVATION_INPUTS: ClassVar[FrozenSet[str]] = frozenset(
+        {"type", "length", "specific_earth_resistance"}
+    )
+    _BUS_REFERENCES: ClassVar[Tuple[str, ...]] = ("from_bus", "to_bus")
 
     name: str
     description: Optional[str] = None
@@ -1191,6 +1474,10 @@ class Branch(ValidatedAssignmentModel):
             Field name to value, as returned by :meth:`_derive`.
         """
         for field, value in derived.items():
+            # ``None`` over ``None`` is the common case for the optional
+            # fields; skipping it saves a validated assignment per field.
+            if value is None and self.__dict__.get(field) is None:
+                continue
             setattr(self, field, value)
 
     def _calculate_phase_impedance(
@@ -1402,7 +1689,7 @@ class Branch(ValidatedAssignmentModel):
         return f"Branch(name={self.name}, from={self.from_bus}, to={self.to_bus})"
 
 
-class Fault(ValidatedAssignmentModel):
+class Fault(_NetworkElement):
     """
     Represents a fault within the network.
 
@@ -1446,6 +1733,10 @@ class Fault(ValidatedAssignmentModel):
     model_config = ConfigDict(
         ser_json_inf_nan="constants", validate_assignment=True
     )
+
+    _COLLECTION: ClassVar[str] = "faults"
+    _KIND: ClassVar[str] = "fault"
+    _BUS_REFERENCES: ClassVar[Tuple[str, ...]] = ("bus",)
 
     name: str
     description: Optional[str] = None
@@ -1569,7 +1860,7 @@ class Fault(ValidatedAssignmentModel):
         return f"Fault(name={self.name}, bus={self.bus})"
 
 
-class Source(ValidatedAssignmentModel):
+class Source(_NetworkElement):
     """
     Represents a current or Thevenin (voltage) source within the network.
 
@@ -1664,6 +1955,10 @@ class Source(ValidatedAssignmentModel):
     model_config = ConfigDict(
         ser_json_inf_nan="constants", validate_assignment=True
     )
+
+    _COLLECTION: ClassVar[str] = "sources"
+    _KIND: ClassVar[str] = "source"
+    _BUS_REFERENCES: ClassVar[Tuple[str, ...]] = ("bus",)
 
     name: str
     description: Optional[str] = None
@@ -2003,6 +2298,14 @@ class Result(BaseModel):
         independently of the caller's warning filters, so a program (or a
         GUI) can read the conditions that qualify the result from the result
         itself. See :mod:`groundinsight.diagnostics`.
+    input_digest : str, optional
+        Digest of the inputs this result was computed from -- the network
+        frequencies, every bus, branch and source as the solver reads them,
+        and the definition of this result's fault. Written by
+        :func:`groundinsight.run_fault`; :meth:`Network.stale_results`
+        compares it with the network's current inputs. ``None`` for results
+        stored by an older version or assembled by hand, which are never
+        reported stale (their provenance is unknown).
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -2013,6 +2316,7 @@ class Result(BaseModel):
     grounding_impedance: Optional[ResultGroundingImpedance] = None
     fault: str = ""  # name of the fault that was active
     diagnostics: List[Diagnostic] = []
+    input_digest: Optional[str] = None
 
     def __str__(self):
         return f"Result(buses={len(self.buses)}, branches={len(self.branches)})"
@@ -2049,6 +2353,118 @@ class Path(BaseModel):
         return f"Path(name={self.name}, source={self.source}, fault={self.fault})"
 
 
+#: Version tag of :attr:`Result.input_digest`. A digest with another tag was
+#: computed over a different set of inputs and is treated like no digest.
+_DIGEST_SCHEME = "gi1"
+
+#: The fields a stored result depends on, per model: what
+#: :meth:`Network._input_digest_common` and :meth:`Network._input_digest`
+#: read. ``type`` of a branch stands for ``type.grounding_conductor``, the only
+#: type attribute the solver reads directly.
+_DIGEST_FIELDS: Dict[str, Tuple[str, ...]] = {
+    "Bus": ("name", "active", "impedance"),
+    "Branch": (
+        "name", "active", "from_bus", "to_bus", "type", "parallel_coefficient",
+        "self_impedance", "mutual_impedance", "phase_impedance",
+    ),
+    "Source": ("name", "bus", "source_type", "values", "voltage", "source_impedance"),
+    "Fault": ("name", "bus", "scalings"),
+    "Network": ("frequencies", "buses", "branches", "sources", "faults"),
+}
+
+#: The fields a stored result does *not* read, with the reason. A test keeps
+#: the two tables complete, so a new field has to be classified before it
+#: can be added -- a field missing from the digest would let a result stay
+#: "current" after a change that alters it.
+_DIGEST_EXEMPT_FIELDS: Dict[str, Dict[str, str]] = {
+    "Bus": {
+        "description": "metadata",
+        "type": "enters through the derived impedance",
+        "specific_earth_resistance": "enters through the derived impedance",
+        "R": "transient solvers only",
+        "L": "transient solvers only",
+        "C": "transient solvers only",
+    },
+    "Branch": {
+        "description": "metadata",
+        "length": "enters through the derived impedances",
+        "specific_earth_resistance": "enters through the derived impedances",
+        "R_self": "transient solvers only",
+        "L_self": "transient solvers only",
+        "C_self": "transient solvers only",
+        "R_mutual": "transient solvers only",
+        "M_mutual": "transient solvers only",
+    },
+    "Source": {
+        "description": "metadata",
+        "i_k_a": "IEC 60909 characteristic, applied after the solve",
+        "r_to_x": "IEC 60909 characteristic, applied after the solve",
+        "kappa": "IEC 60909 characteristic, applied after the solve",
+    },
+    "Fault": {
+        "description": "metadata",
+        "t_k_s": "thermal checks only, applied after the solve",
+        "n_factor": "thermal checks only, applied after the solve",
+    },
+    "Network": {
+        "name": "metadata",
+        "description": "metadata",
+        "results": "the outputs themselves",
+        "paths": "derived from the topology, rebuilt when it changes",
+        "active_fault": "set by run_fault to the fault it solves",
+    },
+}
+
+
+def _impedance_record(
+    mapping: Optional[Dict[float, Any]], strings: List[str], floats: List[float]
+) -> None:
+    """
+    Append one frequency-keyed mapping to the digest buffers.
+
+    Parameters
+    ----------
+    mapping : Optional[Dict[float, Any]]
+        ``{frequency: ComplexNumber}`` (or ``{frequency: float}``), or
+        ``None``.
+    strings : List[str]
+        Receives the structure (``"~"`` for ``None``, else the entry count).
+    floats : List[float]
+        Receives frequency, real and imaginary part per entry, sorted by
+        frequency; ``+ 0.0`` folds ``-0.0`` into ``0.0``.
+    """
+    if mapping is None:
+        strings.append("~")
+        return
+    strings.append(str(len(mapping)))
+    for freq in sorted(mapping):
+        value = mapping[freq]
+        if isinstance(value, ComplexNumber):
+            floats.extend((freq + 0.0, value.real + 0.0, value.imag + 0.0))
+        else:
+            floats.extend((freq + 0.0, float(value) + 0.0, 0.0))
+
+
+def _digest_update(digest: "hashlib._Hash", strings: List[str], floats: List[float]) -> None:
+    """
+    Feed the digest buffers into ``digest`` in a platform-independent form.
+
+    Parameters
+    ----------
+    digest : hashlib._Hash
+        The running digest.
+    strings : List[str]
+        Names and structure markers, joined by a unit separator.
+    floats : List[float]
+        Packed as little-endian IEEE 754 doubles.
+    """
+    digest.update("\x1f".join(strings).encode("utf-8", "surrogatepass"))
+    packed = array("d", floats)
+    if sys.byteorder == "big":  # pragma: no cover - no big-endian CI
+        packed.byteswap()
+    digest.update(packed.tobytes())
+
+
 class Network(ValidatedAssignmentModel):
     """
     Top-level container for an entire grounding network.
@@ -2080,6 +2496,29 @@ class Network(ValidatedAssignmentModel):
         Source-to-fault paths keyed by path name.
     active_fault : str, optional
         Name of the currently active fault.
+
+    Notes
+    -----
+    **Editing.** Assigning an input of an element that belongs to the
+    network -- ``Bus.specific_earth_resistance``/``type``,
+    ``Branch.length``/``specific_earth_resistance``/``type`` -- re-derives
+    its impedances at once, and assigning :attr:`frequencies` re-derives
+    every element; a failing derivation leaves everything unchanged and
+    raises. :meth:`update_bus` and :meth:`update_branch` change several
+    fields at once (all or nothing); the ``remove_*`` methods refuse to
+    leave a dangling reference. Renaming an element that belongs to the
+    network is refused -- remove it and add a renamed copy. An element
+    belongs to one network at a time.
+
+    **Stale results.** :meth:`stale_results` lists the faults whose stored
+    result no longer matches the network's inputs; :meth:`is_result_stale`
+    asks for one fault. A result is stale when the frequencies, a bus, a
+    branch or a source changed as the solver sees them, or the definition of
+    its own fault -- adding or editing *another* fault leaves it current,
+    and so do metadata such as ``description`` or ``Fault.t_k_s``. The
+    comparison is by content (see :attr:`Result.input_digest`): restoring
+    an input restores the result's status, which is how ``outage_context``
+    and the studies leave the flags as they found them.
     """
 
     model_config = ConfigDict(
@@ -2225,6 +2664,112 @@ class Network(ValidatedAssignmentModel):
                 ):
                     return
         self._paths_fingerprint = self._active_topology_fingerprint()
+
+    def model_post_init(self, __context: Any) -> None:
+        """
+        Attach every element to this network after construction.
+
+        Runs for every way a network is built -- the constructor, JSON and
+        the database -- so that an element knows which network re-derives
+        it (see :class:`_NetworkLink`).
+
+        Parameters
+        ----------
+        __context : Any
+            Pydantic's validation context (unused).
+        """
+        self._link_elements()
+
+    def __setstate__(self, state: Dict[Any, Any]) -> None:
+        """
+        Restore a pickled network and re-attach its elements.
+
+        The element links are not pickled (they hold a weak reference), so
+        the elements of an unpickled network are attached here.
+
+        Parameters
+        ----------
+        state : Dict[Any, Any]
+            The state produced by ``BaseModel.__getstate__``.
+        """
+        super().__setstate__(state)
+        self._link_elements()
+
+    def _link_elements(self) -> None:
+        """Point every element held by this network at it."""
+        link = _NetworkLink(self)
+        for collection in (self.buses, self.branches, self.sources, self.faults):
+            for element in collection.values():
+                private = getattr(element, "__pydantic_private__", None)
+                if private is not None:
+                    private["_network_link"] = link
+
+    def _claim(self, element: _NetworkElement) -> None:
+        """
+        Refuse an element that already belongs to another network.
+
+        Parameters
+        ----------
+        element : _NetworkElement
+            The bus, branch, source or fault about to be added.
+
+        Raises
+        ------
+        ValueError
+            If the element is held by another network under its name.
+        """
+        owner = element._owning_network()
+        if owner is not None and owner is not self:
+            raise ValueError(
+                f"{element._KIND.capitalize()} '{element.name}' already belongs "
+                f"to network '{owner.name}'. An element belongs to one network "
+                "at a time -- its impedances are derived for that network's "
+                "frequencies and its edits re-derive it there. Add a copy: "
+                "element.model_copy(deep=True), or remove it from the other "
+                "network first."
+            )
+
+    def _adopt(self, element: _NetworkElement) -> None:
+        """Link an element that has just been inserted into this network."""
+        element.__pydantic_private__["_network_link"] = _NetworkLink(self)
+
+    def _after_field_assignment(self, name: str) -> None:
+        """
+        Re-derive on a new frequency list; re-attach on a new element dict.
+
+        Parameters
+        ----------
+        name : str
+            The field that was assigned.
+
+        Raises
+        ------
+        ValueError
+            If an element cannot be derived at the new frequencies. Nothing
+            has been re-derived then, and the base class restores the old
+            frequency list.
+        """
+        if name == "frequencies":
+            self._rederive_all()
+        elif name in ("buses", "branches", "sources", "faults"):
+            self._link_elements()
+
+    def _rederive_all(self) -> None:
+        """
+        Re-derive every bus and branch at :attr:`frequencies`, all or nothing.
+
+        Raises
+        ------
+        ValueError
+            If any element cannot be derived; no element has been changed.
+        """
+        pending = [
+            (element, element._derive(self.frequencies))
+            for collection in (self.buses, self.branches)
+            for element in collection.values()
+        ]
+        for element, derived in pending:
+            element._apply_derived(derived)
 
     @property
     def electrical_network(self):
@@ -2477,6 +3022,7 @@ class Network(ValidatedAssignmentModel):
             raise ValueError(
                 f"Bus with name '{bus.name}' already exists in the network '{self.name}'. If you want to overwrite, set overwrite=True."
             )
+        self._claim(bus)
 
         # Derive first, insert second: a formula that fails to evaluate must
         # leave the network as it was (ARC9). Inserting before deriving used
@@ -2485,6 +3031,7 @@ class Network(ValidatedAssignmentModel):
         derived = bus._derive(self.frequencies)
         bus._apply_derived(derived)
         self.buses[bus.name] = bus
+        self._adopt(bus)
         if replacing:
             logger.warning(
                 "Bus '%s' already exists in the network. Overwriting.",
@@ -2515,6 +3062,7 @@ class Network(ValidatedAssignmentModel):
             raise ValueError(
                 f"Branch with name '{branch.name}' already exists in the network '{self.name}'. If you want to overwrite, set overwrite=True."
             )
+        self._claim(branch)
 
         # Validate that the from_bus and to_bus are in the network
         if branch.from_bus not in self.buses:
@@ -2529,6 +3077,7 @@ class Network(ValidatedAssignmentModel):
         derived = branch._derive(self.frequencies)
         branch._apply_derived(derived)
         self.branches[branch.name] = branch
+        self._adopt(branch)
         if replacing:
             logger.warning(
                 "Branch '%s' already exists in the network. Overwriting.",
@@ -2554,18 +3103,20 @@ class Network(ValidatedAssignmentModel):
         if fault.bus not in self.buses:
             raise ValueError(f"bus '{fault.bus}' is not in the network '{self.name}'")
 
-        if fault.name in self.faults:
-            if overwrite:
-                logger.warning(
-                    "Fault '%s' already exists in the network. Overwriting.",
-                    fault.name,
-                )
-            else:
-                raise ValueError(
-                    f"Fault with name '{fault.name}' already exists in the network '{self.name}'. If you want to overwrite, set overwrite=True."
-                )
+        replacing = fault.name in self.faults
+        if replacing and not overwrite:
+            raise ValueError(
+                f"Fault with name '{fault.name}' already exists in the network '{self.name}'. If you want to overwrite, set overwrite=True."
+            )
+        self._claim(fault)
 
         self.faults[fault.name] = fault
+        self._adopt(fault)
+        if replacing:
+            logger.warning(
+                "Fault '%s' already exists in the network. Overwriting.",
+                fault.name,
+            )
 
     def add_source(self, source: Source, overwrite: bool = False):
         """
@@ -2586,17 +3137,19 @@ class Network(ValidatedAssignmentModel):
         if source.bus not in self.buses:
             raise ValueError(f"bus '{source.bus}' is not in the network '{self.name}'")
 
-        if source.name in self.sources:
-            if overwrite:
-                logger.warning(
-                    "Source '%s' already exists in the network. Overwriting.",
-                    source.name,
-                )
-            else:
-                raise ValueError(
-                    f"Source with name '{source.name}' already exists in the network '{self.name}'. If you want to overwrite, set overwrite=True."
-                )
+        replacing = source.name in self.sources
+        if replacing and not overwrite:
+            raise ValueError(
+                f"Source with name '{source.name}' already exists in the network '{self.name}'. If you want to overwrite, set overwrite=True."
+            )
+        self._claim(source)
         self.sources[source.name] = source
+        self._adopt(source)
+        if replacing:
+            logger.warning(
+                "Source '%s' already exists in the network. Overwriting.",
+                source.name,
+            )
 
     def add_path(self, path: Path):
         """
@@ -2608,6 +3161,494 @@ class Network(ValidatedAssignmentModel):
             The path instance to add.
         """
         self.paths[path.name] = path
+
+    # -- stale results ---------------------------------------------------------
+
+    def _input_digest_common(self) -> bytes:
+        """
+        Digest of the inputs every stored result depends on.
+
+        Covers the frequencies and every bus, branch and source as the solver
+        reads them (see ``_DIGEST_FIELDS``): names, ``active``, the wiring,
+        ``type.grounding_conductor``, ``parallel_coefficient``, the derived or
+        assigned impedance dictionaries and the source data. Elements are
+        taken in name order and dictionaries in frequency order, so the
+        digest does not depend on insertion order and survives JSON and the
+        database.
+
+        Returns
+        -------
+        bytes
+            A 16-byte BLAKE2b digest.
+        """
+        strings: List[str] = [str(len(self.frequencies))]
+        floats: List[float] = [float(f) + 0.0 for f in self.frequencies]
+        for name in sorted(self.buses):
+            bus = self.buses[name]
+            strings.extend((name, "1" if bus.active else "0"))
+            _impedance_record(bus.impedance, strings, floats)
+        strings.append("|branches")
+        for name in sorted(self.branches):
+            branch = self.branches[name]
+            strings.extend((
+                name, branch.from_bus, branch.to_bus,
+                "1" if branch.active else "0",
+                "1" if branch.type.grounding_conductor else "0",
+                repr(branch.parallel_coefficient),
+            ))
+            _impedance_record(branch.self_impedance, strings, floats)
+            _impedance_record(branch.mutual_impedance, strings, floats)
+            _impedance_record(branch.phase_impedance, strings, floats)
+        strings.append("|sources")
+        for name in sorted(self.sources):
+            source = self.sources[name]
+            strings.extend((name, source.bus, source.source_type))
+            _impedance_record(source.values, strings, floats)
+            _impedance_record(source.voltage, strings, floats)
+            _impedance_record(source.source_impedance, strings, floats)
+        digest = hashlib.blake2b(digest_size=16)
+        _digest_update(digest, strings, floats)
+        return digest.digest()
+
+    def _input_digest(self, fault: str, common: Optional[bytes] = None) -> Optional[str]:
+        """
+        Digest of everything the result of ``fault`` depends on.
+
+        Parameters
+        ----------
+        fault : str
+            Name of the fault.
+        common : bytes, optional
+            :meth:`_input_digest_common`, when the caller already has it.
+
+        Returns
+        -------
+        Optional[str]
+            ``"<scheme>:<hex>"``, or ``None`` if ``fault`` is not a fault of
+            this network.
+        """
+        definition = self.faults.get(fault)
+        if definition is None:
+            return None
+        if common is None:
+            common = self._input_digest_common()
+        strings = [definition.name, definition.bus]
+        floats: List[float] = []
+        _impedance_record(definition.scalings, strings, floats)
+        digest = hashlib.blake2b(common, digest_size=16)
+        _digest_update(digest, strings, floats)
+        return f"{_DIGEST_SCHEME}:{digest.hexdigest()}"
+
+    def _stale(self, fault: str, common: Optional[bytes]) -> Tuple[bool, Optional[bytes]]:
+        """
+        Whether the stored result of ``fault`` is stale.
+
+        Parameters
+        ----------
+        fault : str
+            A key of :attr:`results`.
+        common : bytes, optional
+            The common digest, if already computed.
+
+        Returns
+        -------
+        Tuple[bool, Optional[bytes]]
+            The answer, and the common digest for the next call.
+        """
+        stamp = self.results[fault].input_digest
+        if not isinstance(stamp, str) or not stamp.startswith(_DIGEST_SCHEME + ":"):
+            return False, common
+        if fault not in self.faults:
+            return True, common
+        if common is None:
+            common = self._input_digest_common()
+        return stamp != self._input_digest(fault, common), common
+
+    def stale_results(self) -> List[str]:
+        """
+        Faults whose stored result no longer matches the network.
+
+        A result is stale when anything it was computed from has changed
+        since: the frequencies, a bus, branch or source as the solver reads
+        it (impedances, ``active``, the wiring, the source data), or the
+        definition of its own fault (bus, scalings). Metadata such as
+        ``description``, ``Fault.t_k_s`` or the IEC 60909 characteristics of a
+        source do not count, and neither does another fault. The comparison
+        is by content: an edit that is undone -- by hand, or by a study that
+        restores the network -- leaves the result current.
+
+        Results stored by an older version or assembled by hand carry no
+        digest and are never reported (their provenance is unknown).
+        :func:`groundinsight.run_fault` makes the result of its fault current.
+
+        Returns
+        -------
+        List[str]
+            Fault names, in the order of :attr:`results`.
+
+        Examples
+        --------
+        >>> gi.run_fault(net, "F")  # doctest: +SKIP
+        >>> net.update_bus("b1", specific_earth_resistance=250.0)  # doctest: +SKIP
+        >>> net.stale_results()  # doctest: +SKIP
+        ['F']
+        """
+        stale: List[str] = []
+        common: Optional[bytes] = None
+        for fault in self.results:
+            is_stale, common = self._stale(fault, common)
+            if is_stale:
+                stale.append(fault)
+        return stale
+
+    def is_result_stale(self, fault: str) -> bool:
+        """
+        Whether the stored result of ``fault`` no longer matches the network.
+
+        See :meth:`stale_results` for what counts as a change.
+
+        Parameters
+        ----------
+        fault : str
+            Name of a fault with a stored result.
+
+        Returns
+        -------
+        bool
+            ``True`` if an input of the result has changed since it was
+            computed; ``False`` if not, or if the result carries no digest.
+
+        Raises
+        ------
+        ValueError
+            If no result is stored for ``fault``.
+
+        Examples
+        --------
+        >>> net.is_result_stale("F")  # doctest: +SKIP
+        False
+        """
+        if fault not in self.results:
+            raise ValueError(f"No results available for fault '{fault}'.")
+        return self._stale(fault, None)[0]
+
+    # -- editing ---------------------------------------------------------------
+
+    def _lookup(self, collection: str, name: str) -> _NetworkElement:
+        """
+        The element ``name`` of ``collection``, or a ``ValueError``.
+
+        Parameters
+        ----------
+        collection : str
+            ``"buses"``, ``"branches"``, ``"sources"`` or ``"faults"``.
+        name : str
+            The element name.
+
+        Returns
+        -------
+        _NetworkElement
+            The element.
+
+        Raises
+        ------
+        ValueError
+            If there is no such element -- the same error class
+            :func:`groundinsight.run_fault` raises for an unknown fault.
+        """
+        elements = getattr(self, collection)
+        if name not in elements:
+            kind = {"buses": "Bus", "branches": "Branch", "sources": "Source", "faults": "Fault"}[collection]
+            raise ValueError(
+                f"{kind} '{name}' does not exist in the network '{self.name}'."
+            )
+        return elements[name]
+
+    def _update_element(self, collection: str, name: str, fields: Dict[str, Any]) -> _NetworkElement:
+        """
+        Change several fields of one element, all or nothing.
+
+        Every value is validated on a detached copy first; the references
+        are checked against the network and the impedances derived from the
+        new inputs. Only when all of that succeeded is anything written.
+
+        Parameters
+        ----------
+        collection : str
+            ``"buses"`` or ``"branches"``.
+        name : str
+            The element name.
+        fields : Dict[str, Any]
+            Field name to new value.
+
+        Returns
+        -------
+        _NetworkElement
+            The updated element (the same object as before).
+
+        Raises
+        ------
+        ValueError
+            As documented for :meth:`update_bus`.
+        """
+        element = self._lookup(collection, name)
+        cls = type(element)
+        updatable = sorted(
+            set(cls.model_fields) - set(cls.DERIVED_FIELDS) - {"name"}
+        )
+        unknown = sorted(set(fields) - set(cls.model_fields))
+        if unknown:
+            raise ValueError(
+                f"{cls.__name__} has no field {', '.join(map(repr, unknown))}. "
+                f"Fields that can be updated: {', '.join(updatable)}."
+            )
+        derived = sorted(set(fields) & set(cls.DERIVED_FIELDS))
+        if derived:
+            raise ValueError(
+                f"{', '.join(map(repr, derived))} of {cls.__name__} "
+                f"'{name}' {'is' if len(derived) == 1 else 'are'} derived from "
+                f"the type and the inputs ({', '.join(sorted(cls._DERIVATION_INPUTS))}) "
+                "and cannot be updated. To override a derived value for a study, "
+                "assign it directly; it is recomputed on the next input change."
+            )
+        if "name" in fields and fields["name"] != name:
+            raise ValueError(
+                f"Cannot rename {cls._KIND} '{name}' through update: elements are "
+                "kept under their name. Remove it and add a renamed copy instead."
+            )
+
+        scratch = element.model_copy()  # detached: no hooks fire on it
+        for field, value in fields.items():
+            setattr(scratch, field, value)
+        for field in cls._BUS_REFERENCES:
+            if field in fields and getattr(scratch, field) not in self.buses:
+                raise ValueError(
+                    f"{cls.__name__} '{name}': {field} '{getattr(scratch, field)}' "
+                    f"is not a bus of network '{self.name}'."
+                )
+        derived_values = (
+            scratch._derive(self.frequencies)
+            if set(fields) & set(cls._DERIVATION_INPUTS)
+            else None
+        )
+
+        for field in fields:
+            element.__dict__[field] = scratch.__dict__[field]
+        element.__pydantic_fields_set__.update(fields)
+        if derived_values is not None:
+            element._apply_derived(derived_values)
+        return element
+
+    def update_bus(self, name: str, /, **fields: Any) -> "Bus":
+        """
+        Change several fields of a bus at once, all or nothing.
+
+        Every value is validated first, then the impedances are derived from
+        the new inputs; only when all of that succeeded are the fields
+        written. Assigning a single field (``bus.specific_earth_resistance =
+        250``) has the same effect for that field.
+
+        Parameters
+        ----------
+        name : str
+            Name of the bus.
+        **fields : Any
+            Fields to change: ``type``, ``specific_earth_resistance``,
+            ``active``, ``description``. The derived fields (``impedance``,
+            ``R``, ``L``, ``C``) and ``name`` cannot be updated.
+
+        Returns
+        -------
+        Bus
+            The updated bus (the same object).
+
+        Raises
+        ------
+        ValueError
+            If the bus does not exist, a field is unknown, derived or
+            ``name``, a value is invalid, or the impedances cannot be derived
+            from the new inputs. The bus is unchanged then.
+
+        Examples
+        --------
+        >>> net.update_bus("b1", specific_earth_resistance=250.0)  # doctest: +SKIP
+        """
+        return self._update_element("buses", name, fields)
+
+    def update_branch(self, name: str, /, **fields: Any) -> "Branch":
+        """
+        Change several fields of a branch at once, all or nothing.
+
+        Every value is validated first, ``from_bus``/``to_bus`` are checked
+        against the network, then the impedances are derived from the new
+        inputs; only when all of that succeeded are the fields written.
+
+        Parameters
+        ----------
+        name : str
+            Name of the branch.
+        **fields : Any
+            Fields to change: ``type``, ``length``,
+            ``specific_earth_resistance``, ``from_bus``, ``to_bus``,
+            ``parallel_coefficient``, ``active``, ``description``. The derived
+            impedance and RLCM fields and ``name`` cannot be updated.
+
+        Returns
+        -------
+        Branch
+            The updated branch (the same object).
+
+        Raises
+        ------
+        ValueError
+            If the branch does not exist, a field is unknown, derived or
+            ``name``, a value is invalid, a bus reference names no bus of
+            the network, or the impedances cannot be derived. The branch is
+            unchanged then.
+
+        Examples
+        --------
+        >>> net.update_branch("cable_1", length=2.5, to_bus="b3")  # doctest: +SKIP
+        """
+        return self._update_element("branches", name, fields)
+
+    def remove_bus(self, name: str) -> "Bus":
+        """
+        Remove a bus that nothing refers to any more.
+
+        Parameters
+        ----------
+        name : str
+            Name of the bus.
+
+        Returns
+        -------
+        Bus
+            The removed bus; it no longer belongs to the network.
+
+        Raises
+        ------
+        ValueError
+            If the bus does not exist, or if a branch, source or fault still
+            refers to it -- the message names every one of them.
+
+        Examples
+        --------
+        >>> net.remove_bus("spare")  # doctest: +SKIP
+        """
+        bus = self._lookup("buses", name)
+        users = (
+            [f"branch '{n}'" for n, b in self.branches.items() if name in (b.from_bus, b.to_bus)]
+            + [f"source '{n}'" for n, src in self.sources.items() if src.bus == name]
+            + [f"fault '{n}'" for n, flt in self.faults.items() if flt.bus == name]
+        )
+        if users:
+            raise ValueError(
+                f"Bus '{name}' cannot be removed: {', '.join(users)} still "
+                f"refer{'s' if len(users) == 1 else ''} to it. Remove them first "
+                "(remove_branch, remove_source, remove_fault) or reconnect them "
+                "(update_branch(..., from_bus=..., to_bus=...))."
+            )
+        del self.buses[name]
+        return bus
+
+    def remove_branch(self, name: str) -> "Branch":
+        """
+        Remove a branch.
+
+        Enumerated paths that run through the branch are dropped (see
+        :meth:`invalidate_paths`); stored results become stale.
+
+        Parameters
+        ----------
+        name : str
+            Name of the branch.
+
+        Returns
+        -------
+        Branch
+            The removed branch; it no longer belongs to the network.
+
+        Raises
+        ------
+        ValueError
+            If the branch does not exist.
+
+        Examples
+        --------
+        >>> net.remove_branch("cable_3")  # doctest: +SKIP
+        """
+        branch = self._lookup("branches", name)
+        del self.branches[name]
+        if any(seg.name == name for path in self.paths.values() for seg in path.segments):
+            self.invalidate_paths()
+        return branch
+
+    def remove_source(self, name: str) -> "Source":
+        """
+        Remove a source.
+
+        Parameters
+        ----------
+        name : str
+            Name of the source.
+
+        Returns
+        -------
+        Source
+            The removed source; it no longer belongs to the network.
+
+        Raises
+        ------
+        ValueError
+            If the source does not exist.
+
+        Examples
+        --------
+        >>> net.remove_source("S2")  # doctest: +SKIP
+        """
+        source = self._lookup("sources", name)
+        del self.sources[name]
+        if any(path.source == name for path in self.paths.values()):
+            self.invalidate_paths()
+        return source
+
+    def remove_fault(self, name: str) -> "Fault":
+        """
+        Remove a fault together with its stored result.
+
+        If it was the active fault, no fault is active afterwards. The
+        results of the other faults are unaffected: they do not depend on
+        this fault's definition.
+
+        Parameters
+        ----------
+        name : str
+            Name of the fault.
+
+        Returns
+        -------
+        Fault
+            The removed fault; it no longer belongs to the network.
+
+        Raises
+        ------
+        ValueError
+            If the fault does not exist.
+
+        Examples
+        --------
+        >>> net.remove_fault("F_old")  # doctest: +SKIP
+        """
+        fault = self._lookup("faults", name)
+        del self.faults[name]
+        self.results.pop(name, None)
+        if self.active_fault == name:
+            fault._set_active(False)
+            self.active_fault = None
+        if any(path.fault == name for path in self.paths.values()):
+            self.invalidate_paths()
+        return fault
 
     def res_buses(self, fault: Optional[str] = None) -> pl.DataFrame:
         """

@@ -44,8 +44,10 @@ from groundinsight.utils.impedance_calculator import compute_impedance
 FREQUENCIES = [50.0, 250.0]
 
 BUS_FORMULA = "rho * 0.01 + j*f*1e-4"
-SELF_FORMULA = "(0.25 + j*f*0.012) * l"
-MUTUAL_FORMULA = "(j*f*0.012) * l"
+# Carson-like: the earth-return reactance grows with log(rho), so that a
+# change of the branch's rho changes its impedances.
+SELF_FORMULA = "(0.25 + j*f*(0.010 + 2e-4*log(rho))) * l"
+MUTUAL_FORMULA = "(j*f*(0.010 + 2e-4*log(rho))) * l"
 PHASE_FORMULA = "(0.1 + j*f*0.008) * l"
 
 
@@ -616,3 +618,478 @@ def test_every_documented_formula_passes_the_type_checks():
         except ValueError as exc:
             failures.append(f"{where}: {field}={formula!r}: {str(exc)[:120]}")
     assert not failures, "\n".join(failures)
+
+
+# ---------------------------------------------------------------------------
+# GUI3 / F9 -- edit invariants
+# ---------------------------------------------------------------------------
+
+def _rlc_bus_type(name="SB_RLC"):
+    """A bus type that also carries lumped R and L formulas."""
+    return gi.BusType(
+        name=name, system_type="S", voltage_level=20, impedance_formula=BUS_FORMULA,
+        R_formula="rho*0.01", L_formula="rho*1e-6",
+    )
+
+
+def _two_fault_ring():
+    """The ring with a second fault ``G`` at ``b``; both solved."""
+    net = build_ring()
+    gi.create_fault(name="G", bus="b", scalings={f: 1.0 for f in FREQUENCIES}, network=net)
+    gi.run_fault(net, "F")
+    gi.run_fault(net, "G")
+    return net
+
+
+# --- re-derivation on assignment ---------------------------------------------
+
+def test_assigning_bus_rho_rederives_the_impedance():
+    net = build_ring()
+    net.buses["b"].type = _rlc_bus_type()
+    net.buses["b"].specific_earth_resistance = 250.0
+    bus = net.buses["b"]
+    assert bus.impedance == compute_impedance(BUS_FORMULA, FREQUENCIES, {"rho": 250.0})
+    assert bus.R == {f: pytest.approx(2.5) for f in FREQUENCIES}
+    assert bus.L == {f: pytest.approx(250e-6) for f in FREQUENCIES}
+
+
+@pytest.mark.parametrize("field,value,params", [
+    ("length", 2.5, {"rho": 100.0, "l": 2.5}),
+    ("specific_earth_resistance", 400.0, {"rho": 400.0, "l": 1.0}),
+])
+def test_assigning_branch_inputs_rederives_every_impedance(field, value, params):
+    net = build_ring()
+    setattr(net.branches["l1"], field, value)
+    branch = net.branches["l1"]
+    assert branch.self_impedance == compute_impedance(SELF_FORMULA, FREQUENCIES, params)
+    assert branch.mutual_impedance == compute_impedance(MUTUAL_FORMULA, FREQUENCIES, params)
+    assert branch.phase_impedance == compute_impedance(PHASE_FORMULA, FREQUENCIES, params)
+
+
+def test_assigning_a_type_rederives_and_clears_what_the_new_type_lacks():
+    net = build_ring()
+    bus = net.buses["b"]
+    bus.type = _rlc_bus_type()
+    assert bus.R is not None
+    plain = _bus_type(name="plain", formula="rho*0.02")
+    bus.type = plain
+    assert bus.impedance == compute_impedance("rho*0.02", FREQUENCIES, {"rho": 100.0})
+    assert bus.R is None and bus.L is None and bus.C is None
+
+    cable = _cable_type(name="no_phase", phase_impedance_formula=None)
+    net.branches["l2"].type = cable
+    assert net.branches["l2"].phase_impedance is None
+
+
+def test_assignment_on_a_detached_element_does_nothing_extra():
+    bus = gi.Bus(name="x", type=_bus_type(), impedance={})
+    bus.specific_earth_resistance = 250.0
+    assert bus.impedance == {}
+    branch = gi.Branch(
+        name="x", type=_cable_type(), length=1.0, from_bus="a", to_bus="b",
+        self_impedance={}, mutual_impedance={},
+    )
+    branch.length = 3.0
+    assert branch.self_impedance == {}
+
+
+@pytest.mark.parametrize("edit", [
+    lambda net: setattr(net.buses["b"], "specific_earth_resistance", float("nan")),
+    lambda net: setattr(net.buses["b"], "type", _bus_type(name="bad", formula="-rho")),
+    lambda net: setattr(net.branches["l0"], "type", _cable_type(name="bad", R_self_formula="j*l")),
+], ids=["bus_rho_nan", "bus_type_negative", "branch_type_late_failure"])
+def test_failing_rederivation_leaves_the_element_as_it_was(edit):
+    net = build_ring()
+    before = net.model_dump()
+    with pytest.raises(ValueError):
+        edit(net)
+    assert net.model_dump() == before
+
+
+def test_edited_network_solves_like_one_built_with_the_new_values():
+    """Second way: the same inputs entered from the start."""
+    net = build_ring()
+    gi.run_fault(net, "F")
+    net.buses["b"].specific_earth_resistance = 250.0
+    net.branches["l2"].length = 2.5
+    gi.run_fault(net, "F")
+    reference = build_ring(rho={"b": 250.0}, length={"l2": 2.5})
+    gi.run_fault(reference, "F")
+    assert_same_results(net, reference)
+
+
+def test_assigning_frequencies_rederives_every_element():
+    net = build_ring()
+    new = [50.0, 150.0, 350.0]
+    net.frequencies = new
+    for bus in net.buses.values():
+        assert bus.impedance == compute_impedance(BUS_FORMULA, new, {"rho": 100.0})
+    for branch in net.branches.values():
+        params = {"rho": 100.0, "l": 1.0}
+        assert branch.self_impedance == compute_impedance(SELF_FORMULA, new, params)
+        assert branch.phase_impedance == compute_impedance(PHASE_FORMULA, new, params)
+    # second way: the network built at these frequencies solves the same
+    net.sources["s"].values = {f: 1000.0 / (1 + i) for i, f in enumerate(new)}
+    net.faults["F"].scalings = {f: 1.0 for f in new}
+    gi.run_fault(net, "F")
+    reference = build_ring(frequencies=new)
+    gi.run_fault(reference, "F")
+    assert_same_results(net, reference)
+
+
+def test_failing_frequency_change_is_atomic():
+    net = build_ring()
+    # valid at 50 and 250 Hz, 0*log(0) = NaN at 60 Hz
+    net.buses["d"].type = _bus_type(
+        name="fails_at_60", formula="rho*0.01 + (f - 60)**2*log((f - 60)**2)"
+    )
+    before = net.model_dump()
+    with pytest.raises(ValueError):
+        net.frequencies = [50.0, 60.0]
+    assert net.model_dump() == before
+
+
+# --- names and references ----------------------------------------------------
+
+@pytest.mark.parametrize("collection,name", [
+    ("buses", "b"), ("branches", "l0"), ("sources", "s"), ("faults", "F"),
+])
+def test_renaming_an_attached_element_is_refused(collection, name):
+    net = build_ring()
+    element = getattr(net, collection)[name]
+    with pytest.raises(ValueError, match="(?i)remove"):
+        element.name = "renamed"
+    assert element.name == name
+    element.name = name  # assigning the same name is harmless
+
+
+def test_renaming_a_detached_element_is_allowed():
+    net = build_ring()
+    branch = net.branches.pop("l0")
+    branch.name = "l0_new"
+    assert branch.name == "l0_new"
+
+
+@pytest.mark.parametrize("edit", [
+    lambda net: setattr(net.branches["l0"], "to_bus", "nowhere"),
+    lambda net: setattr(net.branches["l0"], "from_bus", "nowhere"),
+    lambda net: setattr(net.sources["s"], "bus", "nowhere"),
+    lambda net: setattr(net.faults["F"], "bus", "nowhere"),
+], ids=["to_bus", "from_bus", "source_bus", "fault_bus"])
+def test_rewiring_to_an_unknown_bus_is_refused(edit):
+    net = build_ring()
+    before = net.model_dump()
+    with pytest.raises(ValueError, match="nowhere"):
+        edit(net)
+    assert net.model_dump() == before
+
+
+# --- stale results -----------------------------------------------------------
+
+def test_a_fresh_result_is_not_stale():
+    net = _two_fault_ring()
+    assert net.stale_results() == []
+    assert net.is_result_stale("F") is False
+    assert net.results["F"].input_digest is not None
+
+
+_STALE_EDITS = {
+    "bus_rho": lambda net: setattr(net.buses["b"], "specific_earth_resistance", 250.0),
+    "bus_type": lambda net: setattr(net.buses["b"], "type", _bus_type(name="t2", formula="rho*0.02")),
+    "bus_active": lambda net: setattr(net.buses["d"], "active", False),
+    "branch_length": lambda net: setattr(net.branches["l1"], "length", 2.0),
+    "branch_rho": lambda net: setattr(net.branches["l1"], "specific_earth_resistance", 300.0),
+    "branch_type": lambda net: setattr(net.branches["l1"], "type", _cable_type(name="c2", self_impedance_formula="(0.3 + j*f*0.012)*l")),
+    "branch_active": lambda net: setattr(net.branches["l1"], "active", False),
+    "branch_rewired": lambda net: setattr(net.branches["l3"], "to_bus", "b"),
+    "parallel_coefficient": lambda net: setattr(net.branches["l1"], "parallel_coefficient", 0.5),
+    "impedance_override": lambda net: setattr(net.buses["b"], "impedance", {f: gi.ComplexNumber(real=7.0, imag=0.0) for f in net.frequencies}),
+    "source_values": lambda net: setattr(net.sources["s"], "values", {f: 500.0 for f in net.frequencies}),
+    "frequencies": lambda net: setattr(net, "frequencies", [50.0, 250.0, 450.0]),
+    "add_bus": lambda net: gi.create_bus(name="x", type=_bus_type(), network=net),
+    "add_branch": lambda net: gi.create_branch(name="x", type=_cable_type(), from_bus="a", to_bus="c", length=1.0, network=net),
+    "add_source": lambda net: gi.create_source(name="s2", bus="c", values={50.0: 10.0}, network=net),
+    "update_bus": lambda net: net.update_bus("c", specific_earth_resistance=300.0),
+    "remove_branch": lambda net: net.remove_branch("l3"),
+    "remove_source": lambda net: (gi.create_source(name="s2", bus="c", values={50.0: 1.0}, network=net), gi.run_fault(net, "F"), gi.run_fault(net, "G"), net.remove_source("s2")),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_STALE_EDITS))
+def test_every_input_change_marks_the_results_stale(name):
+    net = _two_fault_ring()
+    _STALE_EDITS[name](net)
+    assert net.stale_results() == ["F", "G"]
+    assert net.is_result_stale("F") and net.is_result_stale("G")
+
+
+def test_a_fault_definition_only_affects_its_own_result():
+    """F's numbers do not depend on G's definition (the phase currents and
+    the path set are taken for the active fault only)."""
+    net = _two_fault_ring()
+    net.faults["G"].scalings = {f: 0.5 for f in FREQUENCIES}
+    assert net.stale_results() == ["G"]
+    net.faults["G"].bus = "d"
+    assert net.stale_results() == ["G"]
+    gi.create_fault(name="H", bus="a", scalings={}, network=net)
+    assert net.stale_results() == ["G"]
+
+
+def test_metadata_edits_do_not_mark_results_stale():
+    net = _two_fault_ring()
+    net.buses["b"].description = "renamed in the GUI"
+    net.branches["l1"].description = "cable 1"
+    net.faults["F"].t_k_s = 0.5
+    net.faults["F"].n_factor = 0.9
+    net.sources["s"].i_k_a = 1000.0
+    net.description = "a network"
+    assert net.stale_results() == []
+
+
+def test_run_fault_clears_the_flag_of_its_fault_only():
+    net = _two_fault_ring()
+    net.buses["b"].specific_earth_resistance = 250.0
+    gi.run_fault(net, "F")
+    assert net.stale_results() == ["G"]
+
+
+def test_undoing_an_edit_makes_the_result_current_again():
+    """Staleness is a statement about content: the inputs are back to what
+    the result was computed from (what an undo in a GUI produces)."""
+    net = _two_fault_ring()
+    net.buses["b"].specific_earth_resistance = 250.0
+    assert net.stale_results() == ["F", "G"]
+    net.buses["b"].specific_earth_resistance = 100.0
+    assert net.stale_results() == []
+
+
+def test_stale_flags_survive_json(tmp_path):
+    net = _two_fault_ring()
+    net.buses["b"].specific_earth_resistance = 250.0
+    gi.run_fault(net, "G")
+    assert net.stale_results() == ["F"]
+    path = tmp_path / "net.json"
+    gi.save_network_to_json(net, str(path))
+    loaded = gi.load_network_from_json(str(path))
+    assert loaded.stale_results() == ["F"]
+    assert loaded.results["G"].input_digest == net.results["G"].input_digest
+
+
+def test_stale_flags_survive_the_database(tmp_path):
+    net = _two_fault_ring()
+    net.buses["b"].specific_earth_resistance = 250.0
+    gi.run_fault(net, "G")
+    gi.start_dbsession(str(tmp_path / "net.db"), force=True)
+    try:
+        gi.save_network_to_db(net)
+        loaded = gi.load_network_from_db(net.name)
+    finally:
+        gi.close_dbsession()
+    assert loaded.stale_results() == ["F"]
+
+
+def test_results_stored_before_digests_are_not_reported_stale():
+    net = _two_fault_ring()
+    net.results["F"].input_digest = None
+    net.buses["b"].specific_earth_resistance = 250.0
+    assert net.stale_results() == ["G"]
+    assert net.is_result_stale("F") is False
+
+
+def test_is_result_stale_needs_a_result():
+    net = build_ring()
+    with pytest.raises(ValueError, match="No results"):
+        net.is_result_stale("F")
+    with pytest.raises(ValueError):
+        net.is_result_stale("nope")
+
+
+def test_outage_context_leaves_stale_flags_as_it_found_them():
+    net = _two_fault_ring()
+    with gi.outage_context(net, gi.Outage(name="o", disabled_branches=["l1"])):
+        assert net.stale_results() == ["F", "G"]  # the topology differs in here
+    assert net.stale_results() == []
+
+
+def test_outage_study_flags_only_the_result_it_replaced():
+    """The study leaves the last scenario's solution as the stored result of
+    its fault; that result was computed under an outage the network no
+    longer has. The other fault's flag is untouched."""
+    net = _two_fault_ring()
+    gi.run_outage_study(
+        net, fault="F", scenarios=[gi.Outage(name="o", disabled_branches=["l1"])]
+    )
+    assert net.stale_results() == ["F"]
+    gi.run_outage_study(net, fault="F", scenarios=[], include_base=True)
+    assert net.stale_results() == []
+
+
+def test_sweep_and_rho_search_leave_other_results_as_they_found_them():
+    net = _two_fault_ring()
+    gi.run_sweep(net, fault="F", points=[gi.SweepPoint(label="p", bus_rho={"b": 500.0})])
+    assert net.stale_results() == ["F"]  # F now holds the result of the point
+    gi.run_fault(net, "F")
+    gi.find_max_rho_scaling(net, "F", ["b", "c"], u_max=1e9, c_bounds=(0.5, 2.0))
+    assert "G" not in net.stale_results()
+
+
+# --- update_* ----------------------------------------------------------------
+
+def test_update_bus_applies_every_field_and_rederives():
+    net = build_ring()
+    bus = net.update_bus("b", specific_earth_resistance=250.0, description="edited")
+    assert bus is net.buses["b"]
+    assert bus.description == "edited"
+    assert bus.impedance == compute_impedance(BUS_FORMULA, FREQUENCIES, {"rho": 250.0})
+
+
+def test_update_branch_rewires_and_rederives_like_a_fresh_build():
+    net = build_ring()
+    net.update_branch("l2", length=2.5, specific_earth_resistance=200.0)
+    gi.run_fault(net, "F")
+    reference = build_ring(length={"l2": 2.5}, rho={"l2": 200.0})
+    gi.run_fault(reference, "F")
+    assert_same_results(net, reference)
+
+
+@pytest.mark.parametrize("call", [
+    lambda net: net.update_branch("l0", length=2.0, from_bus="nowhere"),
+    lambda net: net.update_branch("l0", length=2.0, type=_cable_type(name="bad", R_self_formula="j*l")),
+    lambda net: net.update_branch("l0", description="x", length="not a number"),
+    lambda net: net.update_bus("b", specific_earth_resistance=250.0, type=_bus_type(name="bad", formula="-rho")),
+    lambda net: net.update_bus("b", description="x", active="maybe"),
+], ids=["unknown_bus", "derivation_fails", "invalid_value", "bus_derivation_fails", "bus_invalid_value"])
+def test_update_is_all_or_nothing(call):
+    net = build_ring()
+    before = net.model_dump()
+    with pytest.raises(ValueError):
+        call(net)
+    assert net.model_dump() == before
+
+
+@pytest.mark.parametrize("call,match", [
+    (lambda net: net.update_bus("b", colour="red"), "colour"),
+    (lambda net: net.update_bus("b", impedance={}), "derived"),
+    (lambda net: net.update_branch("l0", self_impedance={}), "derived"),
+    (lambda net: net.update_bus("b", name="x"), "(?i)remove"),
+    (lambda net: net.update_bus("nope", description="x"), "nope"),
+    (lambda net: net.update_branch("nope", length=1.0), "nope"),
+])
+def test_update_rejects_unknown_and_derived_fields(call, match):
+    net = build_ring()
+    with pytest.raises(ValueError, match=match):
+        call(net)
+
+
+# --- remove_* ----------------------------------------------------------------
+
+def test_remove_bus_names_every_reference():
+    net = build_ring()
+    with pytest.raises(ValueError) as excinfo:
+        net.remove_bus("a")
+    message = str(excinfo.value)
+    for ref in ("l0", "l3", "'s'"):
+        assert ref in message
+    with pytest.raises(ValueError, match="'F'"):
+        net.remove_bus("c")
+    assert set(net.buses) == set("abcd")
+
+
+def test_remove_bus_after_its_references_are_gone():
+    net = build_ring()
+    net.remove_branch("l1")
+    net.remove_branch("l2")
+    gi.create_fault(name="F2", bus="d", scalings={}, network=net)
+    net.remove_fault("F")
+    bus = net.remove_bus("c")
+    assert "c" not in net.buses
+    bus.specific_earth_resistance = 999.0  # detached now: nothing re-derived
+    assert bus.impedance == compute_impedance(BUS_FORMULA, FREQUENCIES, {"rho": 100.0})
+
+
+def test_remove_fault_drops_its_result_and_the_active_flag():
+    net = _two_fault_ring()
+    assert net.active_fault == "G"
+    net.remove_fault("G")
+    assert "G" not in net.faults and "G" not in net.results
+    assert net.active_fault is None
+    assert net.stale_results() == []  # F does not depend on G
+
+
+def test_remove_branch_drops_paths_through_it():
+    net = build_ring()
+    gi.create_paths(net)
+    assert any("l1" in [s.name for s in p.segments] for p in net.paths.values())
+    net.remove_branch("l1")
+    assert not any("l1" in [s.name for s in p.segments] for p in net.paths.values())
+
+
+@pytest.mark.parametrize("method", ["remove_bus", "remove_branch", "remove_source", "remove_fault"])
+def test_remove_unknown_name_is_a_value_error(method):
+    net = build_ring()
+    with pytest.raises(ValueError, match="nope"):
+        getattr(net, method)("nope")
+
+
+# --- types are read-only -----------------------------------------------------
+
+@pytest.mark.parametrize("make,field,value", [
+    (_bus_type, "impedance_formula", "rho*0.02"),
+    (_bus_type, "electrode_cross_section_mm2", 50.0),
+    (_cable_type, "self_impedance_formula", "(0.3 + j*f*0.012)*l"),
+    (_cable_type, "grounding_conductor", False),
+])
+def test_types_are_read_only(make, field, value):
+    element_type = make()
+    snapshot = element_type.model_dump()
+    with pytest.raises(ValueError, match="read-only") as excinfo:
+        setattr(element_type, field, value)
+    assert "model_copy" in str(excinfo.value)
+    assert element_type.model_dump() == snapshot
+
+
+def test_changing_a_type_goes_through_a_copy_and_update():
+    net = build_ring()
+    old = net.buses["b"].type
+    new = old.model_copy(update={"impedance_formula": "rho*0.02 + j*f*1e-4"})
+    for name, bus in net.buses.items():
+        if bus.type == old:
+            net.update_bus(name, type=new)
+    for bus in net.buses.values():
+        assert bus.impedance == compute_impedance("rho*0.02 + j*f*1e-4", FREQUENCIES, {"rho": 100.0})
+
+
+# --- membership --------------------------------------------------------------
+
+def test_an_element_belongs_to_one_network():
+    net1, net2 = build_ring("one"), build_ring("two")
+    bus = net1.buses["a"]
+    with pytest.raises(ValueError, match="one"):
+        net2.add_bus(bus, overwrite=True)
+    net2.add_bus(bus.model_copy(deep=True), overwrite=True)
+    assert net2.buses["a"] is not bus
+
+
+@pytest.mark.parametrize("path", sorted(_COPY_PATHS))
+def test_edits_on_a_copy_rederive_the_copy_only(path):
+    net = build_ring()
+    gi.run_fault(net, "F")
+    clone = _COPY_PATHS[path](net)
+    clone.buses["b"].specific_earth_resistance = 250.0
+    assert clone.buses["b"].impedance == compute_impedance(BUS_FORMULA, FREQUENCIES, {"rho": 250.0})
+    assert net.buses["b"].impedance == compute_impedance(BUS_FORMULA, FREQUENCIES, {"rho": 100.0})
+    assert clone.stale_results() == ["F"] and net.stale_results() == []
+    with pytest.raises(ValueError, match="(?i)remove"):
+        clone.buses["b"].name = "x"
+
+
+def test_every_model_field_is_classified_for_the_result_digest():
+    """A new field must be declared as an input of the stored results or as
+    one they do not depend on -- otherwise a result could stay "current"
+    after a change that alters it."""
+    from groundinsight.models.core_models import _DIGEST_EXEMPT_FIELDS, _DIGEST_FIELDS
+
+    for cls in (gi.Bus, gi.Branch, gi.Source, gi.Fault, gi.Network):
+        digest, exempt = set(_DIGEST_FIELDS[cls.__name__]), set(_DIGEST_EXEMPT_FIELDS[cls.__name__])
+        assert digest | exempt == set(cls.model_fields), cls.__name__
+        assert not digest & exempt, cls.__name__

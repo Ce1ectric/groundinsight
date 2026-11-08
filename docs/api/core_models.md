@@ -183,6 +183,97 @@ import groundinsight as gi
 gi.set_active_fault(net, "F1", keep_results=True)
 ```
 
+## Editing a network and stale results
+
+A `Bus` or `Branch` stores impedances *derived* from its type, its
+`specific_earth_resistance` and — for a branch — its `length`, at the
+network's frequencies. The network keeps them consistent while you
+edit, and every stored result knows whether it still matches:
+
+```python
+import groundinsight as gi
+
+net = gi.create_network(name="demo", frequencies=[50.0, 250.0])
+rod = gi.BusType(name="rod", system_type="Tower", voltage_level=20.0,
+                 impedance_formula="rho * 0.01 + j*f*1e-4")
+cable = gi.BranchType(name="cable", grounding_conductor=True,
+                      self_impedance_formula="(0.25 + j*f*0.012)*l",
+                      mutual_impedance_formula="(j*f*0.012)*l")
+for name in ("a", "b", "c"):
+    gi.create_bus(name=name, type=rod, network=net)
+gi.create_branch(name="ab", type=cable, from_bus="a", to_bus="b",
+                 length=1.0, network=net)
+gi.create_branch(name="bc", type=cable, from_bus="b", to_bus="c",
+                 length=1.0, network=net)
+gi.create_source(name="s", bus="a", values={50.0: 1000.0, 250.0: 100.0},
+                 network=net)
+gi.create_fault(name="F", bus="c", scalings={50.0: 1.0, 250.0: 1.0},
+                network=net)
+gi.run_fault(net, "F")
+
+# An input assignment re-derives the element at once ...
+net.buses["b"].specific_earth_resistance = 250.0
+# ... and the stored result knows that it no longer matches.
+print(net.stale_results())          # ['F']
+
+# Several fields at once, all or nothing:
+net.update_branch("bc", length=2.5, specific_earth_resistance=200.0)
+
+gi.run_fault(net, "F")
+print(net.is_result_stale("F"))     # False
+```
+
+- **Assignment re-derives.** `Bus.type`, `Bus.specific_earth_resistance`,
+  `Branch.type`, `Branch.length` and `Branch.specific_earth_resistance`
+  on an element that belongs to a network re-derive it through the same
+  code path as `Network.add_*`; assigning `Network.frequencies`
+  re-derives every element. A failing derivation raises and leaves the
+  element (or the network) exactly as it was. On an element that belongs
+  to no network an assignment only stores the value.
+- **`update_bus` / `update_branch`** change several fields of one
+  element: every value is validated, the bus references are checked and
+  the impedances derived before anything is written. The derived fields
+  (`impedance`, `self_impedance`, …) cannot be updated — assign them
+  directly to override a value for a study; the next input change
+  recomputes them.
+- **`remove_bus`** refuses while a branch, source or fault refers to the
+  bus and names all of them; `remove_branch`, `remove_source` and
+  `remove_fault` (which also drops that fault's stored result) complete
+  the set. Unknown names raise `ValueError`, as everywhere else.
+- **Names are keys.** Renaming an element that belongs to a network is
+  refused — remove it and add a renamed copy. Rewiring a branch, source or
+  fault to a bus the network does not have is refused. An element
+  belongs to one network at a time; add `element.model_copy(deep=True)`
+  to another one.
+- **Types are read-only.** A type has been evaluated into every element
+  that uses it, so it cannot be changed in place. Create a changed type
+  and assign it per element:
+
+    ```python
+    rod_2 = rod.model_copy(update={"impedance_formula": "rho * 0.02 + j*f*1e-4"})
+    for name, bus in net.buses.items():
+        if bus.type == rod:
+            net.update_bus(name, type=rod_2)
+    ```
+
+**What makes a result stale.** `Network.stale_results()` lists the
+faults whose stored result no longer matches the network:
+`Network.frequencies`, any bus, branch or source as the solver reads it
+(impedances, `active`, the wiring, `parallel_coefficient`, the source
+data), or the definition of the result's own fault (`bus`, `scalings`).
+Metadata — `description`, `Fault.t_k_s`/`n_factor`, the IEC 60909
+characteristics of a source — and *other* faults do not count. The
+check compares a digest of the inputs (`Result.input_digest`, written
+by `run_fault`) with the network's current inputs, so it is a statement
+about content: undoing an edit makes the result current again, and
+`outage_context`, `run_sweep` and the rho searches, which restore the
+network, leave the flags as they found them. The one result a study
+leaves behind computed under *modified* inputs — the last scenario of
+`run_outage_study`, the last point of `run_sweep` — is reported stale,
+because it is. The digest is saved with the result to JSON and to the
+database; results written by an older version carry none and are never
+reported stale.
+
 Field-level validation guards are documented inline (frequency
 duplicate / NaN / negative rejection on `Network.frequencies`,
 int-vs-float key coercion on `Fault.scalings`, …). See the

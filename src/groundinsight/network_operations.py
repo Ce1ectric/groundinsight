@@ -910,6 +910,9 @@ def run_fault(
     # the diagnostics of the run are attached to that same object.
     result = network.results[fault_name]
     result.diagnostics = unique(sink)
+    # Stamp the inputs the result was computed from; Network.stale_results
+    # compares the stamp with the network's inputs at any later time (GUI3).
+    result.input_digest = network._input_digest(fault_name)
     return result
 
 
