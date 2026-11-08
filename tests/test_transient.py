@@ -151,12 +151,12 @@ def _rl_two_bus_network(name: str):
 def test_transient_study_requires_existing_fault():
     net = _purely_resistive_two_bus_network("net")
     with pytest.raises(ValueError):
-        TransientStudy(net, fault_name="does_not_exist")
+        TransientStudy(net, fault="does_not_exist")
 
 
 def test_transient_study_set_observation_validates_names():
     net = _purely_resistive_two_bus_network("net")
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     with pytest.raises(ValueError):
         study.set_observation(buses=["unknown_bus"])
     with pytest.raises(ValueError):
@@ -177,7 +177,7 @@ def test_fft_solver_rejects_voltage_source():
         source_impedance={50.0: 0.5 + 0.1j},
         network=net,
     )
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     # set_source_waveform must accept a voltage source.
     study.set_source_waveform("src", waveforms.step(amplitude=100.0))
     # solve(solver='fft') must refuse it with a clear pointer.
@@ -189,7 +189,7 @@ def test_resistive_network_fft_tracks_source_proportionally():
     """In a purely resistive network the EPR at the fault bus must be a
     scalar multiple of the source waveform at every instant."""
     net = _purely_resistive_two_bus_network("net_R")
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src",
         waveforms.sinusoidal_with_dc_offset(
@@ -223,12 +223,12 @@ def test_fft_steady_state_matches_frequency_domain_solver():
     forced response at 50 Hz with negligible transient ringing."""
     net = _rl_two_bus_network("net_steady")
     # Steady-state reference via the frequency-domain solver.
-    gi.run_fault(net, fault_name="F1")
+    gi.run_fault(net, fault="F1")
     epr_freq_dom = next(
         b.uepr for b in net.results["F1"].buses if b.name == "bus2"
     )
 
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src",
         waveforms.sinusoidal_with_dc_offset(
@@ -257,7 +257,7 @@ def test_fft_step_response_in_resistive_network_is_instant():
     EPR must follow the source step without rise time (apart from the
     finite Gibbs-like ringing introduced by the FFT band-limit)."""
     net = _purely_resistive_two_bus_network("net_step")
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src",
         waveforms.step(amplitude=100.0, t_on=0.05, t_off=None),
@@ -332,7 +332,7 @@ def test_state_space_step_response_shows_transient_decay():
     the bus to ground at t -> infinity."""
     R_bus, L_bus = 10.0, 0.05  # smallest tau = L/R = 5 ms
     net = _rl_state_space_network("net_ss_step", R_bus=R_bus, L_bus=L_bus)
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("src", waveforms.step(amplitude=100.0))
     study.set_observation(buses=["bus1"], branches=["branch1"])
 
@@ -363,7 +363,7 @@ def test_state_space_matches_fft_on_lti_network():
     R_bus, L_bus = 10.0, 0.005  # small L: tau = 0.5 ms, well-settled by 0.5 s
     net = _rl_state_space_network("net_ss_match", R_bus=R_bus, L_bus=L_bus)
 
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src",
         waveforms.sinusoidal_with_dc_offset(
@@ -393,7 +393,7 @@ def test_state_space_fault_clearing_shows_decay():
     R_bus, L_bus = 10.0, 0.05  # tau = 5 ms
     net = _rl_state_space_network("net_ss_decay", R_bus=R_bus, L_bus=L_bus)
 
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     # Source on for 0.2 s, off afterwards. The two interacting RL pairs
     # in this two-bus topology have a slow mode around tau ~= 100 ms, so
     # the on-window must be long enough for the trace to settle and the
@@ -446,7 +446,7 @@ def test_state_space_requires_R_on_buses():
     )
     gi.create_fault(name="F1", bus="bus2", scalings={50.0: 1.0}, network=net)
 
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("src", waveforms.step(amplitude=100.0))
     with pytest.raises(ValueError, match="resistive ground path"):
         study.solve(t_end=0.1, dt=1e-4, solver="state_space")
@@ -481,7 +481,7 @@ def test_state_space_requires_at_least_one_inductor():
     )
     gi.create_fault(name="F1", bus="bus2", scalings={50.0: 1.0}, network=net)
 
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("src", waveforms.step(amplitude=100.0))
     with pytest.raises(ValueError, match="inductive element"):
         study.solve(t_end=0.1, dt=1e-4, solver="state_space")
@@ -533,7 +533,7 @@ def test_state_space_parallel_RLC_bus_oscillates():
     gi.create_fault(name="F1", bus="ref", scalings={50.0: 1.0}, network=net)
     gi.create_paths(network=net)
 
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("src", waveforms.step(amplitude=100.0))
     study.set_observation(buses=["osc"])
     result = study.solve(t_end=0.04, dt=1e-5, solver="state_space")
@@ -586,7 +586,7 @@ def test_state_space_voltage_source_R_only_matches_current_norton():
             name="src", bus="b1", values={50.0: 100.0 + 0.0j}, network=net,
         )
     )
-    study_i = TransientStudy(net_i, fault_name="F1")
+    study_i = TransientStudy(net_i, fault="F1")
     study_i.set_source_waveform("src", waveforms.step(amplitude=100.0))
     study_i.set_observation(buses=["b1", "b2"])
     # The slowest eigenmode of this two-bus topology sits around 40 ms;
@@ -603,7 +603,7 @@ def test_state_space_voltage_source_R_only_matches_current_norton():
             network=net,
         )
     )
-    study_v = TransientStudy(net_v, fault_name="F1")
+    study_v = TransientStudy(net_v, fault="F1")
     study_v.set_source_waveform("src", waveforms.step(amplitude=U_amp))
     study_v.set_observation(buses=["b1", "b2"])
     res_v = study_v.solve(t_end=0.5, dt=2e-4, solver="state_space")
@@ -672,7 +672,7 @@ def test_state_space_voltage_source_with_L_runs_and_oscillates():
     gi.create_fault(name="F1", bus="ref", scalings={50.0: 1.0}, network=net)
     gi.create_paths(network=net)
 
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("src", waveforms.step(amplitude=100.0))
     study.set_observation(buses=["osc"])
     result = study.solve(t_end=0.05, dt=1e-5, solver="state_space")
@@ -721,7 +721,7 @@ def test_state_space_pi_section_branch_C_lumps_onto_buses():
     gi.create_fault(name="F1", bus="b2", scalings={50.0: 1.0}, network=net)
     gi.create_paths(network=net)
 
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("src", waveforms.step(amplitude=100.0))
     study.set_observation(buses=["b1", "b2"])
     result = study.solve(t_end=0.05, dt=1e-4, solver="state_space")
@@ -773,7 +773,7 @@ def test_state_space_mutual_coupling_consistent_with_fft():
     gi.create_fault(name="F1", bus="b2", scalings={50.0: 1.0}, network=net)
     gi.create_paths(network=net)
 
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src",
         waveforms.sinusoidal_with_dc_offset(
@@ -825,7 +825,7 @@ def test_state_space_mutual_matches_fft_in_steady_state():
     gi.create_fault(name="F1", bus="b2", scalings={50.0: 1.0}, network=net)
     gi.create_paths(network=net)
 
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src",
         waveforms.sinusoidal_with_dc_offset(
@@ -849,7 +849,7 @@ def test_state_space_mutual_matches_fft_in_steady_state():
 def test_unknown_solver_raises():
     """Solver dispatch surfaces unknown identifiers with a clear message."""
     net = _purely_resistive_two_bus_network("net_unknown_solver")
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("src", waveforms.step(amplitude=100.0))
     with pytest.raises(NotImplementedError, match="Unknown transient solver"):
         study.solve(t_end=0.1, dt=1e-4, solver="some_other")
@@ -857,7 +857,7 @@ def test_unknown_solver_raises():
 
 def test_transient_result_to_polars_has_expected_columns():
     net = _purely_resistive_two_bus_network("net_polars")
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src", waveforms.step(amplitude=100.0, t_on=0.0, t_off=0.05),
     )

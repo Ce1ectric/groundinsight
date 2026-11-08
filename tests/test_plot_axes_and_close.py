@@ -133,7 +133,7 @@ def other_result():
 def transient_result():
     """A short transient run with two observed buses and two branches."""
     net = _solved_network(name="AxNetTransient")
-    study = gi.TransientStudy(network=net, fault_name="flt")
+    study = gi.TransientStudy(network=net, fault="flt")
     study.set_source_waveform(
         "src",
         gi.waveforms.sinusoidal_with_dc_offset(

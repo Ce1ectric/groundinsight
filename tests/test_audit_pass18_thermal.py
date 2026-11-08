@@ -69,9 +69,9 @@ def _network(frequencies, source_values):
 def test_an_out_of_range_kappa_is_refused(kappa):
     net = _network([50.0], {50.0: 1000.0})
     with pytest.raises(ValueError, match="kappa must lie in"):
-        gi.check_conductor_limits(net, "F", t_k=0.5, kappa=kappa)
+        gi.check_conductor_limits(net, "F", t_k_s=0.5, kappa=kappa)
     with pytest.raises(ValueError, match="kappa must lie in"):
-        gi.check_node_limits(net, "F", t_k=0.5, kappa=kappa)
+        gi.check_node_limits(net, "F", t_k_s=0.5, kappa=kappa)
 
 
 @pytest.mark.parametrize("n", [-2.0, 0.0, 1.5, 3.0, float("nan")])
@@ -80,7 +80,7 @@ def test_an_out_of_range_n_is_refused(n):
     # Since audit pass 19 (USE8) the message names the canonical keyword
     # n_factor; the call keeps the deprecated n and so exercises the alias.
     with pytest.raises(ValueError, match=r"n_factor must lie in \(0, 1\]"):
-        gi.check_conductor_limits(net, "F", t_k=0.5, r_to_x=0.1, n=n)
+        gi.check_conductor_limits(net, "F", t_k_s=0.5, r_to_x=0.1, n_factor=n)
 
 
 def test_a_stored_out_of_range_kappa_is_refused_too():
@@ -104,7 +104,7 @@ def test_a_stored_out_of_range_kappa_is_refused_too():
     tampered.__dict__["kappa"] = 42.0
     net.sources["SRC"] = tampered
     with pytest.raises(ValueError, match="kappa must lie in"):
-        gi.check_conductor_limits(net, "F", t_k=0.5)
+        gi.check_conductor_limits(net, "F", t_k_s=0.5)
 
 
 def test_every_kappa_the_r_to_x_conversion_can_produce_is_accepted():
@@ -112,7 +112,7 @@ def test_every_kappa_the_r_to_x_conversion_can_produce_is_accepted():
     fire on it -- otherwise the ordinary path would be the one that breaks."""
     net = _network([50.0], {50.0: 1000.0})
     for r_to_x in (0.0, 0.02, 0.1, 1.0, 10.0, 1000.0):
-        frame = gi.check_conductor_limits(net, "F", t_k=0.5, r_to_x=r_to_x)
+        frame = gi.check_conductor_limits(net, "F", t_k_s=0.5, r_to_x=r_to_x)
         assert 1.0 < frame["kappa"][0] <= 2.0
 
 
@@ -120,7 +120,7 @@ def test_i_th_is_the_shared_formula_not_a_second_copy():
     from groundinsight.analysis.shortcircuit import thermal_equivalent_current
 
     net = _network([50.0], {50.0: 1000.0})
-    frame = gi.check_conductor_limits(net, "F", t_k=0.5, r_to_x=0.1)
+    frame = gi.check_conductor_limits(net, "F", t_k_s=0.5, r_to_x=0.1)
     row = frame.row(0, named=True)
     assert row["I_th_A"] == pytest.approx(
         thermal_equivalent_current(row["I_ac_rms_A"], row["m"], row["n"]),
@@ -138,11 +138,11 @@ def test_the_dc_bin_is_not_counted_in_the_short_time_current():
     the DC current entered the RMS as well and inflated ``I_th`` by 22 %.
     """
     ac_only = gi.check_conductor_limits(
-        _network([50.0], {50.0: 1000.0}), "F", t_k=0.5, r_to_x=0.1
+        _network([50.0], {50.0: 1000.0}), "F", t_k_s=0.5, r_to_x=0.1
     )
     with_dc = gi.check_conductor_limits(
         _network([0.0, 50.0], {0.0: 700.0, 50.0: 1000.0}),
-        "F", t_k=0.5, r_to_x=0.1,
+        "F", t_k_s=0.5, r_to_x=0.1,
     )
     for name in ac_only["branch_name"]:
         a = ac_only.filter(ac_only["branch_name"] == name).row(0, named=True)
@@ -153,7 +153,7 @@ def test_the_dc_bin_is_not_counted_in_the_short_time_current():
 def test_the_dc_bin_is_reported_in_its_own_column():
     frame = gi.check_conductor_limits(
         _network([0.0, 50.0], {0.0: 700.0, 50.0: 1000.0}),
-        "F", t_k=0.5, r_to_x=0.1,
+        "F", t_k_s=0.5, r_to_x=0.1,
     )
     row = frame.row(0, named=True)
     assert row["I_dc_A"] is not None and row["I_dc_A"] > 0
@@ -167,7 +167,7 @@ def test_without_a_dc_bin_the_column_is_null_rather_than_zero():
     """A study with no 0 Hz bin has nothing to report there, which is a
     different statement from a measured direct current of zero."""
     frame = gi.check_conductor_limits(
-        _network([50.0], {50.0: 1000.0}), "F", t_k=0.5, r_to_x=0.1
+        _network([50.0], {50.0: 1000.0}), "F", t_k_s=0.5, r_to_x=0.1
     )
     assert frame["I_dc_A"].null_count() == frame.height
     assert frame["I_ac_rms_A"].to_list() == pytest.approx(
@@ -177,11 +177,11 @@ def test_without_a_dc_bin_the_column_is_null_rather_than_zero():
 
 def test_the_node_check_splits_the_dc_bin_the_same_way():
     ac_only = gi.check_node_limits(
-        _network([50.0], {50.0: 1000.0}), "F", t_k=0.5, r_to_x=0.1
+        _network([50.0], {50.0: 1000.0}), "F", t_k_s=0.5, r_to_x=0.1
     )
     with_dc = gi.check_node_limits(
         _network([0.0, 50.0], {0.0: 700.0, 50.0: 1000.0}),
-        "F", t_k=0.5, r_to_x=0.1,
+        "F", t_k_s=0.5, r_to_x=0.1,
     )
     keys = ["bus_name", "element"]
     for row in ac_only.rows(named=True):

@@ -145,7 +145,7 @@ def test_default_solve_unchanged_versus_pre_change_baseline():
     consistency: EPR>0 at the fault bus, EPR>0 at the source bus, and the
     intermediate bus sits in between."""
     net = _build_line()
-    gi.run_fault(net, fault_name="F1", auto_parallel_coefficients=True)
+    gi.run_fault(net, fault="F1", phase_current_mode="auto")
     e1 = _epr_at(net, "bus1")
     e2 = _epr_at(net, "bus2")
     e3 = _epr_at(net, "bus3")
@@ -171,7 +171,7 @@ def test_inactive_branch_acts_as_open_circuit_in_a_ring():
     net.branches["b13"].active = False
     # Drop pre-existing path cache so define_paths runs again with the new topology
     net.paths = {}
-    gi.run_fault(net, fault_name="F1", auto_parallel_coefficients=True)
+    gi.run_fault(net, fault="F1", phase_current_mode="auto")
 
     df = net.res_branches(fault="F1")
     rms_b13 = (
@@ -191,7 +191,7 @@ def test_inactive_bus_removes_node_and_paths():
     net = _build_line()
     net.buses["bus2"].active = False
     net.paths = {}
-    gi.run_fault(net, fault_name="F1", auto_parallel_coefficients=True)
+    gi.run_fault(net, fault="F1", phase_current_mode="auto")
 
     # bus2 is removed from the result -- only bus1 and bus3 remain
     df = net.res_buses(fault="F1")
@@ -265,7 +265,7 @@ def test_run_outage_study_collects_base_and_scenarios():
             Outage(name="b13_open", disabled_branches=["b13"]),
             Outage(name="bus2_isolated", disabled_buses=["bus2"]),
         ],
-        auto_parallel_coefficients=True,
+        phase_current_mode="auto",
     )
 
     assert isinstance(study, OutageStudyResult)
@@ -298,7 +298,7 @@ def test_compare_buses_produces_long_format_with_deltas():
         net,
         fault="F1",
         scenarios=[Outage(name="b13_open", disabled_branches=["b13"])],
-        auto_parallel_coefficients=True,
+        phase_current_mode="auto",
     )
 
     df = study.compare_buses()
@@ -336,7 +336,7 @@ def test_compare_branches_against_custom_reference():
         fault="F1",
         scenarios=[Outage(name="b13_open", disabled_branches=["b13"])],
         include_base=True,
-        auto_parallel_coefficients=True,
+        phase_current_mode="auto",
     )
 
     df = study.compare_branches(against="b13_open")

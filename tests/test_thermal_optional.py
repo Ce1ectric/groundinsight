@@ -448,7 +448,7 @@ def test_the_check_requires_a_fault_duration_and_says_so():
 def test_the_check_requires_dc_information_and_says_so():
     net = _chain(_bare_bus_type(), _bare_branch_type(), sc_metadata=False)
     with pytest.raises(ValueError) as excinfo:
-        gi.check_node_limits(net, "F", t_k=0.5)
+        gi.check_node_limits(net, "F", t_k_s=0.5)
     message = str(excinfo.value)
     assert "kappa" in message and "r_to_x" in message
 
@@ -456,8 +456,8 @@ def test_the_check_requires_dc_information_and_says_so():
 def test_the_excitation_may_come_from_arguments_alone():
     """A network with no stored 60909 data is still fully assessable ad hoc."""
     net = _chain(_full_bus_type(), _full_branch_type(), sc_metadata=False)
-    branch = gi.check_conductor_limits(net, "F", t_k=0.5, r_to_x=0.1)
-    node = gi.check_node_limits(net, "F", t_k=0.5, r_to_x=0.1)
+    branch = gi.check_conductor_limits(net, "F", t_k_s=0.5, r_to_x=0.1)
+    node = gi.check_node_limits(net, "F", t_k_s=0.5, r_to_x=0.1)
     assert all(v is not None for v in branch["within_limit"].to_list())
     assert all(v is not None for v in node["within_limit"].to_list())
     assert branch["kappa"][0] == pytest.approx(node["kappa"][0])

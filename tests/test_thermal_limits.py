@@ -124,7 +124,7 @@ def _thermal_network(cross_section_mm2):
 
 def test_check_conductor_limits_applies_iec_formulas():
     net = _thermal_network(50.0)
-    df = gi.check_conductor_limits(net, "F", t_k=1.0, r_to_x=0.1)
+    df = gi.check_conductor_limits(net, "F", t_k_s=1.0, r_to_x=0.1)
     row = df.filter(df["branch_name"] == "c1").to_dicts()[0]
 
     kappa = kappa_from_r_to_x(0.1)
@@ -139,8 +139,8 @@ def test_check_conductor_limits_applies_iec_formulas():
 
 
 def test_check_conductor_limits_flags_undersized_and_passes_oversized():
-    small = gi.check_conductor_limits(_thermal_network(1.0), "F", t_k=1.0, r_to_x=0.1)
-    big = gi.check_conductor_limits(_thermal_network(500.0), "F", t_k=1.0, r_to_x=0.1)
+    small = gi.check_conductor_limits(_thermal_network(1.0), "F", t_k_s=1.0, r_to_x=0.1)
+    big = gi.check_conductor_limits(_thermal_network(500.0), "F", t_k_s=1.0, r_to_x=0.1)
     assert small.filter(small["branch_name"] == "c1")["within_limit"][0] is False
     assert big.filter(big["branch_name"] == "c1")["within_limit"][0] is True
 
@@ -159,7 +159,7 @@ def test_check_conductor_limits_branch_without_params_not_checked():
     gi.create_fault(name="F", bus="b2", scalings={50.0: 1.0}, network=net)
     gi.run_fault(net, "F")
 
-    df = gi.check_conductor_limits(net, "F", t_k=1.0, r_to_x=0.1)
+    df = gi.check_conductor_limits(net, "F", t_k_s=1.0, r_to_x=0.1)
     row = df.filter(df["branch_name"] == "c1").to_dicts()[0]
     assert row["within_limit"] is None       # not checked
     assert row["I_th_A"] > 0                  # I_th still reported
@@ -168,13 +168,13 @@ def test_check_conductor_limits_branch_without_params_not_checked():
 def test_check_conductor_limits_input_validation():
     net = _thermal_network(50.0)
     with pytest.raises(ValueError):
-        gi.check_conductor_limits(net, "F", t_k=0.0, r_to_x=0.1)     # bad t_k
+        gi.check_conductor_limits(net, "F", t_k_s=0.0, r_to_x=0.1)     # bad t_k
     with pytest.raises(ValueError):
-        gi.check_conductor_limits(net, "F", t_k=1.0)                 # neither kappa nor r_to_x
+        gi.check_conductor_limits(net, "F", t_k_s=1.0)                 # neither kappa nor r_to_x
     with pytest.raises(ValueError):
-        gi.check_conductor_limits(net, "F", t_k=1.0, kappa=1.8, r_to_x=0.1)  # both
+        gi.check_conductor_limits(net, "F", t_k_s=1.0, kappa=1.8, r_to_x=0.1)  # both
     with pytest.raises(ValueError):
-        gi.check_conductor_limits(net, "nope", t_k=1.0, r_to_x=0.1)  # no results
+        gi.check_conductor_limits(net, "nope", t_k_s=1.0, r_to_x=0.1)  # no results
 
 
 # ---------------------------------------------------------------------------

@@ -94,7 +94,7 @@ def test_a_rho_search_leaves_the_assembled_system_matching_the_network():
     net = _network(bus_formula="rho*0.1")
     before = gi.bus_response(net, fault="F", bus="B1").z_network[50.0]
 
-    gi.find_max_rho_scaling(net, "F", BUSES, u_max=200.0)
+    gi.find_max_rho_scaling(net, "F", BUSES, u_limit=200.0)
 
     after = gi.bus_response(net, fault="F", bus="B1").z_network[50.0]
     assert after.real > 0, "driving-point impedance of a passive network"
@@ -120,7 +120,7 @@ def test_the_search_restores_an_absent_assembled_system_as_absent():
     above raise on the second and not on the first."""
     net = _network()
     net.electrical_network = None
-    gi.find_max_rho_scaling(net, "F", BUSES, u_max=1e6)
+    gi.find_max_rho_scaling(net, "F", BUSES, u_limit=1e6)
     assert net.electrical_network is None
 
 

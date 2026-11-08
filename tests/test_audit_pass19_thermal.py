@@ -59,7 +59,7 @@ def _network(frequencies, source_values, scalings=None):
 def test_a_dc_component_excluded_from_the_adiabatic_check_is_announced(check):
     net = _network([0.0, 50.0], {0.0: 700.0, 50.0: 1000.0})
     with pytest.warns(ModelAssumptionWarning, match="unconservative") as record:
-        frame = check(net, "F", t_k=0.5, r_to_x=0.1)
+        frame = check(net, "F", t_k_s=0.5, r_to_x=0.1)
     notes = [w.message for w in record if getattr(w.message, "code", None) == "THERMAL_DC_EXCLUDED"]
     assert len(notes) == 1
     assert ("fault", "F") in notes[0].elements
@@ -84,7 +84,7 @@ def test_no_note_without_a_direct_current(check):
     ):
         with warnings.catch_warnings():
             warnings.simplefilter("error", ModelAssumptionWarning)
-            check(net, "F", t_k=0.5, r_to_x=0.1)
+            check(net, "F", t_k_s=0.5, r_to_x=0.1)
 
 
 def test_the_cross_term_the_note_leaves_out_is_what_the_docstring_says():

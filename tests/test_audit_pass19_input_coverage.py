@@ -245,7 +245,7 @@ def test_a_transient_only_source_is_not_judged_by_its_stationary_values():
     from groundinsight.simulation.transient import TransientStudy
 
     net = _state_space_chain("use3_transient", {60.0: 1.0})
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("Q", waveforms.step(amplitude=100.0))
     study.set_observation(buses=["S", "A", "F"])
     with warnings.catch_warnings(record=True) as record:

@@ -121,7 +121,7 @@ def _mutual_state_space_network(name):
 
 def test_state_space_transient_invariant_to_fault_scalings():
     net = _mutual_state_space_network("pass9_ss_scalings")
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src",
         waveforms.sinusoidal_with_dc_offset(amplitude=100.0, frequency_hz=50.0, t_on=0.0),
@@ -164,7 +164,7 @@ def test_find_max_rho_scaling_restores_state_on_fresh_network():
     gi.create_fault(name="flt", bus="b1", scalings={50.0: 1.0}, network=net)
     assert net.active_fault is None and net.results == {}
 
-    find_max_rho_scaling(net, "flt", ["b0", "b1"], u_max=200.0)
+    find_max_rho_scaling(net, "flt", ["b0", "b1"], u_limit=200.0)
 
     assert net.active_fault is None            # not left dangling
     assert net.results == {}                   # no stale probe result

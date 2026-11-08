@@ -123,7 +123,7 @@ def test_reduction_factor_for_bus7_fault7():
     for i in range(9):
 
         # Run fault calculations
-        gi.run_fault(net, fault_name=f"fault{i+1}")
+        gi.run_fault(net, fault=f"fault{i+1}")
 
     # Access the Polars DataFrame of impedances
     res_impedances_df = net.res_all_impedances()
@@ -188,7 +188,7 @@ def test_voltage_source_reproduces_current_source_in_high_zsrc_limit():
     net_i = _build_simple_two_bus_network("net_current")
     gi.create_source(name="src", bus="bus1", values={50: 100.0 + 0.0j}, network=net_i)
     net_i.define_paths()
-    gi.run_fault(net_i, fault_name="fault1")
+    gi.run_fault(net_i, fault="fault1")
     epr_i_bus1 = next(
         b.uepr for b in net_i.results["fault1"].buses if b.name == "bus1"
     )
@@ -209,7 +209,7 @@ def test_voltage_source_reproduces_current_source_in_high_zsrc_limit():
         network=net_v,
     )
     net_v.define_paths()
-    gi.run_fault(net_v, fault_name="fault1")
+    gi.run_fault(net_v, fault="fault1")
     epr_v_bus1 = next(
         b.uepr for b in net_v.results["fault1"].buses if b.name == "bus1"
     )
@@ -239,7 +239,7 @@ def test_voltage_source_finite_zsrc_reduces_effective_fault_current():
         network=net,
     )
     net.define_paths()
-    gi.run_fault(net, fault_name="fault1")
+    gi.run_fault(net, fault="fault1")
 
     en = net.electrical_network
     src_idx = en.bus_indices["bus1"]

@@ -50,7 +50,7 @@ def test_session_start():
     gi.create_paths(network=net)
 
     # Run the fault
-    gi.run_fault(network=net, fault_name="fault1")
+    gi.run_fault(network=net, fault="fault1")
 
     # try to save it to the database without starting the session
     with pytest.raises(RuntimeError):
@@ -159,7 +159,7 @@ def test_network_save_load():
     gi.create_paths(network=net)
 
     # Run the fault
-    gi.run_fault(network=net, fault_name="fault1")
+    gi.run_fault(network=net, fault="fault1")
 
     gi.close_dbsession()
     # save the network to the database error will be raised if the session is not started
@@ -173,7 +173,7 @@ def test_network_save_load():
 
     # load the network from the database
     loaded_net = gi.load_network_from_db("TestNet")
-    gi.run_fault(network=loaded_net, fault_name="fault1")
+    gi.run_fault(network=loaded_net, fault="fault1")
 
     assert loaded_net.name == net.name
     assert loaded_net.frequencies == net.frequencies

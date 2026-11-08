@@ -306,7 +306,7 @@ def test_a_transient_study_refuses_it_at_its_0_hz_bin():
     """The same network in a transient study: the FFT grid starts at 0 Hz,
     so the formula is evaluated there after all, and refused there."""
     net = _network("p19_log_tr", LOG_BUS, [50.0])
-    study = TransientStudy(net, fault_name="F")
+    study = TransientStudy(net, fault="F")
     study.set_source_waveform("s", waveforms.step(amplitude=1000.0, t_on=0.0))
     study.set_observation(buses=["A", "B"], branches=["A-B"])
     with pytest.raises(ValueError, match="minus infinity") as excinfo:

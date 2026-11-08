@@ -527,7 +527,7 @@ def test_explicit_arguments_override_the_stored_characteristics():
     gi.run_fault(net, "F")
 
     stored = gi.check_conductor_limits(net, "F").to_dicts()[0]
-    overridden = gi.check_conductor_limits(net, "F", t_k=1.0, kappa=1.2).to_dicts()[0]
+    overridden = gi.check_conductor_limits(net, "F", t_k_s=1.0, kappa=1.2).to_dicts()[0]
 
     assert overridden["t_k_s"] == pytest.approx(1.0)
     assert overridden["kappa"] == pytest.approx(1.2)

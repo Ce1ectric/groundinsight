@@ -206,7 +206,7 @@ def test_imported_network_solves_after_adding_source_and_fault():
 
     gi.create_source(name="src", bus="bus_mv_1", values={50: 100.0}, network=network)
     gi.create_fault(name="F1", bus="bus_mv_3", scalings={50: 1.0}, network=network)
-    gi.run_fault(network, fault_name="F1", auto_parallel_coefficients=True)
+    gi.run_fault(network, fault="F1", phase_current_mode="auto")
 
     epr = network.results["F1"].buses[0].uepr
     assert epr >= 0.0  # solver completed and produced a number

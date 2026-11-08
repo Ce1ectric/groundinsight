@@ -128,7 +128,7 @@ def _study(
     t_on=0.0,
     t_off=None,
 ):
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src", waveforms.step(amplitude=amplitude, t_on=t_on, t_off=t_off)
     )
@@ -191,13 +191,13 @@ def test_fft_ignores_a_source_without_a_path_to_the_fault():
         name="ghost", bus="island", values={50.0: 100.0 + 0.0j}, network=net
     )
 
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("ghost", waveforms.step(amplitude=1000.0))
     study.set_observation(buses=["island", "bus2"])
     result = study.solve(t_end=0.05, dt=1e-4, solver="fft")
 
     # Stationary reference: the isolated source contributes nothing.
-    gi.run_fault(net, fault_name="F1")
+    gi.run_fault(net, fault="F1")
     stationary = {b.name: b.uepr for b in net.results["F1"].buses}
     assert stationary["island"] == pytest.approx(0.0, abs=1e-9)
 

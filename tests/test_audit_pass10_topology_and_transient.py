@@ -207,7 +207,7 @@ def test_find_max_rho_scaling_does_not_reuse_a_stale_path_set():
     gi.create_fault(name="fltA", bus="b1", scalings={50.0: 1.0}, network=control)
     gi.create_fault(name="fltB", bus="b2", scalings={50.0: 1.0}, network=control)
     gi.run_fault(control, "fltB")
-    expected = find_max_rho_scaling(control, "fltB", buses, u_max=10.0,
+    expected = find_max_rho_scaling(control, "fltB", buses, u_limit=10.0,
                                     c_bounds=(1e-3, 1e3))
 
     # The defect path: solve fltA first, add fltB afterwards.
@@ -215,7 +215,7 @@ def test_find_max_rho_scaling_does_not_reuse_a_stale_path_set():
     gi.create_fault(name="fltA", bus="b1", scalings={50.0: 1.0}, network=net)
     gi.run_fault(net, "fltA")
     gi.create_fault(name="fltB", bus="b2", scalings={50.0: 1.0}, network=net)
-    actual = find_max_rho_scaling(net, "fltB", buses, u_max=10.0,
+    actual = find_max_rho_scaling(net, "fltB", buses, u_limit=10.0,
                                   c_bounds=(1e-3, 1e3))
 
     # The bisection must actually have run, i.e. not returned the bracket.
@@ -353,7 +353,7 @@ def _two_bus_coupled_network(name):
 
 
 def _run_transient(net, buses, branches, solver="state_space"):
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src",
         waveforms.sinusoidal_with_dc_offset(amplitude=_AMPL, frequency_hz=_F),
@@ -388,7 +388,7 @@ def test_state_space_mutual_coupling_without_a_preceding_run_fault(caplog):
     peak_a = _steady_peak(result_a.time_s, result_a.epr_t["bus2"])
 
     # Run B: exactly the same study, but after a normal stationary solve.
-    gi.run_fault(net, fault_name="F1")
+    gi.run_fault(net, fault="F1")
     _, result_b = _run_transient(net, ["bus1", "bus2"], ["branch1"])
     peak_b = _steady_peak(result_b.time_s, result_b.epr_t["bus2"])
 
@@ -435,7 +435,7 @@ def test_state_space_mutual_factor_is_first_path_wins_not_accumulated():
     exactly why no existing test caught it.
     """
     net = _ring_coupled_network("p10_t3b")
-    gi.run_fault(net, fault_name="F1")
+    gi.run_fault(net, fault="F1")
     # Audit pass 18 (K2): paths are no longer a side effect of run_fault.
     gi.create_paths(net)
     assert len(net.paths) == 2, "the ring must produce two parallel paths"
@@ -479,7 +479,7 @@ def test_state_space_mutual_factor_control_single_path():
     net.branches["bBE"].active = False
     net.branches["bEC"].active = False
     net.buses["E"].active = False
-    gi.run_fault(net, fault_name="F1")
+    gi.run_fault(net, fault="F1")
     # Audit pass 18 (K2): paths are no longer a side effect of run_fault.
     gi.create_paths(net)
     assert len(net.paths) == 1

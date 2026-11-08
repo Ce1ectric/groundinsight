@@ -213,7 +213,7 @@ def _chain_open_reference():
 
 def _transient_dc(net, buses=("A", "B", "C"), branches=("A-B", "B-C")):
     """Mean of u(t) and i(t) over a full FFT window, i.e. the 0 Hz bin."""
-    study = TransientStudy(net, fault_name="F")
+    study = TransientStudy(net, fault="F")
     study.set_source_waveform("s", waveforms.step(amplitude=I_DC, t_on=0.0))
     study.set_observation(buses=list(buses), branches=list(branches))
     res = study.solve(t_end=0.04, dt=1e-4, solver="fft")

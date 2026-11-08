@@ -197,7 +197,7 @@ def build_network(name, bus_names, branch_specs, solve=True, bus_type=None,
     gi.create_fault(name="flt", bus=bus_names[-1], scalings={50.0: 1.0}, network=net)
     gi.create_paths(network=net)
     if solve:
-        gi.run_fault(network=net, fault_name="flt")
+        gi.run_fault(network=net, fault="flt")
     return net
 
 
@@ -865,7 +865,7 @@ def test_resolving_a_loaded_network_reproduces_the_original_results(db_path):
     expected = results_by_name(net.model_dump()["results"]["flt"])
     assert results_by_name(loaded.model_dump()["results"]["flt"]) == expected
 
-    gi.run_fault(network=loaded, fault_name="flt")
+    gi.run_fault(network=loaded, fault="flt")
     resolved = results_by_name(loaded.model_dump()["results"]["flt"])
 
     for bus_name, bus_result in expected["buses"].items():

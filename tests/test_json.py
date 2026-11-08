@@ -47,7 +47,7 @@ def test_save_network_successful(tmp_path):
     gi.create_paths(network=net)
 
     # Run the fault
-    gi.run_fault(network=net, fault_name="fault1")
+    gi.run_fault(network=net, fault="fault1")
 
     # Save the network as JSON to a temporary file
     json_file = tmp_path / "test_network.json"
@@ -59,7 +59,7 @@ def test_save_network_successful(tmp_path):
     # default phase_current_mode="auto", so the reloaded network gets them
     # the same way the original did -- by asking for them explicitly.
     gi.create_paths(network=net2)
-    gi.run_fault(network=net2, fault_name="fault1")
+    gi.run_fault(network=net2, fault="fault1")
 
     # Check that the loaded network is the same as the original network
     assert net.name == net2.name

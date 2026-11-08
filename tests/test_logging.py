@@ -253,13 +253,13 @@ def test_parallel_coefficient_warning_is_logged():
             and "parallel_coefficient" in d.message
         ]
 
-    result = gi.run_fault(net, fault_name="F1", phase_current_mode="paths")
+    result = gi.run_fault(net, fault="F1", phase_current_mode="paths")
     assert _parallel_warnings(result), (
         "Expected a warning about parallel_coefficient for a ring solved in "
         "the legacy path-based mode."
     )
 
-    result = gi.run_fault(net, fault_name="F1")
+    result = gi.run_fault(net, fault="F1")
     assert not _parallel_warnings(result), (
         "The default phase_current_mode='auto' splits the ring from the "
         "topology, so there is nothing to warn about."

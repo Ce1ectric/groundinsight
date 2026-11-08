@@ -202,7 +202,7 @@ def _transient_net(name, bus_formula="rho*0 + 10.0 + I*f*0",
 
 def _solve_transient(net):
     """Run the FFT solver on a 20 ms window; the bin spacing is 50 Hz."""
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("src", waveforms.step(amplitude=100.0, t_on=0.0))
     return study.solve(t_end=0.02, dt=1e-3, solver="fft")
 

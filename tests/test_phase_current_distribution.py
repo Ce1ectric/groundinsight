@@ -410,7 +410,10 @@ def test_the_deprecated_flag_still_wins_when_passed(legacy_flag, expected_epr, c
     sites -- including ``run_outage_study`` -- are unaffected by the new default,
     and passing it says that it is deprecated.
     """
-    with caplog.at_level(logging.WARNING, logger="groundinsight"):
+    with (
+        caplog.at_level(logging.WARNING, logger="groundinsight"),
+        pytest.warns(DeprecationWarning, match="auto_parallel_coefficients"),
+    ):
         epr, _, _ = _solve(
             _network(RING, ["S", "A", "B", "F"]),
             auto_parallel_coefficients=legacy_flag,

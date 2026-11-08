@@ -633,7 +633,7 @@ def test_open_end_branch_carries_no_shield_current():
 
 
 def test_open_end_branch_in_the_automatic_phase_current_mode():
-    """``auto_parallel_coefficients=True`` builds a second, phase-side
+    """``phase_current_mode="auto"`` builds a second, phase-side
     admittance matrix from the same impedances -- with its own reciprocal, and
     therefore its own copy of the defect."""
     types = {name: _grounded_type() for name in ("A", "B", "C")}
@@ -643,7 +643,7 @@ def test_open_end_branch_in_the_automatic_phase_current_mode():
         self_impedance_formula="nan", mutual_impedance_formula="nan",
     )
     net.branches["A-B"].calculate_impedance(net.frequencies)
-    gi.run_fault(net, "F", auto_parallel_coefficients=True)
+    gi.run_fault(net, "F", phase_current_mode="auto")
 
     epr = _epr(net)
     assert all(math.isfinite(value) for value in epr.values())

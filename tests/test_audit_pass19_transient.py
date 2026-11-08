@@ -160,7 +160,7 @@ def _offset_fault_current(rms=1000.0, tau=0.04):
 
 def _state_space(model, *, waves=None, t_end=0.4, dt=1e-5, buses=None,
                  branches=(), fault="F1"):
-    study = TransientStudy(model, fault_name=fault)
+    study = TransientStudy(model, fault=fault)
     for name, wave in (waves or {"s": _sine()}).items():
         study.set_source_waveform(name, wave)
     study.set_observation(buses=list(buses or model.buses), branches=list(branches))
@@ -446,7 +446,7 @@ def test_fft_without_coupling_is_higher_and_the_warning_says_so():
     ``1/|1 - Z_m/Z_s|`` (the coupling scales every injection by ``1 - k``).
     """
     net = _two_bus_coupled("pl1")
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("src", waveforms.sinusoidal_with_dc_offset(
         amplitude=100.0 * math.sqrt(2.0), frequency_hz=50.0, t_on=0.0))
     study.set_observation(buses=["b1", "b2"])
@@ -478,7 +478,7 @@ def test_fft_without_coupling_is_higher_and_the_warning_says_so():
 
 def test_fft_coupling_warning_is_collected_as_a_diagnostic():
     net = _two_bus_coupled("pl1_diag")
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("src", waveforms.step(amplitude=100.0))
     study.set_observation(buses=["b2"])
     with diagnostics.collecting() as sink, warnings.catch_warnings():
@@ -539,7 +539,7 @@ def _ring_network(name, n_bus):
 
 
 def _fft_study(net):
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("src", waveforms.sinusoidal_with_dc_offset(
         amplitude=1000.0, frequency_hz=50.0, t_on=0.01, t_off=0.05,
         dc_amplitude=500.0, dc_decay_tau=0.02))
@@ -598,7 +598,7 @@ def _spectrum_inputs(study, t_end, dt):
     ],
 )
 def test_fft_block_size_follows_the_byte_budget(n_bus, budget, expected):
-    study = TransientStudy(_ring_network(f"p8_k_{n_bus}", 3), fault_name="F1")
+    study = TransientStudy(_ring_network(f"p8_k_{n_bus}", 3), fault="F1")
     assert study._fft_block_bins(n_bus, budget) == expected
 
 

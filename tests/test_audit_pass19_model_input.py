@@ -930,7 +930,7 @@ def test_sweep_and_rho_search_leave_other_results_as_they_found_them():
     # result included -- it no longer holds the result of the last point.
     assert net.stale_results() == []
     gi.run_fault(net, "F")
-    gi.find_max_rho_scaling(net, "F", ["b", "c"], u_max=1e9, c_bounds=(0.5, 2.0))
+    gi.find_max_rho_scaling(net, "F", ["b", "c"], u_limit=1e9, c_bounds=(0.5, 2.0))
     assert "G" not in net.stale_results()
 
 

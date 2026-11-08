@@ -214,7 +214,7 @@ def _build_network(name, bus_names, branch_specs, solve=True):
     gi.create_fault(name="flt", bus=bus_names[-1], scalings={50.0: 1.0}, network=net)
     gi.create_paths(network=net)
     if solve:
-        gi.run_fault(network=net, fault_name="flt")
+        gi.run_fault(network=net, fault="flt")
     return net
 
 

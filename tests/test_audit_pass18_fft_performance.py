@@ -149,7 +149,7 @@ def _chain_network(name: str, n_bus: int = 6):
 
 
 def _solved_study(net, *, block: int):
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src",
         waveforms.sinusoidal_with_dc_offset(

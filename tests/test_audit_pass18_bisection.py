@@ -95,7 +95,7 @@ def test_a_limit_inside_the_dip_is_answered_instead_of_refused():
     factor ... satisfies the constraint" while a whole band of factors does.
     """
     result = gi.find_max_rho_scaling(
-        _dip_network(), "F", ["F"], u_max=1.05
+        _dip_network(), "F", ["F"], u_limit=1.05
     )
     assert result["status"] == STATUS_NON_MONOTONE
     assert result["converged"] is False
@@ -108,7 +108,7 @@ def test_without_the_scan_the_same_call_still_refuses():
     the search is the 0.6.0 one and fails exactly as it did."""
     with pytest.raises(ValueError, match="no scaling factor"):
         gi.find_max_rho_scaling(
-            _dip_network(), "F", ["F"], u_max=1.05, monotonicity_grid=0
+            _dip_network(), "F", ["F"], u_limit=1.05, monotonicity_grid=0
         )
 
 
@@ -116,7 +116,7 @@ def test_the_non_monotone_result_is_a_measured_admissible_factor():
     """``c_max`` is never a guess: its EPR was evaluated and satisfied the
     limit, which is the one guarantee the docstring gives in either status."""
     net = _dip_network()
-    result = gi.find_max_rho_scaling(net, "F", ["F"], u_max=1.10)
+    result = gi.find_max_rho_scaling(net, "F", ["F"], u_limit=1.10)
     rho_0 = 100.0
     net.buses["F"].specific_earth_resistance = result["c_max"] * rho_0
     net.buses["F"].calculate_impedance(net.frequencies)
@@ -128,7 +128,7 @@ def test_the_non_monotone_result_is_a_measured_admissible_factor():
 
 def test_the_turn_is_reported_to_the_caller(caplog):
     with caplog.at_level(logging.WARNING, logger="groundinsight"):
-        gi.find_max_rho_scaling(_dip_network(), "F", ["F"], u_max=1.05)
+        gi.find_max_rho_scaling(_dip_network(), "F", ["F"], u_limit=1.05)
     messages = [r.getMessage() for r in caplog.records]
     assert any("not monotone" in m for m in messages)
 
@@ -137,14 +137,14 @@ def test_a_limit_below_the_whole_curve_says_why_it_is_uncertain():
     """Refusing is still right when nothing scanned satisfies the limit --
     but the message has to say that the scan is a scan, not a proof."""
     with pytest.raises(ValueError, match="not monotone"):
-        gi.find_max_rho_scaling(_dip_network(), "F", ["F"], u_max=1.005)
+        gi.find_max_rho_scaling(_dip_network(), "F", ["F"], u_limit=1.005)
 
 
 # --- the monotone case is unchanged ---------------------------------------------
 
 
 def test_a_monotone_search_still_converges():
-    result = gi.find_max_rho_scaling(_monotone_network(), "F", ["F"], u_max=5.0)
+    result = gi.find_max_rho_scaling(_monotone_network(), "F", ["F"], u_limit=5.0)
     assert result["converged"] is True
     assert result["status"] == "converged"
     assert result["u_epr_rms_at_c_max"] <= 5.0
@@ -154,10 +154,10 @@ def test_the_scan_narrows_the_starting_bracket():
     """The scan pays part of its own cost back: the bisection starts from one
     grid interval instead of six decades, which is worth three steps."""
     with_scan = gi.find_max_rho_scaling(
-        _monotone_network(), "F", ["F"], u_max=5.0
+        _monotone_network(), "F", ["F"], u_limit=5.0
     )
     without = gi.find_max_rho_scaling(
-        _monotone_network(), "F", ["F"], u_max=5.0, monotonicity_grid=0
+        _monotone_network(), "F", ["F"], u_limit=5.0, monotonicity_grid=0
     )
     assert with_scan["iterations"] < without["iterations"]
     assert with_scan["c_max"] == pytest.approx(without["c_max"], rel=2e-3)
@@ -184,5 +184,5 @@ def test_monotonicity_tolerates_solver_noise_but_not_a_real_turn():
 def test_an_unusable_grid_size_is_refused(bad):
     with pytest.raises(ValueError, match="monotonicity_grid"):
         gi.find_max_rho_scaling(
-            _monotone_network(), "F", ["F"], u_max=5.0, monotonicity_grid=bad
+            _monotone_network(), "F", ["F"], u_limit=5.0, monotonicity_grid=bad
         )
