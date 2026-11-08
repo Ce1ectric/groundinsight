@@ -94,6 +94,14 @@ migration checklist.
   stationarily). `Branch.parallel_coefficient` is no longer read by
   `TransientStudy`, and a state-space solve no longer fills `network.paths`;
   call `gi.create_paths(network)` where the paths are needed as data. (PH2)
+- **`session` and `db_session` are no longer in `groundinsight.__all__`, and
+  the session globals can no longer be assigned.** A star import does not
+  bind them any more, and assigning `gi.session`, `gi.engine` & co. no longer
+  redirects the module-level persistence functions, which now use the default
+  `gi.Database`. Migration: use the object that `gi.start_dbsession(path)`
+  returns, or `gi.Database(path)` — `db.session()` yields a short-lived
+  SQLAlchemy session, `db.engine` is the engine. Reading `gi.session` keeps
+  working with a `DeprecationWarning`. (ARC2)
 
 ### Added
 
@@ -122,6 +130,32 @@ migration checklist.
   phase split of a meshed network depends on frequency — routes of different
   R/L ratio — so that a DC offset and harmonics are divided as at `f_eval`.
   (PH2)
+- **`gi.Database(path, *, migrate=True)` — the SQLite store as an object.**
+  It owns its engine and session factory and offers the persistence
+  operations as methods: `save_bustype`/`load_bustypes`/`delete_bustype`,
+  the same for branch types, `save_network`/`load_network`/`list_networks`/
+  `delete_network`, `needs_migration`/`migrate`, `session()` for direct ORM
+  work, `close()` and the context-manager protocol; `":memory:"` gives a
+  private in-memory database. Up to 0.6.0 the store lived in module globals:
+  one database per process (a second file raised) and one session registry
+  shared by every caller, which a GUI with two open projects or a server
+  cannot use. Every method now runs in its own short-lived session; two
+  databases on two files work from two threads at the same time, and one
+  database works from several threads — operations on the same file are
+  serialised by a lock shared by every `Database` of the process on that
+  file. Without that lock, two threads saving networks that share a bus type
+  failed with `IntegrityError` in 5 of 5 trials; with it, in none. A type a
+  stored network still uses cannot be deleted. The new list/delete
+  operations are also available as `groundinsight.database.crud` functions.
+  (ARC2)
+- **The JSON project file carries `schema_version` and
+  `groundinsight_version`.** Both are top-level keys in front of the model
+  fields, so `Network.model_validate_json` still reads a project file and a
+  0.6.0 installation still opens one. `load_network_from_json` refuses a file
+  of a newer schema with a `ValueError` that names both versions, instead of
+  silently dropping what the newer release stored; files without the keys
+  (0.6.0 and earlier) load unchanged. The current version is
+  `groundinsight.io.project_file.SCHEMA_VERSION = 1`. (GUI1)
 
 ### Changed
 
@@ -200,6 +234,47 @@ migration checklist.
   newer" (they said 3.14); the wheel declares `Requires-Python >=3.12,<4.0`
   and the 3.12/3.13/3.14 classifiers, which Poetry derives from the
   constraint (F10, REL4, REL6).
+- **`save_network_to_json` writes UTF-8 atomically; `load_network_from_json`
+  reads UTF-8.** The file used to be opened without an encoding, so the
+  locale decided: on Windows (cp1252) a name with `Ω` or `ρ` raised
+  `UnicodeEncodeError` on save, and a file with `"Süd"` written on macOS came
+  back as mojibake. The writer serialised *after* truncating the target, so a
+  failure in between left an empty or half-written project. Now the network
+  is serialised first, written to a temporary file in the target directory,
+  flushed and `fsync`-ed, and moved over the target with `os.replace`; a
+  failure leaves the previous file byte-identical. The replaced file keeps
+  its permission bits, a read-only file is refused, a symbolic link keeps
+  pointing at the saved file; hard links to the old file keep the old
+  content. Reading accepts a UTF-8 byte-order mark. A file that is not UTF-8
+  (0.6.0 on a Windows machine) is read with the platform's preferred
+  encoding, as 0.6.0 did, with an `InputWarning` `PROJECT_FILE_LEGACY_ENCODING`.
+  Invalid JSON and a non-object top level are reported as `ValueError` naming
+  the file (formerly a `pydantic.ValidationError`, which is a `ValueError` as
+  well). The functions live in `groundinsight.io.project_file`; names and
+  signatures are unchanged, and `path` may be any `os.PathLike`. (GUI1)
+- **`gi.start_dbsession(path)` returns the default `Database`.** The
+  module-level helpers (`start_dbsession`, `close_dbsession`,
+  `save_*_to_db`, `load_*_from_db`) keep their names, arguments, messages and
+  errors and delegate to that object; without a started session they still
+  raise `RuntimeError`. They moved from the package `__init__` to
+  `groundinsight.database.store` (re-exported as before). (ARC2)
+- **`import groundinsight` no longer imports `matplotlib.pyplot`.** The
+  plotting helpers import it on their first call. The package import is
+  about a third faster — median 1.33 s → 0.83 s (minimum 0.95 s → 0.60 s,
+  40 interleaved runs in fresh interpreters) — and a program that never
+  plots, such as a GUI or a server, never loads pyplot's global state.
+  `typing.get_type_hints` on a plotting helper needs `matplotlib.pyplot`
+  imported first. (GUI8)
+
+### Deprecated
+
+- **`gi.session`, `gi.db_session`, `gi.engine` and `gi.SessionLocal`.** They
+  resolve to the default database's scoped session (the same object for both
+  session names), engine and session factory, or `None` without a started
+  session, and raise a `DeprecationWarning` on every access. Removal no
+  earlier than two releases and six months after this release. Replacement:
+  the methods of `gi.Database` (or of the object `gi.start_dbsession`
+  returns), `with db.session() as s:` for a raw session, `db.engine`. (ARC2)
 
 ### Fixed
 
@@ -474,6 +549,11 @@ migration checklist.
   `fft_block_bytes`, including that a very small budget costs time on
   mid-size networks (150 buses: 0.7 s at the default, 4.5 s at 1 MiB).
   (PH15, P8)
+- **Project files and the database object are documented.** The I/O page
+  describes the project-file format, its guarantees and the schema-version
+  table; the Database page the object, threading, the module-level helpers
+  and a migration table for the deprecated globals; the plotting page the
+  lazy import. (GUI1, ARC2, GUI8)
 
 ### Internal
 
@@ -703,6 +783,12 @@ migration checklist.
   loop. Three pass-10 tests that pinned the path-based factor (paths rebuilt
   with a log line, factor exactly 1.0) now assert untouched paths and the
   factor to 1e-12.
+- **The package `__init__` lost its persistence code** (878 → 455 lines):
+  JSON I/O moved to `io/project_file.py`, the database session and its
+  wrappers to `database/store.py`. Tests that pinned the removed globals
+  (`_set_session`, direct assignment of `gi.engine`/`gi.session`) were
+  rewritten to the new contract. A project file written by the genuine 0.6.0
+  writer is a test fixture. (ARC2, GUI1)
 
 ## [0.6.0] — 2026-09-01
 
