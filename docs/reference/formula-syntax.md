@@ -111,7 +111,11 @@ evaluated *at* 0 Hz as written — Carson's `f*log(658*sqrt(rho/f)/r)` is
 - a finite reactance that survives at 0 Hz (`0.25 + j*0.6`) has no physical
   reading; the real part is used and a `DCLimitWarning` names the formula;
 - a limit that is still moving over the last decade is used and announced by a
-  `DCLimitWarning` ("converges only slowly").
+  `DCLimitWarning` ("converges only slowly") — unless the step shrinks at
+  least five-fold per decade, which counts as converged however small the
+  value is: anything linear in `f` shrinks it ten-fold, Carson's
+  `pi**2*1e-4*f` included, while `sqrt(f)` (3.2-fold) and `log(f)` (not at
+  all) are reported.
 
 The how-to on data sheets shows what this means for the Carson formulas
 ([At 0 Hz](../howto/types-from-datasheets.md#at-0-hz)); the full treatment is

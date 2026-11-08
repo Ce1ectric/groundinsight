@@ -131,12 +131,38 @@ _DC_PROBE_FREQUENCIES: Tuple[float, ...] = (1e-6, 1e-7, 1e-8)
 #: comparison of two numbers that are both rounding error.
 _DC_CONVERGENCE_NOISE: float = 1e-12
 
-#: How much the *real* part may still move over the last decade before the
-#: limit counts as poorly resolved and is reported. A formula that approaches
-#: DC linearly moves by about 1e-13 relative; ``sqrt(f)`` moves by 7e-4 and
-#: ``log(1/f)`` does not converge at all. Both of the latter are reported.
+#: How much the *real* part may still move over the last decade, relative to
+#: its own value, before the limit counts as poorly resolved and is reported
+#: -- unless the step shrinks geometrically, see :data:`_DC_RESOLUTION_DECAY`.
+#: A conductor that approaches its DC resistance linearly moves by about
+#: 1e-13 relative; ``0.3 + sqrt(f)`` moves by 7e-4 and ``log(1/f)`` does not
+#: converge at all. The absolute part is a noise floor for values that are
+#: zero up to rounding, not a scale.
 _DC_RESOLUTION_RTOL: float = 1e-6
 _DC_RESOLUTION_ATOL: float = 1e-12
+
+#: Second way for a limit to count as resolved: the real-part step of the last
+#: decade is at most this fraction of the step of the decade before.
+#:
+#: The relative test above cannot judge a limit of zero. The earth-return
+#: resistance ``pi**2*1e-4*f`` of every Carson mutual impedance moves by 90 %
+#: of its value per decade however small it is, and against the absolute
+#: floor it was reported from a length of 11.3 m on although its value at
+#: 0 Hz is ``pi**2*1e-12*l`` Ohm. What resolves a limit is the trend of the
+#: step, not its size: a step that shrinks by a factor ``q`` per decade leaves
+#: at most ``q/(1-q)`` of itself between the last probe and the limit -- a
+#: quarter at this threshold. Anything analytic in ``f`` gives ``q = 0.1``,
+#: Carson's ``f*log(1/f)`` 0.12 on these probes and ``f**0.7`` sits at the
+#: threshold (0.1995); ``sqrt(f)`` gives 0.32 and ``log(f)`` 1, and those stay
+#: reported. The ratio is scale-free, so every branch of one BranchType gets
+#: the same verdict whatever its length, as the message wording already
+#: assumes (:func:`_describe_dc_formula`).
+#:
+#: What it does not catch is a linear approach with an absurd slope:
+#: ``0.25 + 1e6*f`` is 0.26 at the last probe and accepted. The value is
+#: always the formula at 1e-8 Hz, so the error is the change of the formula
+#: over 1e-8 Hz -- for a physical impedance far below anything measurable.
+_DC_RESOLUTION_DECAY: float = 0.2
 
 #: Factor by which ``|Im(Z)|`` must fall over the last decade to count as a
 #: vanishing reactance rather than a constant one. A genuine reactance falls
@@ -197,13 +223,15 @@ class DCLimitWarning(GroundinsightWarning):
       numerical dust -- a reactance cannot survive at DC, so the value is a
       modelling statement that the real-part fallback silently overrides;
     * the limit is not well resolved, i.e. the last decade of the approach
-      sequence still moved the real part appreciably;
+      sequence still moved the real part appreciably and the step did not
+      shrink at least five-fold from the decade before -- how ``sqrt(f)`` or
+      ``log(f)`` behave near DC;
     * the approach sequence diverges and the element is treated as an open
       circuit;
     * an impedance is zero (or too small to invert) at DC and is replaced by
       the small finite substitute of :func:`dc_substitute_impedance`.
 
-    It is a warning and not an error on purpose: in every one of the three
+    It is a warning and not an error on purpose: in every one of the four
     cases there is a defensible value to continue with, and a DC study that
     stops on the first unusual formula is of no use. Promote it with
     ``warnings.simplefilter("error", DCLimitWarning)`` to make a study strict.
@@ -406,6 +434,13 @@ def _resolve_dc(
     per decade and so passes the test) is not silently accepted either: it
     trips the resolution warning below, which names the residual.
 
+    That warning judges the real part twice. A step that is negligible
+    against the value itself is resolved; so is a step that shrinks at least
+    five-fold per decade (:data:`_DC_RESOLUTION_DECAY`), because then the
+    remaining distance to the limit is at most a quarter of it. The second
+    test is what keeps a limit of *zero* quiet -- the earth-return resistance
+    of a Carson mutual impedance -- for which no relative test can work.
+
     Parameters
     ----------
     compiled_func : Callable
@@ -482,25 +517,34 @@ def _resolve_dc(
 
     # Converged. Report if the last decade still moved the real part -- that
     # is the part which survives the real-part fallback, so it is the part
-    # whose resolution matters.
+    # whose resolution matters -- unless the step shrank geometrically, which
+    # is the only test that can judge a limit of zero.
     real_scale = max(abs(z1.real), abs(z2.real), abs(z3.real))
+    real_step = abs(z1.real - z2.real)
     real_move = abs(z2.real - z3.real)
-    if real_move > _DC_RESOLUTION_RTOL * real_scale + _DC_RESOLUTION_ATOL:
-        # Relative, for the same reason the pole message is: the residual of
-        # ``(0.30 + sqrt(f)) * l`` scales with ``l``, its share of the value
-        # does not.
+    negligible = (
+        real_move <= _DC_RESOLUTION_RTOL * real_scale + _DC_RESOLUTION_ATOL
+    )
+    geometric = real_move <= _DC_RESOLUTION_DECAY * real_step
+    if not (negligible or geometric):
+        # Both numbers are ratios, for the same reason the pole message
+        # quotes one: the residual of ``(0.30 + sqrt(f)) * l`` scales with
+        # ``l``, its share of the value and the step ratio do not.
         share = real_move / real_scale if real_scale else float("inf")
+        ratio = real_move / real_step if real_step else float("inf")
         warnings.warn(
             f"Impedance formula {_describe_dc_formula(formula_str)} "
-            f"converges only slowly towards 0 Hz: over the last decade of the "
-            f"approach ({_DC_PROBE_FREQUENCIES[1]:g} -> "
+            f"converges only slowly towards 0 Hz, if at all: over the last "
+            f"decade of the approach ({_DC_PROBE_FREQUENCIES[1]:g} -> "
             f"{_DC_PROBE_FREQUENCIES[2]:g} Hz) the real part still moved by "
-            f"{share:.2%} of its value. The value reached is used for the "
-            f"0 Hz bin, but it is an approximation of the limit rather than "
-            f"the limit. A formula that behaves like sqrt(f) or log(f) near "
-            f"DC does this; if the DC value is known analytically, state it "
-            f"in the formula (e.g. as a term without f) instead of leaving it "
-            f"to the limit.",
+            f"{share:.2%} of its value, and that step was {ratio:.2g} times "
+            f"the step of the decade before. A limit the approach can resolve "
+            f"shrinks the step at least five-fold per decade, ten-fold for "
+            f"anything linear in f; sqrt(f) shrinks it 3.2-fold and log(f) "
+            f"not at all. The value reached is used for the 0 Hz bin, but it "
+            f"is an approximation of the limit rather than the limit. If the "
+            f"DC value is known analytically, state it in the formula (e.g. "
+            f"as a term without f) instead of leaving it to the limit.",
             DCLimitWarning,
             stacklevel=3,
         )

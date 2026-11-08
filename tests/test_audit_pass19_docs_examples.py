@@ -352,8 +352,8 @@ def test_electrode_formulas_two_ways(types_ns):
 
 
 def test_carson_formulas_at_dc(types_ns):
-    """At 0 Hz: self -> R_s'*l and phase -> R_c'*l silently, mutual -> ~0 with a
-    DCLimitWarning ("converges only slowly"), as the page documents.
+    """At 0 Hz: self -> R_s'*l, phase -> R_c'*l and mutual -> ~0, all three
+    without a message, as the page documents.
 
     Second way: the analytic limit of each formula at f -> 0.
     """
@@ -369,24 +369,30 @@ def test_carson_formulas_at_dc(types_ns):
             value = compute_impedance(getattr(cable, field), [0.0], params)[0.0]
         assert value.imag == 0.0
         assert value.real == pytest.approx(limit, rel=1e-9)
-    with pytest.warns(DCLimitWarning, match="converges only slowly"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DCLimitWarning)
         mutual = compute_impedance(cable.mutual_impedance_formula, [0.0], params)[0.0]
     assert 0.0 <= mutual.real <= 1e-10 * 2.0
     assert mutual.imag == 0.0
 
 
-def test_carson_mutual_dc_warning_depends_on_length(types_ns):
-    """The DC note on the page: below about 11 m the same formula is silent.
+def test_carson_mutual_at_dc_is_quiet_at_every_length(types_ns):
+    """The DC note on the page: no length makes the mutual impedance warn.
 
-    The evaluator's convergence test uses an absolute floor of 1e-12 Ohm; the
-    real part pi^2*1e-4*f*l moves by 8.9e-11*l over the last decade.
+    Up to this pass it warned from about 11 m on: its real part
+    pi^2*1e-4*f*l moves by 8.9e-11*l over the last decade of the approach,
+    which an absolute floor of 1e-12 Ohm reported. The step shrinks ten-fold
+    per decade, the decrease the evaluator now accepts; second way: that
+    ratio, from the real part written out here, and the value it ends on.
     """
     formula = types_ns["cable"].mutual_impedance_formula
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", DCLimitWarning)
-        compute_impedance(formula, [0.0], {"rho": 100.0, "l": 0.01})
-    with pytest.warns(DCLimitWarning):
-        compute_impedance(formula, [0.0], {"rho": 100.0, "l": 0.012})
+    for length in (0.01, 0.012, 1.0, 100.0):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DCLimitWarning)
+            value = compute_impedance(formula, [0.0], {"rho": 100.0, "l": length})[0.0]
+        assert value.real == pytest.approx(math.pi**2 * 1e-12 * length, rel=1e-9)
+    real = [math.pi**2 * 1e-4 * f for f in (1e-6, 1e-7, 1e-8)]
+    assert (real[1] - real[2]) / (real[0] - real[1]) == pytest.approx(0.1, rel=1e-9)
 
 
 # --- the EN 50522 how-to ------------------------------------------------------

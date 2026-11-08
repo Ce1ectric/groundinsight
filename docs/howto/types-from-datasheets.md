@@ -389,13 +389,17 @@ types on this page it returns:
 |---|---|---|
 | `self_impedance_formula` | R<sub>s</sub>′·l, the DC resistance of the screen | none |
 | `phase_impedance_formula` | R<sub>c</sub>′·l, the DC resistance of the conductor | none |
-| `mutual_impedance_formula` | about π²·10⁻¹²·l Ω — zero for every practical purpose, r = 1 | a `DCLimitWarning` "converges only slowly towards 0 Hz" for branches longer than about 11 m |
+| `mutual_impedance_formula` | about π²·10⁻¹²·l Ω — zero for every practical purpose, r = 1 | none |
 
-The mutual impedance tends to zero, and its real part $\pi^2 10^{-4} f$ has no
-constant term; the evaluator's convergence test compares the last step with an
-absolute floor of 10⁻¹² Ω and reports it. For these formulas the warning is
-expected and does not affect the result. The electrode formulas contain no `f`
-and are unchanged at 0 Hz.
+The mutual impedance tends to zero: its real part $\pi^2 10^{-4} f$ has no
+constant term, so what the approach ends on, the value at 10⁻⁸ Hz, is all that
+is left of it. A test relative to the value cannot judge such a limit — the
+real part changes by 90 % of itself per decade however small it is — but the
+step shrinks ten-fold per decade, as for anything linear in `f`, and the
+evaluator accepts that as converged at every length. A formula that behaves
+like $\sqrt{f}$ or $\log f$ near 0 Hz still gets a `DCLimitWarning`
+"converges only slowly". The electrode formulas contain no `f` and are
+unchanged at 0 Hz.
 
 ## Check a new type
 

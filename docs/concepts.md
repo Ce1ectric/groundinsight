@@ -176,6 +176,17 @@ because mistaking a pole for a limit yields a very large finite impedance that
 behaves almost like the open circuit it should have been, whereas the opposite
 mistake would silently disconnect a real earthing conductor.
 
+A limit found this way is also checked for *resolution*: if the real part
+still moves over the last decade, the value at $10^{-8}$ Hz is only an
+approximation and a `DCLimitWarning` says so ("converges only slowly"). A move
+that is small against the value passes, and so does one that shrinks at least
+five-fold from one decade to the next — the only test that can judge a limit
+of zero, such as the earth-return resistance $\pi^2 10^{-4} f$ of a Carson
+mutual impedance: its change per decade is 90 % of its value, but that change
+shrinks ten-fold from one decade to the next. `sqrt(f)` (3.2-fold) and
+`log(f)` (not at all) are reported, and since the ratio does not depend on the
+length, all branches of one type get the same verdict.
+
 ### A finite reactance has no reading at DC
 
 `(0.25 + j*0.6)*l` reports the same reactance at every frequency, zero
