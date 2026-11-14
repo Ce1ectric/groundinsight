@@ -36,6 +36,15 @@ from groundinsight.analysis import find_max_rho_scaling, evaluate_max_epr_under_
 from groundinsight.models.core_models import Branch, BusType, BranchType
 from groundinsight.simulation import waveforms
 from groundinsight.simulation.transient import TransientStudy
+from tests._warning_policy import acknowledge
+
+#: The ring or parallel-route network of these tests splits its phase current
+#: by the proxy (PHASE_PROXY); the tests are about something else.
+RING = acknowledge("PHASE_PROXY")
+
+#: The fault scalings that the transient solvers ignore are the subject of the
+#: test.
+SCALINGS_IGNORED = acknowledge("TRANSIENT_SCALINGS_IGNORED")
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +54,7 @@ from groundinsight.simulation.transient import TransientStudy
 
 def _rms_epr(net, fault, bus):
     df = net.res_buses(fault)
-    row = df.filter((df["bus_name"] == bus) & (df["frequency_Hz"] == "RMS"))
+    row = df.filter((df["bus_name"] == bus) & df["is_rms"])
     return row["EPR_V"][0]
 
 
@@ -72,6 +81,7 @@ def _ring_network():
 # ---------------------------------------------------------------------------
 
 
+@RING
 def test_run_fault_rebuilds_paths_after_manual_active_flip():
     net = _ring_network()
     gi.run_fault(net, "F")
@@ -119,9 +129,10 @@ def _mutual_state_space_network(name):
     return net
 
 
+@SCALINGS_IGNORED
 def test_state_space_transient_invariant_to_fault_scalings():
     net = _mutual_state_space_network("pass9_ss_scalings")
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src",
         waveforms.sinusoidal_with_dc_offset(amplitude=100.0, frequency_hz=50.0, t_on=0.0),
@@ -164,7 +175,7 @@ def test_find_max_rho_scaling_restores_state_on_fresh_network():
     gi.create_fault(name="flt", bus="b1", scalings={50.0: 1.0}, network=net)
     assert net.active_fault is None and net.results == {}
 
-    find_max_rho_scaling(net, "flt", ["b0", "b1"], u_max=200.0)
+    find_max_rho_scaling(net, "flt", ["b0", "b1"], u_limit=200.0)
 
     assert net.active_fault is None            # not left dangling
     assert net.results == {}                   # no stale probe result
@@ -200,6 +211,7 @@ def test_evaluate_max_epr_under_k_clears_active_fault_on_fresh_network():
 # ---------------------------------------------------------------------------
 
 
+@RING
 def test_results_survive_sqlite_roundtrip(tmp_path):
     from groundinsight.database.crud import save_network, load_network
 
@@ -207,13 +219,11 @@ def test_results_survive_sqlite_roundtrip(tmp_path):
     gi.run_fault(net, "F")
     epr = _rms_epr(net, "F", "b3")
 
-    db = str(tmp_path / "pass9.db")
-    gi.start_dbsession(db)
-    try:
-        save_network(net, gi.session, overwrite=True)
-        loaded = load_network(net.name, gi.session)
-    finally:
-        gi.close_dbsession()
+    database = gi.Database(tmp_path / "pass9.db")
+    with database.session() as session:
+        save_network(net, session, overwrite=True)
+        loaded = load_network(net.name, session)
+    database.close()
 
     assert "F" in loaded.results
     reloaded_epr = next(rb.uepr for rb in loaded.results["F"].buses if rb.name == "b3")
@@ -240,8 +250,12 @@ def test_fault_active_flag_survives_json_roundtrip():
 # ---------------------------------------------------------------------------
 
 
+@RING
 def test_clear_pathfinder_cache_does_not_evict_same_named_network():
-    from groundinsight.pathfinder import clear_pathfinder_cache, _GRAPH_CACHE
+    # Since audit pass 19 (ARC2) every network owns its memo
+    # (``path_cache()``); the contract -- a scoped clear of A leaves the
+    # equally named B alone -- is checked on the two memos.
+    from groundinsight.pathfinder import clear_pathfinder_cache
 
     clear_pathfinder_cache()  # start clean
     net_a = _ring_network()
@@ -249,10 +263,10 @@ def test_clear_pathfinder_cache_does_not_evict_same_named_network():
     gi.run_fault(net_a, "F")
     gi.run_fault(net_b, "F")
 
-    assert any(k[0] == id(net_b) for k in _GRAPH_CACHE)
+    assert any(k[0] == id(net_b) for k in net_b.path_cache().keys("graph"))
     net_a.invalidate_paths()  # scoped clear of A only
-    assert not any(k[0] == id(net_a) for k in _GRAPH_CACHE)
-    assert any(k[0] == id(net_b) for k in _GRAPH_CACHE)   # B survives
+    assert net_a.path_cache().keys("graph") == []
+    assert any(k[0] == id(net_b) for k in net_b.path_cache().keys("graph"))  # B survives
 
 
 def test_topology_key_reflects_rewiring():

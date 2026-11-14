@@ -6,7 +6,46 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege (audit pass 19, SEC4): every job here only reads the
+# repository. Without this block the jobs inherit the repository's default
+# token scope, which can be read/write. Nothing here pushes either, so the
+# checkouts drop the token from .git/config (persist-credentials: false) and
+# a later step -- a dependency's install hook, say -- cannot read it.
+permissions:
+  contents: read
+
+# Every action is pinned to a full commit SHA, with the release as a comment
+# (audit pass 19, SEC3). A tag can be moved by whoever controls the action's
+# repository; a SHA cannot. Dependabot updates SHA and comment together.
 jobs:
+  # Lint, never format (STD8): ruff and numpydoc at the versions the dev group
+  # pins (tests/test_audit_pass19_standards.py keeps the two in step). A
+  # finding fails the workflow and is fixed by a deliberate edit, never by a
+  # formatter. Python 3.12 is the floor, so numpydoc's parse also refuses
+  # syntax newer than the floor.
+  lint:
+    name: Lint (ruff, numpydoc)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned linters
+        run: python -m pip install "ruff==0.17.4" "numpydoc==1.11.0"
+
+      - name: ruff (lint only, no formatter)
+        run: ruff check src tests scripts gui docs/snippets --output-format=github
+
+      - name: numpydoc (public API docstrings)
+        run: numpydoc lint $(git ls-files 'src/groundinsight/*.py')
+
   test:
     name: Tests (Python ${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -14,28 +53,68 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.14"]
+        # 3.12 is the floor pyproject declares (audit pass 19, F10; it is
+        # what groundfield requires), 3.14 the version the docs and the
+        # release workflow use. Every minor version in between is tested so
+        # the declared range is a claim the CI actually backs.
+        python-version: ["3.12", "3.13", "3.14"]
+        # macOS and Windows (audit pass 19, REL7) run the two ends of the
+        # range. What differs by platform -- paths, the default text
+        # encoding, SQLite file locking, the matplotlib backend -- does not
+        # depend on the minor version in between, and every extra runner is
+        # a full suite run. Seven jobs in total.
+        include:
+          - os: macos-latest
+            python-version: "3.12"
+          - os: macos-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.14"
+    # snok/install-poetry needs bash on Windows, where PowerShell is the
+    # default; bash exists on every runner, so all of them use it.
+    defaults:
+      run:
+        shell: bash
+    env:
+      # macOS and Windows runners default to GUI backends; plotting tests
+      # must not depend on a window server.
+      MPLBACKEND: Agg
+      # Strict mode (tests/conftest.py): a test that would skip for a missing
+      # import or tool fails instead -- this job installs the dev group, so
+      # such a skip means the install is incomplete, not that a test is
+      # optional.
+      GROUNDINSIGHT_CI: "1"
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v7
+        id: setup-python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
+        uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
         with:
           virtualenvs-create: true
           virtualenvs-in-project: true
 
+      # snok/install-poetry documents that restoring a cached .venv stalls
+      # Windows jobs, so Windows installs from scratch. The key carries the
+      # full Python version: a venv cached for 3.14.6 points at an
+      # interpreter that is gone once the runner image moves to 3.14.7.
       - name: Cache Poetry virtualenv
-        uses: actions/cache@v6
+        if: runner.os != 'Windows'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .venv
-          key: venv-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install project
         run: poetry install --no-interaction --with dev
@@ -43,10 +122,92 @@ jobs:
       - name: Run pytest with coverage
         run: poetry run pytest --cov=groundinsight --cov-report=xml --cov-report=term
 
+      # Exactly one job uploads: upload-artifact refuses a second artifact
+      # of the same name in a run, and 3.14 runs on three systems.
       - name: Upload coverage artifact
-        if: matrix.python-version == '3.14'
-        uses: actions/upload-artifact@v7
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-xml
           path: coverage.xml
           if-no-files-found: ignore
+
+  # The GUI distribution in gui/ (GUI phase 0): its own pyproject, the same
+  # version as the library, pinned to it. Its tests drive the NiceGUI app
+  # with NiceGUI's simulated user -- no browser, no display -- and check
+  # every displayed number against the library, so they run where the
+  # library suite runs, on the newest Python.
+  gui:
+    name: GUI tests (Python 3.14)
+    runs-on: ubuntu-latest
+    env:
+      MPLBACKEND: Agg
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      # One pip call with both: the GUI pins groundinsight to its own
+      # version, and pip satisfies that pin with the library of this commit
+      # instead of the release on PyPI.
+      - name: Install the library and the GUI from the checkout
+        run: python -m pip install ./ "./gui[test]"
+
+      - name: Run the GUI tests
+        working-directory: gui
+        run: python -m pytest
+
+  # The example notebooks in docs/examples are stored without outputs and
+  # executed by mkdocs-jupyter while the site is built (execute: true,
+  # allow_errors: false in mkdocs.yml). This job is therefore also the one
+  # place in CI that runs them: a notebook cell that raises fails the build.
+  # examples/pandapower_import.ipynb needs the pandapower extra.
+  docs:
+    name: Docs build (strict, notebooks executed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .venv
+          key: venv-docs-pandapower-${{ runner.os }}-py3.14-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install project with docs group and pandapower extra
+        run: poetry install --no-interaction --with docs --extras pandapower
+
+      # ``docs.yml`` only runs on ``main``, i.e. after the merge -- a broken
+      # cross-reference was therefore always found too late, on the branch
+      # that publishes the site. ``--strict`` turns every mkdocs warning into
+      # an error, which is what the deploy already relies on.
+      - name: Build the site strictly
+        run: poetry run mkdocs build --strict
+
+      # ``--strict`` does not notice a public name that no page renders. The
+      # inventory the build writes lists what was rendered; every name of
+      # ``groundinsight.__all__`` and ``groundinsight.api.__all__`` must be in
+      # it (DOC4).
+      - name: Check that every public name is rendered
+        run: poetry run python scripts/check_api_inventory.py site/objects.inv

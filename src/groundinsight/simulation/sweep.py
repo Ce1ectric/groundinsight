@@ -18,9 +18,11 @@ which is why :mod:`groundinsight.analysis.statistics` starts here.
 Overrides are applied by writing directly onto ``Bus.impedance`` and friends,
 which reaches the solver untouched because ``run_fault`` does not recompute
 impedances (see :class:`~groundinsight.electrical_network.ElectricalNetwork`).
-Everything is restored in a ``finally`` block, so an exception in the middle of
-a sweep leaves the network exactly as it was found -- including the path cache
-and the active fault.
+Every point's overrides are undone in a ``finally`` block, and the
+network-level state the solves write -- stored results, active fault, path
+set, assembled system -- is restored exactly when the sweep ends, however it
+ends: a finished sweep, a failing point with ``on_error="raise"``, a
+cancellation through ``should_cancel``.
 
 Example
 -------
@@ -32,6 +34,8 @@ directions::
         bus="Station_7",
         k_vectors={f"k1={k1:g}": (k1, 1e-4, 3e-4, 0.0, 0.0)
                    for k1 in (0.01, 0.02, 0.05, 0.1)},
+        frequencies=net.frequencies,
+        rho=100.0,
     )
     study = gi.run_sweep(
         net, fault="F_Station_7", points=points,
@@ -45,14 +49,16 @@ directions::
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import polars as pl
 from pydantic import BaseModel, Field
 
+from groundinsight._state import restore_always
 from groundinsight.analysis.decomposition import Cut, analyze_cuts
 from groundinsight.models.core_models import ComplexNumber, Network
 from groundinsight.network_operations import run_fault
+from groundinsight.progress import StudyHooks
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +103,14 @@ class SweepPoint(BaseModel):
     parameters : dict of str to object, optional
         Free-form values copied into every result row as columns, so a plot can
         be made against the physical parameter rather than against the label.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> point = gi.SweepPoint(label="wet", bus_rho={"bus2": 30.0},
+    ...                       parameters={"rho_Ohm_m": 30.0})
+    >>> point.label, point.bus_rho
+    ('wet', {'bus2': 30.0})
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -125,6 +139,17 @@ class SweepResult(BaseModel):
     failures : dict of str to str
         Points that raised, mapped to the exception text. They are absent from
         the frames; the sweep does not abort on one bad point.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> study = gi.run_sweep(build_minimal(), fault="fault",
+    ...                      points=[gi.SweepPoint(label="base")])
+    >>> study.labels, study.failures
+    (['base'], {})
+    >>> study.buses().columns[:3]
+    ['point', 'bus_name', 'fault']
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -138,20 +163,54 @@ class SweepResult(BaseModel):
     _cuts: Optional[pl.DataFrame] = None
 
     def buses(self) -> pl.DataFrame:
-        """Per-bus results of every point, stacked."""
+        """
+        Per-bus results of every point, stacked.
+
+        Returns
+        -------
+        pl.DataFrame
+            The ``res_buses`` frames of the points with a ``point`` column first;
+            empty when no point produced a result.
+        """
         return _or_empty(self._buses)
 
     def branches(self) -> pl.DataFrame:
-        """Per-branch results of every point, stacked."""
+        """
+        Per-branch results of every point, stacked.
+
+        Returns
+        -------
+        pl.DataFrame
+            The ``res_branches`` frames of the points with a ``point`` column
+            first; empty unless the sweep was run with ``collect_branches=True``.
+        """
         return _or_empty(self._branches)
 
     def impedances(self) -> pl.DataFrame:
-        """``Z_G`` and both reduction factors of every point, stacked."""
+        """
+        ``Z_G`` and both reduction factors of every point, stacked.
+
+        Returns
+        -------
+        pl.DataFrame
+            The ``res_all_impedances`` frames of the points with a ``point``
+            column first.
+        """
         return _or_empty(self._impedances)
 
     def cuts(self) -> pl.DataFrame:
-        """Side impedances and side reduction factors, stacked. Empty when the
-        sweep was run without cuts."""
+        """
+        Side impedances and side reduction factors, stacked.
+
+        Empty when the sweep was run without cuts.
+
+        Returns
+        -------
+        pl.DataFrame
+            The :meth:`CutAnalysis.to_polars
+            <groundinsight.CutAnalysis.to_polars>` frames of the points with a
+            ``point`` column first.
+        """
         return _or_empty(self._cuts)
 
     def __str__(self):
@@ -195,6 +254,7 @@ def rho_f_points(
     Returns
     -------
     list of SweepPoint
+        One point per catalogue entry, labelled with its key.
 
     Raises
     ------
@@ -203,6 +263,15 @@ def rho_f_points(
         the solver rejects as non-passive. The offending label and frequency are
         named, because an unconstrained least-squares fit can land there and the
         failure is otherwise reported far from its cause.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> points = gi.rho_f_points(bus="bus3",
+    ...                          k_vectors={"dry": (2.0, 0.0, 0.0, 0.0, 0.0)},
+    ...                          frequencies=[50.0], rho=100.0)
+    >>> [p.label for p in points], sorted(points[0].bus_impedance)
+    (['dry'], ['bus3'])
     """
     points: List[SweepPoint] = []
     for label, k in k_vectors.items():
@@ -241,54 +310,129 @@ def rho_f_points(
     return points
 
 
-def _apply(network: Network, point: SweepPoint) -> Dict[str, Any]:
-    """Apply a point's overrides and return what is needed to undo them."""
-    saved: Dict[str, Any] = {
-        "impedance": {},
-        "rho": {},
+def _new_saved() -> Dict[str, Any]:
+    """Build the empty undo record :func:`_apply` fills in.
+
+    The record is created by the caller and handed *into* :func:`_apply`
+    rather than returned from it. That is the whole point: ``run_sweep``
+    restores in a ``finally`` block, and a record that only exists as a
+    return value never reaches that block when ``_apply`` raises half-way
+    through -- every mutation made up to that point then stayed on the
+    network and every later point of the sweep was solved on it.
+
+    Returns
+    -------
+    dict
+        ``{"buses": {}, "order": [], "scalings": None, "scalings_fault": None}``.
+        ``order`` lists the bus names in the order they were first touched,
+        so :func:`_restore` can undo them in reverse.
+    """
+    return {
+        "buses": {},
+        "order": [],
         "scalings": None,
         "scalings_fault": None,
     }
 
+
+def _snapshot_bus(saved: Dict[str, Any], bus_name: str, bus) -> None:
+    """Record a bus's pre-override state exactly once.
+
+    ``setdefault`` is essential rather than convenient: a point may override
+    both ``bus_impedance`` and ``bus_rho`` of the same bus, and the rho branch
+    re-evaluates the type formula *after* the impedance branch has already
+    written its table. A second snapshot would therefore capture the override
+    as if it were the original and the bus would keep it for the rest of the
+    sweep.
+
+    All five fields the overrides can reach are captured together --
+    ``specific_earth_resistance``, ``impedance`` and the lumped ``R``/``L``/``C``
+    that ``Bus.calculate_impedance`` recomputes alongside the impedance table.
+    """
+    if bus_name in saved["buses"]:
+        return
+    saved["buses"][bus_name] = {
+        "specific_earth_resistance": bus.specific_earth_resistance,
+        "impedance": dict(bus.impedance),
+        "R": dict(bus.R) if bus.R is not None else None,
+        "L": dict(bus.L) if bus.L is not None else None,
+        "C": dict(bus.C) if bus.C is not None else None,
+    }
+    saved["order"].append(bus_name)
+
+
+def _apply(network: Network, point: SweepPoint, saved: Dict[str, Any]) -> None:
+    """Apply a point's overrides, recording the undo information in ``saved``.
+
+    Every referenced bus name is validated *before* the first mutation, so a
+    point that names a bus the network does not have leaves the network
+    untouched instead of half-overridden. Whatever is mutated after that is
+    snapshotted into ``saved`` first, and ``saved`` belongs to the caller, so
+    :func:`_restore` can undo the work of a call that raised in the middle.
+
+    Parameters
+    ----------
+    network : Network
+        The network to mutate in place.
+    point : SweepPoint
+        The overrides to apply.
+    saved : dict
+        Undo record from :func:`_new_saved`, filled in as the overrides are
+        applied.
+
+    Raises
+    ------
+    ValueError
+        If the point references a bus that is not part of ``network``.
+    """
+    unknown = sorted(
+        {name for name in point.bus_impedance if name not in network.buses}
+        | {name for name in point.bus_rho if name not in network.buses}
+    )
+    if unknown:
+        raise ValueError(
+            f"Sweep point '{point.label}' overrides bus(es) {unknown}, which "
+            f"are not in network '{network.name}'. Available: "
+            f"{sorted(network.buses)}."
+        )
+
     for bus_name, table in point.bus_impedance.items():
-        if bus_name not in network.buses:
-            raise ValueError(
-                f"Sweep point '{point.label}' overrides bus '{bus_name}', which "
-                f"is not in network '{network.name}'."
-            )
         bus = network.buses[bus_name]
-        saved["impedance"][bus_name] = dict(bus.impedance)
+        _snapshot_bus(saved, bus_name, bus)
         bus.impedance = {
             float(f): ComplexNumber(real=complex(z).real, imag=complex(z).imag)
             for f, z in table.items()
         }
 
     for bus_name, rho in point.bus_rho.items():
-        if bus_name not in network.buses:
-            raise ValueError(
-                f"Sweep point '{point.label}' overrides rho of bus "
-                f"'{bus_name}', which is not in network '{network.name}'."
-            )
         bus = network.buses[bus_name]
-        saved["rho"][bus_name] = (bus.specific_earth_resistance, dict(bus.impedance))
+        _snapshot_bus(saved, bus_name, bus)
         bus.specific_earth_resistance = rho
         bus.calculate_impedance(network.frequencies)
 
-    return saved
-
 
 def _restore(network: Network, saved: Dict[str, Any]) -> None:
-    """Undo :func:`_apply`. Never raises on a missing element -- a restore that
-    fails would leave the network in a state no later point can trust."""
-    for bus_name, table in saved["impedance"].items():
+    """
+    Undo :func:`_apply`.
+
+    Never raises on a missing element -- a restore that fails would leave the
+    network in a state no later point can trust.
+
+    Buses are restored in reverse order of application, which is the order
+    that makes a restore correct when two overrides of one point interact
+    (an ``impedance`` table written first and then overwritten by the rho
+    branch's re-evaluation of the type formula).
+    """
+    for bus_name in reversed(saved["order"]):
         bus = network.buses.get(bus_name)
-        if bus is not None:
-            bus.impedance = table
-    for bus_name, (rho, table) in saved["rho"].items():
-        bus = network.buses.get(bus_name)
-        if bus is not None:
-            bus.specific_earth_resistance = rho
-            bus.impedance = table
+        if bus is None:
+            continue
+        state = saved["buses"][bus_name]
+        bus.specific_earth_resistance = state["specific_earth_resistance"]
+        bus.impedance = state["impedance"]
+        bus.R = state["R"]
+        bus.L = state["L"]
+        bus.C = state["C"]
     if saved["scalings_fault"] is not None:
         fault = network.faults.get(saved["scalings_fault"])
         if fault is not None:
@@ -317,6 +461,8 @@ def run_sweep(
     phase_current_mode: str = "auto",
     collect_branches: bool = False,
     on_error: str = "record",
+    progress: Optional[Callable[[int, int, str], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> SweepResult:
     """
     Solve one fault once per parameter point and stack the results.
@@ -324,7 +470,10 @@ def run_sweep(
     Parameters
     ----------
     network : Network
-        The network. Left exactly as found, whatever happens.
+        The network. Left exactly as found, whatever happens: the point
+        overrides are undone after every point, and the stored results,
+        active fault, path set and assembled system are the ones it had
+        before the sweep.
     fault : str
         Fault to solve, unless a point names its own.
     points : sequence of SweepPoint
@@ -341,16 +490,41 @@ def run_sweep(
         ``"record"`` (default) notes a failing point in ``SweepResult.failures``
         and carries on -- a single non-passive parameter combination should not
         throw away the rest of a long grid. ``"raise"`` propagates instead.
+    progress : callable, optional
+        ``progress(done, total, label)``, called after every point (a failed
+        one included) with ``total = len(points)`` and the point's label.
+        See :mod:`groundinsight.progress`.
+    should_cancel : callable, optional
+        Asked before every point; a true answer raises
+        :class:`~groundinsight.progress.StudyCancelled`.
 
     Returns
     -------
     SweepResult
+        The stacked results of every point and the failures of the points
+        that did not solve.
 
     Raises
     ------
     ValueError
         If ``points`` is empty, if two points share a label, if the fault is
         unknown, or if ``on_error`` is not one of the two accepted values.
+    TypeError
+        If ``progress`` or ``should_cancel`` is not callable.
+    StudyCancelled
+        If ``should_cancel()`` returned true; the network is as found.
+
+    Examples
+    --------
+    >>> import polars as pl
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> points = [gi.SweepPoint(label=f"Z={z}", bus_impedance={"bus3": {50.0: z}},
+    ...                         parameters={"Z_bus3_Ohm": z}) for z in (0.5, 1.0, 2.0)]
+    >>> study = gi.run_sweep(build_minimal(), fault="fault", points=points)
+    >>> frame = study.buses().filter((pl.col("bus_name") == "bus3") & pl.col("is_rms"))
+    >>> [round(v, 2) for v in frame["EPR_V"]]
+    [11.73, 18.03, 24.28]
     """
     if on_error not in ("record", "raise"):
         raise ValueError(
@@ -371,8 +545,8 @@ def run_sweep(
             f"Fault '{fault}' does not exist in network '{network.name}'. "
             f"Available: {sorted(network.faults)}."
         )
+    hooks = StudyHooks("run_sweep", len(points), progress, should_cancel)
 
-    previous_active = network.active_fault
     bus_frames: List[pl.DataFrame] = []
     branch_frames: List[pl.DataFrame] = []
     impedance_frames: List[pl.DataFrame] = []
@@ -380,59 +554,66 @@ def run_sweep(
     solved: List[str] = []
     failures: Dict[str, str] = {}
 
-    for point in points:
-        target = point.fault or fault
-        if target not in network.faults:
-            message = (
-                f"point '{point.label}' names fault '{target}', which does not "
-                f"exist in network '{network.name}'"
-            )
-            if on_error == "raise":
-                raise ValueError(message)
-            failures[point.label] = message
-            continue
-
-        saved = None
-        try:
-            saved = _apply(network, point)
-            if point.fault_scalings is not None:
-                fault_obj = network.faults[target]
-                saved["scalings_fault"] = target
-                saved["scalings"] = dict(fault_obj.scalings)
-                fault_obj.scalings = dict(point.fault_scalings)
-
-            run_fault(network, target, phase_current_mode=phase_current_mode)
-
-            bus_frames.append(_tag(network.res_buses(fault=target), point))
-            if collect_branches:
-                branch_frames.append(
-                    _tag(network.res_branches(fault=target), point)
+    # Every solve below replaces the stored result, the active fault and the
+    # assembled system, and may drop the path set; restoring them exactly is
+    # what "left exactly as found" means -- also for the previously active
+    # fault and its cached result (S8). Bus overrides are undone per point.
+    with restore_always(network):
+        for point in points:
+            hooks.checkpoint()
+            target = point.fault or fault
+            if target not in network.faults:
+                message = (
+                    f"point '{point.label}' names fault '{target}', which does not "
+                    f"exist in network '{network.name}'"
                 )
-            impedance_frames.append(
-                _tag(
-                    network.res_all_impedances().filter(
-                        pl.col("fault_name") == target
-                    ),
-                    point,
+                if on_error == "raise":
+                    raise ValueError(message)
+                failures[point.label] = message
+                hooks.advance(point.label)
+                continue
+
+            # Bound before the call, not from its return value: ``_apply`` may
+            # raise after it has already mutated the network, and ``finally``
+            # has to see everything it did up to that point (S2).
+            saved = _new_saved()
+            try:
+                _apply(network, point, saved)
+                if point.fault_scalings is not None:
+                    fault_obj = network.faults[target]
+                    saved["scalings_fault"] = target
+                    saved["scalings"] = dict(fault_obj.scalings)
+                    fault_obj.scalings = dict(point.fault_scalings)
+
+                run_fault(network, target, phase_current_mode=phase_current_mode)
+
+                bus_frames.append(_tag(network.res_buses(fault=target), point))
+                if collect_branches:
+                    branch_frames.append(
+                        _tag(network.res_branches(fault=target), point)
+                    )
+                impedance_frames.append(
+                    _tag(
+                        network.res_all_impedances().filter(
+                            pl.col("fault_name") == target
+                        ),
+                        point,
+                    )
                 )
-            )
-            if cuts:
-                analysis = analyze_cuts(network, fault=target, cuts=cuts)
-                cut_frames.append(_tag(analysis.to_polars(), point))
-            solved.append(point.label)
-        except Exception as exc:  # noqa: BLE001 -- recorded, then re-raised or not
-            if on_error == "raise":
-                raise
-            logger.warning(
-                "Sweep point '%s' failed and was skipped: %s", point.label, exc
-            )
-            failures[point.label] = str(exc)
-        finally:
-            if saved is not None:
+                if cuts:
+                    analysis = analyze_cuts(network, fault=target, cuts=cuts)
+                    cut_frames.append(_tag(analysis.to_polars(), point))
+                solved.append(point.label)
+            except Exception as exc:  # noqa: BLE001 -- recorded, then re-raised or not
+                if on_error == "raise":
+                    raise
+                logger.warning(
+                    "Sweep point '%s' failed and was skipped: %s", point.label, exc
+                )
+                failures[point.label] = str(exc)
+            finally:
                 _restore(network, saved)
-
-    if previous_active is not None and previous_active in network.faults:
-        network.set_active_fault(previous_active)
+            hooks.advance(point.label)
 
     result = SweepResult(fault=fault, labels=solved, failures=failures)
     result._buses = pl.concat(bus_frames, how="diagonal") if bus_frames else None

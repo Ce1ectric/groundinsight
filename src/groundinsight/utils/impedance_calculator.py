@@ -1,4 +1,4 @@
-# impedance_calculator.py
+# utils/impedance_calculator.py
 
 """
 Frequency-domain evaluation of impedance formula strings.
@@ -14,7 +14,7 @@ public API unchanged:
 
 1.  **Compilation cache.** ``sympy.sympify`` and ``sympy.lambdify`` are
     expensive (each call typically costs a few milliseconds plus an ``exec``
-    of the generated source). They are now memoised in
+    of the generated source). They are memoised in
     :func:`_compile_formula` with an ``lru_cache`` keyed on the formula
     string and the tuple of parameter names. All buses sharing a
     :class:`BusType` and all branches sharing a :class:`BranchType` therefore
@@ -32,13 +32,15 @@ sweeps that build many ad-hoc formulas) can release the compiled callables
 via :func:`clear_formula_cache`.
 """
 
+import math
 import warnings
 
 import sympy as sp
 import numpy as np
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
+from groundinsight.diagnostics import GroundinsightWarning
 from groundinsight.utils.validations import assert_safe_formula
 
 
@@ -66,12 +68,12 @@ _OPEN_END_SENTINEL = "nan"
 #: argument of the compiled callable; ``I`` and ``j`` are both spellings of the
 #: imaginary unit and are substituted before evaluation.
 #:
-#: Passing one of them used to lose the caller's value without a word --
-#: ``params={"I": 5.0}`` evaluated ``I`` as ``1j`` and dropped the 5.0, and
-#: ``params={"f": 7.0}`` failed with ``duplicate argument 'f' in function
-#: definition``, a leaked Python error from generated code. ``I`` for current
-#: is about as natural a name as exists in power engineering, which is exactly
-#: why the collision has to be loud rather than resolved by a coin toss.
+#: Unchecked, passing one of them would lose the caller's value without a
+#: word -- ``params={"I": 5.0}`` would evaluate ``I`` as ``1j`` and drop the
+#: 5.0, and ``params={"f": 7.0}`` would fail with ``duplicate argument 'f' in
+#: function definition``, a leaked Python error from generated code. ``I`` for
+#: current is about as natural a name as exists in power engineering, which is
+#: exactly why the collision has to be loud rather than resolved by a coin toss.
 _RESERVED_PARAM_NAMES: Tuple[str, ...] = ("f", "I", "j")
 
 
@@ -129,12 +131,38 @@ _DC_PROBE_FREQUENCIES: Tuple[float, ...] = (1e-6, 1e-7, 1e-8)
 #: comparison of two numbers that are both rounding error.
 _DC_CONVERGENCE_NOISE: float = 1e-12
 
-#: How much the *real* part may still move over the last decade before the
-#: limit counts as poorly resolved and is reported. A formula that approaches
-#: DC linearly moves by about 1e-13 relative; ``sqrt(f)`` moves by 7e-4 and
-#: ``log(1/f)`` does not converge at all. Both of the latter are reported.
+#: How much the *real* part may still move over the last decade, relative to
+#: its own value, before the limit counts as poorly resolved and is reported
+#: -- unless the step shrinks geometrically, see :data:`_DC_RESOLUTION_DECAY`.
+#: A conductor that approaches its DC resistance linearly moves by about
+#: 1e-13 relative; ``0.3 + sqrt(f)`` moves by 7e-4 and ``log(1/f)`` does not
+#: converge at all. The absolute part is a noise floor for values that are
+#: zero up to rounding, not a scale.
 _DC_RESOLUTION_RTOL: float = 1e-6
 _DC_RESOLUTION_ATOL: float = 1e-12
+
+#: Second way for a limit to count as resolved: the real-part step of the last
+#: decade is at most this fraction of the step of the decade before.
+#:
+#: The relative test above cannot judge a limit of zero. The earth-return
+#: resistance ``pi**2*1e-4*f`` of every Carson mutual impedance moves by 90 %
+#: of its value per decade however small it is, and against the absolute
+#: floor it would be reported from a length of 11.3 m on although its value at
+#: 0 Hz is ``pi**2*1e-12*l`` Ohm. What resolves a limit is the trend of the
+#: step, not its size: a step that shrinks by a factor ``q`` per decade leaves
+#: at most ``q/(1-q)`` of itself between the last probe and the limit -- a
+#: quarter at this threshold. Anything analytic in ``f`` gives ``q = 0.1``,
+#: Carson's ``f*log(1/f)`` 0.12 on these probes and ``f**0.7`` sits at the
+#: threshold (0.1995); ``sqrt(f)`` gives 0.32 and ``log(f)`` 1, and those stay
+#: reported. The ratio is scale-free, so every branch of one BranchType gets
+#: the same verdict whatever its length, as the message wording already
+#: assumes (:func:`_describe_dc_formula`).
+#:
+#: What it does not catch is a linear approach with an absurd slope:
+#: ``0.25 + 1e6*f`` is 0.26 at the last probe and accepted. The value is
+#: always the formula at 1e-8 Hz, so the error is the change of the formula
+#: over 1e-8 Hz -- for a physical impedance far below anything measurable.
+_DC_RESOLUTION_DECAY: float = 0.2
 
 #: Factor by which ``|Im(Z)|`` must fall over the last decade to count as a
 #: vanishing reactance rather than a constant one. A genuine reactance falls
@@ -186,7 +214,7 @@ _DC_SUBSTITUTE_FACTOR: float = float(np.sqrt(np.finfo(float).eps))
 _DC_SUBSTITUTE_FALLBACK_OHM: float = 1.0
 
 
-class DCLimitWarning(UserWarning):
+class DCLimitWarning(GroundinsightWarning):
     """Something about a formula at 0 Hz needed a decision rather than a value.
 
     Raised in four situations, all of them at ``f = 0`` only:
@@ -195,17 +223,33 @@ class DCLimitWarning(UserWarning):
       numerical dust -- a reactance cannot survive at DC, so the value is a
       modelling statement that the real-part fallback silently overrides;
     * the limit is not well resolved, i.e. the last decade of the approach
-      sequence still moved the real part appreciably;
+      sequence still moved the real part appreciably and the step did not
+      shrink at least five-fold from the decade before -- how ``sqrt(f)`` or
+      ``log(f)`` behave near DC;
     * the approach sequence diverges and the element is treated as an open
       circuit;
     * an impedance is zero (or too small to invert) at DC and is replaced by
       the small finite substitute of :func:`dc_substitute_impedance`.
 
-    It is a warning and not an error on purpose: in every one of the three
+    It is a warning and not an error on purpose: in every one of the four
     cases there is a defensible value to continue with, and a DC study that
     stops on the first unusual formula is of no use. Promote it with
     ``warnings.simplefilter("error", DCLimitWarning)`` to make a study strict.
+
+    A real part of minus infinity -- ``log(f)`` at 0 Hz -- is deliberately not
+    a fifth case: it is the limit of a negative resistance, there is no
+    defensible value to continue with, and :func:`check_passive_impedance`
+    refuses it like any negative real part.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> issubclass(gi.DCLimitWarning, gi.GroundinsightWarning)
+    True
     """
+
+    default_code = "DC_LIMIT"
+
 
 
 def _is_open_end(formula_str: str) -> bool:
@@ -252,8 +296,8 @@ def _evaluate(compiled_func, freqs_arr: np.ndarray, param_values: Tuple[Any, ...
 
     Constant-in-frequency formulas (e.g. ``"5 + 0j"``) return a scalar from
     lambdify regardless of the input shape; broadcast to the requested
-    frequency grid so the output has one entry per frequency, matching the
-    legacy behaviour. A formula with an unbound symbol (e.g. ``rho`` not
+    frequency grid so the output has one entry per frequency, as for any
+    other formula. A formula with an unbound symbol (e.g. ``rho`` not
     present in ``params``) makes lambdify return a SymPy expression that
     ``np.asarray(..., dtype=complex)`` rejects; that is the path which turns
     "missing parameter" into a ``ValueError`` in the caller.
@@ -339,7 +383,7 @@ def _compile_formula(formula_str: str, param_names: Tuple[str, ...]):
         # A name the caller declared as a parameter *is* a parameter. Names
         # that are not declared keep their SymPy meaning, so ``sqrt``, ``log``,
         # ``exp`` and ``pi`` continue to work as functions and constants.
-        local_symbols: Dict[str, sp.Symbol] = dict(zip(param_names, sym_params))
+        local_symbols: Dict[str, sp.Symbol] = dict(zip(param_names, sym_params, strict=True))
         local_symbols["f"] = sym_f
 
         expr = sp.sympify(formula_str, locals=local_symbols)
@@ -400,6 +444,13 @@ def _resolve_dc(
     ``d2 <= d1`` but is still moving (``log(1/f)`` moves by a constant amount
     per decade and so passes the test) is not silently accepted either: it
     trips the resolution warning below, which names the residual.
+
+    That warning judges the real part twice. A step that is negligible
+    against the value itself is resolved; so is a step that shrinks at least
+    five-fold per decade (:data:`_DC_RESOLUTION_DECAY`), because then the
+    remaining distance to the limit is at most a quarter of it. The second
+    test is what keeps a limit of *zero* quiet -- the earth-return resistance
+    of a Carson mutual impedance -- for which no relative test can work.
 
     Parameters
     ----------
@@ -477,25 +528,34 @@ def _resolve_dc(
 
     # Converged. Report if the last decade still moved the real part -- that
     # is the part which survives the real-part fallback, so it is the part
-    # whose resolution matters.
+    # whose resolution matters -- unless the step shrank geometrically, which
+    # is the only test that can judge a limit of zero.
     real_scale = max(abs(z1.real), abs(z2.real), abs(z3.real))
+    real_step = abs(z1.real - z2.real)
     real_move = abs(z2.real - z3.real)
-    if real_move > _DC_RESOLUTION_RTOL * real_scale + _DC_RESOLUTION_ATOL:
-        # Relative, for the same reason the pole message is: the residual of
-        # ``(0.30 + sqrt(f)) * l`` scales with ``l``, its share of the value
-        # does not.
+    negligible = (
+        real_move <= _DC_RESOLUTION_RTOL * real_scale + _DC_RESOLUTION_ATOL
+    )
+    geometric = real_move <= _DC_RESOLUTION_DECAY * real_step
+    if not (negligible or geometric):
+        # Both numbers are ratios, for the same reason the pole message
+        # quotes one: the residual of ``(0.30 + sqrt(f)) * l`` scales with
+        # ``l``, its share of the value and the step ratio do not.
         share = real_move / real_scale if real_scale else float("inf")
+        ratio = real_move / real_step if real_step else float("inf")
         warnings.warn(
             f"Impedance formula {_describe_dc_formula(formula_str)} "
-            f"converges only slowly towards 0 Hz: over the last decade of the "
-            f"approach ({_DC_PROBE_FREQUENCIES[1]:g} -> "
+            f"converges only slowly towards 0 Hz, if at all: over the last "
+            f"decade of the approach ({_DC_PROBE_FREQUENCIES[1]:g} -> "
             f"{_DC_PROBE_FREQUENCIES[2]:g} Hz) the real part still moved by "
-            f"{share:.2%} of its value. The value reached is used for the "
-            f"0 Hz bin, but it is an approximation of the limit rather than "
-            f"the limit. A formula that behaves like sqrt(f) or log(f) near "
-            f"DC does this; if the DC value is known analytically, state it "
-            f"in the formula (e.g. as a term without f) instead of leaving it "
-            f"to the limit.",
+            f"{share:.2%} of its value, and that step was {ratio:.2g} times "
+            f"the step of the decade before. A limit the approach can resolve "
+            f"shrinks the step at least five-fold per decade, ten-fold for "
+            f"anything linear in f; sqrt(f) shrinks it 3.2-fold and log(f) "
+            f"not at all. The value reached is used for the 0 Hz bin, but it "
+            f"is an approximation of the limit rather than the limit. If the "
+            f"DC value is known analytically, state it in the formula (e.g. "
+            f"as a term without f) instead of leaving it to the limit.",
             DCLimitWarning,
             stacklevel=3,
         )
@@ -520,101 +580,139 @@ def clear_formula_cache() -> None:
     _compile_formula.cache_clear()
 
 
-def compute_impedance(
+def _repair_non_finite(
+    compiled_func,
+    freqs_arr: np.ndarray,
+    param_values: Tuple[Any, ...],
+    result_arr: np.ndarray,
+) -> np.ndarray:
+    """Repair the non-finite values of a real-axis evaluation.
+
+    The two steps :func:`_impedance_array` applies to a raw evaluation before
+    the 0 Hz treatment: NaN is re-evaluated on the complex plane, and the
+    ``inf+nan*j`` of a complex division by zero is cleared to a clean
+    infinity. Both only act on non-finite values, so the caller skips this
+    function when every value is finite (P10).
+
+    Parameters
+    ----------
+    compiled_func : callable
+        The compiled formula, see :func:`_compile_formula`.
+    freqs_arr : numpy.ndarray
+        Frequencies in Hz.
+    param_values : tuple
+        The parameter values in the order of the compiled signature.
+    result_arr : numpy.ndarray
+        The values of the real-axis evaluation.
+
+    Returns
+    -------
+    numpy.ndarray
+        The repaired values; ``result_arr`` itself where nothing needed it.
+    """
+    # NumPy picks the branch of ``sqrt`` and ``log`` from the *dtype* of
+    # its argument, not from the value: ``np.sqrt(-0.5625)`` is ``nan``
+    # while ``np.sqrt(-0.5625+0j)`` is ``0.75j``. With a real frequency
+    # array every formula whose argument goes negative therefore collapses
+    # to NaN without a word -- and it goes negative in ordinary use,
+    # because 0 Hz is a routine entry in ``scalings`` and ``sqrt(f - f0)``
+    # or ``log(f/f0)`` is a routine dispersion term.
+    #
+    # Only SymPy's own answer (``sqrt(1-(50/40)**2) == 0.75*I``) is both
+    # the documented semantics and physically meaningful for an impedance,
+    # so re-evaluate on the complex plane -- but only at the positions that
+    # came back NaN. Every value the real evaluation produced is kept
+    # bit-for-bit, which is what keeps ``Abs``, ``Max`` and comparisons on
+    # existing formulas working and costs nothing in the common case.
+    nan_mask = np.isnan(result_arr.real) | np.isnan(result_arr.imag)
+    if nan_mask.any():
+        retry_arr = _evaluate(
+            compiled_func,
+            freqs_arr.astype(complex),
+            tuple(_as_complex(value) for value in param_values),
+        )
+        result_arr = np.where(nan_mask, retry_arr, result_arr)
+
+    # IEEE 754 complex division by zero returns ``inf+nan*j``, not a clean
+    # infinity: ``1/(j*2*pi*f*C)`` at 0 Hz -- a capacitive branch at DC,
+    # which is an ordinary thing to model -- comes back as ``inf+nan*j``.
+    # The NaN there is an artefact of the division algorithm's bookkeeping,
+    # not a failed computation: the magnitude is unambiguously infinite,
+    # and that is the only part that carries downstream (the admittance
+    # 1/Z is zero either way). IEEE 754 cannot represent the *direction* of
+    # a complex infinity, so the artefact is cleared to zero rather than
+    # guessed at.
+    half_infinite = (
+        np.isinf(result_arr.real) | np.isinf(result_arr.imag)
+    ) & (np.isnan(result_arr.real) | np.isnan(result_arr.imag))
+    if half_infinite.any():
+        # Written component-wise on purpose. Rebuilding the value as
+        # ``real + 1j*imag`` would put the NaN straight back, because
+        # ``1j * inf`` is ``nan+inf*j`` -- the real part comes out of
+        # ``0 * inf``.
+        cleaned = result_arr.copy()
+        cleaned.real[half_infinite & np.isnan(cleaned.real)] = 0.0
+        cleaned.imag[half_infinite & np.isnan(cleaned.imag)] = 0.0
+        result_arr = cleaned
+    return result_arr
+
+
+def _impedance_array(
     formula_str: str,
     frequencies: List[float],
     params: Dict[str, float],
     *,
     dc_real_fallback: bool = True,
-) -> Dict[float, Any]:
-    """
-    Compute impedance values for a list of frequencies based on a given formula and parameters.
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Evaluate an impedance formula over a frequency grid into a NumPy array.
 
-    This function parses a SymPy-compatible impedance formula string, substitutes the provided
-    parameters, and evaluates the impedance across the specified frequencies.
-
-    A formula that is exactly ``"nan"`` (case-insensitive, surrounding
-    whitespace ignored) is the *open-end sentinel* and returns infinite
-    impedance at every frequency. The match is against the whole string: a
-    formula that merely contains those three letters somewhere -- ``resonance``
-    or ``nanofarad``, say -- is an ordinary formula and is evaluated.
-
-    Formulas are evaluated on the real frequency axis first and re-evaluated on
-    the complex plane at exactly those frequencies where the real evaluation
-    returned NaN, because NumPy chooses the branch of ``sqrt`` and ``log`` from
-    the dtype rather than the value. NaN that survives that retry is raised as
-    a :class:`ValueError` rather than passed on; ``inf`` is a legitimate result
-    and is passed through.
-
-    **0 Hz is treated as DC, not as "a very small frequency".** Two things
-    happen there and nowhere else:
-
-    1.  A formula that comes back NaN *at* 0 Hz is re-examined by approaching
-        zero numerically (see :func:`_resolve_dc`). A removable singularity --
-        Carson's earth-return term is the standard case -- resolves to its
-        limit; a true pole resolves to infinity, which is the correct open
-        circuit for a series capacitance. Only a formula that is NaN on the
-        approach as well still raises.
-    2.  The imaginary part of a finite DC impedance is dropped
-        (``dc_real_fallback``). At DC a reactance either vanishes
-        (``j*omega*L -> 0``) or is infinite (``1/(j*omega*C) -> inf``); a
-        finite non-zero reactance at 0 Hz has no physical reading, so the
-        solvers fall back to the real part. Dropping a value that is not
-        numerical dust emits a :class:`DCLimitWarning`.
-
-    The compiled SymPy callable is cached across calls (see
-    :func:`_compile_formula`) and the evaluation across all frequencies is
-    vectorised through NumPy.
+    This is the numerical core shared by :func:`compute_impedance`, which
+    wraps the result into a ``{frequency: ComplexNumber}`` dictionary, and
+    :func:`compute_impedance_array`, which hands the array straight back.
+    Everything the two have in common lives here: the open-end sentinel, the
+    compile cache, the real-axis evaluation with the complex retry, the
+    ``inf+nan*j`` clean-up of complex division by zero, the DC treatment of
+    the 0 Hz bin and the final NaN rejection. See :func:`compute_impedance`
+    for the semantics of each step -- this function only exists so that a
+    caller which does not want the dictionary does not have to pay for it.
 
     Parameters
     ----------
     formula_str : str
-        A SymPy-compatible formula string for impedance.
-        Example: "1 + j * f / 50"
-    frequencies : List[float]
-        A list of frequencies (in Hz) at which to compute the impedance.
-    params : Dict[str, float]
-        A dictionary of additional parameters required by the formula.
-        Example: {"rho": 100.0}
+        SymPy-compatible impedance formula.
+    frequencies : list of float
+        Frequencies in Hz.
+    params : dict of str to float
+        Substitutions, e.g. ``{"rho": 100.0}``.
     dc_real_fallback : bool, keyword-only, default True
-        Drop the imaginary part of a finite impedance at ``f = 0``. Set to
-        ``False`` by callers for which a complex value at DC is an error to be
-        reported rather than a value to be repaired -- :func:`compute_real_value`
-        does this, because an RLC parameter is real by contract and its
-        "non-real value" check must keep firing at 0 Hz as it does everywhere
-        else. The DC *limit* of point 1 above is applied either way.
+        Drop the imaginary part of a finite impedance at 0 Hz.
 
     Returns
     -------
-    Dict[float, Any]
-        A dictionary mapping each frequency to its calculated `ComplexNumber` impedance.
+    tuple of (numpy.ndarray, numpy.ndarray)
+        The frequency grid as a float array and the impedances as a complex
+        array of the same shape.
 
     Raises
     ------
     ValueError
-        If there is an error in parsing or computing the impedance formula, if
-        a parameter name collides with a name this module binds (``f``, ``I``,
-        ``j``), or if the formula evaluates to NaN at any frequency.
-    TypeError
-        If the provided parameters do not match the formula's requirements.
+        As documented for :func:`compute_impedance`.
 
     Warns
     -----
     DCLimitWarning
-        If the value at 0 Hz required a decision: a dropped reactance, a
-        poorly resolved limit, or a divergent approach treated as an open
-        circuit.
+        As documented for :func:`compute_impedance`.
     """
-    from groundinsight.models.core_models import ComplexNumber
-
     # Open-ended element: infinite impedance at every frequency. Matched
     # against the whole string, not as a substring -- see
     # :data:`_OPEN_END_SENTINEL`.
+    freqs_arr = np.asarray(frequencies, dtype=float)
+    if freqs_arr.ndim == 0:
+        raise ValueError("frequencies must be a non-empty iterable of numbers")
     if _is_open_end(formula_str):
-        return {
-            float(freq): ComplexNumber(real=np.inf, imag=np.inf)
-            for freq in frequencies
-        }
+        return freqs_arr, np.full(
+            freqs_arr.shape, complex(np.inf, np.inf), dtype=complex
+        )
 
     # Stable parameter ordering — used both as the lambdify signature and the
     # cache key. ``tuple(params)`` preserves insertion order in Python 3.7+,
@@ -637,57 +735,14 @@ def compute_impedance(
     # formula producing a non-numeric value, ...) is reported as ValueError,
     # matching the contract documented in the public API.
     try:
-        freqs_arr = np.asarray(frequencies, dtype=float)
-        if freqs_arr.ndim == 0:
-            raise ValueError(
-                "frequencies must be a non-empty iterable of numbers"
-            )
         result_arr = _evaluate(compiled_func, freqs_arr, param_values)
-
-        # NumPy picks the branch of ``sqrt`` and ``log`` from the *dtype* of
-        # its argument, not from the value: ``np.sqrt(-0.5625)`` is ``nan``
-        # while ``np.sqrt(-0.5625+0j)`` is ``0.75j``. With a real frequency
-        # array every formula whose argument goes negative therefore collapses
-        # to NaN without a word -- and it goes negative in ordinary use,
-        # because 0 Hz is a routine entry in ``scalings`` and ``sqrt(f - f0)``
-        # or ``log(f/f0)`` is a routine dispersion term.
-        #
-        # Only SymPy's own answer (``sqrt(1-(50/40)**2) == 0.75*I``) is both
-        # the documented semantics and physically meaningful for an impedance,
-        # so re-evaluate on the complex plane -- but only at the positions that
-        # came back NaN. Every value the real evaluation produced is kept
-        # bit-for-bit, which is what keeps ``Abs``, ``Max`` and comparisons on
-        # existing formulas working and costs nothing in the common case.
-        nan_mask = np.isnan(result_arr.real) | np.isnan(result_arr.imag)
-        if nan_mask.any():
-            retry_arr = _evaluate(
-                compiled_func,
-                freqs_arr.astype(complex),
-                tuple(_as_complex(value) for value in param_values),
+        # The repairs only ever touch non-finite values. A grid that came
+        # back finite everywhere -- every ordinary formula -- skips their
+        # masks (P10); the values are the same either way.
+        if not np.isfinite(result_arr).all():
+            result_arr = _repair_non_finite(
+                compiled_func, freqs_arr, param_values, result_arr
             )
-            result_arr = np.where(nan_mask, retry_arr, result_arr)
-
-        # IEEE 754 complex division by zero returns ``inf+nan*j``, not a clean
-        # infinity: ``1/(j*2*pi*f*C)`` at 0 Hz -- a capacitive branch at DC,
-        # which is an ordinary thing to model -- comes back as ``inf+nan*j``.
-        # The NaN there is an artefact of the division algorithm's bookkeeping,
-        # not a failed computation: the magnitude is unambiguously infinite,
-        # and that is the only part that carries downstream (the admittance
-        # 1/Z is zero either way). IEEE 754 cannot represent the *direction* of
-        # a complex infinity, so the artefact is cleared to zero rather than
-        # guessed at.
-        half_infinite = (
-            np.isinf(result_arr.real) | np.isinf(result_arr.imag)
-        ) & (np.isnan(result_arr.real) | np.isnan(result_arr.imag))
-        if half_infinite.any():
-            # Written component-wise on purpose. Rebuilding the value as
-            # ``real + 1j*imag`` would put the NaN straight back, because
-            # ``1j * inf`` is ``nan+inf*j`` -- the real part comes out of
-            # ``0 * inf``.
-            cleaned = result_arr.copy()
-            cleaned.real[half_infinite & np.isnan(cleaned.real)] = 0.0
-            cleaned.imag[half_infinite & np.isnan(cleaned.imag)] = 0.0
-            result_arr = cleaned
     except ValueError:
         raise
     except Exception as e:
@@ -798,17 +853,253 @@ def compute_impedance(
             f"Impedance formula '{formula_str}' evaluated to NaN at {shown} "
             f"with parameters {params}. NaN is not a valid impedance -- it "
             f"propagates into the admittance matrix and surfaces much later as "
-            f"a singular-matrix error. Check for a division by zero, a domain "
-            f"error (e.g. log(0) at f=0 Hz), or a parameter that is itself NaN."
+            f"a singular-matrix error. Check for 0/0, 0*inf or inf-inf at that "
+            f"frequency (e.g. (f-50)*log(f-50) at 50 Hz; at 0 Hz such a term is "
+            f"replaced by its limit), or a parameter that is itself NaN."
         )
 
-    impedance_dict: Dict[float, ComplexNumber] = {}
-    for freq, value in zip(freqs_arr.tolist(), result_arr):
-        impedance_dict[float(freq)] = ComplexNumber(
-            real=float(value.real), imag=float(value.imag)
-        )
+    return freqs_arr, result_arr
 
-    return impedance_dict
+
+def impedance_table(freqs_arr: np.ndarray, values: np.ndarray) -> Dict[float, Any]:
+    """Pack evaluated impedances into the ``{frequency: ComplexNumber}`` form.
+
+    Internal API: used by the element derivation in
+    :mod:`groundinsight.models.core_models`; not exported from
+    ``groundinsight`` and free to change in any release.
+
+    The table :func:`compute_impedance` returns, from the arrays of
+    :func:`compute_impedance_array`. The parts are taken out of the array with
+    one ``tolist()`` each rather than value by value through NumPy scalars;
+    the doubles are the same (P10).
+
+    Parameters
+    ----------
+    freqs_arr : numpy.ndarray
+        Frequencies in Hz.
+    values : numpy.ndarray
+        Complex impedances, one per frequency.
+
+    Returns
+    -------
+    dict of float to ComplexNumber
+        The table the models store.
+    """
+    from groundinsight.models.core_models import ComplexNumber
+
+    return {
+        freq: ComplexNumber(real=real, imag=imag)
+        for freq, real, imag in zip(
+            freqs_arr.tolist(), values.real.tolist(), values.imag.tolist(), strict=True
+        )
+    }
+
+
+def compute_impedance(
+    formula_str: str,
+    frequencies: List[float],
+    params: Dict[str, float],
+    *,
+    dc_real_fallback: bool = True,
+) -> Dict[float, Any]:
+    """
+    Compute impedance values for a list of frequencies based on a given formula and parameters.
+
+    This function parses a SymPy-compatible impedance formula string, substitutes the provided
+    parameters, and evaluates the impedance across the specified frequencies.
+
+    A formula that is exactly ``"nan"`` (case-insensitive, surrounding
+    whitespace ignored) is the *open-end sentinel* and returns infinite
+    impedance at every frequency. The match is against the whole string: a
+    formula that merely contains those three letters somewhere -- ``resonance``
+    or ``nanofarad``, say -- is an ordinary formula and is evaluated.
+
+    Formulas are evaluated on the real frequency axis first and re-evaluated on
+    the complex plane at exactly those frequencies where the real evaluation
+    returned NaN, because NumPy chooses the branch of ``sqrt`` and ``log`` from
+    the dtype rather than the value. NaN that survives that retry is raised as
+    a :class:`ValueError` rather than passed on; ``inf`` is a legitimate result
+    and is passed through.
+
+    **0 Hz is treated as DC, not as "a very small frequency".** Two things
+    happen there and nowhere else:
+
+    1.  A formula that comes back NaN *at* 0 Hz is re-examined by approaching
+        zero numerically (see :func:`_resolve_dc`). A removable singularity --
+        Carson's earth-return term is the standard case -- resolves to its
+        limit; a true pole resolves to infinity, which is the correct open
+        circuit for a series capacitance. Only a formula that is NaN on the
+        approach as well still raises.
+    2.  The imaginary part of a finite DC impedance is dropped
+        (``dc_real_fallback``). At DC a reactance either vanishes
+        (``j*omega*L -> 0``) or is infinite (``1/(j*omega*C) -> inf``); a
+        finite non-zero reactance at 0 Hz has no physical reading, so the
+        solvers fall back to the real part. Dropping a value that is not
+        numerical dust emits a :class:`DCLimitWarning`.
+
+    The compiled SymPy callable is cached across calls (see
+    :func:`_compile_formula`) and the evaluation across all frequencies is
+    vectorised through NumPy.
+
+    Parameters
+    ----------
+    formula_str : str
+        A SymPy-compatible formula string for impedance.
+        Example: "1 + j * f / 50"
+    frequencies : List[float]
+        A list of frequencies (in Hz) at which to compute the impedance.
+    params : Dict[str, float]
+        A dictionary of additional parameters required by the formula.
+        Example: {"rho": 100.0}
+    dc_real_fallback : bool, keyword-only, default True
+        Drop the imaginary part of a finite impedance at ``f = 0``. Set to
+        ``False`` by callers for which a complex value at DC is an error to be
+        reported rather than a value to be repaired -- :func:`compute_real_value`
+        does this, because an RLC parameter is real by contract and its
+        "non-real value" check must keep firing at 0 Hz as it does everywhere
+        else. The DC *limit* of point 1 above is applied either way.
+
+    Returns
+    -------
+    Dict[float, Any]
+        A dictionary mapping each frequency to its calculated `ComplexNumber` impedance.
+
+    Raises
+    ------
+    ValueError
+        If there is an error in parsing or computing the impedance formula, if
+        a parameter name collides with a name this module binds (``f``, ``I``,
+        ``j``), or if the formula evaluates to NaN at any frequency.
+    TypeError
+        If the provided parameters do not match the formula's requirements.
+
+    Warns
+    -----
+    DCLimitWarning
+        If the value at 0 Hz required a decision: a dropped reactance, a
+        poorly resolved limit, or a divergent approach treated as an open
+        circuit.
+    """
+    freqs_arr, result_arr = _impedance_array(
+        formula_str, frequencies, params, dc_real_fallback=dc_real_fallback
+    )
+
+    return impedance_table(freqs_arr, result_arr)
+
+
+def compute_impedance_array(
+    formula_str: str,
+    frequencies: List[float],
+    params: Dict[str, float],
+    *,
+    dc_real_fallback: bool = True,
+) -> np.ndarray:
+    """Evaluate an impedance formula and return the raw complex array.
+
+    Identical to :func:`compute_impedance` -- same compile cache, same DC
+    treatment, same NaN rejection, same warnings -- except that the result
+    stays a NumPy array instead of being packed into a
+    ``{frequency: ComplexNumber}`` dictionary.
+
+    That packing is the right default: an impedance dictionary is what the
+    models persist and what every steady-state caller reads back by
+    frequency. It is the wrong thing for a transient study. An FFT grid has
+    one bin per sample, so a 20 000-sample run over a 25-bus network builds
+    roughly half a million :class:`~groundinsight.models.core_models.ComplexNumber`
+    instances (2.9 s of a 9.2 s solve, measured) purely to unpack them again
+    one bin later. This entry point exists for callers that hold the values
+    in arrays anyway.
+
+    Use :func:`check_passive_impedance_array` to validate the result; the
+    dictionary-based :func:`check_passive_impedance` would undo the saving.
+
+    Parameters
+    ----------
+    formula_str : str
+        SymPy-compatible impedance formula.
+    frequencies : list of float
+        Frequencies in Hz, in the order the array should carry them.
+    params : dict of str to float
+        Substitutions, e.g. ``{"rho": 100.0, "l": 2.5}``.
+    dc_real_fallback : bool, keyword-only, default True
+        Drop the imaginary part of a finite impedance at 0 Hz, exactly as
+        :func:`compute_impedance` does.
+
+    Returns
+    -------
+    numpy.ndarray
+        Complex impedances in Ohm, one per entry of ``frequencies``.
+
+    Raises
+    ------
+    ValueError
+        As documented for :func:`compute_impedance`.
+
+    Warns
+    -----
+    DCLimitWarning
+        As documented for :func:`compute_impedance`.
+
+    Examples
+    --------
+    >>> compute_impedance_array("0.25 + I*2*pi*f*1e-3", [0.0, 50.0], {})
+    array([0.25+0.j        , 0.25+0.31415927j])
+    """
+    _, values = _impedance_array(
+        formula_str, frequencies, params, dc_real_fallback=dc_real_fallback
+    )
+    return values
+
+
+def check_passive_impedance_array(
+    values: np.ndarray,
+    frequencies: np.ndarray,
+    *,
+    element: str,
+    formula_str: Optional[str] = None,
+    params: Optional[Dict[str, float]] = None,
+) -> None:
+    """Array counterpart of :func:`check_passive_impedance`.
+
+    Applies exactly the same four rules -- zero above 0 Hz, non-invertibly
+    small above 0 Hz, negative real part at any frequency, real part of minus
+    infinity at any frequency -- to arrays, without a dictionary per element.
+    On an FFT grid that is the difference between 9 s and a few milliseconds,
+    because the scalar :func:`is_short_circuit` was called once per
+    (element, bin).
+
+    Neither the rules nor the message exist twice: both checkers classify
+    with :func:`passivity_classes` and word the error with the same builder,
+    so a value one checker refuses is refused by the other, in the same
+    words.
+
+    Parameters
+    ----------
+    values : numpy.ndarray
+        Complex impedances in Ohm.
+    frequencies : numpy.ndarray
+        The matching frequencies in Hz.
+    element : str
+        How to name the element in the message.
+    formula_str : str, optional
+        The formula the values came from.
+    params : dict, optional
+        The substitutions used.
+
+    Raises
+    ------
+    ValueError
+        As documented for :func:`check_passive_impedance`.
+    """
+    values = np.asarray(values, dtype=complex)
+    _raise_if_not_passive(
+        np.asarray(frequencies, dtype=float),
+        values.real,
+        values.imag,
+        element=element,
+        formula_str=formula_str,
+        params=params,
+    )
 
 
 def compute_real_value(
@@ -851,8 +1142,8 @@ def compute_real_value(
     Returns
     -------
     Dict[float, float]
-        Mapping of frequency to the real value of the
-    formula at that frequency.
+        Mapping of frequency to the real value of the formula at that
+        frequency.
 
     Raises
     ------
@@ -901,8 +1192,8 @@ def compute_real_value(
         # on NaN, so this branch is unreachable through the public path today
         # -- it is kept deliberately, because the ``np.isfinite`` test on the
         # next line cannot tell NaN from inf. Drop this guard and a NaN would
-        # not raise but be *stored* as the field value, which is exactly the
-        # bug this pass fixed. It is a second lock on the same door, not a
+        # not raise but be *stored* as the field value -- the silent failure
+        # described above. It is a second lock on the same door, not a
         # duplicate of it.
         if np.isnan(cn.real) or np.isnan(cn.imag):
             raise ValueError(
@@ -958,8 +1249,14 @@ def _describe_source(formula_str: Optional[str], params: Optional[Dict[str, floa
     return f" Formula: '{formula_str}'."
 
 
+# Magnitude at or above which ``1/z`` is finite by construction: the
+# reciprocal is then at most 1e290, three orders of magnitude below DBL_MAX
+# (~1.8e308). Values below it are handed to the explicit overflow probe.
+_INVERTIBLE_FLOOR = 1e-290
+
+
 def is_short_circuit(z: complex) -> bool:
-    """Is ``z`` a zero impedance that ``1/z`` cannot express?
+    """Whether ``z`` is a zero impedance that ``1/z`` cannot express.
 
     Two values answer yes: exact zero, and a magnitude so small that ``1/z``
     overflows to infinity in double precision (below about 5.6e-309 Ohm). They
@@ -980,21 +1277,76 @@ def is_short_circuit(z: complex) -> bool:
     -------
     bool
         True if ``z`` is a short circuit in the sense above.
+
+    Notes
+    -----
+    This is one of the hottest functions in the package -- 59 850 calls in a
+    200-bus / 50-frequency profile, and far more in a transient study, which
+    evaluates every element at every FFT bin. The classification is therefore
+    done with ``math`` on the two C doubles; each ``numpy`` call on a Python
+    float costs an array coercion and a scalar dispatch for one bit of
+    information.
+
+    The overflow probe still asks the question that actually matters -- "can
+    this be inverted?" -- rather than comparing against a threshold that
+    would have to be re-derived whenever the complex division algorithm
+    changes. It is only *reached* for values whose magnitude is small enough
+    for the question to be open: if either component is at least
+    ``_INVERTIBLE_FLOOR``, then ``|z| >= _INVERTIBLE_FLOOR`` and hence
+    ``|1/z| <= 1/_INVERTIBLE_FLOOR``, three orders of magnitude below
+    ``DBL_MAX``, so the reciprocal is finite by construction.
     """
-    if np.isnan(z.real) or np.isnan(z.imag):
-        return False
-    if np.isinf(z.real) or np.isinf(z.imag):
-        return False
-    if z == 0:
+    re, im = z.real, z.imag
+    if re == 0.0 and im == 0.0:
         return True
-    # Ask the question that actually matters -- "can this be inverted?" --
-    # instead of comparing against a threshold that would have to be
-    # re-derived whenever the complex division algorithm changes. The errstate
-    # suppression is required because the overflow being detected here is
-    # precisely the condition numpy would warn about.
+    if math.isnan(re) or math.isnan(im):
+        return False
+    if math.isinf(re) or math.isinf(im):
+        return False
+    if abs(re) >= _INVERTIBLE_FLOOR or abs(im) >= _INVERTIBLE_FLOOR:
+        return False
+    # The errstate suppression is required because the overflow being
+    # detected here is precisely the condition numpy would warn about.
     with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
         admittance = np.complex128(1.0) / np.complex128(z)
     return not (np.isfinite(admittance.real) and np.isfinite(admittance.imag))
+
+
+def short_circuit_mask(re: np.ndarray, im: np.ndarray) -> np.ndarray:
+    """Vectorised :func:`is_short_circuit` over two component arrays.
+
+    Internal API: also used by the electrical network; not exported from
+    ``groundinsight`` and free to change in any release.
+
+    Same classification, one pass over the whole frequency grid instead of
+    one Python call per bin. ``check_passive_impedance`` runs this for every
+    bus and every branch of a network, at every frequency; a transient study
+    has several thousand bins.
+
+    Parameters
+    ----------
+    re, im : numpy.ndarray
+        Real and imaginary parts of the impedances, same shape.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean mask, ``True`` where the value is a short circuit in the
+        sense of :func:`is_short_circuit`. Non-finite entries are ``False``.
+    """
+    finite = np.isfinite(re) & np.isfinite(im)
+    zero = (re == 0.0) & (im == 0.0)
+    # Only values below the floor can fail to invert; everything else is
+    # finite by construction (see the note in ``is_short_circuit``).
+    candidate = finite & ~zero & (np.abs(re) < _INVERTIBLE_FLOOR) & (
+        np.abs(im) < _INVERTIBLE_FLOOR
+    )
+    mask = zero & finite
+    if candidate.any():
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            admittance = 1.0 / (re[candidate] + 1j * im[candidate])
+        mask[candidate] = ~np.isfinite(admittance)
+    return mask
 
 
 def dc_substitute_impedance(
@@ -1099,22 +1451,23 @@ def check_passive_impedance(
     """Reject impedance values that cannot become an admittance.
 
     Every value checked here is destined for the diagonal or an off-diagonal
-    entry of ``Y`` as its reciprocal ``1/Z``. Three kinds of value have no
-    reciprocal the nodal solve can use, and each of them used to be swallowed
-    silently:
+    entry of ``Y`` as its reciprocal ``1/Z``. Four kinds of value have no
+    reciprocal the nodal solve can use, and each of them would otherwise be
+    swallowed silently:
 
     ``Z == 0`` **above 0 Hz**
         Exactly zero. Read as a *limit*, zero is the ideal case -- a perfect
         earth electrode, a perfect bond -- and a sweep towards it converges
         there. The nodal formulation cannot express it: an infinite admittance
-        is not a number, so a zero-impedance element used to be dropped from
-        the matrix instead, which is the *opposite* of the limit. A bus whose
-        grounding impedance is zero then reported the full earth potential
-        rise and no current into the soil -- exactly what a bus with *no*
-        electrode reports. The two were indistinguishable. Model a near-ideal
-        electrode with a small finite value instead: the solution converges
-        smoothly as ``Z`` goes to zero, with a relative error of the order of
-        the ratio between that value and the other impedances in the network.
+        is not a number, and dropping a zero-impedance element from the
+        matrix instead would be the *opposite* of the limit. A bus whose
+        grounding impedance is zero would then report the full earth
+        potential rise and no current into the soil -- exactly what a bus with
+        *no* electrode reports, and the two would be indistinguishable. Model
+        a near-ideal electrode with a small finite value instead: the solution
+        converges smoothly as ``Z`` goes to zero, with a relative error of the
+        order of the ratio between that value and the other impedances in the
+        network.
         In a network whose impedances are of the order of 1 Ohm, ``1e-6`` Ohm
         reproduces the ideal-earth limit to about seven digits, and every
         further decade buys another digit.
@@ -1143,9 +1496,23 @@ def check_passive_impedance(
         drives the nodal system towards singularity, where the reported earth
         potential rise grows without bound and without warning.
 
-    Infinity is *not* rejected: it is the documented open-end sentinel
-    (formula ``"nan"``) and ``1/inf == 0`` is exactly the right contribution
-    for a tower without an electrode. NaN is not rejected either -- it is a
+    ``Re(Z) == -inf``
+        The same rule at its limit, and the one value an inspection of finite
+        values alone would miss: ``1/(-inf) == 0`` makes the solver read the
+        element as an open circuit, without a word. It comes from a
+        ``log(f)`` term that no factor of ``f`` cancels -- ``log(0)`` is
+        ``-inf`` -- so in practice it appears at 0 Hz, i.e. in a DC study and
+        in the 0 Hz bin of every transient study. Close to 0 Hz such a
+        formula is negative and refused anyway (``1 + log(f)`` below
+        0.37 Hz); only the 0 Hz bin itself escaped. It is rejected at any
+        frequency; a network that never evaluates the formula at 0 Hz is not
+        affected.
+
+    Positive infinity is *not* rejected, and neither is an infinite
+    reactance. The first is the documented open-end sentinel (formula
+    ``"nan"``), and ``1/inf == 0`` is exactly the right contribution for a
+    tower without an electrode; the second is a series capacitance at DC,
+    ``-j*inf`` with a finite real part. NaN is not rejected either -- it is a
     failed computation rather than an implausible one, and
     :func:`compute_impedance` and
     :meth:`~groundinsight.electrical_network.ElectricalNetwork._assert_finite_system`
@@ -1173,34 +1540,183 @@ def check_passive_impedance(
     ------
     ValueError
         If any frequency above 0 Hz carries a zero or non-invertible
-        impedance, or if any frequency at all carries a negative real part.
-        Every offending frequency is listed, grouped by cause.
+        impedance, or if any frequency at all carries a negative real part or
+        a real part of minus infinity. Every offending frequency is listed,
+        grouped by cause.
     """
-    zeros: List[float] = []
-    too_small: List[Tuple[float, float]] = []
-    negative: List[Tuple[float, float]] = []
+    if not z_dict:
+        return
 
-    for freq, value in z_dict.items():
-        zc = complex(float(value.real), float(value.imag))
-        # A failed computation, not an implausible one -- reported elsewhere.
-        if np.isnan(zc.real) or np.isnan(zc.imag):
-            continue
-        # The documented open-end sentinel. 1/inf == 0 is the right answer.
-        if np.isinf(zc.real) or np.isinf(zc.imag):
-            continue
-        if is_short_circuit(zc):
-            # At DC this is the physics, not a mistake: the solvers substitute
-            # a small finite value and warn. Above DC it is a mistake.
-            if freq != 0.0:
-                if zc == 0:
-                    zeros.append(float(freq))
-                else:
-                    too_small.append((float(freq), abs(zc)))
-            continue
-        if zc.real < 0:
-            negative.append((float(freq), zc.real))
+    # One pass over the whole frequency grid instead of one Python-level
+    # classification per bin. This function is called for every bus and every
+    # branch of a network -- and a transient study evaluates the same element
+    # at several thousand FFT bins -- so the scalar loop showed up as 1.5 s of
+    # a 6.9 s stationary profile and 4.4 s of a 9.9 s transient one.
+    count = len(z_dict)
+    freqs = np.fromiter((float(f) for f in z_dict), dtype=float, count=count)
+    re = np.fromiter(
+        (float(v.real) for v in z_dict.values()), dtype=float, count=count
+    )
+    im = np.fromiter(
+        (float(v.imag) for v in z_dict.values()), dtype=float, count=count
+    )
+    _raise_if_not_passive(
+        freqs, re, im, element=element, formula_str=formula_str, params=params
+    )
 
-    if not (zeros or too_small or negative):
+
+class PassivityClasses(NamedTuple):
+    """
+    The four ways an impedance can fail to be a usable admittance.
+
+    Internal API: the result type of :func:`passivity_classes`; not exported
+    from ``groundinsight`` and free to change in any release.
+
+    Boolean masks of a common (broadcast) shape, as returned by
+    :func:`passivity_classes`. Their union is :func:`non_passive_mask`.
+
+    Attributes
+    ----------
+    zero : numpy.ndarray
+        Exactly zero, above 0 Hz.
+    too_small : numpy.ndarray
+        Not zero, but too small to invert in double precision, above 0 Hz.
+    negative : numpy.ndarray
+        Finite, invertible and with a negative real part, at any frequency.
+    minus_infinite : numpy.ndarray
+        Real part of minus infinity, at any frequency.
+    """
+
+    zero: np.ndarray
+    too_small: np.ndarray
+    negative: np.ndarray
+    minus_infinite: np.ndarray
+
+
+def passivity_classes(
+    re: np.ndarray, im: np.ndarray, frequencies: np.ndarray
+) -> PassivityClasses:
+    """
+    Classify impedances against the four passivity rules (the one copy).
+
+    Internal API: the one implementation of the passivity rules; not exported
+    from ``groundinsight`` and free to change in any release.
+
+    The rules are explained in :func:`check_passive_impedance`. This is their
+    only implementation: the dictionary checker, the array checker of the
+    transient solver and the vectorised pass/fail of the stationary kernel
+    (:func:`non_passive_mask`) all call it, so the three cannot disagree on
+    a value.
+
+    Parameters
+    ----------
+    re, im : numpy.ndarray
+        Real and imaginary parts, same shape.
+    frequencies : numpy.ndarray
+        Frequencies in Hz, broadcastable against ``re`` -- one per value, or
+        one per column of an ``(elements, frequencies)`` array.
+
+    Returns
+    -------
+    PassivityClasses
+        One boolean mask per rule. NaN and plus infinity fall in none of
+        them: a failed computation is reported where it happens, and plus
+        infinity is the open-end sentinel.
+    """
+    re = np.asarray(re, dtype=float)
+    im = np.asarray(im, dtype=float)
+    above_dc = np.asarray(frequencies, dtype=float) != 0.0
+    finite = np.isfinite(re) & np.isfinite(im)
+    short = short_circuit_mask(re, im)
+    exact_zero = (re == 0.0) & (im == 0.0) & finite
+    return PassivityClasses(
+        zero=exact_zero & above_dc,
+        too_small=short & ~exact_zero & above_dc,
+        negative=finite & ~short & (re < 0.0),
+        # Not finite, hence outside every mask above, and the one non-finite
+        # value that is not an open circuit.
+        minus_infinite=np.isneginf(re),
+    )
+
+
+def non_passive_mask(values: np.ndarray, frequencies: np.ndarray) -> np.ndarray:
+    """
+    Where impedances violate a passivity rule.
+
+    Internal API: used by the electrical network for its vectorised pass/fail
+    check; not exported from ``groundinsight`` and free to change in any
+    release.
+
+    Parameters
+    ----------
+    values : numpy.ndarray
+        Complex impedances, any shape.
+    frequencies : numpy.ndarray
+        Frequencies in Hz, broadcastable against ``values``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean mask, ``True`` where :func:`check_passive_impedance` would
+        reject the value.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> non_passive_mask(np.array([0j, 0j, -1 + 0j, 2 + 1j]),
+    ...                  np.array([0.0, 50.0, 50.0, 50.0])).tolist()
+    [False, True, True, False]
+    """
+    values = np.asarray(values, dtype=complex)
+    classes = passivity_classes(values.real, values.imag, frequencies)
+    return classes.zero | classes.too_small | classes.negative | classes.minus_infinite
+
+
+def _raise_if_not_passive(
+    freqs: np.ndarray,
+    re: np.ndarray,
+    im: np.ndarray,
+    *,
+    element: str,
+    formula_str: Optional[str],
+    params: Optional[Dict[str, float]],
+) -> None:
+    """
+    Raise the passivity error for one element, or return if there is none.
+
+    Parameters
+    ----------
+    freqs, re, im : numpy.ndarray
+        One-dimensional arrays of the same length: frequency, real and
+        imaginary part per value.
+    element : str
+        How to name the element in the message.
+    formula_str : str, optional
+        The formula the values came from.
+    params : dict, optional
+        The substitutions used.
+
+    Raises
+    ------
+    ValueError
+        If any value violates a rule; every offending frequency is listed,
+        grouped by cause.
+    """
+    classes = passivity_classes(re, im, freqs)
+    zeros: List[float] = freqs[classes.zero].tolist()
+    too_small: List[Tuple[float, float]] = list(
+        zip(
+            freqs[classes.too_small].tolist(),
+            np.hypot(re[classes.too_small], im[classes.too_small]).tolist(),
+            strict=True,
+        )
+    )
+    negative: List[Tuple[float, float]] = list(
+        zip(freqs[classes.negative].tolist(), re[classes.negative].tolist(), strict=True)
+    )
+    minus_infinite: List[float] = freqs[classes.minus_infinite].tolist()
+
+    if not (zeros or too_small or negative or minus_infinite):
         return
 
     origin = _describe_source(formula_str, params)
@@ -1209,7 +1725,7 @@ def check_passive_impedance(
     if zeros:
         parts.append(
             "It is exactly zero at "
-            + _render_frequencies(zeros)
+            + render_frequencies(zeros)
             + ". Zero is not an ideal earth in this model and never was -- an "
             "element with no impedance has no admittance either, so it drops "
             "out of the nodal system and reports the opposite of the "
@@ -1227,7 +1743,7 @@ def check_passive_impedance(
         )
 
     if too_small:
-        shown = _render_frequencies([freq for freq, _ in too_small])
+        shown = render_frequencies([freq for freq, _ in too_small])
         magnitude = min(mag for _, mag in too_small)
         parts.append(
             f"Its magnitude is {magnitude:g} Ohm at {shown}, which is too "
@@ -1238,7 +1754,7 @@ def check_passive_impedance(
         )
 
     if negative:
-        shown = _render_frequencies([freq for freq, _ in negative])
+        shown = render_frequencies([freq for freq, _ in negative])
         worst = min(real for _, real in negative)
         parts.append(
             f"Its real part is negative ({worst:g} Ohm) at {shown}. An earth "
@@ -1251,11 +1767,31 @@ def check_passive_impedance(
             "length in the model."
         )
 
+    if minus_infinite:
+        parts.append(
+            "Its real part is minus infinity at "
+            + render_frequencies(minus_infinite)
+            + ". That is not an open circuit -- an open circuit is plus "
+            "infinity, e.g. the formula 'nan' -- but the limit of a negative "
+            "resistance, and passing it on would disconnect the element "
+            "without a word, because 1/(-inf) is zero. At 0 Hz it comes from "
+            "a log(f) term that no factor of f cancels (log(0) is -inf); "
+            "Carson's earth-return term is written f*log(...) for that "
+            "reason and tends to zero instead. Give the formula a finite "
+            "value there: let the frequency-dependent part vanish at 0 Hz or "
+            "state the DC resistance as a term without f. A study that does "
+            "not list 0 Hz never evaluates it, but a transient study always "
+            "does -- its FFT grid starts at 0 Hz."
+        )
+
     raise ValueError(" ".join(parts) + origin)
 
 
-def _render_frequencies(freqs: List[float], limit: int = 5) -> str:
+def render_frequencies(freqs: List[float], limit: int = 5) -> str:
     """Render a frequency list for an error message without flooding it.
+
+    Internal API: also used by the electrical network and the core models; not
+    exported from ``groundinsight`` and free to change in any release.
 
     A transient study evaluates the same formula at several thousand FFT bins,
     so an unbounded list would bury the sentence that explains the problem.

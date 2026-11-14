@@ -1,6 +1,6 @@
 # Transient simulation
 
-The stationary solver described in [Concepts](concepts.md) operates in the
+The stationary solver described in [Model and assumptions](explanation/theory.md) operates in the
 phasor domain: one linear system per frequency, RMS / per-frequency
 post-processing. Many fault studies in low- and medium-voltage grounding
 analysis need a *time-domain* answer instead — for example to look at the
@@ -16,7 +16,8 @@ assumptions each one makes, and explains where one is the right choice
 over the other.
 
 ```python
-study = gi.TransientStudy(network, fault_name="F1")
+# fragment: assumes a network `network` with the source "src" and the fault "F1"
+study = gi.TransientStudy(network, fault="F1")
 study.set_source_waveform("src", waveforms.sinusoidal_with_dc_offset(...))
 study.set_observation(buses=["b10"], branches=["L_09_10"])
 
@@ -101,9 +102,35 @@ inverse-FFTed sample-by-sample.
 formula are cached, so even at $\sim 2000$ FFT bins each unique formula
 is parsed exactly once.
 
-*Mutual coupling.* The FFT solver uses the existing
-`_compute_phase_currents_from_paths` machinery to inject Norton-equivalent
-mutual currents per branch in the same way the stationary solver does.
+*Mutual coupling — not modelled.* The FFT solver builds $Y(f_m)$ from the
+bus grounding impedances and the branch **self** impedances only.
+`BranchType.mutual_impedance_formula` and the lumped `R_mutual` / `M_mutual`
+never enter it, so the Norton-equivalent mutual injection the stationary
+solver adds is missing. Without it no induced share of the fault current
+returns through the shields, and the EPR comes out *higher* at the fault bus
+and as the maximum over the network — the FFT answer is conservative there:
+77.6 V against 49.2 V in the steady state of a coupled two-bus cable link,
+i.e. $1/|1 - Z_m/Z_s|$ for one coupled branch, and +44 % on the peak of a
+fully offset fault current. A bus away from the fault can come out lower.
+The solver raises a `TransientModelWarning` (code `TRANSIENT_MODEL`, the
+coupled branches as elements) as soon as it meets a coupled branch, so the difference is visible rather than inferred from this
+page. Use `solver="state_space"`, which does model the coupling for current
+sources (see [Mutual coupling](#mutual-coupling) below), or accept the FFT
+answer as a self-impedance-only result.
+
+*Source filtering.* Only sources with a galvanic connection to the fault bus
+inject. The stationary solver applies the same rule through its
+source-to-fault paths; the FFT solver recomputes the reachability with a
+breadth-first search over the active branches, so a transient study does not
+depend on a path set having been built first. A source on an isolated bus
+therefore contributes $0\,\mathrm{V}$ in both solvers.
+
+*Time grid.* Both solvers use the same grid: $N = \operatorname{round}(t_{\text{end}}/\Delta t)$
+samples over $t = 0 \dots (N-1)\Delta t$, rounded *up* to an even $N$ so that
+`rfft`/`irfft` round-trip cleanly. $N\,\Delta t$ — the *period* of the DFT
+window — is therefore never shorter than the requested $t_{\text{end}}$, which
+is what keeps a source that repeats with $t_{\text{end}}$ exactly on a bin.
+The rounding is logged at debug level.
 
 *DC bin.* The lowest FFT bin sits at $f_0 = 0$, so **every** transient run
 evaluates every impedance formula at zero frequency — there is no such thing
@@ -112,12 +139,15 @@ and all of them arrive as `NaN` or `inf` in floating point: a removable
 singularity such as Carson's earth-return term (limit 0, so the conductor
 tends to its DC resistance), a true pole such as a series capacitance
 (infinite, i.e. the open circuit it should be) and a genuine formula error
-(raises). A purely inductive element is an exact *short circuit* at DC; since
-zero has no reciprocal, that one bin uses a small finite stand-in and warns
-with a `DCLimitWarning`. Up to v0.4.0 such an element was dropped from the
-matrix instead, i.e. a short circuit was modelled as a disconnection — see
-[Direct current (`f = 0`)](concepts.md#direct-current-f-0) in the concepts
-chapter for the measured error and for when to merge the two buses instead.
+(raises). A real part of $-\infty$ — a `log(f)` term without a factor $f$ — is
+refused at this bin, even when the network lists no 0 Hz and its stationary
+study accepts the same formula. A purely inductive element is an exact
+*short circuit* at DC; since zero has no reciprocal, that one bin uses a small
+finite stand-in and warns with a `DCLimitWarning`. Up to v0.4.0 such an
+element was dropped from the matrix instead, i.e. a short circuit was
+modelled as a disconnection — see
+[Direct current (`f = 0`)](explanation/dc.md#an-ideal-bond-is-a-short-circuit-and-a-short-circuit-has-no-admittance)
+for the measured error and for when to merge the two buses instead.
 If $Y(f_0)$ is still singular after all this (a genuinely floating
 sub-network) the bin is set to zero, which is equivalent to a DC-removed
 reconstruction.
@@ -131,12 +161,51 @@ reconstruction.
 - **Wraparound.** The DFT is implicitly periodic. If the network's
   impulse response has not decayed by $t_{\text{end}}$, the tail
   wraps around and corrupts the start of the next "period", which is
-  what the user sees as the simulation start. Choose
-  $t_{\text{end}} \gg \tau_{\text{slowest}}$ in practice.
+  what the user sees as the simulation start. Measured on an $R \parallel L$
+  bus with a fault pulse at $0.1\,\mathrm{s}$ and a $0.4\,\mathrm{s}$
+  window: an EPR of $45.9\,\mathrm{V}$ at $t = 0$, i.e. *before* the fault,
+  and a post-fault peak 37 % below the state-space answer. Choose
+  $t_{\text{end}} \gg \tau_{\text{slowest}}$ in practice. The solver checks
+  the last sample of the window against the peak and raises a
+  `TransientModelWarning` when it is above 1 %, and `solve(..., zero_pad=True)`
+  solves on a window twice as long and reports only its first half — the
+  same trace at twice the solve cost, with the wrap pushed out of the
+  reported interval.
 - **Aliasing.** Source-waveform content above the Nyquist
   $1 / (2\,\Delta t)$ is folded back into the resolved band. Sharp
   switching edges have nominally infinite bandwidth; the FFT result
   shows Gibbs-style ringing on the rising/falling edges.
+- **The Nyquist bin is real.** With an even $N$ the last bin
+  $f_{N/2} = 1/(2\,\Delta t)$ has no conjugate partner, and `irfft`
+  discards its imaginary part. Whatever phase shift the network applies at
+  exactly the Nyquist frequency is therefore lost. It matters only for a
+  network whose response is still significant at $f_{\max}$, which is the
+  same condition that makes the aliasing above unacceptable — halve
+  $\Delta t$ and both go away.
+- **Mutual coupling is not evaluated.** See the implementation note above:
+  the FFT result is a self-impedance-only answer and warns about it.
+- **Fault scalings are not applied.** `Fault.scalings` weights the source
+  phasors per frequency in the stationary solve. Both transient solvers take
+  the source *waveform* as the literal injection instead — the waveform
+  already carries the spectral content, and the FFT bin grid is set by
+  $t_{\text{end}}$ and $\Delta t$ and has no relation to
+  `network.frequencies`. A fault carrying scalings other than 1 raises a
+  `TransientModelWarning`; scale the waveform itself if the transient is
+  meant to carry the same weighting as the stationary solve.
+- **A frequency-independent reactance is acausal.** A real impulse response
+  requires $Z(-f) = \overline{Z(f)}$. A formula such as `(0.25 + I*0.6)*l`,
+  where the reactance does not scale with $f$, does not satisfy that: the
+  reconstructed kernel has a small non-zero part *before* the excitation
+  (1.6–2.8 % of the peak, measured). It is a modelling artefact, not a
+  solver defect — write reactances as `I*2*pi*f*L` and the artefact
+  disappears. The stationary solver is unaffected, because it never
+  reconstructs a time-domain kernel.
+- **Sign of the transient EPR at the fault bus.** The injection convention
+  is `+I` at the source bus and `-sum(I)` at the fault bus (the same one the
+  stationary solver uses), so a *positive* fault current produces a
+  *negative* EPR at the fault bus in the time series. The stationary result
+  reports magnitudes and hides this. Take $|u(t)|$, or compare the two
+  solvers' traces rather than their signs.
 - **Voltage sources.** Voltage-mode sources are rejected by the FFT
   solver at `solve()` time with a clear pointer to the state-space
   alternative. The reason: a voltage source's loop current depends on
@@ -261,7 +330,7 @@ that simply re-applies the algebraic substitution of $\underline{v}_R$.
 
 A Thevenin source between source bus $a$ and active fault bus $b$ with
 EMF $u(t)$ and internal impedance $Z_{\text{src}}(f_{\text{eval}})$ is
-decomposed at the network's lowest frequency into
+decomposed at $f_{\text{eval}}$ into
 
 $$
 R_{\text{src}} \;=\; \mathrm{Re}\,Z_{\text{src}},
@@ -284,6 +353,20 @@ Two cases:
    loop dynamics — including the L/R rise time of the fault current —
    without doing any Norton math by hand.
 
+#### Which frequency is $f_{\text{eval}}$?
+
+The state-space model carries one set of `R` / `L` / `C` values and treats
+them as frequency-independent, so one entry of `network.frequencies` has to
+be chosen as the operating point. The default is the **smallest strictly
+positive** frequency in the list, and `solve(..., f_eval=...)` selects a
+different one explicitly (it must be one of `network.frequencies`, because
+that is where the lumped tables are stored). A list position such as
+`frequencies[0]` would not be a physical choice: with `frequencies=[0, 50]`
+it would parameterise the model at DC, where
+$L_{\text{src}} = \mathrm{Im}\,Z_{\text{src}} / \omega$ is not defined. A reactive $Z_{\text{src}}$ combined with
+$f_{\text{eval}} = 0$ is rejected with a `ValueError` rather than turned
+into a purely resistive source.
+
 ### Mutual coupling
 
 When `R_mutual_formula` and `M_mutual_formula` are populated on the
@@ -295,8 +378,8 @@ R_{\text{self}}\,i_s + L_{\text{self}}\,\dot{i}_s
 \;+\; R_{\text{mut}}\,I_p + M\,\dot{I}_p,
 $$
 
-with $I_p$ the phase current on the source-to-fault path traversing
-this branch. The $\dot{I}_p$ term is awkward because $I_p$ is a function
+with $I_p$ the phase current of this branch. The $\dot{I}_p$ term is
+awkward because $I_p$ is a function
 of the source waveform, not a state — we would have to numerically
 differentiate the input. The state-space solver avoids this with the
 substitution
@@ -315,10 +398,19 @@ $$
 $$
 
 a clean ODE in $z$ with $I_p$ entering as a regular linear input. The
-phase factor $I_p / I_{\text{src}}$ per branch is derived from the
-network's path topology — same algorithm as the FFT solver's mutual
-Norton injection. The actually observed shield current is recovered at
-output time via $i_s = z - (M/L_{\text{self}})\,I_p$.
+phase current is $I_p = \alpha\,I_{\text{src}}$, with $\alpha$ the per-unit
+split of the phase-conductor network at $f_{\text{eval}}$ — the same solve
+`run_fault(..., phase_current_mode="auto")` uses (fault bus as reference,
+`phase_impedance_formula` or its proxy per branch), so a ring divides the
+source current between its routes; `parallel_coefficient` is not read. A
+complex $\alpha$ (routes of different R/L ratio) is folded into the
+coupling, $R'_{\text{mut}} + j\omega M' = (R_{\text{mut}} + j\omega M)\,\alpha$,
+which is exact in the $f_{\text{eval}}$ steady state; a DC offset and
+harmonics then see the $f_{\text{eval}}$ split, and the solver says so with
+a `ModelAssumptionWarning` (code `TRANSIENT_PHASE_SPLIT`; below 1 % of the
+peak EPR on a cable/overhead-line ring with a fully offset fault current).
+The actually observed shield current is recovered at output time via
+$i_s = z - (M'/L_{\text{self}})\,I_{\text{src}}$.
 
 The mutual coupling for state-space sources is currently restricted to
 current sources; voltage sources are skipped with a one-time warning
@@ -381,35 +473,63 @@ the LTI case this is a strict win over a generic ODE solver.
 - **Voltage-source mutual coupling.** Mutual coupling is evaluated only
   for current sources. The phase current of a voltage source is itself
   a state and is not yet woven into the mutual feedforward.
+- **One operating point for R, L and C.** The lumped values are read at a
+  single $f_{\text{eval}}$ (see [above](#which-frequency-is-f_texteval));
+  a frequency-dependent earth-return resistance is therefore represented by
+  its value at that one frequency.
+- **Fault scalings are not applied**, exactly as in the FFT solver — the
+  source waveform is the injection. A fault carrying scalings other than 1
+  raises a `TransientModelWarning`.
+- **Passivity is checked, not repaired.** A negative `R_self`, `L_self`,
+  `C_self`, bus `L` or bus `C` is rejected with a `ValueError`. Dropping
+  such an element instead would read as a lossless and therefore
+  never-decaying network rather than as the formula error it is. A mutual inductance above the branch's own `L_self` is not realisable
+  for two coupled conductors and raises a `TransientModelWarning` (it is
+  almost always a mH/H unit slip, worth a factor of 1000 on the coupled EPR).
 
 ## When to choose which solver
 
 The two solvers, applied to the *same* physical network with the *same*
 input and zero initial conditions, return the same time series to
-within numerical precision. The relevant differences are practical, not
-mathematical:
+within numerical precision — **provided the network carries no mutual
+coupling**, which only the state-space solver evaluates, and provided the
+FFT window is long enough for the response to decay in it. Both conditions
+are now checked and warned about rather than assumed. The remaining
+differences are practical, not mathematical:
 
 | Concern | FFT | State-space |
 | --- | --- | --- |
 | Source types | current only | current + voltage (Thevenin) |
-| Mutual coupling | current sources only | current sources only |
+| Mutual coupling | **not modelled** (warns) | current sources only |
+| Impedance model | full $Z(f)$ per bin from the formulas | lumped R/L/C at one $f_{\text{eval}}$ |
 | Bus capacitance | via `impedance_formula` | via `C_formula` and pi-lumping |
+| Fault `scalings` | ignored (warns) | ignored (warns) |
+| Window artefacts | periodic wraparound, aliasing (warns; `zero_pad=True`) | none |
 | Topology change mid-sim | not supported | not supported (yet) |
 | Initial conditions | always zero | always zero (extension point) |
 | Speed (LTI) | very fast for short traces | very fast via matrix exponential |
 | Speed (long traces) | grows with sample count | grows linearly per sample, $\Phi$ reused |
 | Future nonlinear elements | impossible | natural via `solve_ivp` |
 
+Both return the same time grid for the same `(t_end, dt)`, so the two traces
+can be compared element-wise without resampling — the cheapest cross-check
+the package offers.
+
 Use the FFT solver when:
 
 - the network is strictly LTI with a fixed topology,
 - the source is a current source (any waveform, including a switched
   sinusoid with DC offset),
+- the network has no mutual coupling, or you deliberately want the
+  self-impedance-only answer,
+- the impedances are genuinely frequency-dependent and you want them
+  evaluated at every bin rather than at one operating point,
 - you want a fast cross-check against the stationary solver — both use
   the same per-frequency admittance matrices.
 
 Use the state-space solver when:
 
+- the network has mutual coupling that matters,
 - the source is a Thevenin voltage source and you want to see the
   loop dynamics including $L_{\text{src}}$,
 - you need to look at clean post-clearing ring-down behaviour

@@ -159,13 +159,25 @@ def test_from_pandapower_uses_supplied_types_and_rho():
 
 
 def test_from_pandapower_rejects_empty_frequencies():
+    """Audit pass 18 (M20): the refusal moved from the importer to the model.
+
+    ``ImportDefaults`` validates its own frequency list now, so the empty list
+    is rejected where it is written rather than after the caller has assembled
+    the types and reached ``from_pandapower``. The importer keeps its own
+    guard for a defaults object built some other way, so both call sites are
+    still asserted.
+    """
     net, _ = _build_three_bus_mv_with_lv_stub()
-    bad = gi.ImportDefaults(
-        rho=100.0,
-        frequencies=[],
-        default_bus_type=_bus_type(),
-        default_branch_type=_branch_type(),
-    )
+    with pytest.raises(ValueError, match="frequencies"):
+        gi.ImportDefaults(
+            rho=100.0,
+            frequencies=[],
+            default_bus_type=_bus_type(),
+            default_branch_type=_branch_type(),
+        )
+
+    bad = _defaults()
+    object.__setattr__(bad, "frequencies", [])
     with pytest.raises(ValueError, match="frequencies"):
         gi.from_pandapower(net, defaults=bad, voltage_level_kV=20.0)
 
@@ -194,7 +206,7 @@ def test_imported_network_solves_after_adding_source_and_fault():
 
     gi.create_source(name="src", bus="bus_mv_1", values={50: 100.0}, network=network)
     gi.create_fault(name="F1", bus="bus_mv_3", scalings={50: 1.0}, network=network)
-    gi.run_fault(network, fault_name="F1", auto_parallel_coefficients=True)
+    gi.run_fault(network, fault="F1", phase_current_mode="auto")
 
     epr = network.results["F1"].buses[0].uepr
     assert epr >= 0.0  # solver completed and produced a number

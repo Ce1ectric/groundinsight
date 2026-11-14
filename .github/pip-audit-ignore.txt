@@ -1,0 +1,17 @@
+# Advisories the dependency audit may ignore (scripts/audit_dependencies.py).
+#
+# Keep this list empty. Upgrade the affected package instead; add an entry
+# only when no fixed release exists yet or the fix cannot be taken right
+# now, and say why the advisory does not reach groundinsight's code paths.
+#
+# Format, one advisory per line (id as pip-audit prints it):
+#
+#     <advisory id>  # <why it does not affect groundinsight>; until YYYY-MM-DD
+#
+# Example (commented out):
+#
+#     GHSA-xxxx-xxxx-xxxx  # only in the docs toolchain, never shipped; until 2027-01-31
+#
+# The end date is mandatory. After it, the audit fails until the entry is
+# removed or renewed with a fresh reason -- an exception nobody re-examines
+# becomes permanent.

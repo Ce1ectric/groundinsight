@@ -2,11 +2,27 @@
 
 All notable changes to `groundinsight` are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Releases up to 0.6.0 followed [Semantic Versioning](https://semver.org/spec/v2.0.0.html);
+from the first release after 0.6.0 on, the project uses
+[calendar versioning](https://calver.org/) in the form `YYYY.M.MICRO` — the
+year, the month without a leading zero, and a counter that restarts at 0 in
+every month (`2026.11.0`, `2026.11.1`, `2026.12.0`, `2027.1.0`). The month
+carries no leading zero because PEP 440 normalises `2026.01.0` to
+`2026.1.0`, and a padded tag would never match the version on PyPI.
 
-Change categories follow the Keep-a-Changelog vocabulary:
+A calendar version says *when* a release was cut, not whether it is
+compatible with the previous one. Two rules carry that promise instead:
 
+- Every change that can break working user code is listed under
+  **Breaking** with a migration note, in addition to its regular entry.
+- A deprecated feature keeps working and emits a `DeprecationWarning` for at
+  least **two releases and six months** before it is removed.
+
+Change categories follow the Keep-a-Changelog vocabulary, plus *Breaking*:
+
+- **Breaking** — changes that can break working user code, each with a
+  migration note (also listed under their regular category).
 - **Added** — new features and public API.
 - **Changed** — behaviour changes to existing public API.
 - **Deprecated** — features that still work but will be removed.
@@ -26,18 +42,1511 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+### Breaking
+
+Each item is detailed under its regular category below; this list is the
+migration checklist.
+
+- **Version scheme.** The first release after 0.6.0 is numbered by the
+  calendar (`YYYY.M.MICRO`). A Poetry constraint such as `groundinsight =
+  "^0.6"` will not pick it up; use `groundinsight = ">=2026.11"`.
+- **`frequency_Hz` is numeric** in `res_buses()`, `res_branches()` and the
+  sweep frames; the RMS rows are marked by the boolean column `is_rms`.
+  Replace `pl.col("frequency_Hz") == "RMS"` with `pl.col("is_rms")` and
+  `== "50"` with `== 50.0`. (`OutageStudyResult.compare_*()` keeps its string
+  join key.)
+- **`network.paths` is empty after a default `run_fault`.** Call
+  `gi.create_paths(network)` where the enumerated paths are needed as data.
+- **Networks that used to solve silently now raise**: an active element
+  without an impedance at a solved frequency, `kappa`/`n` outside the
+  IEC 60909 range, negative `R/L/C/M` fields in the state-space solver,
+  assignments that violate a field validator, formulas calling functions
+  outside the whitelist, `bus_response` on a stale nodal system, and
+  `ImportDefaults(frequencies=[])`. Each message names the element and the
+  fix.
+- **Values change** where the old ones were wrong: `value_current` with a
+  source on the fault bus; `BusResponse.evaluate` (`Z_G_Ohm`, `r_epr`);
+  `I_th`/`i_p` with a 0 Hz bin; `analyze_cuts` at 0 Hz and with Thévenin
+  sources (new row `source_loop`); FFT transients with unreachable sources;
+  the state-space solver with 0 Hz first in the frequency list, and its time
+  series is one sample shorter.
+- **Persistence.** Databases written by 0.6.0 or earlier are migrated when
+  they are opened (a backup is kept); JSON writes `"inf"` instead of the
+  non-standard `Infinity` (old files still load); `save_network` refuses to
+  rewrite a bus or branch type shared with another network unless
+  `overwrite_types=True`.
+- **Top-level API.** `gi.NetworkDB`, `gi.BusTypeDB` and `gi.BranchTypeDB`
+  are no longer re-exported; `gi.Path` is the domain model, not
+  `pathlib.Path`; `BusResponse.admittance` lost its unused `freq`
+  argument; the reference case `en50522_chain` now checks `I_E`.
+- **Release tooling.** The console command `poetry run release` is gone;
+  run `poetry run python scripts/release.py`.
+- **Dependencies.** pillow 13.0.0 or newer is required (security floor, see
+  *Security*). Upgrade pillow in the environment; if another package there
+  caps pillow below 13, that package has to move first (SEC2).
+- **State-space transients of meshed networks with mutual coupling change
+  value.** The phase current that drives the coupling is now divided between
+  the routes of a ring or mesh like the stationary default
+  `phase_current_mode="auto"`; before, every route carried the full source
+  current. Chains, trees and networks without coupling are unchanged.
+  Migration: there is no switch back — the old numbers were those of the
+  legacy split (`run_fault(..., phase_current_mode="paths")`, still available
+  stationarily). `Branch.parallel_coefficient` is no longer read by
+  `TransientStudy`, and a state-space solve no longer fills `network.paths`;
+  call `gi.create_paths(network)` where the paths are needed as data. (PH2)
+- **`session` and `db_session` are no longer in `groundinsight.__all__`, and
+  the session globals can no longer be assigned.** A star import does not
+  bind them any more, and assigning `gi.session`, `gi.engine` & co. no longer
+  redirects the module-level persistence functions, which now use the default
+  `gi.Database`. Migration: use the object that `gi.start_dbsession(path)`
+  returns, or `gi.Database(path)` — `db.session()` yields a short-lived
+  SQLAlchemy session, `db.engine` is the engine. Reading `gi.session` keeps
+  working with a `DeprecationWarning`. (ARC2)
+- **Formulas of a bus or branch type may only use the symbols the evaluator
+  binds.** A bus formula is evaluated with `f` and `rho`, a branch formula with
+  `f`, `rho` and `l`; `j`, `I`, `pi` and `E` are available in both. Any other
+  name (`L`, `F`, `Rho`, `R + j*X` …) used to be accepted and failed only at
+  `create_bus`/`create_branch` with "Cannot convert expression to float"; it
+  now raises when the type is created, naming the symbol, the allowed set and
+  the case-insensitive match. Migration: write the symbols in lower case as
+  listed; a bus formula has no `l`. (USE2)
+- **`Branch.length` must be a finite length > 0 km.** Zero, negative, NaN and
+  infinite lengths are rejected at construction and on assignment, with a
+  message about the length. They used to surface as "exactly zero impedance"
+  or as a negative real part, and a detached branch was not checked at all.
+  Migration: model a bus coupler or jumper with a short positive length
+  (e.g. `0.001`). A database or JSON file with such a branch no longer loads
+  until the length is corrected. (USE5)
+- **Tighter formula limits.** Exponents above 12 (written out or computed,
+  e.g. `10**-15`, `9**(2*7)`), number literals with more than 100 digits,
+  hexadecimal/octal/binary literals, more than 512 terms, more than 8 calls
+  or more than 3 arguments per call, `floor`/`ceiling` of a value with more
+  than 100 digits and `exp`/`sinh`/`cosh` of an argument above 1e100 are
+  rejected. No formula in the documentation, the notebooks or the test suite
+  comes near any of them (at most 6 digits, exponent 2, 27 terms, 2 calls,
+  2 arguments). Migration: write small factors with an exponent part
+  (`1e-15` instead of `10**-15`). (SEC1)
+- **Edit invariants.** Renaming a bus, branch, source or fault that belongs to
+  a network, rewiring a branch, source or fault to a bus the network does not
+  have, adding an element that belongs to another network, and assigning a
+  field of a `BusType`/`BranchType` now raise `ValueError`. Migration: remove
+  the element and add a renamed copy; add `element.model_copy(deep=True)` to a
+  second network; change a type with
+  `new = bus_type.model_copy(update={...})` and `network.update_bus(name, type=new)`.
+  (GUI3, F9)
+- **`ResultReductionFactor.u_earthing` / `z_earthing` and the grounding
+  impedance are now the EN 50522 quantities at the fault bus.** `u_earthing`
+  is the EPR of the fault bus (`U_E`); `z_earthing`,
+  `ResultGroundingImpedance.value`, `Z_G` in `res_all_impedances()` and
+  `Z_G_Ohm` of `bus_response` are the driving-point impedance of the earthing
+  network there (`Z_E`). Migration: the old values (the current-weighted mean
+  potential of the earth group and that mean divided by `I_E`) are in
+  `u_earthing_group`/`z_earthing_group`. A result stored before the change
+  loads with its values moved to those fields, `u_earthing`/`z_earthing` and
+  the grounding impedance left empty, and an info diagnostic
+  `LEGACY_EARTHING_DEFINITION`; run the fault again to get `U_E` and `Z_E`.
+  (PH4, F4)
+- **`run_fault` raises `ValueError` for a source that has no value at any
+  network frequency.** Such a source used to contribute 0 A, and the run
+  reported 0 V at every bus. Migration: give the source values at the network
+  frequencies, or deactivate it. (USE3, F8)
+- **Earth-return quantities that are undefined are `None`, not rounding
+  noise.** `I_E`, `value_current` and the earth group are `None`/`[]` when no
+  electrode current exceeds `1e-9·|I_F|`. The EPR-based `value` is `None` when
+  the fault-bus EPR without coupling is below `1e-9·|I_F|·|Z_E|`. Migration:
+  code that turns these fields into floats has to handle `None`; the
+  diagnostics `EARTH_GROUP_UNDEFINED` and `REDUCTION_FACTOR_UNDEFINED` give
+  the reason. (P9, F14)
+- **A real part of minus infinity is refused, not read as an open circuit.**
+  A bus formula with a `log(f)` term that no factor of `f` cancels, such as
+  `rho*0.01 + log(f)`, is −∞ at 0 Hz (`log(0)`). The passivity checks looked
+  at finite values only, so −∞ passed and the solver read `1/(−∞) = 0`: the
+  electrode was disconnected at DC without a word — in a DC study and in the
+  0 Hz bin of every transient study, while a bin just above 0 Hz is refused
+  for its negative real part (`1 + log(f)` is negative below 0.37 Hz). −∞ is
+  the limit of negative resistances and is now refused like one, for bus
+  impedances, grounding-conductor self impedances and voltage-source
+  impedances: where the element is built, on the transient FFT grid and
+  before the solve. Refusing rather than warning, because there is no value
+  to continue with — +∞ would be an open circuit the formula does not
+  describe — and because the same formula with a Carson term beside it was
+  already refused (its approach to 0 Hz ends on a finite negative value).
+  Positive infinity — the `"nan"` open end, `1/f`, a capacitance at DC —
+  stays an open circuit, and a network that does not list 0 Hz never
+  evaluates the formula there and is not affected (a transient study always
+  does). Migration: give the formula a finite DC value — let the
+  frequency-dependent part vanish at 0 Hz (`f*log(...)`, as in Carson's
+  terms) or state the DC resistance as a term without `f` — or leave 0 Hz out
+  of a stationary study. (D7)
+
+### Added
+
+- `run_outage_study(..., on_error="raise"|"record")` and
+  `OutageStudyResult.failures`, matching `run_sweep`.
+- `ImportDefaults.switch_branch_type`, `switch_length_km` and
+  `derive_phase_impedance` (a `phase_impedance_formula` from
+  `r_ohm_per_km + I*x_ohm_per_km`, deduplicated by formula) for the
+  pandapower importer; `preview_pandapower_import(..., defaults=...)`.
+- `utils.impedance_calculator.compute_impedance_array` and
+  `check_passive_impedance_array` — the array path the transient solver
+  uses; same results, same messages, without a `ComplexNumber` per bin.
+- `Network.sources_reaching(fault_name)`, `PathFinder.reaches`,
+  `set_/get_pathfinder_max_paths`, `ElectricalNetwork.state_fingerprint()`.
+- A shared `simple_network` fixture in `tests/conftest.py`.
+- CI: the release workflow runs the test suite before it builds; pull
+  requests run `mkdocs build --strict` and execute `docs/examples/*.ipynb`.
+- **`TransientStudy.solve(..., fft_block_bytes=None)` bounds the memory of the
+  FFT solver.** Upper bound in bytes for one batch of dense admittance
+  matrices, 256 MiB by default; the batch holds
+  `max(1, min(512, fft_block_bytes // (16 * n**2)))` frequency bins for `n`
+  active buses. A non-integer raises `TypeError`, a value ≤ 0 `ValueError`.
+  (P8)
+- **Diagnostic code `TRANSIENT_PHASE_SPLIT`** (`ModelAssumptionWarning`,
+  elements: the coupled branches). Raised by the state-space solver when the
+  phase split of a meshed network depends on frequency — routes of different
+  R/L ratio — so that a DC offset and harmonics are divided as at `f_eval`.
+  (PH2)
+- **`gi.Database(path, *, migrate=True)` — the SQLite store as an object.**
+  It owns its engine and session factory and offers the persistence
+  operations as methods: `save_bustype`/`load_bustypes`/`delete_bustype`,
+  the same for branch types, `save_network`/`load_network`/`list_networks`/
+  `delete_network`, `needs_migration`/`migrate`, `session()` for direct ORM
+  work, `close()` and the context-manager protocol; `":memory:"` gives a
+  private in-memory database. Up to 0.6.0 the store lived in module globals:
+  one database per process (a second file raised) and one session registry
+  shared by every caller, which a GUI with two open projects or a server
+  cannot use. Every method now runs in its own short-lived session; two
+  databases on two files work from two threads at the same time, and one
+  database works from several threads — operations on the same file are
+  serialised by a lock shared by every `Database` of the process on that
+  file. Without that lock, two threads saving networks that share a bus type
+  failed with `IntegrityError` in 5 of 5 trials; with it, in none. A type a
+  stored network still uses cannot be deleted. The new list/delete
+  operations are also available as `groundinsight.database.crud` functions.
+  (ARC2)
+- **The JSON project file carries `schema_version` and
+  `groundinsight_version`.** Both are top-level keys in front of the model
+  fields, so `Network.model_validate_json` still reads a project file and a
+  0.6.0 installation still opens one. `load_network_from_json` refuses a file
+  of a newer schema with a `ValueError` that names both versions, instead of
+  silently dropping what the newer release stored; files without the keys
+  (0.6.0 and earlier) load unchanged. The current version is
+  `groundinsight.io.project_file.SCHEMA_VERSION = 1`. (GUI1)
+- **`Network.stale_results()` and `Network.is_result_stale(fault)` tell which
+  stored results no longer match the network.** `run_fault` stamps
+  `Result.input_digest`, a digest of everything the result was computed from:
+  the frequencies, every bus, branch and source as the solver reads them, and
+  the definition of the result's own fault. The comparison is by content, so
+  an undone edit makes a result current again, and `outage_context`,
+  `run_sweep` and the rho searches -- which restore the network -- leave the
+  flags as they found them; the result a study leaves behind computed under
+  modified inputs (last outage scenario, last sweep point) is reported stale.
+  Metadata (`description`, `Fault.t_k_s`/`n_factor`, a source's IEC 60909
+  characteristics) and other faults do not count. The digest survives JSON and
+  the database (results are stored as JSON there; no migration); results
+  without one -- written by an older version -- are never reported. Cost:
+  10 ms per check on a 1000-bus ring with 7 frequencies. (GUI3, F9)
+- **`Network.update_bus(name, **fields)` and `Network.update_branch(name, **fields)`.**
+  Every value is validated on a detached copy, bus references are checked and
+  the impedances derived before anything is written -- all or nothing.
+  Derived fields (`impedance`, `self_impedance`, …) and `name` are refused with
+  an explanation. (GUI3, F9)
+- **`Network.remove_bus/remove_branch/remove_source/remove_fault`.**
+  `remove_bus` refuses while a branch, source or fault refers to the bus and
+  names every one of them; `remove_fault` also drops the stored result and the
+  active flag; enumerated paths through a removed element are invalidated.
+  Unknown names raise `ValueError`, like `run_fault` for an unknown fault.
+  (GUI3, F9)
+- **`utils.validations.check_formula_symbols`, `BUS_FORMULA_SYMBOLS`,
+  `BRANCH_FORMULA_SYMBOLS`, `FORMULA_CONSTANTS`** -- the symbol check of the
+  type validators, usable by a formula editor. (USE2)
+- **`ResultReductionFactor.i_fault`, `u_earthing_group`,
+  `z_earthing_group`.** `i_fault` is the denominator of `value_current` (the
+  sum of the scaled source currents that reach the fault). The two group
+  fields keep the earth-group mean as a diagnostic. (PH4, F4)
+- **`Fault.scaling_at(frequency)`, and `scalings` is optional.**
+  `create_fault(..., scalings=None)`, `scalings={}` and `Fault(...)` without
+  the argument all mean factor 1.0 at every frequency. `scaling_at` is the one
+  place that applies this default. (PH6, USE4, F7)
+- **`ElectricalNetwork.earthing_admittance_matrix(freq)` and
+  `ElectricalNetwork.thevenin_loop_admittances(freq)`.** The first is the
+  earthing network alone: electrodes and shields, without coupling and
+  without Thevenin loop closures, from which `Z_E` is computed. The second
+  returns the loop-closure stamps that the Y assembly and the earthing matrix
+  share. `BusResponse.fault_driving_point(z_bus, freq)` returns `Z_E` for the
+  electrode under test. (PH4)
+- **Diagnostics with codes, collected in `Result.diagnostics`:**
+  `ModelAssumptionWarning` `EARTH_GROUP_UNDEFINED`,
+  `REDUCTION_FACTOR_UNDEFINED`, `EARTHING_IMPEDANCE_UNDEFINED` (P9, PH4),
+  `PHASE_PROXY` (PH3), `THEVENIN_COUPLING` (PH1),
+  `SOURCE_WITHOUT_PHASE_PATH` (PH9) and `THERMAL_DC_EXCLUDED` (PH10);
+  `InputWarning` `SOURCE_FREQUENCY_GAP`, `SOURCE_FREQUENCY_OUTSIDE_NETWORK`
+  (USE3) and `SCALINGS_INCOMPLETE` (PH6); info `LEGACY_EARTHING_DEFINITION`
+  (PH4).
+- **`BusResponse.z_fault_ideal`.** Where the electrode at the studied bus is
+  the only one on the fault side, the earthing network without it floats and
+  its open-network values (`z_fault_open`, `z_fault_transfer`, `z_bus_open`)
+  do not exist. `Z_E` still exists for every electrode there, because all of
+  the current leaves through it: `fault_driving_point(z_bus)` returns
+  `z_bus + z_fault_ideal`, where `z_fault_ideal` is the driving point at the
+  fault bus with an ideal electrode at the studied bus. With no electrode, it
+  returns `None`. (PH4 follow-up)
+- **`gi.solve(network, fault)` — a fault solve that writes nothing into its
+  input.** `run_fault` stores the result, activates the fault, may drop or
+  rebuild the path set and attaches the assembled admittance system: right
+  for a notebook, wrong for a GUI whose worker thread solves while the user
+  interface reads the network, for an undo history, or for a study that
+  promises to hand its input back. `solve` runs the unchanged `run_fault`
+  pipeline on an overlay that shares the bus, branch and source objects
+  (read only) and owns everything a solve writes, so its result is
+  bit-identical to `run_fault`'s — serialised comparison on a chain, a ring
+  and a Thevenin network in both phase-current modes, and the closed form
+  `r = |(Z_s - Z_m)/(Z_s + Z_A + Z_B)|` of a two-bus line to 4.4e-16 — and the
+  network is unchanged afterwards: serialised form, stored results, active
+  fault, path set, assembled system and private state, also when the solve
+  raises. The overlay is a copy, not a construction, so the input's elements
+  stay attached to the input and keep re-deriving on edits. The result
+  carries the input digest `run_fault` would stamp: kept with
+  `network.results[fault] = result`, it counts as current for
+  `stale_results()` until the next edit. Not for two threads solving the
+  same network object at once — the path caches are module-level. (ARC1)
+- **`gi.check_network(network, *, fault=None)` — every problem of a network
+  as data.** Returns a list of `Diagnostic` records (code, severity, message,
+  elements) and never raises; `[]` for a sound network. 25 codes, listed with
+  their severity in `groundinsight.checks.CHECK_CODES`: invalid elements and
+  frequencies, missing excitation, references to buses that do not exist,
+  impedances the solver cannot invert (missing, NaN, not passive, formula
+  errors), source frequency coverage, faults on unknown or inactive buses,
+  partial scalings, faults no source reaches, isolated buses and earthing
+  islands without a reference to earth. A branch end or a source on a bus
+  that does not exist is something the solver drops without a word — on a
+  four-bus ring with one branch pointing at a missing bus the maximum EPR
+  became 239 V instead of 73 V; the editing API refuses such a reference,
+  but a hand-edited project file or a script-filled network can carry one.
+  The check is structural — no assembly, no solve — so a GUI can run it
+  after every edit, and every severity is cross-checked against the solver:
+  in 20 malformed networks each `error` is one on which `run_fault` raises
+  or returns 0 V for a network that is not the one described. The codes
+  `SCALINGS_INCOMPLETE`, `SOURCE_FREQUENCY_GAP` and
+  `SOURCE_FREQUENCY_OUTSIDE_NETWORK` mean what they mean in
+  `Result.diagnostics`. (GUI9)
+- **Progress reports and cooperative cancellation in the five long-running
+  studies.** `run_sweep`, `run_outage_study`, `find_max_rho_scaling`,
+  `find_max_rho_f_scaling` and `TransientStudy.solve` take
+  `progress(done, total, label)`, called after every unit of work — a sweep
+  point, an outage scenario, one solve of a search, a batch of FFT bins (at
+  most 512, fewer under a tight `fft_block_bytes`), a stage of the
+  state-space solver — and `should_cancel()`, asked before every unit. A true
+  answer raises the new `gi.StudyCancelled` (a `RuntimeError` with `done`
+  and `total`) and puts the network back exactly as it was when the study
+  was called: serialised form, stored results and their order, active fault,
+  paths, assembled system. Python cannot stop a thread from outside, so until
+  now a GUI or a server could only wait for a running study. The searches
+  announce their total before the first solve — a log-bisection needs the
+  same number of halvings wherever the threshold lies — and match it: 20
+  progress calls for 20 solves at the default settings, and the announced
+  total equals `n_scan + k` for every tolerance and grid tried. Results with
+  and without hooks are identical. (GUI5)
+- **Networks as tables: `gi.network_from_tables(...)` and
+  `Network.to_tables()`.** Ten tables with a pinned schema
+  (`groundinsight.io.TABLE_SCHEMAS`: column order and dtype; only
+  `frequencies`, `bus_types` and `buses` are required), as Polars frames,
+  CSV files or a directory of `<table>.csv` files; for a workbook,
+  `pl.read_excel(path, sheet_id=0)` returns the dict of sheets
+  `network_from_tables` takes (Polars needs its optional `fastexcel` for
+  that). The tables hold input only: the network is built through the same
+  `Network.add_*` path as `create_bus` & co., so every formula passes the
+  formula guard and every impedance is evaluated from its type; results and
+  paths are not exported. Network → tables → network is identical
+  (`model_dump_json` without results) for four example networks and the
+  shared test fixture, through frames and through CSV, and the rebuilt
+  networks solve to identical results. Malformed tables raise one
+  `ValueError` that lists every problem with table, row and column — missing
+  or unknown columns (a typo such as `lenght` is not dropped silently),
+  decimal commas, duplicate names, references to buses, types, sources or
+  faults that do not exist, validation errors. Also
+  `groundinsight.io.network_to_tables`. (USE6)
+- **`Network.res_fault(fault)` — the key figures of a fault in one table.**
+  Fault current, EPR at the fault and the largest EPR with its bus, the
+  EPR-based and the current-based reduction factor, the earth-return
+  current `I_E`, the EN 50522 earthing voltage `U_E` and earthing impedance
+  `Z_E` were spread over `Network.faults`, `ResultBus`,
+  `ResultReductionFactor` and `ResultGroundingImpedance`, and every GUI
+  tile, report template or script picked them out itself. `res_fault`
+  returns one Polars frame with the pinned schema `gi.RES_FAULT_SCHEMA`: one
+  row per network frequency and one RMS row (`is_rms`, `frequency_Hz`
+  null), magnitudes and angles, and `n_diagnostics`, the number of records
+  in `Result.diagnostics`, on every row. A value the result marks as
+  undefined is null — `r_current` and `I_E_A` at a frequency without fault
+  current, `U_E`/`Z_E`/`I_F` of a result stored before these fields
+  existed; ratios, impedances and angles are null on the RMS row, which
+  carries the stored RMS EPR and root sums of squares of `I_F`, `I_E` and
+  `U_E`. It reads the stored result only and changes nothing: an unknown
+  fault is a `ValueError`, a fault without stored result a `RuntimeError`
+  that names `run_fault` and `solve`, and a stale result is reported as
+  stored (`stale_results()` says so). Every column agrees with the result
+  field it names and with an independent nodal solver to 1e-12 on a radial
+  chain, a meshed cable/overhead-line ring and a network with two infeeds of
+  different angle. (USE1, GUI6)
+- **`gi.PathfinderSettings` and `Network.pathfinder_settings` — the limit and
+  the memory of the path search belong to the network.** Up to 0.6.0 the limit
+  (`set_pathfinder_max_paths`) and the memory size (`set_pathfinder_cache_size`)
+  were process-wide switches, and the memory was three module-level
+  dictionaries shared by every network. A limit set for one network applied to
+  all of them — also to a network another thread was solving at that moment —
+  the dictionaries were changed from several threads without a lock, and they
+  kept every branch of a deleted network alive. Now
+  `net.pathfinder_settings = gi.PathfinderSettings(max_paths=…, cache_size=…)`
+  configures one network; the settings are frozen and validated (positive
+  integers, no `bool`, no float), `None` returns to the process default
+  (`max_paths=100_000`, `cache_size=256`), and a network only accepts a
+  `PathfinderSettings` (`TypeError` otherwise). Each network owns its memory:
+  three LRU tables bounded by its own `cache_size`, holding the network only
+  weakly; every copy (`model_copy`, `copy`, `deepcopy`, pickle) starts with an
+  empty one and keeps the settings. The settings are runtime configuration and
+  are not written to project files or the database. The limit error names the
+  per-network fix. Measured: two 4 × 4 grids (184 paths each) with limits 100
+  and 1000, solved in two threads for four rounds — before, one of the two
+  results was wrong in every round (4 of 8, independent of timing, because the
+  last global write wins); now 0 of 8, equal to two sequential runs. (ARC2)
+- **Service layer `groundinsight.api` for front ends.** A GUI, a server and the
+  command line need the same things around a network that a notebook does not:
+  a session that owns one project, undoable edits, calculations off the
+  caller's thread, and data that travels as JSON. `ProjectSession` holds one
+  network with a revision counter (undo/redo return to the number of the state
+  they restore), resource limits as constructor parameters (`max_buses`,
+  `max_branches`, `max_job_runtime_s`, `max_undo`, `max_paths`) and a file or a
+  `ProjectStore` location (`MemoryStore`, `DatabaseStore` over `gi.Database`);
+  open and save use the library's project-file functions, without results.
+  Nineteen commands (add/update/remove for buses, branches, sources, faults,
+  bus types, branch types; `SetFrequencies`) go through the library's editing
+  API, are atomic and undoable — after undo the serialised network equals the
+  one before, and a rejected command changes nothing and names the library's
+  reason. Whether a result is stale is the library's verdict
+  (`Network.is_result_stale`), so undo makes a result current again.
+  `JobRunner` runs solve, solve_all, sweep, outage and max_rho jobs in a thread
+  or a process with progress, cancel (`JobCancelled` is a `gi.StudyCancelled`),
+  a runtime limit and results bound to the revision they were computed from.
+  25 DTOs (pydantic, strictly JSON-safe, `dto_schema_version = 1`) with
+  `json_schemas()` for 27 schemas. The key figures equal `res_fault` exactly
+  and the independent reference solver to 1e-10 on the documented examples.
+  Exported from `groundinsight.api`, not from the package root. (GUI1–GUI9,
+  ARC1)
+- **Command line `python -m groundinsight` / `groundinsight`.** `run
+  <project.json> --fault <name> [--format table|json|csv]` and `check`, built on
+  the service layer (the same DTOs as the GUI); exit codes 0 (fine), 1 (check
+  errors or a failed solve), 2 (usage or file problems).
+- **`groundinsight-gui`, a separate distribution in `gui/` (GUI phase 0).**
+  NiceGUI 4.0, browser mode by default, `--native` for a desktop window,
+  German and English. Start page with templates and opening a project file,
+  editable element tables (every edit a command, undo/redo), a fault or all
+  faults as a background job with progress and cancel, key-figure tiles, key
+  figures per frequency, EPR per bus as chart and table, the diagnostics of the
+  result with links to the elements they name, the stale marker, the
+  pre-flight check, save and save-as. Every number on screen is a DTO field;
+  the GUI tests check the shown values against `res_fault`/`res_buses` of an
+  independently solved twin and against the reference solver. Released
+  together with the library under the same version, pinned to it.
+- **`groundinsight.diagnostics.note()` records an informational diagnostic on the current run without raising a warning.** Some findings explain a result rather than cast doubt on it; raising them as warnings would make every study that places trial faults on every bus repeat them, and a strict warnings filter would turn a correct result into an error. `note` appends a `Diagnostic` with severity `"info"` to the active `collecting()` sink and does nothing outside one.
+
+### Changed
+
+- **Calendar versioning (`YYYY.M.MICRO`) instead of SemVer.**
+  `scripts/release.py` computes the next version from the release date —
+  the first release in a month gets the counter 0, every further one counts
+  up — and `set` accepts only a well-formed calendar version for the month of
+  the release date that is newer than the current one. The SemVer bump kinds
+  `major`/`minor`/`patch` stop with an explanation instead of guessing, and
+  `CITATION.cff` gains a `date-released` field on every release. The month
+  carries no leading zero because PEP 440 strips it (`2026.01.0` is published
+  as `2026.1.0`), so a padded tag would never match PyPI. The head of this
+  file states the scheme and the deprecation policy that replaces the
+  compatibility promise SemVer used to carry.
+- **Two reference cases were replaced by ones that can fail.**
+  `en50522_chain` checked `U_E = 3*I_0 * Z_E * r` with all three factors read
+  out of one result — an identity the implementation closes by construction,
+  so the case agreed to 1e-16 whatever the model did, and tripling every
+  electrode current made the deviation *smaller*. It now re-derives `I_E` from
+  an independently assembled nodal system (quantity and tolerance changed).
+  `ladder_potential_decay` built its matrix from local constants rather than
+  from the model and is now assembled from `bus.impedance` /
+  `branch.self_impedance`.
+- **`summarize` gains an `n_nan` column** and `check_conductor_limits` /
+  `check_node_limits` gain `I_dc_A` and `I_ac_rms_A`. Code that asserts an
+  exact column set has to be updated.
+- **`BusResponse.admittance` lost its `freq` argument**, which it never read.
+
+- **`res_buses()` / `res_branches()` report `frequency_Hz` as `Float64`**
+  with the RMS row marked by a new `is_rms` column, instead of a string
+  column mixing `"50"` and `"RMS"` that could not be compared with a number
+  and disagreed with `res_all_impedances()`. Filter with
+  `pl.col("is_rms")` and `pl.col("frequency_Hz") == 50.0`; both frames also
+  gain `I_inj_A` / `I_inj_degree`, the earthing-conductor current the
+  `ResultBus` docstring warns not to confuse with the electrode current.
+  All three `res_*` frames carry a pinned schema, so an empty result keeps
+  its columns.
+- **`net.paths` is empty after a default `run_fault`** (see *Fixed*); paths
+  that were persisted with the network are adopted on load and survive the
+  next solve as long as the topology still matches.
+- **The FFT transient solver warns** (`TransientModelWarning`, exported)
+  when the network carries mutual coupling it does not model, when the
+  active fault has `scalings` other than 1 (both solvers ignore them), and
+  when the window ends while the response is still ringing — the periodic
+  DFT then wraps the tail into the start of the trace (measured −37 % on the
+  peak with a 0.4 s window). `solve(..., zero_pad=True)` computes on a window
+  twice as long and reports the first half. `|M_mutual| > L_self` warns as the
+  usual mH/H slip. Both solvers share one time grid; the state-space series
+  is one sample shorter than before (`[0, t_end)`), a real branch named
+  `__vsrc__…` is refused.
+- **Non-finite floats are written as the strings `"inf"`, `"-inf"`, `"nan"`**
+  in JSON and in the SQLite JSON columns, because the open-end sentinel of
+  the `"nan"` formula used to be emitted as the literal `Infinity`, which is
+  not RFC 8259 JSON (SQLite `json_valid()` = 0, `JSON.parse` throws). Old
+  files still load.
+- **`gi.Path` is the domain model**, not `pathlib.Path`; `Network`, `Bus`,
+  `BusType`, `Branch`, `BranchType`, `Fault`, `Source`, `Result`,
+  `ResultBus`, `ResultBranch`, `ComplexNumber` are exported and in
+  `__all__`; the ORM classes `BusTypeDB` / `BranchTypeDB` / `NetworkDB` are
+  no longer reachable from the top-level package.
+- **`run_fault(auto_parallel_coefficients=…)` emits a `DeprecationWarning`**
+  in addition to the log line, which without a logging setup nobody saw.
+- **`scripts/` is not packaged and the `release` /
+  `generate-third-party-licenses` entry points are gone**: they installed a
+  top-level module `scripts` and an executable called `release` into every
+  user's environment. Run `poetry run python scripts/release.py …` instead.
+- **`python = "^3.13"`** (was `^3.14`); the suite passes unchanged on 3.13 and
+  CI runs both.
+- **`ImportDefaults` validates `rho`, `frequencies` and `switch_length_km`**
+  on construction, so an empty frequency list fails at the defaults rather
+  than deep in the importer.
+- **Python 3.12 is the floor (`python = "^3.12"`, was `^3.13`).** The full
+  suite passes on 3.12, 3.13 and 3.14, and `groundfield` — which requires
+  `^3.12` and was therefore held at groundinsight 0.3.0 — can follow current
+  releases again. README and the installation page say "Python 3.12 or
+  newer" (they said 3.14); the wheel declares `Requires-Python >=3.12,<4.0`
+  and the 3.12/3.13/3.14 classifiers, which Poetry derives from the
+  constraint (F10, REL4, REL6).
+- **`save_network_to_json` writes UTF-8 atomically; `load_network_from_json`
+  reads UTF-8.** The file used to be opened without an encoding, so the
+  locale decided: on Windows (cp1252) a name with `Ω` or `ρ` raised
+  `UnicodeEncodeError` on save, and a file with `"Süd"` written on macOS came
+  back as mojibake. The writer serialised *after* truncating the target, so a
+  failure in between left an empty or half-written project. Now the network
+  is serialised first, written to a temporary file in the target directory,
+  flushed and `fsync`-ed, and moved over the target with `os.replace`; a
+  failure leaves the previous file byte-identical. The replaced file keeps
+  its permission bits, a read-only file is refused, a symbolic link keeps
+  pointing at the saved file; hard links to the old file keep the old
+  content. Reading accepts a UTF-8 byte-order mark. A file that is not UTF-8
+  (0.6.0 on a Windows machine) is read with the platform's preferred
+  encoding, as 0.6.0 did, with an `InputWarning` `PROJECT_FILE_LEGACY_ENCODING`.
+  Invalid JSON and a non-object top level are reported as `ValueError` naming
+  the file (formerly a `pydantic.ValidationError`, which is a `ValueError` as
+  well). The functions live in `groundinsight.io.project_file`; names and
+  signatures are unchanged, and `path` may be any `os.PathLike`. (GUI1)
+- **`gi.start_dbsession(path)` returns the default `Database`.** The
+  module-level helpers (`start_dbsession`, `close_dbsession`,
+  `save_*_to_db`, `load_*_from_db`) keep their names, arguments, messages and
+  errors and delegate to that object; without a started session they still
+  raise `RuntimeError`. They moved from the package `__init__` to
+  `groundinsight.database.store` (re-exported as before). (ARC2)
+- **`import groundinsight` no longer imports `matplotlib.pyplot`.** The
+  plotting helpers import it on their first call. The package import is
+  about a third faster — median 1.33 s → 0.83 s (minimum 0.95 s → 0.60 s,
+  40 interleaved runs in fresh interpreters) — and a program that never
+  plots, such as a GUI or a server, never loads pyplot's global state.
+  `typing.get_type_hints` on a plotting helper needs `matplotlib.pyplot`
+  imported first. (GUI8)
+- **Assigning an input of an element that belongs to a network re-derives it.**
+  `Bus.type`, `Bus.specific_earth_resistance`, `Branch.type`, `Branch.length`
+  and `Branch.specific_earth_resistance` go through `calculate_impedance`, the
+  code path of `add_*`; assigning `Network.frequencies` re-derives every
+  element, computing all of them before writing any. A failing derivation
+  leaves the element as it was and raises. `bus.specific_earth_resistance = 1000`
+  used to be accepted while the impedance kept its old value, and the next
+  `run_fault` used it silently (measured on a four-bus ring after editing one
+  bus and one branch: EPR at the fault bus 113.4 V instead of 148.4 V, at a
+  neighbouring bus 0 V instead of 13.6 V). On an element that belongs to no network an assignment only stores
+  the value. (GUI3, F9)
+- **`BusType` and `BranchType` are read-only after construction.** A type has
+  been evaluated into every element that uses it, and after a JSON or database
+  round trip every element holds its own copy, so an in-place change could
+  neither reach the elements nor be traced to them. (GUI3, F9)
+- **The optional derived fields are `None` when the type has no formula for
+  them** (`R`/`L`/`C`, `phase_impedance`, `R_self` … `M_mutual`), instead of
+  keeping whatever an earlier type left there. (GUI3, ARC9)
+- **`U_E = 3·I_0·Z_E·r` now holds as physics, not by definition.** The
+  earth-group mean, which `u_earthing`/`z_earthing` used to report, came out
+  43 % below the fault-bus EPR and 45 % below the driving-point impedance on a
+  homogeneous cable chain with the fault far from the infeed, the norm's ideal
+  case. Taken as `U_E` into a touch-voltage assessment, that is
+  unconservative. The chain closed only because `Z_E` was defined as
+  `U_E/I_E`. On a 64-section chain the new values match the closed forms
+  `|u_F| = |1−k|·I·|Z_∞|` and `Z_∞ = −Z'/2 + √(Z'²/4 + Z_e·Z')` to 1e-5.
+  `Z_E` equals the driving point of an independent reference solver to 1e-12
+  on 17 structural networks. Thevenin loops are not part of `Z_E`; a fault
+  bus that only a Thevenin loop reaches gives `None` and
+  `EARTHING_IMPEDANCE_UNDEFINED`. `value` and `value_current` keep their
+  definitions. (PH4, F4)
+- **A Thevenin source that drives coupled branches is announced.** The
+  stationary solver takes the Norton current `E/Z_src` as the phase current.
+  Compared with a fully coupled multi-conductor reference, that puts the
+  fault EPR 5.8 / 22.2 / 37.9 % too low for `Z_src` = 5+15j / 1+3j /
+  0.3+1j Ω on a cable chain. `run_fault` emits `THEVENIN_COUPLING` once per
+  run until the loop-current solution lands; a Thevenin source on the fault
+  bus is exact and stays silent. (PH1, F5)
+- **Source coverage is checked.** A source that reaches the fault but lacks
+  values at some network frequencies gives one `SOURCE_FREQUENCY_GAP` per
+  source and run. Keys outside the network frequencies are announced by
+  `create_source`, `create_voltage_source` and `Network.add_source` with
+  `SOURCE_FREQUENCY_OUTSIDE_NETWORK`; the solve ignores them, as before.
+  The run-time checks belong to `run_fault`: `build_electrical_network`
+  switches them on (`ElectricalNetwork(..., input_checks=True)`), while the
+  phase-split probe of the transient solver leaves them off. A source that
+  carries only a transient waveform stays legitimate there. (USE3, F8)
+- **An incomplete `scalings` mapping is announced.** One `SCALINGS_INCOMPLETE`
+  per run names the frequencies that fall back to 1.0. (PH6, F7)
+- **The phase-proxy note and the note on a source without a phase path are
+  structured warnings.** Both used to be `logger.warning` lines, which the
+  library's `NullHandler` hides. They are now `ModelAssumptionWarning`s,
+  emitted once per run (the source note used to repeat at every frequency),
+  and the source note says that the source current still enters the earthing
+  system with reduction factor 1 for its share. (PH3, PH9)
+- **The thermal checks name the direct current they leave out.**
+  `check_conductor_limits` and `check_node_limits` keep the 0 Hz bin out of
+  `I_th` (pass 18). They now emit `THERMAL_DC_EXCLUDED` with the elements and
+  the increase of `I_th` from `I_th² = I_ac²(m + n) + I_dc²`, because a direct
+  current that flows during `T_k` makes the check unconservative. The formula
+  leaves out a cross term with the decaying DC offset, which can have either
+  sign: for 1000 A AC, 700 A DC, R/X = 0.1 and `T_k` = 0.5 s, the numerically
+  integrated current gives an `I_th` 3.7 % above or 4.4 % below it. (PH10)
+- **`run_fault` solves the phase-conductor network sparse, once per frequency for all sources.**
+  The automatic phase-current split (`phase_current_mode="auto"`, the default)
+  assembled the phase network as a dense `n x n` array and called
+  `numpy.linalg.solve` once per source and frequency — the dominant cost of a
+  run, growing faster than `n**2` and multiplied by the number of sources. The
+  reduced phase network is now assembled straight into CSC, factorised once
+  per frequency with SciPy's `splu` and solved for one right-hand side with a
+  column per source. Measured interleaved in one process (CPU time, median of
+  three, seven frequencies): phase stage 17.3 s → 0.017 s on a 2000-bus radial
+  feeder with three sources, 3.17 s → 0.015 s on a 2000-bus ring. The proxy
+  rule (including a broken shield, PH3), the `PHASE_PROXY` and
+  `SOURCE_WITHOUT_PHASE_PATH` diagnostics, the errors and `phase_currents` are
+  unchanged. On long radial feeders the sparse factorisation is also the more
+  accurate one: 8e-14 against the exact KCL currents at 300 buses, where the
+  dense solve is 1.9e-12 off. (P1, P13)
+- **The nodal admittance matrices are assembled straight into CSC, and only
+  those are kept.** The positions of all stamps are laid out once per network
+  and each frequency only sums its admittances into them, in the order the
+  former dense loops added them. Peak memory of `run_fault` (tracemalloc, ring,
+  seven frequencies): 146 → 25 MB at 1000 buses, 579 → 51 MB at 2000, 903 →
+  63 MB at 2500; at 4000 buses 101 MB, where the dense kernel needs 2.3 GB
+  (fit of the sizes measured here, exponent 1.99; the audit measured 2.31 GB).
+  The sparse kernel grows linearly (exponent 1.00). The new attribute `ElectricalNetwork.Y_sparse`
+  holds the CSC matrices the solver factorises; `ElectricalNetwork.Y_matrices`
+  is now a read-only view that materialises a dense copy when it is read, and
+  so is `ElectricalNetwork.earthing_admittance_matrix(freq)`: `Z_E` is computed
+  from the sparse earthing matrix (the solved one with the Thevenin loop
+  closures taken out source by source, bit for bit the entries of the dense
+  definition), with the cached factorisation when there is no voltage source.
+  Migration: code that *wrote* into `Y_matrices` to change the solve has to
+  write into `Y_sparse` (nothing in the package did; two pass-18 mutation tests
+  were retargeted). (P2, PH4)
+- **`run_fault` is 4× to 68× faster on networks of 500 to 2500 buses** (P1, P2,
+  P5a, P6 together; CPU time, median of three interleaved runs, seven
+  frequencies): ring 1000 1.06 → 0.12 s, ring 2000 4.04 → 0.22 s, ring 2500
+  7.8 → 0.30 s, radial 2000 with three sources 18.1 → 0.27 s, 40 × 40 mesh
+  with four sources 7.0 → 0.35 s. At 4000 buses: ring 0.53 s, radial with
+  three sources 0.57 s, 50 × 50 mesh with four sources 0.59 s; the dense
+  kernel does not fit into 2 GB there — extrapolated from the sizes measured
+  here it needs about 20 s, 200 s and 20 s (audit pass 19 measured 28 s,
+  143 s and 27 s on another machine). The sparse kernel's time grows almost
+  linearly (exponent 1.12 from 1000 to 8000 buses; ring 8000: 1.16 s, peak
+  203 MB). What remains on large networks is mostly the result objects (P5):
+  0.2–0.3 s of the 0.53 s of the 4000-bus ring.
+- **`bus_response` and `analyze_cuts` factorise the sparse matrix instead of
+  solving a dense copy.** 2000-bus ring at seven frequencies: `bus_response`
+  5.6 → 0.032 s (it solved a second dense system for the earthing columns of
+  `fault_driving_point`; those now come from the same factorisation, or from a
+  sparse one of the earthing matrix when a voltage source is present),
+  `analyze_cuts` 2.8 → 0.031 s (CPU, median of three); `z_network`, the
+  driving-point impedance and `z_fault_open` agree to 4e-16. (P7)
+- **Results move in the last digits, and more on condition-limited systems.**
+  The admittances come from NumPy's instead of Python's complex division
+  (different in the last bit for about a quarter of all values) and the
+  factorisations are sparse. Where the system is badly conditioned by
+  construction — the 0 Hz bin with a short replaced by its stand-in
+  (`sqrt(eps)` times the smallest impedance, condition numbers 1e8 to 1e11) —
+  results stay within the forward-error bound `kappa * eps` (at most 3 % of it
+  in the test battery) but may differ from 0.6.0 by up to about 1e-7 relative:
+  both kernels are up to 6e-8..8e-8 away from the exact solution there. Tests
+  that compare such values bit-exactly or at 1e-9 need a tolerance; two were
+  adjusted. (P13)
+- **A declared phase impedance obeys the passivity rule of the other
+  elements.** When the phase network is solved (`phase_current_mode="auto"`),
+  `run_fault` refuses a `phase_impedance_formula` value with a `ValueError`
+  naming the branch when it is zero or too small to invert above 0 Hz, or has
+  a negative real part at any frequency. Before, an exact zero above 0 Hz
+  raised a bare `ZeroDivisionError`, and a negative real part was accepted.
+- **One name per concept in the public API.** `fault` (was `fault_name`),
+  `u_limit` (was `u_max`), `t_k_s` (was `t_k`, like the field `Fault.t_k_s`),
+  `n_factor` (was `n`, like `Fault.n_factor`) and `frequency` (was `f` or
+  `freq`): 26 parameters of 18 public functions and methods, and a signature
+  walk over `__all__` and the public methods finds none of the old names
+  left. Positional calls are unaffected and the old keywords keep working
+  (see Deprecated). Error messages and hints name the new keywords, for
+  example `u_limit must be a finite positive number`,
+  `n_factor must lie in (0, 1]`, `t_k_s must be strictly positive` and
+  `Pass t_k_s=...`. Field and column names of results are unchanged
+  (`FaultShortCircuitData.fault_name`, the `fault_name` report column,
+  `TransientStudy.fault_name`). The new `BusResponse.fault_driving_point`
+  takes `frequency` from the start. (USE8, STD3)
+- **Result-relevant log lines are structured warnings.** The package logs
+  through a `NullHandler`, so a `logger.warning` reached nobody who had not
+  configured logging, and a GUI could neither attach it to an element nor
+  tell a hint from a warning. All 62 `logger.warning`/`logger.error` calls
+  were classified; the 24 that a user needs to read a result now raise an
+  `InputWarning`, `ModelAssumptionWarning` or `TransientModelWarning` with a
+  stable code and the elements concerned, and inside `run_fault` they are
+  collected into `Result.diagnostics`, also when logging is off and
+  warnings are ignored: the pandapower importer's fallbacks and skips
+  (`IMPORT_LENGTH_DEFAULT`, `IMPORT_BUS_SKIPPED`, `IMPORT_LINE_SKIPPED`,
+  `IMPORT_SWITCH_NOT_IMPORTED`, `IMPORT_ELEMENT_NOT_IMPORTED`,
+  `IMPORT_VOLTAGE_LEVEL_MISMATCH`, `IMPORT_EMPTY`), the short-circuit
+  reader and applier (`SC_VALUE_REPLACED`, `SC_KAPPA_OUT_OF_RANGE`,
+  `SC_KAPPA_MISSING`, `SC_ROW_AMBIGUOUS`, `SC_SPLIT_EQUAL`,
+  `SC_VOLTAGE_SOURCE_SKIPPED`), the IEC 60909 aggregation (`SC_KAPPA_MIXED`,
+  and `SC_DATA_INCOMPLETE` for the current share without IEC data), the
+  thermal checks (`THERMAL_DATA_INCOMPLETE`), the stationary solver
+  (`PARALLEL_COEFFICIENT_DEFAULT`, `EARTH_GROUP_SPREAD` — now once per run
+  for all frequencies —, and `REDUCTION_FACTOR_UNDEFINED` when the solve
+  without coupling fails) and the transient solvers
+  (`TRANSIENT_SOURCE_NOT_CONNECTED`, `TRANSIENT_COUPLING_SKIPPED`,
+  `TRANSIENT_BRANCH_SKIPPED`, `TRANSIENT_RESISTIVE_COUPLING_IGNORED`). Each
+  code is documented in the docstring of the function that raises it. These
+  messages no longer go to the `groundinsight` logger; a setup that reads
+  them from the log can route warnings there with
+  `logging.captureWarnings(True)` (logger `py.warnings`, as text — code and
+  elements stay with the records). The other 38 stay log lines: persistence,
+  migration and session bookkeeping, cost notices, an explicit overwrite,
+  and summaries of what the returned object already carries (status of the
+  ρ searches, failures of sweeps and outage studies, the `within_limit`
+  column of the thermal checks). (GUI4, STD5)
+- **`gi.solve` no longer touches any shared path-search state.** The overlay it
+  solves on gets a memory of its own that goes with it; before, its entries
+  went into the shared dictionaries, keyed on `id(overlay)`, and had to be
+  removed again so that a later object at the same address could not find
+  them. Different networks can now be solved from different threads. (ARC2)
+- **The inverse searches re-solve their trials on the assembly of their first
+  solve.** `find_max_rho_scaling` and `find_max_rho_f_scaling` evaluate the
+  same fault for twenty or more trial values of the bus grounding
+  impedances, and every trial used to be a complete `run_fault`. A trial
+  changes nothing but the diagonal of the nodal matrix, so only the first
+  trial per fault location is a full solve now; every later one
+  re-assembles the matrix values with the kernel's own assembly (same
+  summation order), factorises them and solves the injection vector of the
+  first solve. Matrix, factorisation and EPR are bit for bit those of a full
+  `run_fault`, so the searches take the same steps and return identical
+  dictionaries (checked against the same searches with the re-solve switched
+  off). Where the re-solve cannot answer — a 0 Hz stand-in, a bus that gains
+  or loses its electrode, an open, NaN, zero or non-passive value, a failing
+  factorisation — the trial is a full `run_fault` again, with its errors and
+  messages. `find_max_rho_f_scaling` also shares one factorisation per trial
+  between fault locations whose nodal matrix is the same. Progress reports
+  still count one unit per solve, and the network is still left as found.
+  Measured interleaved in one process (CPU, median of three): 1000-bus ring
+  with every bus scaled 5.47 s → 0.59 s, with five buses 2.91 s → 0.21 s,
+  40×40 mesh 11.3 s → 1.86 s; rho-f search on a 300-bus ring over five fault
+  locations 3.79 s → 0.26 s, on a 1000-bus ring over ten 23.9 s → 1.42 s.
+  (P4)
+- **`Network.res_buses` and `Network.res_branches` are built column-wise.**
+  They built one Python dictionary per row and took magnitude and angle of
+  every phasor one NumPy scalar at a time; on a 4000-bus ring at seven
+  frequencies the frame took a quarter of the solve that produced it. The
+  frames are unchanged bit for bit (rows, order, schema, `null` for a missing
+  entry; compared with the former construction with `check_exact=True`).
+  Magnitudes come from `numpy.hypot`, which agrees with Python's `abs` of a
+  complex number in every bit; `numpy.abs` of a complex array does not.
+  `res_buses`: 0.044 s → 0.010 s at 1000 buses, 0.21 s → 0.035 s at 4000,
+  0.96 s → 0.18 s at 20 000; `res_branches` 4–6× likewise. (P11)
+- **The earth-return current is the split of exactly the electrode currents
+  the result reports.** `I_E` and the earth group of the current-based
+  reduction factor were computed from electrode currents recomputed bus by
+  bus with Python's complex division, while `ResultBus.ia` comes from the
+  array division of the solve; the two could differ in the last bit, so
+  `I_E` was not always exactly the sum of the reported currents of its group.
+  The split now reads the reported currents (52 → 17 ms on a 4000-bus
+  ring), and the check behind the `THEVENIN_COUPLING` diagnostic reads the
+  gathered impedance arrays instead of resolving every branch at every
+  frequency (9.2 → 0.65 ms). (P6)
+- **Building a network validates each derived impedance once.** Every
+  `create_bus`/`create_branch` (and every re-derivation) packed each value of
+  a derived impedance table into a validated `ComplexNumber` and then
+  validated it a second time when the table was assigned to the element.
+  Derived tables are now stored as the validated assignment stores them,
+  without the second pass; the passivity check runs on the evaluated array
+  before it is packed (same rules and message as the dictionary check), and
+  a formula whose values all came back finite skips the masks of the NaN and
+  `inf+nan*j` repairs. The stored model is unchanged bit for bit (the JSON of
+  a built and re-derived 5000-bus ring is byte-identical; the edit invariants
+  — re-derivation on assignment, roll-back, `input_digest` — are untouched).
+  Building a 5000-bus ring 2.02 s → 1.51 s, a 50 000-bus ring 22.9 s →
+  16.7 s; `Branch.calculate_impedance` 155 → 111 µs,
+  `Bus.calculate_impedance` 73 → 50 µs. (P10)
+
+### Deprecated
+
+- **`gi.session`, `gi.db_session`, `gi.engine` and `gi.SessionLocal`.** They
+  resolve to the default database's scoped session (the same object for both
+  session names), engine and session factory, or `None` without a started
+  session, and raise a `DeprecationWarning` on every access. Removal no
+  earlier than two releases and six months after this release. Replacement:
+  the methods of `gi.Database` (or of the object `gi.start_dbsession`
+  returns), `with db.session() as s:` for a raw session, `db.engine`. (ARC2)
+- **The keywords `fault_name`, `u_max`, `t_k`, `n`, `f` and `freq`** of the
+  18 callables renamed above. They work as before and emit a
+  `DeprecationWarning` that names the replacement and the policy: an old
+  name keeps working for at least two releases and six months after the
+  release that deprecated it. A value under both names is a `TypeError`. The
+  full table is on the service API page. (USE8)
+- **`set_pathfinder_max_paths`, `get_pathfinder_max_paths`,
+  `gi.set_pathfinder_cache_size` and `gi.get_pathfinder_cache_size`.** They
+  keep working with a `DeprecationWarning` and now set or read the process
+  default — the settings of every network without settings of its own;
+  `set_pathfinder_cache_size` trims the memory of those networks at once.
+  Removal no earlier than two releases and six months after this release.
+  Replacement: `net.pathfinder_settings = gi.PathfinderSettings(max_paths=n)`
+  (or `cache_size=n`); `net.pathfinder_settings.max_paths` to read.
+  `clear_pathfinder_cache(network)` and `clear_pathfinder_cache()` stay as
+  they are. (ARC2)
+
+### Fixed
+
+- **The inverse searches no longer leave a stale nodal system behind
+  (`analysis/inverse_rho.py`, `analysis/inverse_rho_f.py`).** Both `finally`
+  blocks restored `rho`, impedances, results, paths and the active fault but
+  not `network.electrical_network`, so the network was left carrying the `Y`
+  of the last bisection step next to the restored `rho`. `bus_response` read
+  a **negative** driving-point impedance out of that pair, without error or
+  warning. The pre-search object is put back (or `None`), and
+  `ElectricalNetwork` carries a fingerprint of the model values it was
+  assembled from so `bus_response` refuses a stale system by name.
+- **`BusResponse.evaluate` reports the current `Z_G` definition.** It computed
+  `Z_G = u_b/(r*I_F)` — the definition 0.6.0 replaced — with the *varied*
+  bus's voltage, a factor of 39 against `run_fault`. It is now
+  `Z_E = U_E/I_E` of the bonded group, matching `run_fault` to 1e-9.
+- **`BusResponse.evaluate` evaluates `r_epr` per electrode.** It was carried
+  through as an invariant, which it is only at the fault bus; away from it the
+  factor moves with the electrode by 18 %. A third right-hand side of the same
+  factorisation (the mutual-free injection) makes it exact for every
+  electrode.
+- **`analyze_cuts` decomposes the system that was solved.** It assembled its
+  own nodal matrix, which disagreed with the solver's in two places: a 0 Hz
+  short, which the solver substitutes and the decomposition read as an open
+  circuit (`Z_dp` 10 Ω against 2.5 Ω), and the Thévenin loop closure `Y_src`,
+  which exists only in the solver's matrix and carried up to 23 % of the fault
+  current out of the fault bus. The loop closure is reported as its own
+  direction `"source_loop"`; `kcl_residual` falls from 22.5 % to 1e-16.
+- **`find_max_rho_scaling` no longer assumes monotonicity.** Where only part
+  of the impedance formula carries `rho`, `EPR(c)` falls before it rises, and
+  the bisection reported "no scaling factor satisfies the constraint" for
+  limits a whole band of factors satisfies. A logarithmic pre-scan
+  (`monotonicity_grid`, default 9) measures the shape first.
+- **`kappa` and `n` are validated in the thermal checks.** Both docstrings
+  promised `(1, 2]` and `(0, 1]`; neither was enforced, and every out-of-range
+  value failed in the unsafe direction.
+- **The 0 Hz bin is no longer counted twice in `I_th`.** It entered both the
+  RMS and `m`; on the audit case `[50 Hz]` gave 1028 A and `[0, 50 Hz]` with
+  700 A of direct current gave 1255 A.
+- **`classify` leaves a NaN unassessed** instead of putting it in the highest
+  band, where a failed sweep point was counted among the violations.
+- **`analyze_cuts` explains an incomplete result** instead of raising a bare
+  `KeyError`, and `CutAnalysis.to_polars()` pins its schema so an unsolved
+  analysis stacks with a solved one.
+- **`sweep([])` and a non-positive network conductance in
+  `worst_case_electrode`** raise `ValueError` instead of a polars error and a
+  negative "worst case".
+
+- **`run_fault` no longer enumerates every source-to-fault path in the
+  default mode.** `phase_current_mode="auto"` only needs to know which
+  sources reach the fault, yet `define_paths` ran the exhaustive DFS on every
+  call; a 6×6 grid of 36 buses spent 55–68 s on 1 262 816 paths while the
+  solve itself took milliseconds. `Network.sources_reaching(fault_name)`
+  answers the question with a breadth-first search, and the enumeration runs
+  only for `phase_current_mode="paths"`, the transient state-space solver and
+  an explicit `gi.create_paths(network)`. Results are bit-identical on every
+  network where the old path was affordable; the 6×6 grid now solves in
+  0.09 s. `PathFinder` additionally caps the enumeration at
+  `set_pathfinder_max_paths()` (default 100 000) with an error that names
+  the bus pair and points at `"auto"`. `analysis/shortcircuit._sources_feeding`
+  keeps its old behaviour through the same reachability helper.
+- **A frequency an element does not cover is an error, not an open circuit.**
+  `_construct_Y_matrices` skipped any bus or branch whose impedance dict
+  lacked the frequency being solved, silently — extending
+  `network.frequencies` in place and recomputing only the buses left the
+  branches out of the 250 Hz bin and reported an EPR of 1000 V where 4.95 V
+  was right. `ElectricalNetwork` now checks that every active element
+  covers `network.frequencies` before assembling anything.
+- **`value_current` with a source on the fault bus.** `I_fault` was read as
+  the net injection at the fault bus, which with a source there is
+  `I_src,F − ΣI_src` rather than the fault current; the current-based
+  reduction factor came out as 0.005 instead of 0.5. It is now
+  `Σ scaling·I_src` over the sources that reach the fault.
+- **`run_sweep` leaves the network as it found it, in every case.** A point
+  naming an unknown bus raised *after* the earlier buses had been
+  overwritten, and because the return value of `_apply` was never bound, the
+  `finally` block skipped the restore — with `on_error="record"` every later
+  point was solved on the corrupted model. Names are validated before the
+  first mutation, the snapshot is taken once per bus (`R`, `L`, `C` included,
+  and a point overriding both `bus_impedance` and `bus_rho` on one bus can no
+  longer save the overwritten table as the original), restore runs in
+  reverse order, and the previously active fault keeps its cached result.
+- **The FFT transient solver injects only sources that reach the fault**, as
+  the stationary solver does; a source on a galvanically separate bus used to
+  add 1000 V at that bus and shift every other trace through the fault-bus
+  term.
+- **The state-space solver no longer reads its operating frequency from
+  `frequencies[0]`.** With 0 Hz first in the list the source inductance
+  became `L_src = 0` (a factor 680 in the first time step). `solve()` takes
+  `f_eval`, defaulting to the smallest frequency above 0 Hz, and refuses a
+  reactive `Z_src` at `ω = 0`.
+- **Negative `R_self`, `L_self`, `C_self`, bus `L` and `C` are rejected by the
+  state-space solver** instead of being silently treated as absent, which
+  made a branch with `R_self = −0.5` lossless.
+- **`ComplexNumber == None` is `False`**, not a `TypeError`; the class is
+  hashable; NumPy scalars (`np.int64`, `np.complex64`, …) work on either side
+  of an operator; `repr` is a valid constructor call again.
+- **`Network.frequencies` and every other model field validate on
+  assignment** (`validate_assignment=True` on `Bus`, `Branch`, `Fault`,
+  `Source`, `Network`). `apply_shortcircuit_characteristics` could write
+  `kappa = 42` and a shortened `t_k_s` straight past the validators that
+  promised to reject them, inflating `i_p` by 21 and `I_adm` by 7.7 — the
+  unsafe direction — and left the network unserialisable. A rejected
+  assignment is rolled back, because Pydantic writes the value before the
+  model-level validators run.
+- **`Fault.scalings` values are validated** (finite, non-negative) — `nan`
+  and `inf` went through and broke the JSON round-trip of the whole network.
+- **The `add_columns` database migration works.** The DDL it rendered for
+  the eight NOT-NULL columns with Python-side defaults (`position`, `active`,
+  `source_type`) had no `DEFAULT` clause, SQLite refused it, and because
+  `start_dbsession` migrates before it binds, the file was unopenable. The
+  column DDL is rendered with the declared default.
+- **`save_network` no longer rewrites a shared type silently.** Saving
+  network B replaced the formula of a `BusType` network A also uses; A was
+  then internally inconsistent (stored 1 Ω, formula 999 Ω) and every
+  analysis that re-evaluates the formula — `find_max_rho_scaling`,
+  `run_sweep` — switched to the wrong value. A changed formula on a type
+  other networks reference is refused unless `overwrite_types=True`.
+- **`res_buses` handles a missing `ia_freq` entry** (`None` instead of an
+  `AttributeError`), and the plot helpers release their figure when the
+  drawing step raises (a bad `yscale` used to leak one figure per call).
+- **The pandapower importer honours closed bus–bus switches** when
+  `ImportDefaults.switch_branch_type` is set, and otherwise warns and lists
+  them in the preview together with transformers and impedances, which were
+  dropped without a trace before — a station bonded to its neighbour by a
+  switch came out isolated at 0 V. Bus voltage levels are matched with
+  `math.isclose` instead of exact equality, so rounding noise from a
+  CSV/DGS import no longer empties the whole import.
+- **`scripts/release.py` runs git in the repository root**, whatever the
+  current directory, and refuses to touch the three version files when the
+  target tag already exists.
+- **Three doctests had gone stale** (`create_fault`, `create_source`, the
+  `simulation/outage.py` module example); the suite now runs the doctests
+  (`--doctest-modules`) so they cannot rot again.
+- **The state-space solver divides the phase current of a ring like the
+  stationary solver.** It took the phase factor of each branch from the
+  enumerated source-to-fault paths as `sign * parallel_coefficient` (default
+  1.0), i.e. the legacy `"paths"` mode, which gives every route of a ring the
+  full source current: 338.3 V at the fault of a symmetric four-bus ring in
+  steady state against 166.6 V from `run_fault` (+103 %), without a warning.
+  The split now comes from the same phase-network solve as
+  `phase_current_mode="auto"`, at `f_eval`, with 1 A per source; the complex
+  split is folded into the coupling of each branch,
+  `R' + jωM' = (R_mut + jωM)·α`, which makes the `f_eval` steady state exact
+  for every topology (keeping only `Re α` put a cable/overhead-line ring 4.4 %
+  low at the fault). Measured against `run_fault`: 3.6e-7 in the symmetric
+  ring, 6.9e-8 in a chain (unchanged), 3.3e-7 in the mixed ring. Against an
+  independent reference that integrates shield and phase conductors as
+  states: 5.8e-7 of the peak for a homogeneous ring of unequal lengths under
+  a fully offset fault current, 0.99 % for the mixed ring, where the solver
+  says so (`TRANSIENT_PHASE_SPLIT`). The study no longer rebuilds
+  `network.paths` and never touches `network.active_fault`. (PH2)
+- **The FFT solver's coupling warning names the right direction.** The
+  `TransientModelWarning` for the mutual coupling the FFT solver does not
+  evaluate said "expect a lower earth potential rise"; it is higher: 77.6 V
+  against 49.2 V in the steady state of a coupled two-bus cable link, exactly
+  `1/|1 − Z_m/Z_s|` for one coupled branch, and +44 % to +101 % on the
+  post-inception peak of a fully offset fault current in four networks.
+  Without the coupling no induced share of the fault current returns through
+  the shields, so the FFT answer is conservative at the fault bus and as the
+  network maximum (higher in all of 600 random chains and meshes, while 6 % of
+  the remote buses came out lower, which the message now says). The warning
+  is emitted with code `TRANSIENT_MODEL` and every coupled branch as an
+  element, and points at the caller's line. `docs/transient.md` claimed the
+  same wrong direction. (PH-L1)
+- **The FFT solver no longer needs gigabytes for mid-size networks.** It
+  assembled 512 frequency bins as one dense `(512, n, n)` block — 1.3 GB at
+  400 buses, 8.2 GB at 1000 — and kept the previous block alive while
+  building the next, so the peak was about two blocks. The batch now follows
+  the `fft_block_bytes` budget and is released before the next one: a 400-bus
+  ring over 1001 bins peaks at 293 MB (tracemalloc, whole solve), a 100-bus
+  ring at 89 MB instead of 167 MB with the default and at 10.7 MB with a
+  4 MiB budget. The spectra are bit-identical to the old batching, and the
+  run time is unchanged (200 buses, interleaved median: 1.23 s old, 1.03 s
+  new). (P8)
+- **A solved network can be copied and pickled again.** `copy.deepcopy(net)`,
+  `net.model_copy(deep=True)` and `pickle.dumps(net)` failed after `run_fault`
+  with `TypeError: cannot pickle 'SuperLU' object` -- a regression of the LU
+  reuse. The factor cache is dropped in copies (it is rebuilt when needed); the
+  copied solver state refers to the copy, so `bus_response` works on it without
+  a new solve, with the same numbers as the original and as a network built
+  from scratch. (GUI2)
+- **Creating a bus or branch is atomic.** A formula that only fails when it is
+  evaluated (negative resistance, NaN at one frequency, a complex `R_self`)
+  left an element without impedances in the network, and the next `run_fault`
+  failed on "carries no impedance" instead of on the formula. The impedances
+  are now derived before the element is inserted; with `overwrite=True` the
+  previous element stays. (ARC9)
+- **`create_fault(active=True)` without a network** raises a `ValueError` that
+  says what is missing, instead of `AttributeError` on `None`. (ARC9)
+- **A broken shield no longer opens the phase conductor.** For a branch with
+  a grounding conductor and an infinite self impedance (`"nan"`, the
+  documented broken shield) and no declared phase impedance, the phase-split
+  proxy `1/Z_self` was 0. That removed the phase conductor too. On a
+  symmetric ring, the branch carried 0 A instead of half the current, and the
+  fault EPR was 207.1 V instead of 342.0 V. Because the phase network then
+  looked radial, the proxy note was suppressed as well. The branch now falls
+  back to the length proxy (520.4 A / 541.3 A, 300.7 V), and `PHASE_PROXY`
+  names it. (PH3)
+- **Earth group, `I_E` and the reduction factors are no longer decided by
+  rounding noise.** Electrode currents of zero in exact arithmetic come out
+  of the solver at about 1e-17 of the largest one, at an arbitrary angle,
+  and joined an arbitrary group: 786 membership flips in 514 random networks
+  between two kernels that otherwise agree to 1e-13. Without an electrode at
+  the fault bus, `I_E` flipped sign and `Z_G` moved by a factor of 2.2. A
+  fault bus at zero potential reported the quotient of two rounding errors
+  as `value` (0.449 = 5.1e-14 V / 1.1e-13 V for a source behind a dead end).
+  Currents up to `1e-9·max|I_a|` now join no group. Without a fault-bus
+  electrode, the group in phase with the fault-bus EPR feeds. When no current
+  is dropped, the split is bit for bit the previous one. (P9, F14)
+- **The earth-return split is O(n log n).** It was quadratic: 11.2 s per
+  frequency at 20 000 buses, now 9 ms (0.6 / 2.1 / 106 ms at 1 000 /
+  4 000 / 100 000). On 2 000 random phasor sets and a 4 000-bus set, the
+  result equals that of the previous implementation with `==`. (P3)
+- **Carson mutual impedances no longer warn at 0 Hz.** The resolution test of
+  the DC limit compared the last step of the approach (10⁻⁷ → 10⁻⁸ Hz) with
+  10⁻⁶ of the value plus 10⁻¹² Ω. A real part without a constant term — the
+  earth-return resistance π²·10⁻⁴·f of every Carson mutual impedance — moves
+  by 90 % of its value per decade however small it is, so every such cable
+  longer than 11.3 m warned "converges only slowly" in a network that lists
+  0 Hz, although its value there is π²·10⁻¹²·l Ω. A step that shrinks at
+  least five-fold per decade now counts as resolved, since at most a quarter
+  of it then remains to the limit: anything linear in `f` shrinks it ten-fold,
+  `f*log(1/f)` 8.5-fold, while `sqrt(f)` (3.2-fold) and `log(f)` (not at all)
+  are still reported, now with the measured step ratio in the message. The
+  verdict no longer depends on the branch length, and the value used at
+  0 Hz is unchanged. The FFT transient solver was not affected; it evaluates
+  self impedances only. (D7)
+- **`EARTHING_IMPEDANCE_UNDEFINED` is decided by structure.** `Z_E`
+  (`z_earthing`, the grounding impedance) is `None` when no bus connected to
+  the fault bus through shields has an electrode. That decision used to be
+  left to the sparse solver, which caught only a fault bus standing alone.
+  With one or three electrode-less buses behind the fault bus, the earthing
+  matrix is singular only up to rounding, and `z_earthing` came out as about
+  −4.5e15 or −3.6e15 Ω with no diagnostic. The reverse case was wrong too: a
+  voltage source on a bus without an electrode reported `Z_E = None` for a
+  fault side earthed at both ends, and the note blamed the fault bus. Now
+  only the fault bus's own group is factorised, and the note names that
+  group. `bus_response` uses the same rule for its earthing columns, and its
+  check that another electrode remains now looks at the studied bus's group
+  instead of the whole network. Checked against the closed forms of a series
+  chain (Σ Z_s + Z_e) and a parallel pair (Z_F ∥ (Z_s + Z_B)), and against
+  the reference solver of the tests, which finds the group by its own search
+  and refuses a group without an electrode. (PH4, F4)
+- **A group of buses with no path to earth is refused by the solve.**
+  `run_fault` refused a network in which no bus is earthed. A group of
+  electrode-less buses joined by shields, for example a tower behind an
+  overhead line without an earth wire, was solved to rounding noise: 2.18e18 V
+  at the fault bus, with no warning. Every group of buses that the nodal
+  matrix couples now needs a bus with an electrode. Otherwise `run_fault`
+  raises the documented `ValueError` ("Singular admittance matrix … no path
+  to reference earth"), naming the group. The check costs 0.5 ms per
+  frequency on a 4000-bus ring and 2 ms on a 20 000-bus ring, less than 1 %
+  of `run_fault`.
+- **A purely inductive phase conductor at 0 Hz no longer makes `run_fault`
+  raise `ZeroDivisionError`.** A `phase_impedance_formula` such as
+  `j*2*pi*f*L*l` is exactly zero at DC. The 0 Hz scan did not cover phase
+  conductors, so a network whose only DC short was one crashed. Phase
+  conductors now get the documented DC stand-in `sqrt(eps)·Z_min` with a
+  `DCLimitWarning` that names them. `Z_min` remains the smallest impedance
+  of the earthing network, so the earthing results of networks that already
+  had a DC short are unchanged, bit for bit. Where every parallel route of
+  the phase network is an ideal short at DC, the routes split as if all
+  conductors had one and the same impedance; declare the DC resistance where
+  that split matters.
+- **`run_sweep` leaves the network exactly as found, as it always
+  promised.** It put the bus and branch parameters back but left the result
+  and the assembled system of its *last point* in the network: on a four-bus
+  ring, `network.results["F"]` read 52.2 V at the source bus after a sweep —
+  the last point's value — instead of the 70.1 V of the restored network,
+  and `bus_response` would have read the last point's matrices. Stored
+  results and their order, active fault, path set and assembled system are
+  now those of the moment the sweep was called, so the sweep's own fault is
+  no longer reported by `stale_results()` afterwards. (GUI5)
+- **`find_max_rho_scaling` and `find_max_rho_f_scaling` restore the network
+  exactly.** They put back the active fault, the stored result and the
+  assembled system one by one, but re-inserted the result at the end of
+  `network.results`: with results for `F` and `F1` stored, the order became
+  `F1, F` and the serialised network changed. (GUI5)
+- **The pandapower import honours open line switches.** A ring operated open
+  at a line switch (`net.switch` row with `et="l"`, `closed=False`) arrived
+  closed: only bus-to-bus switches were evaluated, so the phase-conductor
+  network got a mesh that does not exist in operation and the fault current
+  divided over both halves of the ring — 643 A of 1000 A took the route
+  through the open switch on a four-bus test ring. An open line switch
+  interrupts the phase conductor of its line at that end; the cable screen is
+  bonded to the station earth independently of the switch and stays connected
+  at both ends. `from_pandapower` now imports such a line with its
+  `default_branch_type` and `phase_impedance_formula = "nan"` (type
+  `<name>_phase_open`): it carries no fault current, and its screen stays in
+  the earthing network. It says so with the new `InputWarning`
+  `IMPORT_LINE_SWITCH_OPEN` (severity `info`; elements: the branch and the
+  switches). `preview_pandapower_import` marks the switch and its line
+  `line_switch_open`, a closed line switch `line_switch_closed` and the switch
+  of a line that is not imported `line_not_imported`. Switches at transformer
+  terminals change nothing (transformers are not imported); an open
+  bus-to-bus switch stays no connection. With one cable type on every line
+  the EPR does not depend on the switch state — the coupling relief is
+  `1 - Z_m/Z_s` however the phase current divides — but the phase and screen
+  currents do, and with them the thermal check; in a ring of mixed
+  construction the EPR moves as well. The legacy
+  `phase_current_mode="paths"` enumerates routes over every active branch and
+  does not see an open phase conductor.
+- **A fault on the bus of every source that feeds it now says why its reduction factors are empty.** Source and fault put `+I` and `-I` on the same row, so nothing is injected into the earthing network: the EPR and the earth-return current are zero and both reduction factors are `None` by definition. The run was silent about it; it now records the info diagnostic `FAULT_AT_FEEDING_BUS` (elements: the fault and its bus) on the result. `U_E` is 0 V, `Z_E` remains the driving-point impedance.
+- **`run_outage_study(auto_parallel_coefficients=...)` warns at its caller.** The deprecated keyword was forwarded to `run_fault`, whose `DeprecationWarning` then pointed at a line inside the package, where Python's default filters hide it. The study resolves the alias itself; the old argument still wins when given.
+- **Warning texts name limitations, not internal audit identifiers** (`THEVENIN_COUPLING`).
+- **`res_fault` names the bus of the largest EPR the same way on every platform.** With a strict comparison, two buses with the same EPR magnitude -- both ends of a symmetric line -- were told apart by the last bit of the solution, which differs between the BLAS/LAPACK builds of Linux, macOS and Windows. Magnitudes within `1e-9` of the largest now count as a tie, and a tie names the fault bus if it is part of it, otherwise the first tied bus in result order.
+
+### Security
+
+- **The impedance formula guard is a whitelist and normalises Unicode
+  (`utils/validations.py`).** It compared raw token strings against an ASCII
+  denylist, but CPython NFKC-normalises identifiers when it compiles the
+  source `sympy.lambdify` generates: a fullwidth `ｅval` passed the guard and
+  reached the builtin `eval` through `create_bus`, i.e. through every JSON and
+  database load. Names must now be ASCII and NFKC-stable, only a fixed set of
+  SymPy functions may be *called* (free symbols stay unrestricted — a user
+  may name a parameter whatever they like, and a bare name can never become
+  a call), only `+ - * / ** ( ) ,` are accepted as operators, and a power
+  whose exponent is itself a power or a literal above 1000 is refused (the
+  `10**10**9` denial of service). Formulas longer than 4096 characters are
+  rejected up front. Nothing in the repository's docs, tests or notebooks is
+  affected; a formula calling a function outside the list (`factorial`,
+  `besselj`, …) now fails with a message that names the allowed set.
+- **`NetworkDB.frequencies` is a JSON column, no longer a `PickleType`.**
+  Loading a database ran `pickle.loads` on the stored blob before any
+  Pydantic validator saw a field, so a `.db` file from another hand was
+  code execution — the very thing the formula guard exists to prevent. Files
+  written before this release are converted by `gi.migrate_database(...)`
+  (`start_dbsession` does it automatically) through a restrictive unpickler
+  that resolves nothing but `builtins.list/float/int` and aborts before the
+  first write when the blob names anything else.
+- **pillow floor 13.0.0, without an upper bound (`pyproject.toml`).**
+  `pillow = "^11.3.0"` meant `<12`, while every fix lies at 12.1.1 or later.
+  pip-audit lists 73 advisories for 11.3.0 and still 39 for 12.3.0; 13.0.0
+  is the first release without one. groundinsight never imports PIL —
+  matplotlib does, and asks for `pillow>=8` — so the declaration is a pure
+  security floor, and it carries no upper bound: the cap is what kept the
+  fixes out of reach of everyone installing groundinsight (SEC2).
+- **Refreshed lock with the open Dependabot updates (#5, #6).** The previous
+  lock carried 171 known advisories in 16 packages (pillow 73, mistune 30,
+  tornado 28, urllib3 7, …); the new one has none. numpy 2.1.3 → 2.4.6
+  (pandapower caps it below 2.5), scipy 1.17.1 → 1.18.1, pydantic 2.13.4 →
+  2.14.3, polars 1.16.0 → 1.44.2, sqlalchemy 2.0.36 → 2.1.8, matplotlib
+  3.10.9 → 3.11.2, pandapower 3.1.2 → 3.5.6, pytest 8.3.4 → 9.2.0,
+  mkdocstrings 0.26.2 → 1.0.8. Installed from the lock, the suite passes on
+  3.12, 3.13 and 3.14 (REL2, SEC2). tornado 6.6 → 6.6.1 (development and
+  documentation groups only) for CVE-2026-126347, published after the
+  refresh and the first finding of the new audit job.
+- **Dependency audit in CI (`.github/workflows/audit.yml`).** On pushes and
+  pull requests to `main`, weekly and on demand,
+  `scripts/audit_dependencies.py` checks every version pinned in
+  `poetry.lock` — all groups, extras and platforms — with pip-audit, and any
+  known advisory fails the job. The ignore list
+  `.github/pip-audit-ignore.txt` is empty; an entry needs a reason and an
+  end date, and an expired entry fails the audit (SEC2).
+- **Every GitHub Action is pinned to a commit SHA** with its release as a
+  comment, including `pypa/gh-action-pypi-publish`, which ran from the
+  moving branch `release/v1` inside the job that holds the PyPI OIDC token.
+  Dependabot updates SHA and comment together (SEC3).
+- **The workflow token is read-only by default.** Every workflow declares
+  `permissions: contents: read`; only the PyPI publish (`id-token: write`),
+  the GitHub release and the docs deploy (`contents: write`) ask for more,
+  each with a comment saying why. Checkouts in jobs that never push no
+  longer leave the token in `.git/config`. zizmor: 50 findings (28 high,
+  7 medium) → 1 informational (SEC4).
+- **bandit B608 in `database/migration.py` triaged and annotated.** The four
+  f-string SQL statements interpolate only module constants, caller literals
+  and columns of the target schema the ORM just created; names read from the
+  file being migrated are only used in membership tests. Each site carries
+  `# nosec B608` with that reason, and a test migrates a file with a hostile
+  column and table name while recording every statement the module sends
+  (SEC6).
+- **Formula strings cannot make SymPy burn CPU any more.** SymPy evaluates
+  arithmetic on numbers exactly while it parses, and the guard only capped the
+  *literal* exponent: `<4080 digits>**999` cost 1.9 s per formula and a JSON
+  with 20 such bus types 17.9 s to load; `9**(99999*99999)` and
+  `floor(exp(10**12))` never returned, `(0*f + 9)**(f - f + 4000000)` cancelled
+  its symbols (2.2 s), `Max` with 120 symbolic arguments took 6.6 s. The guard
+  now bounds, before SymPy runs, the digits of number literals, every
+  exponent (by the value it can reach), the size of every exact intermediate
+  result, `floor`/`ceiling` and `exp`-like arguments, and the number of terms,
+  calls and call arguments; each message names its limit. Measured: every case
+  above is rejected in under 4 ms; the most expensive admitted formula (eight
+  `Max` of three symbolic arguments) costs about 50 ms with cold caches.
+  (SEC1)
+- **The formula guard fails closed.** A string Python's tokenizer cannot split
+  was handed on to SymPy unchecked; it is now rejected by the guard ("could
+  not be tokenized"), and so is a string that tokenizes but is no expression.
+  The string is parsed inside parentheses, which accepts exactly the leading
+  blanks and line breaks SymPy accepts. (SEC5)
+
+### Docs
+
+- `find_max_rho_f_scaling` states the monotonicity assumption and that it is
+  proven at a single bus and unproven in the coupled multi-bus case.
+- `resolve_fault_sc_characteristics` states exactly what it averages —
+  `kappa` over the sources carrying 60909 data, `i_k_a` over all of them — and
+  its warning names the share of the current the data does not cover.
+- `kappa_from_r_to_x` documents its actual range, `[1.02, 2]`.
+- `CutAnalysis.identity_residual` says what it can and cannot show.
+
+- `Source.values` and `ElectricalNetwork._calculate_rms` state the
+  convention: phasors are RMS amplitudes, the total RMS over all frequency
+  components is `√Σ|X(f)|²` with the 0 Hz term entering as `|X_dc|`.
+- `compute_grounding_impedance`, `CLAUDE.md`, `docs/concepts.md` and
+  `docs/api/electrical_network.md` say `Z_G = Z_E = U_E / I_E` and name the
+  pre-0.6.0 expression as such.
+- `docs/transient.md` no longer claims the FFT solver injects mutual
+  currents; the limitations list the Nyquist bin, the non-causal kernel of a
+  frequency-independent reactance and the sign convention of the transient
+  EPR. `docs/api/pathfinder.md` and `docs/concepts.md` state the real cost of
+  the path enumeration. The transient example notebook runs again
+  (`mv_ring_transient.ipynb`, cell 10), the README no longer recommends the
+  deprecated `auto_parallel_coefficients`, and the notebooks import the
+  model classes from `gi.*`.
+- The installation page names pillow among the runtime dependencies (DOC5).
+- **`docs/transient.md` describes the state-space coupling the code
+  implements.** The "Mutual coupling" section derived the phase factor from
+  "the network's path topology — same algorithm as the FFT solver's mutual
+  Norton injection", a coupling the FFT solver does not have; it now states
+  the auto split at `f_eval`, the fold of a complex split and the
+  `TRANSIENT_PHASE_SPLIT` warning. The API page documents
+  `fft_block_bytes`, including that a very small budget costs time on
+  mid-size networks (150 buses: 0.7 s at the default, 4.5 s at 1 MiB).
+  (PH15, P8)
+- **Project files and the database object are documented.** The I/O page
+  describes the project-file format, its guarantees and the schema-version
+  table; the Database page the object, threading, the module-level helpers
+  and a migration table for the deprecated globals; the plotting page the
+  lazy import. (GUI1, ARC2, GUI8)
+- **"Editing a network and stale results"** in the core-models API page:
+  re-derivation on assignment, `update_*`/`remove_*`, read-only types, and what
+  makes a result stale. `BusType`/`BranchType` document their formula symbols
+  and that they are read-only; `core_models` and `utils/validations` have
+  module docstrings explaining the invariants and the resource limits.
+  (GUI3, USE2, SEC1)
+- **`docs/concepts.md` defines `U_E`, `Z_E`, `I_E` and `r` at the fault bus.**
+  The section on the EN 50522 reduction factor and the grounding-impedance
+  section are rewritten, and `docs/examples/fault_decomposition.ipynb`
+  prints the new quantities next to the group mean. (PH4)
+- **A missing `scalings` key means 1.0.** The DC section said 0 ("a fault
+  that does not scale 0 Hz contributes nothing at DC"); a fault without a
+  0 Hz key in fact gives |u_F(0 Hz)| = 33.47 V. (PH6, USE4)
+- **The driving point of `bus_response` is monotone only for an electrode
+  within 90° of the network admittance.** Along `Y_B = t·e^{jφ}`, `|Z_dp|`
+  falls for every `t` if and only if `cos(φ − arg(1/Z_net)) ≥ 0`, which a
+  resistive electrode always meets. The passive worst case
+  `|Z_net|/cos(arg Z_net)` is 0.08 % above `|Z_net|` on a nearly resistive
+  site and 57 % above it at the far end of a four-bus cable chain; the
+  documentation called it "very little". (PH13)
+- **How-to "Bus and branch types from data sheets".** The documentation only
+  showed the illustrative formula `(0.25 + j*f*0.012)*l` and did not say how a
+  cable or electrode becomes a `BranchType` or `BusType`. The new page derives
+  the screen–earth loop `Z_s`, the coupling `Z_m` (Carson with
+  `D_E = 658·√(ρ/f)`), `r = |1 − Z_m/Z_s| = R_s'/|Z_s'|` and the quantity
+  `phase_impedance_formula` has to carry, `Z_red = Z_pp − Z_m²/Z_s`. Worked
+  example NA2XS(F)2Y 1×300 RM/25 12/20 kV (Prysmian data sheet, EN 60228) at
+  100 Ω·m, computed three ways in `docs/snippets/types_from_datasheets.py`:
+  closed form, Pollaczek's integral, a one-branch `run_fault` — r = 0.703286 /
+  0.703244 / 0.703286 at 50 Hz; the closed form stays within 1.5·10⁻⁴ of the
+  integral in r over 16.7 Hz … 2.5 kHz and 10 … 10 000 Ω·m. Also the
+  three-phase system in trefoil (r = 0.342 at 50 Hz; the screen of the faulted
+  core carries 35.9 % of the bundle current, which sets the thermal
+  cross-section), the flat formation, an overhead line with earth wire,
+  electrode formulas and what the evaluator returns at 0 Hz. Values that no
+  data sheet gives are named as estimates. (D7, PH5)
+- **How-to "Compare results with EN 50522 limits".** Which result is which
+  symbol (`3I_0` → `i_fault`, `r` → `value_current`, not `value`; `I_E`,
+  `Z_E`, `U_E` as defined in this release), the procedure of EN 50522:2022 by
+  clause without permissible values, EPR as the upper bound of the touch
+  voltage, and harmonics and DC as total RMS against the 50 Hz curve —
+  conservative for the body current by the frequency factors of IEC 60479-2,
+  not shown for the touch voltage because the impedance of the skin falls with
+  frequency (DIN IEC/TS 60479-1:2007-05, 4.2). Worked example in
+  `docs/snippets/en50522_check.py`. (D5, D6, DOC8, PH4)
+- **Reference pages "Formula syntax", "Conventions and units", "Glossary and
+  symbols".** The formula symbols per type, the 28 callable functions, the
+  limits of the formula guard and why it exists, with the messages of 13
+  refused formulas; units, RMS phasors against peak waveform amplitudes, the
+  sign frame (earth-side phasors are the negatives of the physical ones, shield
+  and phase currents are physical — shown on a two-bus example), source
+  coverage and the `scalings` default; `Z_B` for the bus electrode and `Z_E`
+  only for the earthing impedance. (DOC6, DOC7, PH8, USE2, SEC1)
+- **Explanation pages "Standards and scope" and "Verification and
+  validation".** What the package implements of EN 50522:2022, IEC 61936-1,
+  IEC 60909-0, IEC 60949 and IEC 60479, and what it does not; the verification
+  evidence, with the reference-case table generated at build time from
+  `REFERENCE_CASES`, and plainly: not yet validated against field measurements
+  or other programs. (D8, DOC7)
+- **Liability note** on the home page, the EN 50522 how-to and the standards
+  page. (D10)
+- The data-sheet how-to, the formula syntax reference, the concepts chapter
+  and the transient chapter state both rules at 0 Hz; the how-to no longer
+  documents the Carson warning as expected. (D7)
+- **`docs/concepts.md` covers both rules.** The grounding-impedance section
+  states when `Z_E` is `None` and how `z_fault_ideal` is used. The 0 Hz
+  section covers phase conductors.
+- **New page "Service functions"** (`docs/api/service.md`): which function
+  answers which question, `solve` next to `run_fault`, the full
+  `check_network` code table (kept in sync with `CHECK_CODES` by a test), the
+  progress and cancellation protocol, the table of canonical names, and the
+  API reference of `service`, `checks`, `progress`, `diagnostics` and
+  `utils.compat`. (ARC1, GUI9, GUI5, USE8)
+- **I/O page: "Networks as tables"** — the schema with its required columns
+  (kept in sync with `TABLE_SCHEMAS` by a test), a CSV example, the error
+  semantics and the Excel route. (USE6)
+- README, concepts, quickstart, the transient guide, the API pages and the
+  example notebooks use the canonical keywords. (USE8)
+- **Result tables page: "Key figures of a fault"** — the columns of
+  `res_fault` with type and meaning (kept in sync with `RES_FAULT_SCHEMA` by
+  a test), the null rules and an example. (USE1, GUI6)
+- **Service page: "Diagnostic codes"** — every code the package raises, with
+  its category and the function that raises it (kept complete by a test),
+  how to collect the records around any call, and the route into logging.
+  (GUI4)
+- **The database stores the results of a network.** The Database page and the
+  docstrings of `Database.save_network`/`load_network` said that results are
+  not stored; they are, as a JSON column of the network row (since pass 9). A
+  test pins the round trip (dump equality and a fresh solve, EPR rel. 1e-12).
+  (ARC2)
+- **The pathfinder page describes the settings and memory per network**, with
+  a migration table for the deprecated switches; the Service page drops the
+  warning about shared path caches. (ARC2)
+- **"Internal API" is defined in the API reference index.** Functions and
+  methods that modules of the package share carry no underscore and say
+  "Internal API" in their docstring; they are not exported and can change in
+  any release. (ARC5)
+- **Eleven how-to guides, each with a runnable script and its stated
+  output.** Multi-frequency input, sweeps, outages, the inverse searches, the
+  pandapower importers, the thermal checks, transients, persistence,
+  performance, diagnostics and the service layer were covered by fragments in
+  the quickstart and prose on the API pages, mostly without an example that
+  runs or a result to compare with. The new pages under `docs/howto/` —
+  harmonics, sweeps, outage, inverse-rho, pandapower, thermal, transient,
+  persistence, performance, diagnostics, service-layer — include a script from
+  `docs/snippets/` by section, state what it prints and explain every
+  diagnostic code it shows. Among the contents: what a missing scaling and a
+  scaling of 0.0 mean (F7), which sources reach a frequency (F8), the 0 Hz
+  rules and the stand-in for an ideal bond; that the searches and sweeps scale
+  the bus resistivity only (PH11); the minimum pandapower data of an
+  earth-fault short-circuit case; that `derive_phase_impedance` gives
+  R₁ + jX₁ where the phase network wants `Z_red` — exact only for routes of
+  equal construction; that pandapower line switches are not evaluated, so a
+  ring operated open at a line switch is imported closed (with the
+  workaround); the measured numbers of the sparse kernel and of the study
+  sessions; the exit codes of `groundinsight run|check`. Every number is
+  recomputed a second way in the test suite — closed forms of a two-bus line,
+  a hand-merged DC chain, the independent reference solver, IEC 60909/60949 by
+  hand, the corner-to-corner path counts of grid graphs (2, 12, 184, 8512).
+  (DOC5, DOC6, DOC8, DOC10, DOC12, F7, F8, PH11)
+- **Reference "Result tables" and "Warnings and diagnostics".** Fifteen
+  result frames with column, dtype, unit and meaning — the names and dtypes
+  are generated at build time from the schema constants (`RES_FAULT_SCHEMA`
+  and the others) or from a probe solve, so they cannot drift. Both reduction
+  factors are named everywhere (`r_epr`/`reduction_factor` is the EPR ratio,
+  `r_current`/`reduction_factor_current` the `r` of EN 50522), and
+  `frequency_Hz` is a number with a null RMS row everywhere except in the
+  outage comparison frames, where it is text with `"RMS"`. All 63 diagnostic
+  codes with category, severity, elements, trigger and remedy; a test holds
+  the page to the codes in `src/` in both directions. (DOC6, DOC8, DOC10,
+  DOC12, GUI4)
+- **Every public name is on an API page.** 12 of the 104 names of
+  `groundinsight.__all__` and 2 of the 64 of `groundinsight.api` were rendered
+  nowhere — among them `migrate_database`, `needs_migration`,
+  `set_log_level`, `show_versions`, three warning classes and the thermal
+  catalogues. A new page "Top-level package" lists each name with the page
+  that documents it; the API overview links every API page. (DOC4)
+- **Seven false statements on the API pages corrected.** The electrode
+  currents of all buses sum to zero (not to r·I_F); the branch current is
+  counted positive from `from_bus` to `to_bus`; the electrical-network page
+  names both reduction factors and calls the bus electrode `Z_B`, keeping
+  `Z_E` for the earthing impedance of EN 50522; the reference-case table is
+  generated at build time; the importer example is the connected 20 kV level
+  of `example_simple()` with the bond switch as a branch (4 buses, 4
+  branches); the short-circuit example is a runnable script with the minimum
+  pandapower data; the voltage-level comparison is `math.isclose(...,
+  rel_tol=1e-9)`, as implemented, and the skip-reason table lists all twelve
+  reasons. Also: `create_paths` and `auto_parallel_coefficients` are no longer
+  taught as steps (DOC3); the EPR limit of the rho searches is not a
+  touch-voltage limit (DOC8); the steel default is 300 °C since 0.5.0, not
+  400 °C; the search status `"non_monotone"` is documented; a waveform
+  amplitude is a peak value, √2·1000 A for 1000 A RMS; the outage comparison
+  frames carry `frequency_Hz` as text and the averaging example leaves the RMS
+  rows out (DOC10); no reference to an ADR outside this repository (DOC9).
+  (DOC3, DOC7, DOC8, DOC9, DOC10)
+- **EN 50522 how-to reads the key figures from `res_fault`.** The symbol
+  table names the column for each quantity (`I_F_A` = 3I₀, `r_current` = r,
+  `I_E_A`, `Z_E_Ohm`, `U_E_V`) and the worked example reads all five in one
+  call, recomputed in the tests with the independent reference solver.
+- **The documentation follows the Diátaxis structure: Getting started, How-to
+  guides, Understanding the model, Examples, Reference, Project.** The flat
+  navigation mixed tutorials, explanations and the API, and the audit log made
+  up a fifth of the search index; it now sits under Project and out of the
+  search, like the changelog. `mkdocs build --strict` validates links and
+  anchors (`validation`: omitted files, unrecognised links, anchors). (D1,
+  DOC12, DOC9)
+- **The Concepts page is split into six explanation pages, and its old address
+  still works.** `explanation/theory.md` (model, assumptions and their limits:
+  one-way coupling exact if and only if `k = Z_m/Z_s` is constant per mesh,
+  one phase conductor, inverse rho scales only bus rho, the local source in
+  the current-based reduction factor, the sign frame), `formulas.md`,
+  `phase-currents.md` (`phase_impedance_formula` = `Z_red = Z_pp − Z_m²/Z_s`,
+  the proxy, the legacy `"paths"` mode, which gives `(1 − 2k)·I` in a
+  two-route ring instead of `(1 − k)·I`), `reduction-factors.md` (EPR ratio
+  against the EN 50522 `r`, `U_E`/`Z_E`/`I_E` with the chain example: on a
+  64-section run the group mean lies 43 % and 44.5 % below the fault-bus EPR
+  and the driving-point impedance), `decomposition.md` and `dc.md`. The
+  plugin `mkdocs-redirects` (pinned to 1.2.2; 1.2.3 adds a second
+  documentation tool as a dependency only for a banner) forwards
+  `concepts.md`, `quickstart.md` and `installation.md`; every former section
+  anchor lands on its new place. Every number on the new pages is checked a
+  second way in the test suite. (D1, PH5, PH8, PH11, PH12, PH14)
+- **Getting started: installation with a self-test, and two tutorials whose
+  numbers the reader can compute by hand.** *Your first fault calculation*
+  (two stations, a 5 km cable, 1000 A at 50 Hz: `U_E` = 275.43 V,
+  `Z_E` = 0.8440 Ω, `r` = 0.274064, EPR ratio 0.384615) and *From a line to a
+  ring* (the split, the phase impedance, the legacy mode 2.6 times too high,
+  a harmonic) — each number from the code included on the page and from the
+  closed forms, both checked by the test suite against an independent
+  nodal solve. (DOC5)
+- **The example notebooks are executed when the site is built.** They are
+  stored without outputs, and a cell that raises stops the build: a stored
+  output had shown a reduction factor of 0.904 next to code that gives 0.310.
+  The six notebooks were corrected where narrative and code disagreed and use
+  site links; five notebooks join them — thermal limits, direct current,
+  phase currents in meshes (against a fully coupled multi-conductor solve),
+  the electrode at the fault location (cuts, a rho-f catalogue) and the
+  location response bracket — each checking its numbers a second way. Strict
+  build with all eleven executed: about a minute, 23 s from the cache.
+  (D2, D3, DOC1, DOC2, DOC9, DOC14)
+- **Project pages: changelog, contributing, citation, license.** The new
+  `CONTRIBUTING.md` states the conventions a pull request is reviewed against
+  (module header, NumPy docstrings, typing style, logging, error classes,
+  diagnostics through `groundinsight.diagnostics.emit`, internal API, tests
+  first with two independent methods, changelog categories with **Breaking**,
+  deprecation over two releases and six months, calendar versioning, lint
+  instead of reformat). The citation page writes BibTeX and APA from
+  `CITATION.cff` at build time; the license page carries the scope note. (D1,
+  D10)
+- **README rewritten**: a quickstart that shows its output (checked by a
+  test), the current features with the measured numbers of the sparse kernel,
+  the model overview with the definitions of `U_E`, `Z_E`, `I_E` and both
+  reduction factors, links to the new structure and the scope note. The
+  advice to run a formatter over the code base is gone. (DOC5, D10)
+- `transient.md` and the DC page describe the current behaviour without
+  release history; the history stays in this changelog. (D4)
+- **Import from pandapower:** the switch handling replaces the limitation and
+  its workaround; the example compares the import with the same net with
+  every switch closed. The I/O page lists the reasons `line_switch_open`,
+  `line_switch_closed` and `line_not_imported`; the warnings reference and the
+  service page list `IMPORT_LINE_SWITCH_OPEN` and the element kind `switch`.
+- `find_max_rho_scaling` and `find_max_rho_f_scaling` no longer ask for
+  "consistent paths": the default phase-current mode needs none, and the
+  legacy `"paths"` mode enumerates its own. (DOC3)
+- **Every object of `groundinsight.__all__` has an example that runs, every
+  public model field is documented, and every module says why it exists.**
+  The API pages are generated from the docstrings, and numpydoc found 88
+  places where they lacked what the NumPy convention requires: properties
+  without `Returns`, methods without docstrings, pydantic fields that
+  appeared nowhere. All 99
+  public objects have an `Examples` section run by the doctests (`+SKIP`
+  only where a file, a plot or the pandapower extra is needed), every field
+  of a public model is listed under `Attributes`, and every Python file of
+  the package, the tests, the scripts, the GUI and the how-to scripts starts
+  with its path and a docstring. numpydoc findings: 88 → 0. (STD1, STD2)
+- **Docstrings and comments state the contract and its reason, not the
+  history.** "Until audit pass 19 …", "used to …", "since decision F4 …"
+  next to the code aged and had to be subtracted to find what holds now:
+  167 comment and docstring blocks in 41 files say what holds and why, a
+  former behaviour that motivates a rule became its reason in the
+  conditional. History markers in the shipped code: 115 → 0, kept there by
+  a test. The transient module describes both solvers instead of announcing
+  the state-space solver for "the next release". (D4)
+- **The legacy `"paths"` mode on a ring is stated exactly.** `run_fault` and
+  the `PARALLEL_COEFFICIENT_DEFAULT` warning said a symmetric ring collapses
+  to EPR = 0 at the default coefficient. The coupled injections of a
+  two-route ring add up to `(1 − 2k)·I` instead of `(1 − k)·I`; the EPR
+  is 0 only for `k = 0.5` and, for the cable of the tutorials
+  (`|1 − 2k| = 1`), as if the shields did not couple. The warning no longer
+  claims `Z_G = None` either — `Z_E` does not depend on the mode.
+  `compute_grounding_impedance` cites the explanation page and its value:
+  the group quotient lies 44.5 % below `Z_E`.
+- **CONTRIBUTING.md gives the lint commands, the rule for `# noqa` and the
+  warning policy of the test suite.** (STD8)
+
 ### Internal
+
+- Performance, core: `solve_network` keeps the per-frequency `splu`
+  factorisation and `compute_reduction_factors` reuses it instead of a dense
+  `np.linalg.solve` of the same matrix; `is_short_circuit`,
+  `_is_open_circuit` and `check_passive_impedance` are array/`math` based
+  (12–31× on the checks); `validate_impedance_formula_value` is memoised
+  behind the guard (`model_validate_json` of a 120-bus network 246 ms → 5 ms).
+  `run_fault` on a 200-bus chain × 50 frequencies: 1.10 s → 0.71 s.
+- Performance, transient: the FFT path evaluates impedances as arrays,
+  assembles `Y` as a stacked `(K, n, n)` array solved in blocks of 512 bins
+  and builds `ResultTransient.to_polars()` column-wise — 9.3 s → 0.3 s on
+  25 buses × 20 000 samples, results identical to 1e-13.
+- `tests/test_audit_pass18_*.py` — twenty files, 394 tests, one per
+  finding of the 2026-09-08 review; each fails without its change.
+
+- `analysis/_guards.py` holds the shared completeness guard, previously
+  private to `thermal.py`. Its lookup set is built once; it was quadratic
+  (398 ms at n = 4000).
+- Performance: `analyze_cuts` reuses the assembled `Y` (26.2 ms → 9.5 ms at
+  150 buses × 9 f), `bus_response` solves three right-hand sides against one
+  factorisation instead of two against two, `BusResponse.extremes()` is linear
+  in the frequency count (90.7 ms → 22.9 ms at 9 f), and
+  `find_max_rho_f_scaling` drops its closing re-evaluation
+  (`(iter + 3)·N` → `(iter + 2)·N` `run_fault` calls).
 
 - **`scripts/generate_graphify_report.py` removed, replaced by
   `scripts/refresh_graphify.sh`.** The Python script existed only because
   `graphify` 0.7.x stopped emitting `graphify-out/GRAPH_REPORT.md` while the
   `CLAUDE.md` hook still pointed at it. Verified against `graphifyy` 0.9.53:
-  the report is written again, by `cluster-only` rather than by `extract`
-  (`extract --code-only` alone leaves none). The shell script runs both passes
-  in order, pins the DeepSeek backend to `deepseek-v4-flash` with an explicit
+  the report is written again — but by `cluster-only`, never by `extract`, in
+  **either** variant. `extract` writes `graph.json` and leaves the communities
+  as `Community N` placeholders; skipping the second pass leaves a stale
+  report sitting next to a fresh graph without anything failing, which is the
+  same silent drift the removed workaround was papering over. The shell script
+  runs both passes in order, pins the DeepSeek backend to `deepseek-v4-flash` with an explicit
   `--model` rather than relying on the backend default, prompts for
   `DEEPSEEK_API_KEY` rather than storing it, and falls back to a local
-  AST-only run when none is given. Development tooling only —
+  AST-only run when none is given. It also checks up front that graphify's
+  environment has the `openai` package — DeepSeek has no extra of its own and
+  is reached through the OpenAI-compatible client, so without it the AST pass
+  completes and *then* every semantic chunk fails. Development tooling only —
   `graphify-out/` is gitignored and the package does not depend on any of it.
 - **Dependabot** for GitHub Actions and Python dependencies
   (`.github/dependabot.yml`), monthly, grouped into one pull request per
@@ -46,8 +1555,447 @@ version section when a release is cut.
   onto Node 24, and the warning only surfaced in a release log. Grouping is
   deliberate — a single-maintainer repository reads a dozen separate bump PRs
   as noise, which defeats the purpose.
+- **Audit pass 18 — full review of the 0.6.0 code base, documentation and
+  project setup (2026-09-08).** The review itself changed nothing; the
+  patch series that followed it is what the *Security*, *Fixed*,
+  *Changed*, *Added* and *Docs* entries above record. The complete
+  record — reproduction scripts, measurements, the proposed order of work
+  and the GUI concept it was commissioned with — is kept with the
+  maintainer's working notes outside this repository. The
+  suite was green throughout (992 passed, `mkdocs build --strict` clean),
+  and every finding listed here was reproduced twice — once by the reviewer
+  who raised it and once independently — so the list is short on
+  speculation. What the pass confirmed as *correct* is worth stating first:
+  the coupling model and both reduction factors, the Thévenin ⇄ Norton
+  equivalence in both solvers, the Sherman–Morrison/Möbius form
+  (1.4e-14 at every bus), the ring current split, `iec60909_m` against
+  numerical integration (1e-15), `iec60949_k`, and all four closed forms
+  in `analysis/reference.py` re-derived by hand. The findings sit one layer
+  above the core and at the edges.
+  - *Two ways to execute code by loading foreign data.* The formula guard
+    in `utils/validations.py` compares raw token strings against an ASCII
+    denylist, but CPython NFKC-normalises identifiers when it compiles the
+    source that `sympy.lambdify` generates — a fullwidth `ｅval` passes
+    the guard and reaches the builtin `eval` (verified through
+    `create_bus`). And `NetworkDB.frequencies` is a `PickleType`: a
+    `.db` file from another hand runs `pickle.loads` before Pydantic sees
+    a single field. Both contradict what `assert_safe_formula` promises.
+  - *`run_fault` enumerates every simple source→fault path in every
+    mode.* The default `phase_current_mode="auto"` only needs
+    reachability, yet `define_paths` runs the full DFS: a 6×6 grid of 36
+    buses takes 54–68 s for 1.26 million paths while the solve itself is
+    milliseconds. `docs/concepts.md` and `docs/api/pathfinder.md` state
+    the opposite scaling.
+  - *The transient FFT solver ignores mutual coupling* (17 % on the
+    verification case, no warning) while `docs/transient.md` says it
+    injects mutual currents like the stationary solver; it also injects
+    sources that have no path to the fault, and the state-space solver
+    reads its evaluation frequency from `frequencies[0]`, so a leading
+    0 Hz silently drops the source inductance.
+  - *`run_sweep` does not restore the network after a point fails in
+    `_apply`* (the return value is never bound, so `finally` skips the
+    restore) and the following points are solved on the corrupted model;
+    three smaller restore gaps (`R/L/C`, impedance-plus-rho on one bus,
+    the previous fault's cached result) sit next to it.
+  - *The 0.6.0 analysis layer against its own core:* `bus_response`
+    passes `r_epr` through as invariant although it is only invariant at
+    the fault bus, and computes `Z_G_Ohm` with the `u/(r·I)` expression
+    that 0.6.0 replaced; the inverse-rho searches leave a stale
+    `network.electrical_network` behind from which `bus_response` then
+    reads a *negative* driving-point impedance; the bisection assumes a
+    monotonicity that a rho-only sweep with a fixed reactive part does
+    not have; `analyze_cuts` assembles its own `Y` and therefore treats a
+    0 Hz short circuit as an open end and omits the Thévenin loop
+    admittance, while its `identity_residual` is structurally zero and
+    cannot show either.
+  - *Persistence and models:* the `add_columns` migration cannot add the
+    eight NOT-NULL columns with Python-side defaults it exists for and
+    leaves the file unopenable; `save_network` merges bus/branch types
+    globally and leaves the other network inconsistent; no model sets
+    `validate_assignment`, so `apply_shortcircuit_characteristics` can
+    write `kappa = 42` past the validator that promises to reject it.
+  - *Documentation:* `docs/examples/mv_ring_transient.ipynb` does not run
+    (`KeyError: 'F1'`, cell 10) while its stored output shows a result;
+    the README still recommends the deprecated
+    `auto_parallel_coefficients=True`; `concepts.md` claims an RMS row in
+    `res_all_impedances` that does not exist; the migration API is absent
+    from the site; and the four chapters an engineer without Python
+    routine needs most — assumptions and limits of the stationary model,
+    where the impedance formulas come from, how to read the result
+    columns and carry a verification through to an EN 50522 limit, and a
+    glossary — do not exist yet.
+  - *Runtime, without touching the architecture:* reuse the `splu`
+    factorisation in `compute_reduction_factors` instead of a dense
+    re-factorisation (13× on the linear-algebra share), vectorise the
+    scalar passivity/short-circuit checks (three hot loops at once), an
+    `lru_cache` on `validate_impedance_formula_value` (8.4× on
+    `model_validate_json`), and a batched `(K, n, n)` assembly in the FFT
+    solver (≈10× end to end).
+  The open items are listed under **Roadmap → From the 2026-09-08
+  review**. Fixes follow the house rule: a test that is red without the
+  change, in `tests/test_audit_pass18_*.py`, with the measurement protocol
+  in `docs/audit-log.md`.
+- **Audit pass 19 — review of the `audit-pass-18` state together with the
+  prepared pass-18 series (2026-11-07).** Review only; nothing below is fixed
+  yet. The pass looked at what is still open *after* patches 0006–0024 —
+  which still apply cleanly on `audit-pass-18` and keep the suite green
+  (1413 passed; 1163 without them) — so that the pass-18 findings are not
+  found a second time. Five independent tracks (numerics and performance,
+  physics with an independently written reference solver, security,
+  documentation and code standards, a GUI prototype) plus architecture,
+  usability and versioning; every physical or numerical statement checked by
+  two independent methods. Confirmed as *correct* first: the stationary core
+  matches a branch-current MNA reference to ≤ 3·10⁻¹⁴ on 17 structural cases
+  and 60 random networks, KCL, reciprocity and the power balance hold to
+  10⁻¹⁵, `bus_response` matches re-solves to 10⁻¹⁴, `iec60909_m` matches
+  numerical integration to six digits, and the pass-18 formula guard and
+  pickle fixes hold against 19 bypass vectors and a hostile `.db`. The
+  suite also passes unchanged on Python 3.12.
+  - *Model, not numerics.* A Thévenin source couples with `E/Z_src` instead
+    of the loop current it actually drives (fault EPR 6–38 % low against a
+    fully coupled multi-conductor model, unconservative, no warning); the
+    state-space transient still splits the phase current per enumerated path
+    (a symmetric ring settles at +103 % of the stationary `"auto"` result);
+    a broken shield (`"nan"`) without `phase_impedance_formula` also opens
+    the phase conductor through the proxy and silences the cycle warning
+    (−39 % EPR); and in the textbook case of the standard — a long uniform
+    cable feeder, remote source — `u_earthing` and `z_earthing` come out
+    43–45 % below the fault-bus EPR and the driving-point impedance that the
+    ladder closed form reproduces to six digits. The one-way coupling of the
+    `"auto"` phase solve is exact iff `Z_m/Z_s` is constant around every
+    mesh; `phase_impedance_formula` has to describe the screened loop
+    impedance `Z_pp − Z_m²/Z_s`, which the documentation does not say.
+  - *Regressions and silent misuse.* Since the `splu` reuse (K3) a solved
+    network can no longer be deep-copied or pickled (`SuperLU` in the cached
+    factorisation); assigning `specific_earth_resistance` or `length` is
+    validated but leaves the stored impedance stale; a source with no value
+    at any solved frequency solves to 0 V everywhere without a word; a failed
+    `create_bus`/`create_branch` leaves a half-built element in the network;
+    a missing `scalings` key still means a factor of 1.0 while
+    `docs/concepts.md` says it contributes nothing.
+  - *Scale.* The phase network is solved dense per source and frequency and
+    the admittance matrix is assembled dense per frequency, all of them kept:
+    a 4000-bus ring over seven frequencies takes 28 s and 2.3 GB, a 4000-bus
+    radial feeder with three sources 143 s — `splu` itself accounts for
+    19 ms of it. A sparse prototype solves the same cases in 1.0 s and 1.15 s
+    with 93 MB, agreeing on 606 networks to ≤ 2.6·10⁻¹², while the
+    documentation promises thousands of buses. `split_earth_currents` is
+    quadratic, and the earth-group partition behind `I_E` and `Z_G` is
+    decided by rounding noise in nameable cases (buses without physical earth
+    current, a fault bus without electrode): `Z_G` changes by a factor of
+    2.2 between two solvers that agree to 10⁻¹⁵ everywhere else.
+  - *Security and supply chain.* The guard caps the exponent but not the
+    size of the base (`<4080 digits>**999` costs 1.9 s of `sympify` per
+    formula, 17.9 s for a 20-type JSON); every fixed Pillow release lies
+    outside `pillow = "^11.3.0"`; third-party actions are pinned by tag, the
+    publish action by a moving branch inside the `id-token: write` job.
+  - *Documentation.* The site publishes stored notebook outputs, and all six
+    curated notebooks are stale — `mv_ring` shows `r = 0.904` against 0.310
+    today; the tutorials still teach `create_paths` as a mandatory step; 24
+    of 95 public symbols have no API page; seven factual statements on API
+    pages are wrong; there is no route from installation to a first verified
+    number.
+  - *For a graphical interface* the library lacks a stable project file
+    (UTF-8, atomic write, schema version), copyable networks, edit
+    invariants, structured diagnostics with element references, progress
+    and cancellation hooks and a key-figure accessor at the fault.
+  The planned work is listed under **Roadmap → From the 2026-11-07 review**.
+  The house rule stands: a test that is red without the change, in
+  `tests/test_audit_pass19_*.py`.
 
 ---
+- **CI on macOS and Windows.** The test matrix runs 3.12/3.13/3.14 on Linux
+  and the two ends, 3.12 and 3.14, on macOS and Windows — seven jobs — with
+  bash as the job shell, `MPLBACKEND=Agg`, no restored virtualenv on Windows
+  and a single coverage upload. Four test sites read or wrote text with the
+  platform's default encoding (cp1252 on Windows) and now say UTF-8; an AST
+  scan over `tests/` keeps it that way (REL7, F10).
+- **The lock is checked where the suite runs.** It had been solved for
+  `^3.14` while `pyproject.toml` said `^3.13`, which Poetry 2 refuses at
+  `poetry install`, so every CI job would have stopped before its first
+  test. The suite compares the lock with the declaration and runs
+  `poetry check --lock` when Poetry is installed (REL2).
+- **The documentation is deployed only from a strict build**
+  (`mkdocs gh-deploy --strict`) (STD11, DOC15).
+- `tests/test_audit_pass19_supply_chain.py` and
+  `tests/test_audit_pass19_workflows.py` — 63 tests on the dependency
+  floor, the lock, the audit script, the workflows and the migration
+  triage. Workflow checks read the YAML as text, because PyYAML is not in
+  the CI test environment, and repeat each check on the parsed document
+  where PyYAML is installed.
+- **Independent reference solver for transient tests**
+  (`tests/_transient_reference.py`): modified nodal analysis with shield and
+  phase-conductor branch currents as unknowns, phasor and trapezoidal
+  time-domain solve, optionally with a prescribed phase split; reproduces
+  `run_fault` to 1e-15. `tests/test_audit_pass19_transient.py` (35 tests)
+  checks PH2, PH-L1, PH15 and P8 against it, against the stationary solver,
+  against `1/|1 − Z_m/Z_s|` and against a verbatim copy of the old FFT block
+  loop. Three pass-10 tests that pinned the path-based factor (paths rebuilt
+  with a log line, factor exactly 1.0) now assert untouched paths and the
+  factor to 1e-12.
+- **The package `__init__` lost its persistence code** (878 → 455 lines):
+  JSON I/O moved to `io/project_file.py`, the database session and its
+  wrappers to `database/store.py`. Tests that pinned the removed globals
+  (`_set_session`, direct assignment of `gi.engine`/`gi.session`) were
+  rewritten to the new contract. A project file written by the genuine 0.6.0
+  writer is a test fixture. (ARC2, GUI1)
+- `ElectricalNetwork._UNCOPYABLE_CACHES` lists the attributes that hold SciPy
+  factorisations; a new factor cache has to be listed there, or a solved
+  network stops being copyable. (GUI2)
+- `Bus/Branch._derive()` computes every derived field without writing;
+  `calculate_impedance()` is `_apply_derived(_derive(...))`. Elements share a
+  `_NetworkElement` base with a weak, equality-neutral link to their network.
+  A test keeps the table of digested and exempt model fields complete, so a new
+  field has to be classified before a result can silently stay "current".
+  (GUI3, ARC9)
+- Four tests in `test_core_models.py` used the formula `"1+roh+f"`, a typo the
+  symbol check now catches; they use `"1+rho+f"`. (USE2)
+- **An independent reference solver as a test helper.**
+  `tests/_reference_mna.py` uses modified nodal analysis with branch currents
+  as unknowns, in the physical sign frame. With it, the permanent physics
+  tests (`tests/test_audit_pass19_physics.py`) pin 17 structural networks to
+  1e-12, and KCL, reciprocity, passivity and Tellegen on seeded random meshes
+  (plus a hypothesis variant when hypothesis is installed). A 1e-6 error in
+  the coupling injection turns 38 of 39 of these tests red. (PQ-REF, PQ-INV)
+- **`groundinsight.utils.earth_current`:** `NOISE_REL = 1e-9`,
+  `earth_current_vanishes()`, and `split_earth_currents(..., anchor=,
+  noise_rel=)`. The pytest marker `slow` is registered in `pyproject.toml`.
+  (P3, P9)
+- **CI runs every test the suite has; a missing test dependency fails.**
+  The CI test job installs only the `dev` group, but PyYAML (for the YAML
+  cross-checks of the workflow tests) sat in the `docs` group, and bandit
+  (for the SEC6 check) and hypothesis (for one variant of the PQ-INV
+  invariant tests) were in no group at all. So 12 tests were skipped in CI
+  without anyone seeing it, and the hypothesis variant was not even defined
+  there. All three are dev dependencies now (`pyyaml ^6.0`, `bandit ^1.9`,
+  `hypothesis ^6.0`); the lock keeps every other version and adds bandit
+  1.9.4, hypothesis 6.170.15, rich 15.0.0, sortedcontainers 2.4.0 and
+  stevedore 5.9.1 (pip-audit: 133 pins, no known advisory). The test jobs of
+  `ci.yml` and `release.yml` set `GROUNDINSIGHT_CI=1`, under which
+  `tests/conftest.py` turns a skip caused by `pytest.importorskip` — in a
+  test, a fixture or at module level — into a failure, and a new
+  `require_tool` fixture does the same for a missing executable (`poetry`).
+  Without hypothesis, the PQ-INV module now defines a stand-in that skips
+  visibly instead of leaving no trace. Skips for any other reason
+  (platform, permissions, `+SKIP` doctests) are untouched, and outside CI
+  everything skips as before. A test scans the suite's `importorskip`
+  targets and requires each of them in the `dev` group, so the next
+  optional import cannot go missing in CI either.
+- **Documentation examples run in the test suite.** `docs/snippets/*.py` are
+  included into the pages with `pymdownx.snippets` (now with `check_paths`)
+  and executed by `tests/test_audit_pass19_docs_examples.py`;
+  `tests/test_audit_pass19_docs_pages.py` reads the formula whitelist and the
+  guard limits from the code, replays the documented error messages, checks
+  the sign-frame and RMS examples a second way and runs every code block of
+  the new pages. A build hook, `docs/hooks/reference_cases.py`, writes the
+  reference-case table. `mkdocs-jupyter` is limited to `*.ipynb`: its default
+  turned every `*.py` file under `docs/` into a notebook page. (DOC13)
+- **One pass over the model per assembly.** Impedances, flags and topology are
+  gathered into `(elements, frequencies)` arrays once (`_NetworkTables`), with
+  the 0 Hz stand-in applied to whole columns; the passivity rules, the Thevenin
+  loop closures (`thevenin_loop_admittances` reads the same table rule the
+  assembly stamps with), the mutual Norton injections, the floating-network
+  guard, the electrode and shield currents and the result rows run on those
+  arrays. The element-wise passivity check (0.18 s on a 4000-bus ring at seven
+  frequencies, against 0.7 ms vectorised) still raises its full message when
+  the vectorised one fails. (P6)
+- **The state fingerprint is a BLAKE2 digest of the gathered arrays** with the
+  same coverage as the former tuple (every bus, branch and voltage source by
+  name, values at all stored frequencies). A build digests the tables the
+  assembly has gathered (about 5 ms on a 4000-bus ring at seven frequencies)
+  instead of a separate pass over the model (about 26 ms);
+  `matches_network_state` reads the model afresh and costs about the same as
+  before (about 25 ms). (P6)
+- **Result rows are built with the cyclic garbage collector paused**
+  (`_gc_paused`: restores a collector that was on, also on error; pauses nest
+  and overlap across threads; a collector the caller switched off stays off).
+  Result-building stage: 0.49 → 0.19 s on a 4000-bus ring at seven
+  frequencies, 0.69 → 0.26 s on a 10 000-bus ring at three. (P5a)
+- **Equivalence harness for the stationary kernel.** `tests/_dense_oracle.py`
+  re-implements the model densely from the public data (no `ElectricalNetwork`
+  code), optionally with iterative refinement in `clongdouble`;
+  `tests/test_audit_pass19_performance.py` compares every physical quantity of
+  150 random and 7 structured networks (n ≤ 300) at 1e-12 — with the earth
+  group oriented as the kernel orients it and `Z_E = Z_dp(F)` at every bin —
+  checks the sparse matrices against the dense assembly (1e-15, and bit for
+  bit with the same division), guards against dense `n x n` allocations (with
+  current and with Thevenin sources, also in `bus_response`/`analyze_cuts`)
+  and checks linear memory, checks large networks against exact (tree KCL,
+  closed-form ring split) and refined references, checks that the sparse
+  matrices and their dense view travel together through `copy.deepcopy` and
+  `pickle`, and holds the `slow`-marked size acceptance. (P1, P2, P6, P7, P13)
+- **The reference solver of the tests is group-aware.**
+  `tests/_reference_mna.py` gains `earthing_group`, `has_electrode`,
+  `driving_point_system` and `FloatingEarthError`. The driving point is now
+  solved on the bus's earthing group only, and a group without an electrode
+  is refused.
+- `groundinsight._state.NetworkState`: exact snapshot and restore of the
+  network-level state — every field with the content of its containers, the
+  private attributes of the network and its faults, the fields-set
+  bookkeeping — used by the cancellation and by the searches.
+  `groundinsight.utils.compat.renamed_parameters`: the alias decorator; it
+  checks its renames when the function is decorated and records them in
+  `__deprecated_parameters__`. `analysis._bisection.planned_steps`.
+- The outage study and the frequency-dependent search call `run_fault` with
+  the canonical keyword, so no study triggers the deprecation warning itself.
+- `groundinsight.utils.compat.warn_stacklevel`: the `stacklevel` for a
+  warning raised under the alias decorator, counted without its wrapper
+  frame, so the warnings of functions with a renamed parameter — the
+  diagnostics and the `DeprecationWarning` of `auto_parallel_coefficients` —
+  name the caller's line on Python 3.12 as on 3.14
+  (`warnings.warn(skip_file_prefixes=...)` matches no complete file name on
+  3.12).
+- Tests: `tests/test_audit_pass19_api.py` (126),
+  `tests/test_audit_pass19_studies_progress.py` (27),
+  `tests/test_audit_pass19_tables_io.py` (33),
+  `tests/test_audit_pass19_res_fault.py` (21: every column against the
+  result objects and the reference solver of `tests/_reference_mna.py`),
+  `tests/test_audit_pass19_diagnostics_inventory.py` (42: the remaining log
+  sites pinned with the reason each is operational, so a new
+  `logger.warning` fails until it is classified; every converted code raised
+  in its module and documented there; a triggering network or table per
+  code), eight doctests. Three older tests match the new message wording,
+  one test of the edit invariants expects the sweep to leave no stale
+  result, and 21 older tests in six files read the structured records
+  instead of `caplog`.
+- **The package `__init__` holds imports, `__all__`, `__version__` and the
+  deprecation `__getattr__` only.** The logging default and `set_log_level`
+  moved to `groundinsight/_logging.py`, `show_versions` to
+  `groundinsight/_versions.py`; both stay re-exported. Re-importing the package
+  (`importlib.reload`) no longer adds a second `NullHandler`. A test checks the
+  allowed statements and that each of the 103 names of the previous `__all__`
+  stays importable. Import time unchanged: median 0.912 s → 0.895 s (30
+  interleaved runs in fresh interpreters). (ARC3)
+- **One reachability search and one passivity classification.** The transient
+  study asks `Network.sources_reaching` for the sources that feed the fault
+  instead of running a breadth-first search of its own. The four passivity
+  rules have one implementation, `passivity_classes`, used by the dictionary
+  checker, the array checker of the transient solver and the vectorised check
+  of the stationary kernel (`non_passive_mask`); the message builder exists
+  once as well. Decisions and messages are unchanged: both checkers agree with
+  a rule-by-rule oracle on 48 edge cases (zero, signed zero, subnormal, ±∞,
+  NaN, …), and the reachability agrees with connected components from
+  `scipy.sparse.csgraph` on 40 random networks with inactive elements and
+  islands. (ARC6)
+- **Internal API instead of underscore names across modules.** Modules used 23
+  underscore names of other modules (`electrical._resolved_impedance`,
+  `fault._set_active`, `network._needs_path_rebuild`, …). They are now
+  internal API without the underscore: `ElectricalNetwork.resolved_impedance`,
+  `.grounding_shunts`, `.earthed_buses`, `.remove_loop_closures`,
+  `.compute_phase_currents`; `electrical_network.component_labels`,
+  `.restricted_columns`; `Fault.mark_active` (was `_set_active`);
+  `Network.needs_path_rebuild`, `Network.input_digest`;
+  `impedance_calculator.render_frequencies`, `.short_circuit_mask`;
+  `analysis.shortcircuit.sources_feeding`;
+  `io.pandapower_import.bus_index_to_name`, `.require_pandapower`. The rules
+  of `Network.frequencies` moved from the field validator into
+  `models.core_models.validate_frequencies`, which the validator and
+  `check_network` call; the order warning still points at the code that
+  builds the network. Code that used the former underscore names has to use
+  the new ones. An AST test finds every remaining use of another module's
+  underscore name (also through `getattr`/`setattr`/`hasattr`/`delattr`/
+  `object.__setattr__`); it finds none, with an empty allow-list. (ARC5)
+- **Tests use `gi.Database` instead of the deprecated session globals**,
+  except the tests of the deprecation path, which assert the warning; the
+  suite raises 11 `DeprecationWarning`s fewer. (ARC2)
+- **Release and CI keep the GUI on the library's version.** `scripts/release.py`
+  rewrites `gui/pyproject.toml` (version and `groundinsight==` pin) and
+  `gui/groundinsight_gui/__init__.py` with the other version sources and stops
+  on drift — the drift check no longer keeps one entry per file, which would
+  have hidden a pin disagreeing with the version line of the same file. The
+  release workflow's guard refuses a tag that one of them disagrees with
+  (tested by executing the guard on copies of the files). A CI job installs
+  the library and the GUI from the checkout in one pip call and runs the GUI
+  tests on ubuntu/Python 3.14; Dependabot watches the GUI's NiceGUI range and
+  leaves the library pin to the release script.
+- **Concurrent solves of different networks are tested under thread
+  pressure.** While the pathfinder kept module-level caches shared by every
+  network, clearing one network's entries while another thread inserted failed
+  with `OrderedDict mutated during iteration` (4 threads × 150 solves: 7 of 600
+  raised); the per-network memo of ARC2 removes the shared state, and the new
+  tests keep it that way (results bit-identical to solo solves).
+- New internal API (not exported, see `docs/api/index.md`):
+  `ElectricalNetwork.nodal_parts()` with the `NodalParts` tuple,
+  `assemble_nodal_matrices`, `bus_admittances`, `rms_columns` and
+  `stack_columns` in `groundinsight.electrical_network`, and
+  `impedance_table` in `groundinsight.utils.impedance_calculator`.
+- **Every Python block of the documentation runs or is marked as a
+  fragment.** `tests/test_audit_pass19_docs_codeblocks.py` (runner
+  `tests/_docs_codeblocks.py`) executes the Python blocks of `docs/**/*.md`
+  page by page in one namespace, in a subprocess with a 120 s timeout per
+  block; a block whose first line is `# fragment` is an excerpt, `>>>`
+  sessions are `pycon` blocks, a snippet include runs the whole script once,
+  and blocks needing the pandapower extra are skipped without it except under
+  `GROUNDINSIGHT_CI=1`. Before, 12 pages failed this; now 119 blocks on 43
+  pages pass (21 inline, 69 snippet includes, 29 fragments). (DOC13)
+- **The docs CI job checks the built inventory.** After `mkdocs build
+  --strict`, `scripts/check_api_inventory.py site/objects.inv` fails the job
+  when a public name of `groundinsight` or `groundinsight.api` is not
+  rendered; `tests/test_audit_pass19_docs_api.py` checks the same statically
+  from the `:::` directives. (DOC4)
+- **Build hook for the result tables.** `docs/hooks/result_tables.py` replaces
+  `<!-- result-table: <key> -->` markers with tables generated from the code;
+  a column without a description stops the build. It is called from the
+  registered `docs/hooks/reference_cases.py` until `mkdocs.yml` lists it.
+- **Build hooks for the documentation.** `docs/hooks/notebooks.py` points the
+  notebook kernel at `src/`, limits a cell to 600 s and names the notebook
+  cache after a digest of the package source, so a local build never shows
+  outputs of older code; it also fails a strict build when a notebook page
+  shows a path of the build machine (an unhandled warning).
+  `docs/hooks/project_pages.py` shows `CHANGELOG.md` and `CONTRIBUTING.md`
+  with their links rewritten for the site and writes the citation.
+  `docs/hooks/result_tables.py` is registered. A theme override adds a
+  download button to the notebook pages.
+- **CI runs the notebooks in one place, the strict docs build**, which now
+  installs the pandapower extra and has a 30-minute limit; the separate
+  nbconvert job is removed. The deploy workflow installs the same.
+- **Structure gates** in `tests/test_audit_pass19_docs_structure.py`: every
+  page in the navigation and the sections in order, redirects and every former
+  anchor, the documented Python floor, the tutorial snippets against their
+  pages and the closed forms, notebooks stored clean, executed at build,
+  listed and linked with site addresses, the hooks, the project pages,
+  `CONTRIBUTING.md` linked from README and docs, the README quickstart.
+- Tests: `tests/test_audit_pass19_line_switches.py` (14) — the open switch
+  against the same pandapower net with the switch closed and with the line
+  removed, against the documented construction by hand and against the
+  reference solver of `tests/_reference_mna.py` (EPR, screen and phase
+  currents to 1e-12), and the preview.
+- **ruff and numpydoc gate every push; their 367 and 88 findings were fixed
+  by hand.** The house conventions were written down and checked by no
+  tool. `pyproject.toml` configures ruff (E, W, F, B, N, D, SIM, UP,
+  RUF013, T20, every ignored code with its reason) over `src`, `tests`,
+  `scripts`, `gui` and `docs/snippets`, and numpydoc validation for the
+  package. Lint, never format: no formatter in the configuration, the
+  dependency groups (black is gone from the dev group) or CI; every finding
+  was a deliberate edit — 78 `zip()` calls state `strict=` or became
+  `itertools.pairwise`, 14 unclosed files in the migration tests are
+  closed. ruff 0.17.4, numpydoc 1.11.0 and radon 6.0.1 are exact pins in the
+  dev group, and the new blocking CI job `lint` runs both linters at those
+  versions. ruff 367 → 0, numpydoc 88 → 0. (STD8)
+- **The test suite runs warning-free under strict filters: 1152 warnings
+  per run → 0.** A new warning could not be told from the noise. 351
+  DeprecationWarnings came from tests that still passed `fault_name=`,
+  `u_max=`, `t_k=` or `auto_parallel_coefficients=`; they use the canonical
+  names now, and the alias tests assert their warning. `pytest` turns
+  DeprecationWarnings of the package and the tests, ResourceWarnings,
+  unraisable exceptions and every `GroundinsightWarning` into errors; a test
+  that provokes a package warning asserts it or acknowledges it by name with
+  a reason (`tests/_warning_policy.py`, 35 names), and the one remaining
+  ignore — a pandas FutureWarning inside pandapower — says why. The strict
+  filters found an unclosed database in a test that makes `dispose` fail on
+  purpose. The doctest sweep fails on a module it cannot import instead of
+  passing over it. (STD5)
+- **Code standards are tests.** `tests/test_audit_pass19_standards.py`
+  checks the lint configuration and pins, module headers (203 files), field
+  documentation and examples of the public API, docstrings without history,
+  no `print` in the package, a package or removal category for every
+  `warnings.warn`, the order of the `[Unreleased]` sections, the documented
+  Python floor on every page and in the GUI, the canonical parameter names
+  with an allowlist of 18 deprecated aliases that can only shrink, and a
+  complexity ratchet: the 80 functions above radon complexity 10 are listed
+  in `tests/data/complexity_ratchet.toml` and none may become more complex.
+  (STD1, STD2, STD3, STD5, STD7, STD10, STD11)
+- **The test suite runs on macOS and Windows.** The first CI run on those systems found assertions that measured the platform: a doctest printing a float to its last digit, a child process read as UTF-8 on Windows, platform path separators, a refined reference that needs the 80-bit extended long double of x86-64 Linux (skipped with that reason elsewhere), Poetry's lock check on Windows runners (runs on Linux and macOS), and an absolute timing bound (now relative to the solve on the same machine).
 
 ## [0.6.0] — 2026-09-01
 
@@ -1069,7 +3017,7 @@ Development release. See the git history for details.
 
 Development release. See the git history for details.
 
-## [0.1.0] — 2024-12-01
+## 0.1.0 — 2024-12-01
 
 Initial development release. Not installable via PyPI in the current
 form — superseded by 0.2.0.
@@ -1081,12 +3029,11 @@ form — superseded by 0.2.0.
 [0.5.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.4.0
 [0.3.2]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.2
-[0.3.1]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.1
+[0.3.1]: https://github.com/Ce1ectric/groundinsight/commit/28db80d1092d8e143b6a63f22979bd6e7d7c3d0e
 [0.3.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.3.0
-[0.2.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.2.0
-[0.1.2]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.1.2
-[0.1.1]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.1.1
-[0.1.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.1.0
+[0.2.0]: https://pypi.org/project/groundinsight/0.2.0/
+[0.1.2]: https://pypi.org/project/groundinsight/0.1.2/
+[0.1.1]: https://pypi.org/project/groundinsight/0.1.1/
 
 ---
 
@@ -1108,7 +3055,7 @@ which `groundinsight` consumes. The roadmap below is organised around
 that split: the "bridge" items below define the data-exchange surface
 between the two packages.
 
-### Near term — bridge to `groundfield` (target: 0.4.0)
+### Near term — bridge to `groundfield`
 
 These items define the data-exchange surface between field-level
 computations in `groundfield` and circuit-level solves in
@@ -1147,7 +3094,7 @@ drives the priority.
   analytical surface-potential model in layered earth; higher-fidelity
   surface potentials come from `groundfield` via `ImpedanceTable`.
 
-### Near term — external network import (target: 0.4.0)
+### Near term — external network import
 
 Building grounding networks by hand is the single most time-consuming
 step in any case study. Re-using existing distribution-network models
@@ -1357,6 +3304,85 @@ reduced network, `groundmeas` measurement store).
   future dashboard can resume a notebook session.
 - **`docs/api/database.md` sub-section for `gi.show_versions()`** — the
   helper is in `__all__` but has no rendered docs page entry.
+
+### From the 2026-09-08 review (audit pass 18)
+
+Implemented by the pass-18 series that is recorded under *Security*,
+*Fixed*, *Changed*, *Added* and *Docs* of `[Unreleased]`. What the series
+deliberately left open is carried forward into the 2026-11-07 work packages
+below:
+
+- the two follow-up de-duplications the integration exposed — one
+  reachability search instead of `transient._sources_reaching_fault` next to
+  `Network.sources_reaching`, one passivity mask instead of two
+  (→ WP 6);
+- the residual JSON risk of plain float fields outside `ComplexNumber`
+  that are not covered by the RFC-8259-safe encoding (→ WP 5, project file);
+- a fresh `poetry lock` after the Python floor change (→ WP 4);
+- the nine documentation chapters and the Diátaxis navigation (→ WP 9).
+
+### From the 2026-11-07 review (audit pass 19)
+
+Implemented in this release and recorded under `[Unreleased]`: work packages
+0–10 of the review -- the pass-18 series, no silent wrong result, the
+EN 50522 quantities, the transient phase split, the sparse kernel and the
+study sessions, supply chain and CI, the API and service-layer
+prerequisites, the architecture steps, standards and lint gates, calendar
+versioning, the documentation, and phase 0 of the graphical interface.
+Carried forward:
+
+**Model fidelity.**
+
+- Thévenin sources with the loop current as an unknown of a bordered
+  system; until then `THEVENIN_COUPLING` warns.
+- A fully coupled `phase_current_mode="coupled"` (2×2 branch blocks, twice
+  the nodes, still sparse) that removes the one-way-coupling approximation
+  and the phase proxy together; `ImportDefaults.derive_phase_impedance`
+  then derives `Z_red = Z_pp − Z_m²/Z_s` instead of `R₁ + jX₁`.
+- Eight further reference cases through `run_fault`: uniform and asymmetric
+  ring split, long feeder against the ladder limit, Thévenin single line,
+  superposition of two sources, resistive DC chain, the ladder cases through
+  the solver, a coupled uniform ring.
+- Phase-conductor dynamics as states of the state-space transient (the split
+  taken from the fundamental leaves about 1 % in rings of mixed
+  construction, `TRANSIENT_PHASE_SPLIT`), and an FFT path that couples per
+  spectral line.
+
+**Scale.**
+
+- Array-backed result objects (P5c): they now dominate a large run (0.2–0.3 s
+  of 0.53 s on a 4000-bus ring) and a sweep step (45–58 %).
+- A solve session for `run_sweep` once the result objects are cheap (a
+  bit-identical prototype saved 11–24 % per point).
+- Vectorised formula evaluation in the network build, provided it stays
+  bit-identical to the per-element evaluation that `input_digest` relies on.
+
+**API and naming.**
+
+- The `bus_response` frames still call the driving-point impedance
+  `Z_G_Ohm`; rename it to `Z_E_Ohm` with a deprecation period, as
+  `res_fault` names it.
+- The frequency rules exist a second time in `io/defaults.py`.
+
+**Graphical interface.**
+
+- Phase 1: adding and pasting elements, a network graph, a session that
+  survives a page reload, the remaining studies (`find_max_rho_f_scaling`,
+  `TransientStudy`) as jobs, packaging with signed Windows and notarised
+  macOS builds.
+- The server variant (FastAPI with its own front end, single sign-on for
+  the internal deployment, a public demo) on the REST-ready DTOs of
+  `groundinsight.api`.
+- Report upstream: with NiceGUI 4.0 and AG Grid 36 the browser drops
+  `rowClicked` events (circular context); the GUI works around it.
+
+**Repository and CI.**
+
+- Register the `lint` job as a required status check so that it blocks
+  merges.
+- Strict warning filters for the GUI test suite as in the library suite, and
+  the remaining local `simplefilter("ignore")` blocks of the tests (68 in 22
+  modules) asserted or acknowledged by name.
 
 ### Explicit non-goals
 

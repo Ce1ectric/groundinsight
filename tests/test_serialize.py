@@ -1,6 +1,11 @@
-# test_impedance_serialization.py
+# tests/test_serialize.py
+"""
+Impedance tables to JSON and back (``groundinsight.utils.serialize``).
 
-import pytest
+Both directions, empty tables, and that a round trip in either order returns
+what went in.
+"""
+
 from groundinsight.models.core_models import ComplexNumber
 from groundinsight.utils.serialize import (
     serialize_impedance,
@@ -13,13 +18,13 @@ def test_serialize_impedance_normal():
         60.0: ComplexNumber(real=15.0, imag=4.1),
         75.5: ComplexNumber(real=8.0, imag=0.0),
     }
-    
+
     expected_json = {
         "50.0": {"real": 10.5, "imag": -3.2},
         "60.0": {"real": 15.0, "imag": 4.1},
         "75.5": {"real": 8.0, "imag": 0.0},
     }
-    
+
     serialized = serialize_impedance(impedance_dict)
     assert serialized == expected_json
 
@@ -35,13 +40,13 @@ def test_deserialize_impedance_normal():
         "60.0": {"real": 15.0, "imag": 4.1},
         "75.5": {"real": 8.0, "imag": 0.0},
     }
-    
+
     expected_impedance = {
         50.0: ComplexNumber(real=10.5, imag=-3.2),
         60.0: ComplexNumber(real=15.0, imag=4.1),
         75.5: ComplexNumber(real=8.0, imag=0.0),
     }
-    
+
     deserialized = deserialize_impedance(impedance_json)
     assert deserialized == expected_impedance
 
@@ -57,10 +62,10 @@ def test_round_trip_serialization_deserialization():
         60.0: ComplexNumber(real=15.0, imag=4.1),
         75.5: ComplexNumber(real=8.0, imag=0.0),
     }
-    
+
     serialized = serialize_impedance(original_impedance)
     deserialized = deserialize_impedance(serialized)
-    
+
     assert deserialized == original_impedance
 
 def test_round_trip_deserialization_serialization():
@@ -69,8 +74,8 @@ def test_round_trip_deserialization_serialization():
         "60.0": {"real": 15.0, "imag": 4.1},
         "75.5": {"real": 8.0, "imag": 0.0},
     }
-    
+
     deserialized = deserialize_impedance(original_json)
     serialized = serialize_impedance(deserialized)
-    
+
     assert serialized == original_json

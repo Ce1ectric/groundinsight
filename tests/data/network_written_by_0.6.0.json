@@ -1,0 +1,600 @@
+{
+    "name": "Netz Süd",
+    "description": "Fixture written by 0.6.0",
+    "frequencies": [
+        50.0,
+        250.0
+    ],
+    "buses": {
+        "UW Süd": {
+            "name": "UW Süd",
+            "description": null,
+            "type": {
+                "name": "Erder Süd",
+                "description": null,
+                "system_type": "Substation",
+                "voltage_level": 110.0,
+                "impedance_formula": "rho*0.01 + 1 + I*f*0.002",
+                "R_formula": null,
+                "L_formula": null,
+                "C_formula": null,
+                "earthing_conductor_material": null,
+                "earthing_conductor_cross_section_mm2": null,
+                "earthing_conductor_theta_initial_C": 20.0,
+                "earthing_conductor_theta_final_C": null,
+                "earthing_conductor_current_split": 1.0,
+                "electrode_material": null,
+                "electrode_cross_section_mm2": null,
+                "electrode_theta_initial_C": 20.0,
+                "electrode_theta_final_C": null,
+                "electrode_current_split": 1.0
+            },
+            "impedance": {
+                "50.0": {
+                    "real": 2.0,
+                    "imag": 0.1
+                },
+                "250.0": {
+                    "real": 2.0,
+                    "imag": 0.5
+                }
+            },
+            "specific_earth_resistance": 100.0,
+            "active": true,
+            "R": null,
+            "L": null,
+            "C": null
+        },
+        "Station Öl": {
+            "name": "Station Öl",
+            "description": null,
+            "type": {
+                "name": "Erder Süd",
+                "description": null,
+                "system_type": "Substation",
+                "voltage_level": 110.0,
+                "impedance_formula": "rho*0.01 + 1 + I*f*0.002",
+                "R_formula": null,
+                "L_formula": null,
+                "C_formula": null,
+                "earthing_conductor_material": null,
+                "earthing_conductor_cross_section_mm2": null,
+                "earthing_conductor_theta_initial_C": 20.0,
+                "earthing_conductor_theta_final_C": null,
+                "earthing_conductor_current_split": 1.0,
+                "electrode_material": null,
+                "electrode_cross_section_mm2": null,
+                "electrode_theta_initial_C": 20.0,
+                "electrode_theta_final_C": null,
+                "electrode_current_split": 1.0
+            },
+            "impedance": {
+                "50.0": {
+                    "real": 2.0,
+                    "imag": 0.1
+                },
+                "250.0": {
+                    "real": 2.0,
+                    "imag": 0.5
+                }
+            },
+            "specific_earth_resistance": 100.0,
+            "active": true,
+            "R": null,
+            "L": null,
+            "C": null
+        },
+        "Ortsnetz Straße": {
+            "name": "Ortsnetz Straße",
+            "description": null,
+            "type": {
+                "name": "Erder Süd",
+                "description": null,
+                "system_type": "Substation",
+                "voltage_level": 110.0,
+                "impedance_formula": "rho*0.01 + 1 + I*f*0.002",
+                "R_formula": null,
+                "L_formula": null,
+                "C_formula": null,
+                "earthing_conductor_material": null,
+                "earthing_conductor_cross_section_mm2": null,
+                "earthing_conductor_theta_initial_C": 20.0,
+                "earthing_conductor_theta_final_C": null,
+                "earthing_conductor_current_split": 1.0,
+                "electrode_material": null,
+                "electrode_cross_section_mm2": null,
+                "electrode_theta_initial_C": 20.0,
+                "electrode_theta_final_C": null,
+                "electrode_current_split": 1.0
+            },
+            "impedance": {
+                "50.0": {
+                    "real": 2.0,
+                    "imag": 0.1
+                },
+                "250.0": {
+                    "real": 2.0,
+                    "imag": 0.5
+                }
+            },
+            "specific_earth_resistance": 100.0,
+            "active": true,
+            "R": null,
+            "L": null,
+            "C": null
+        }
+    },
+    "branches": {
+        "Kabel 1": {
+            "name": "Kabel 1",
+            "description": null,
+            "type": {
+                "name": "Kabel NA2XS(F)2Y",
+                "description": null,
+                "grounding_conductor": true,
+                "self_impedance_formula": "(0.25 + I*f*0.012)*l",
+                "mutual_impedance_formula": "(0.05 + I*f*0.010)*l",
+                "phase_impedance_formula": null,
+                "R_self_formula": null,
+                "L_self_formula": null,
+                "C_self_formula": null,
+                "R_mutual_formula": null,
+                "M_mutual_formula": null,
+                "conductor_material": null,
+                "cross_section_mm2": null,
+                "theta_initial_C": 20.0,
+                "theta_final_C": null
+            },
+            "length": 1.0,
+            "from_bus": "UW Süd",
+            "to_bus": "Station Öl",
+            "self_impedance": {
+                "50.0": {
+                    "real": 0.25,
+                    "imag": 0.6
+                },
+                "250.0": {
+                    "real": 0.25,
+                    "imag": 3.0
+                }
+            },
+            "mutual_impedance": {
+                "50.0": {
+                    "real": 0.05,
+                    "imag": 0.5
+                },
+                "250.0": {
+                    "real": 0.05,
+                    "imag": 2.5
+                }
+            },
+            "specific_earth_resistance": 100.0,
+            "parallel_coefficient": 1.0,
+            "active": true,
+            "phase_impedance": null,
+            "R_self": null,
+            "L_self": null,
+            "C_self": null,
+            "R_mutual": null,
+            "M_mutual": null
+        },
+        "Kabel 2": {
+            "name": "Kabel 2",
+            "description": null,
+            "type": {
+                "name": "Kabel NA2XS(F)2Y",
+                "description": null,
+                "grounding_conductor": true,
+                "self_impedance_formula": "(0.25 + I*f*0.012)*l",
+                "mutual_impedance_formula": "(0.05 + I*f*0.010)*l",
+                "phase_impedance_formula": null,
+                "R_self_formula": null,
+                "L_self_formula": null,
+                "C_self_formula": null,
+                "R_mutual_formula": null,
+                "M_mutual_formula": null,
+                "conductor_material": null,
+                "cross_section_mm2": null,
+                "theta_initial_C": 20.0,
+                "theta_final_C": null
+            },
+            "length": 0.5,
+            "from_bus": "Station Öl",
+            "to_bus": "Ortsnetz Straße",
+            "self_impedance": {
+                "50.0": {
+                    "real": 0.125,
+                    "imag": 0.3
+                },
+                "250.0": {
+                    "real": 0.125,
+                    "imag": 1.5
+                }
+            },
+            "mutual_impedance": {
+                "50.0": {
+                    "real": 0.025,
+                    "imag": 0.25
+                },
+                "250.0": {
+                    "real": 0.025,
+                    "imag": 1.25
+                }
+            },
+            "specific_earth_resistance": 100.0,
+            "parallel_coefficient": 1.0,
+            "active": true,
+            "phase_impedance": null,
+            "R_self": null,
+            "L_self": null,
+            "C_self": null,
+            "R_mutual": null,
+            "M_mutual": null
+        }
+    },
+    "faults": {
+        "F Straße": {
+            "name": "F Straße",
+            "description": null,
+            "bus": "Ortsnetz Straße",
+            "scalings": {
+                "50.0": 1.0,
+                "250.0": 1.0
+            },
+            "t_k_s": null,
+            "n_factor": 1.0,
+            "active": true
+        }
+    },
+    "sources": {
+        "Einspeisung": {
+            "name": "Einspeisung",
+            "description": null,
+            "bus": "UW Süd",
+            "source_type": "current",
+            "values": {
+                "50.0": {
+                    "real": 1000.0,
+                    "imag": 0.0
+                },
+                "250.0": {
+                    "real": 100.0,
+                    "imag": 0.0
+                }
+            },
+            "voltage": null,
+            "source_impedance": null,
+            "i_k_a": null,
+            "r_to_x": null,
+            "kappa": null
+        }
+    },
+    "results": {
+        "F Straße": {
+            "buses": [
+                {
+                    "name": "UW Süd",
+                    "uepr": 166.00349197533595,
+                    "ia": 82.8433131836837,
+                    "i_inj": 1004.987562112089,
+                    "uepr_freq": {
+                        "50.0": {
+                            "real": 158.73013966002176,
+                            "imag": 41.425362747713635
+                        },
+                        "250.0": {
+                            "real": 22.224740075364142,
+                            "imag": 12.324867598406788
+                        }
+                    },
+                    "ia_freq": {
+                        "50.0": {
+                            "real": 80.20020339022815,
+                            "imag": 16.70267120434541
+                        },
+                        "250.0": {
+                            "real": 11.908685635278042,
+                            "imag": 3.1852623903838837
+                        }
+                    },
+                    "i_inj_freq": {
+                        "50.0": {
+                            "real": 1000.0,
+                            "imag": 0.0
+                        },
+                        "250.0": {
+                            "real": 100.0,
+                            "imag": 0.0
+                        }
+                    }
+                },
+                {
+                    "name": "Station Öl",
+                    "uepr": 32.18283472530778,
+                    "ia": 16.062450908587145,
+                    "i_inj": 0.0,
+                    "uepr_freq": {
+                        "50.0": {
+                            "real": -31.241412215028475,
+                            "imag": -6.278847417063245
+                        },
+                        "250.0": {
+                            "real": -4.35387568696799,
+                            "imag": -1.1527598981630947
+                        }
+                    },
+                    "ia_freq": {
+                        "50.0": {
+                            "real": -15.738331464280119,
+                            "imag": -2.352507135317617
+                        },
+                        "250.0": {
+                            "real": -2.1845014877688302,
+                            "imag": -0.030254577139339787
+                        }
+                    },
+                    "i_inj_freq": {
+                        "50.0": {
+                            "real": 0.0,
+                            "imag": 0.0
+                        },
+                        "250.0": {
+                            "real": 0.0,
+                            "imag": 0.0
+                        }
+                    }
+                },
+                {
+                    "name": "Ortsnetz Straße",
+                    "uepr": 133.91354281731822,
+                    "ia": 66.82644665580871,
+                    "i_inj": 1004.987562112089,
+                    "uepr_freq": {
+                        "50.0": {
+                            "real": -127.48872744499327,
+                            "imag": -35.14651533065041
+                        },
+                        "250.0": {
+                            "real": -17.870864388396154,
+                            "imag": -11.1721077002437
+                        }
+                    },
+                    "ia_freq": {
+                        "50.0": {
+                            "real": -64.46187192594803,
+                            "imag": -14.350164069027803
+                        },
+                        "250.0": {
+                            "real": -9.724184147509213,
+                            "imag": -3.1550078132445467
+                        }
+                    },
+                    "i_inj_freq": {
+                        "50.0": {
+                            "real": -1000.0,
+                            "imag": 0.0
+                        },
+                        "250.0": {
+                            "real": -100.0,
+                            "imag": 0.0
+                        }
+                    }
+                }
+            ],
+            "branches": [
+                {
+                    "name": "Kabel 1",
+                    "i_s": 924.1649585608286,
+                    "i_s_freq": {
+                        "50.0": {
+                            "real": -919.7997966097719,
+                            "imag": 16.70267120434542
+                        },
+                        "250.0": {
+                            "real": -88.09131436472195,
+                            "imag": 3.1852623903838833
+                        }
+                    }
+                },
+                {
+                    "name": "Kabel 2",
+                    "i_s": 939.998507068625,
+                    "i_s_freq": {
+                        "50.0": {
+                            "real": -935.538128074052,
+                            "imag": 14.350164069027812
+                        },
+                        "250.0": {
+                            "real": -90.2758158524908,
+                            "imag": 3.155007813244545
+                        }
+                    }
+                }
+            ],
+            "reduction_factor": {
+                "name": null,
+                "fault_bus": "Ortsnetz Straße",
+                "value": {
+                    "50.0": 0.34401045807689073,
+                    "250.0": 0.17888543819998315
+                },
+                "value_current": {
+                    "50.0": 0.08192100981551945,
+                    "250.0": 0.12327314795018081
+                },
+                "i_earth": {
+                    "50.0": {
+                        "real": -80.20020339022815,
+                        "imag": -16.70267120434542
+                    },
+                    "250.0": {
+                        "real": -11.908685635278044,
+                        "imag": -3.1852623903838864
+                    }
+                },
+                "earth_buses": {
+                    "50.0": [
+                        "Ortsnetz Straße",
+                        "Station Öl"
+                    ],
+                    "250.0": [
+                        "Ortsnetz Straße",
+                        "Station Öl"
+                    ]
+                },
+                "u_earthing": {
+                    "50.0": {
+                        "real": -108.79995835477848,
+                        "imag": -29.541151913281343
+                    },
+                    "250.0": {
+                        "real": -15.490873737241243,
+                        "imag": -9.407960771786042
+                    }
+                },
+                "z_earthing": {
+                    "50.0": {
+                        "real": 1.3737332304195173,
+                        "imag": 0.08224589420311308
+                    },
+                    "250.0": {
+                        "real": 1.4111540740091442,
+                        "imag": 0.41256146339553673
+                    }
+                }
+            },
+            "grounding_impedance": {
+                "name": null,
+                "fault_bus": "Ortsnetz Straße",
+                "value": {
+                    "50.0": {
+                        "real": 1.3737332304195173,
+                        "imag": 0.08224589420311308
+                    },
+                    "250.0": {
+                        "real": 1.4111540740091442,
+                        "imag": 0.41256146339553673
+                    }
+                }
+            },
+            "fault": "F Straße"
+        }
+    },
+    "paths": {
+        "path_1": {
+            "name": "path_1",
+            "description": "Path from Einspeisung to F Straße",
+            "source": "Einspeisung",
+            "fault": "F Straße",
+            "segments": [
+                {
+                    "name": "Kabel 1",
+                    "description": null,
+                    "type": {
+                        "name": "Kabel NA2XS(F)2Y",
+                        "description": null,
+                        "grounding_conductor": true,
+                        "self_impedance_formula": "(0.25 + I*f*0.012)*l",
+                        "mutual_impedance_formula": "(0.05 + I*f*0.010)*l",
+                        "phase_impedance_formula": null,
+                        "R_self_formula": null,
+                        "L_self_formula": null,
+                        "C_self_formula": null,
+                        "R_mutual_formula": null,
+                        "M_mutual_formula": null,
+                        "conductor_material": null,
+                        "cross_section_mm2": null,
+                        "theta_initial_C": 20.0,
+                        "theta_final_C": null
+                    },
+                    "length": 1.0,
+                    "from_bus": "UW Süd",
+                    "to_bus": "Station Öl",
+                    "self_impedance": {
+                        "50.0": {
+                            "real": 0.25,
+                            "imag": 0.6
+                        },
+                        "250.0": {
+                            "real": 0.25,
+                            "imag": 3.0
+                        }
+                    },
+                    "mutual_impedance": {
+                        "50.0": {
+                            "real": 0.05,
+                            "imag": 0.5
+                        },
+                        "250.0": {
+                            "real": 0.05,
+                            "imag": 2.5
+                        }
+                    },
+                    "specific_earth_resistance": 100.0,
+                    "parallel_coefficient": 1.0,
+                    "active": true,
+                    "phase_impedance": null,
+                    "R_self": null,
+                    "L_self": null,
+                    "C_self": null,
+                    "R_mutual": null,
+                    "M_mutual": null
+                },
+                {
+                    "name": "Kabel 2",
+                    "description": null,
+                    "type": {
+                        "name": "Kabel NA2XS(F)2Y",
+                        "description": null,
+                        "grounding_conductor": true,
+                        "self_impedance_formula": "(0.25 + I*f*0.012)*l",
+                        "mutual_impedance_formula": "(0.05 + I*f*0.010)*l",
+                        "phase_impedance_formula": null,
+                        "R_self_formula": null,
+                        "L_self_formula": null,
+                        "C_self_formula": null,
+                        "R_mutual_formula": null,
+                        "M_mutual_formula": null,
+                        "conductor_material": null,
+                        "cross_section_mm2": null,
+                        "theta_initial_C": 20.0,
+                        "theta_final_C": null
+                    },
+                    "length": 0.5,
+                    "from_bus": "Station Öl",
+                    "to_bus": "Ortsnetz Straße",
+                    "self_impedance": {
+                        "50.0": {
+                            "real": 0.125,
+                            "imag": 0.3
+                        },
+                        "250.0": {
+                            "real": 0.125,
+                            "imag": 1.5
+                        }
+                    },
+                    "mutual_impedance": {
+                        "50.0": {
+                            "real": 0.025,
+                            "imag": 0.25
+                        },
+                        "250.0": {
+                            "real": 0.025,
+                            "imag": 1.25
+                        }
+                    },
+                    "specific_earth_resistance": 100.0,
+                    "parallel_coefficient": 1.0,
+                    "active": true,
+                    "phase_impedance": null,
+                    "R_self": null,
+                    "L_self": null,
+                    "C_self": null,
+                    "R_mutual": null,
+                    "M_mutual": null
+                }
+            ]
+        }
+    },
+    "active_fault": "F Straße"
+}

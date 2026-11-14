@@ -11,6 +11,8 @@ Faults, Sources, and Paths. The functions convert between Pydantic models and SQ
 database models to ensure seamless data manipulation and persistence.
 """
 
+import logging
+
 from groundinsight.models.core_models import Network, BusType, BranchType
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
@@ -25,7 +27,30 @@ from groundinsight.models.database_models import (
     PathSegmentDB,
     NetworkDB,
 )
-from typing import Dict, Tuple
+from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+#: Fields of a ``BusType`` / ``BranchType`` that change what the network
+#: *computes*. Descriptions and thermal metadata are deliberately not in here:
+#: rewriting a description of a shared type is harmless, rewriting a formula
+#: silently changes every other network that references the type.
+_BUSTYPE_FORMULA_FIELDS: Tuple[str, ...] = (
+    "impedance_formula",
+    "R_formula",
+    "L_formula",
+    "C_formula",
+)
+_BRANCHTYPE_FORMULA_FIELDS: Tuple[str, ...] = (
+    "self_impedance_formula",
+    "mutual_impedance_formula",
+    "phase_impedance_formula",
+    "R_self_formula",
+    "L_self_formula",
+    "C_self_formula",
+    "R_mutual_formula",
+    "M_mutual_formula",
+)
 
 #: Association tables of the pre-network-scoped schema. Their presence is not
 #: what makes a database unreadable -- the missing ``network_name`` column on
@@ -43,12 +68,12 @@ def ensure_current_schema(session: Session):
     """
     Reject databases written by the pre-network-scoped schema.
 
-    Up to and including the association-table schema, ``buses``, ``branches``,
-    ``faults``, ``sources`` and ``paths`` were keyed by element name alone and
-    linked to their network through ``network_buses`` & co. Two networks
-    containing an element of the same name therefore shared one row, so saving
-    one network silently rewrote the other. Those tables are now keyed by
-    ``(network_name, name)``.
+    ``buses``, ``branches``, ``faults``, ``sources`` and ``paths`` are keyed
+    by ``(network_name, name)``. A file of the association-table schema keys
+    them by element name alone and links them to their network through
+    ``network_buses`` & co.; two networks containing an element of the same
+    name share one row there, so saving one network would silently rewrite
+    the other.
 
     ``Base.metadata.create_all`` only ever creates *missing* tables -- it never
     adds a column to an existing one -- so an old database file opens without
@@ -108,9 +133,9 @@ def _validate_path_segments(network: Network):
 
     ``Network.paths`` holds ``Branch`` objects, not names, so a user who prunes
     ``network.branches`` after :func:`groundinsight.create_paths` leaves paths
-    pointing at branches that are no longer part of the network. Persisting
-    such a path used to fail with ``AttributeError: 'NoneType' object has no
-    attribute '_sa_instance_state'`` deep inside SQLAlchemy.
+    pointing at branches that are no longer part of the network. Persisted
+    unchecked, such a path fails with ``AttributeError: 'NoneType' object has
+    no attribute '_sa_instance_state'`` deep inside SQLAlchemy.
 
     Parameters
     ----------
@@ -132,6 +157,137 @@ def _validate_path_segments(network: Network):
                     "network.branches. Re-run gi.create_paths(network=...) after "
                     "changing the branches, or drop the stale path before saving."
                 )
+
+
+def _networks_using_type(
+    session: Session, element_cls, type_name: str, exclude: Optional[str]
+) -> List[str]:
+    """
+    Other networks whose elements reference a stored type.
+
+    Parameters
+    ----------
+    session : Session
+        Session to query.
+    element_cls : type
+        ``BusDB`` or ``BranchDB``.
+    type_name : str
+        Name of the type.
+    exclude : str or None
+        The network currently being saved; never reported against itself.
+        ``None`` reports every network.
+
+    Returns
+    -------
+    List[str]
+        Sorted network names.
+    """
+    rows = (
+        session.query(element_cls.network_name)
+        .filter(element_cls.type_name == type_name)
+        .distinct()
+        .all()
+    )
+    names = {row[0] for row in rows if row[0] is not None}
+    if exclude is not None:
+        names.discard(exclude)
+    return sorted(names)
+
+
+def _check_type_merge(network: Network, session: Session, overwrite_types: bool):
+    """
+    Refuse to rewrite the formulas of a type another network relies on.
+
+    ``BusType`` and ``BranchType`` are a *global* catalogue keyed by name, so
+    ``session.merge`` on a type of the network being saved replaces the stored
+    definition for **every** network that references it. Network A, saved
+    yesterday with a 1 Ohm electrode type, silently became a 999 Ohm one when
+    network B was saved today under the same type name; nothing in A's own row
+    changed, so the inconsistency only shows up the next time A's impedances
+    are recomputed from the formula (``find_max_rho_scaling``, ``run_sweep``,
+    a fresh ``calculate_impedance``).
+
+    :func:`groundinsight.save_bustype_to_db` already demands ``overwrite=True``
+    for exactly this operation. This helper brings ``save_network`` in line:
+    the *changed and shared* case is the one that needs consent. Editing a type
+    only this network uses, or re-saving an unchanged one, stays silent.
+
+    Parameters
+    ----------
+    network : Network
+        The network about to be saved.
+    session : Session
+        Session holding the stored catalogue.
+    overwrite_types : bool
+        ``True`` to allow the rewrite (logged at ``WARNING``), ``False`` to
+        refuse it.
+
+    Raises
+    ------
+    ValueError
+        If a type formula differs from the stored one, the type is used by at
+        least one other network, and ``overwrite_types`` is ``False``.
+    """
+    conflicts: List[str] = []
+    seen: Dict[str, None] = {}
+
+    def _compare(pydantic_type, db_cls, element_cls, fields, label):
+        key = f"{label}:{pydantic_type.name}"
+        if key in seen:
+            return
+        seen[key] = None
+        stored = session.get(db_cls, pydantic_type.name)
+        if stored is None:
+            return
+        changed = [
+            field
+            for field in fields
+            if getattr(stored, field) != getattr(pydantic_type, field)
+        ]
+        if not changed:
+            return
+        others = _networks_using_type(
+            session, element_cls, pydantic_type.name, network.name
+        )
+        if not others:
+            return
+        conflicts.append(
+            f"{label} '{pydantic_type.name}' ({', '.join(changed)}) is also used by "
+            f"{', '.join(repr(name) for name in others)}"
+        )
+
+    for bus in network.buses.values():
+        _compare(bus.type, BusTypeDB, BusDB, _BUSTYPE_FORMULA_FIELDS, "BusType")
+    for branch in network.branches.values():
+        _compare(
+            branch.type,
+            BranchTypeDB,
+            BranchDB,
+            _BRANCHTYPE_FORMULA_FIELDS,
+            "BranchType",
+        )
+
+    if not conflicts:
+        return
+    detail = "; ".join(conflicts)
+    if overwrite_types:
+        logger.warning(
+            "Saving network '%s' rewrites shared type definitions: %s. Those "
+            "networks keep their stored impedance values but will recompute "
+            "different ones from the new formula.",
+            network.name,
+            detail,
+        )
+        return
+    raise ValueError(
+        f"Saving network '{network.name}' would rewrite type definitions that "
+        f"other networks reference: {detail}. Bus and branch types are a "
+        "global catalogue keyed by name, so the change would apply to those "
+        "networks too -- their stored impedance values would stay as they are "
+        "while every later recomputation from the formula returns something "
+        "else. Rename the type for this network, or pass overwrite_types=True "
+        "if the change really is meant for all of them."
+    )
 
 
 def save_bustype(bus_type: BusType, session: Session):
@@ -227,7 +383,12 @@ def load_branchtypes(session: Session) -> Dict[str, BranchType]:
     return {bt.name: bt.to_pydantic() for bt in branch_types}
 
 
-def save_network(network: Network, session: Session, overwrite: bool = False):
+def save_network(
+    network: Network,
+    session: Session,
+    overwrite: bool = False,
+    overwrite_types: bool = False,
+):
     """
     Save a Network to the database.
 
@@ -239,7 +400,10 @@ def save_network(network: Network, session: Session, overwrite: bool = False):
     BusTypes and BranchTypes are a *global catalogue*: they are merged, exactly
     as :func:`save_bustype` and :func:`save_branchtype` do, so re-saving a
     network with an edited type definition updates the stored type instead of
-    silently keeping the old one. Every other element is scoped to this network
+    silently keeping the old one. Because the catalogue is shared, a type whose
+    *formulas* changed and which **another** network also references is refused
+    unless ``overwrite_types=True`` -- see :func:`_check_type_merge`. Every
+    other element is scoped to this network
     and is written under the composite key ``(network.name, element.name)``, so
     saving one network can never rewrite another's buses, branches, faults,
     sources or paths.
@@ -258,12 +422,18 @@ def save_network(network: Network, session: Session, overwrite: bool = False):
     overwrite : bool, optional
         If `True`, existing network data with the same name will be overwritten.
         Defaults to `False`.
+    overwrite_types : bool, optional
+        If `True`, allow this save to rewrite the formulas of bus/branch types
+        that other networks also reference; the change is logged at
+        ``WARNING``. Defaults to `False`, which refuses that case.
 
     Raises
     ------
     ValueError
-        If the network already exists and `overwrite` is set to `False`, or if a
-        path references a branch that is not part of ``network.branches``.
+        If the network already exists and `overwrite` is set to `False`, if a
+        path references a branch that is not part of ``network.branches``, or
+        if a shared type definition would be rewritten without
+        ``overwrite_types=True``.
     RuntimeError
         If the database still uses the legacy, globally-keyed element tables.
     Exception
@@ -281,6 +451,7 @@ def save_network(network: Network, session: Session, overwrite: bool = False):
 
     # Fail before touching the database rather than half-way through the write.
     _validate_path_segments(network)
+    _check_type_merge(network, session, overwrite_types)
 
     try:
         # Save BusTypes / BranchTypes -- merge, so an edited type definition
@@ -385,3 +556,155 @@ def load_network(name: str, session: Session) -> Network:
         raise ValueError(f"Network '{name}' not found.")
     network = network_db.to_pydantic()
     return network
+
+
+def list_networks(session: Session) -> List[str]:
+    """
+    List the names of all networks stored in the database.
+
+    Parameters
+    ----------
+    session : Session
+        The SQLAlchemy session used for database operations.
+
+    Returns
+    -------
+    List[str]
+        Network names, sorted.
+
+    Raises
+    ------
+    RuntimeError
+        If the database still uses the legacy, globally-keyed element tables.
+    """
+    ensure_current_schema(session)
+    return sorted(row[0] for row in session.query(NetworkDB.name).all())
+
+
+def delete_network(name: str, session: Session):
+    """
+    Delete a stored network together with all of its elements.
+
+    Buses, branches, faults, sources and paths are scoped to their network
+    and go with it (the relationships cascade). Bus and branch types are a
+    global catalogue and stay; delete them with :func:`delete_bustype` /
+    :func:`delete_branchtype` once no network uses them any more.
+
+    Parameters
+    ----------
+    name : str
+        The name of the network to delete.
+    session : Session
+        The SQLAlchemy session used for database operations.
+
+    Raises
+    ------
+    ValueError
+        If no network of that name is stored.
+    RuntimeError
+        If the database still uses the legacy, globally-keyed element tables.
+    Exception
+        If the commit fails; the transaction is rolled back first.
+    """
+    ensure_current_schema(session)
+    network_db = session.get(NetworkDB, name)
+    if network_db is None:
+        raise ValueError(f"Network '{name}' not found.")
+    try:
+        session.delete(network_db)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+
+
+def delete_bustype(name: str, session: Session):
+    """
+    Delete a stored BusType that no stored network uses.
+
+    Parameters
+    ----------
+    name : str
+        The name of the BusType.
+    session : Session
+        The SQLAlchemy session used for database operations.
+
+    Raises
+    ------
+    ValueError
+        If no BusType of that name is stored, or if a stored network still
+        has a bus of that type (the message names the networks).
+    RuntimeError
+        If the database still uses the legacy, globally-keyed element tables.
+    """
+    _delete_type(session, BusTypeDB, BusDB, name, "BusType")
+
+
+def delete_branchtype(name: str, session: Session):
+    """
+    Delete a stored BranchType that no stored network uses.
+
+    Parameters
+    ----------
+    name : str
+        The name of the BranchType.
+    session : Session
+        The SQLAlchemy session used for database operations.
+
+    Raises
+    ------
+    ValueError
+        If no BranchType of that name is stored, or if a stored network still
+        has a branch of that type (the message names the networks).
+    RuntimeError
+        If the database still uses the legacy, globally-keyed element tables.
+    """
+    _delete_type(session, BranchTypeDB, BranchDB, name, "BranchType")
+
+
+def _delete_type(session: Session, type_cls, element_cls, name: str, label: str):
+    """
+    Delete a catalogue type after checking that nothing references it.
+
+    The check is not optional: the element tables reference the type by name
+    without an enforced foreign key, and the ORM would answer a plain delete
+    by setting ``type_name`` of every referencing bus or branch to ``NULL`` --
+    a stored network that can no longer be loaded.
+
+    Parameters
+    ----------
+    session : Session
+        Session to use.
+    type_cls : type
+        ``BusTypeDB`` or ``BranchTypeDB``.
+    element_cls : type
+        ``BusDB`` or ``BranchDB``, the rows that reference the type.
+    name : str
+        Name of the type.
+    label : str
+        ``"BusType"`` or ``"BranchType"`` for the messages.
+
+    Raises
+    ------
+    ValueError
+        If the type is not stored or still referenced.
+    Exception
+        If the commit fails; the transaction is rolled back first.
+    """
+    ensure_current_schema(session)
+    stored = session.get(type_cls, name)
+    if stored is None:
+        raise ValueError(f"{label} '{name}' not found.")
+    users = _networks_using_type(session, element_cls, name, exclude=None)
+    if users:
+        raise ValueError(
+            f"{label} '{name}' is still used by the stored network(s) "
+            f"{', '.join(repr(user) for user in users)}. Delete those networks "
+            "or save them with another type first."
+        )
+    try:
+        session.delete(stored)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise

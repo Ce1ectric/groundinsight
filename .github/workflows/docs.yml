@@ -5,38 +5,53 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Least privilege (audit pass 19, SEC4): read-only by default; the deploy job
+# below asks for the one write scope it needs. Every action is pinned to a
+# full commit SHA with the release as a comment (SEC3); Dependabot updates
+# both together.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-and-deploy:
     name: Build and deploy MkDocs site
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # mkdocs gh-deploy pushes the built site to gh-pages
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        # The checkout keeps its credentials on purpose: gh-deploy pushes
+        # with git, using the token the checkout stores.
+        # zizmor: ignore[artipacked] gh-deploy needs the persisted token
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Set up Python 3.14
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.14"
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
+        uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
         with:
           virtualenvs-create: true
           virtualenvs-in-project: true
 
       - name: Cache Poetry virtualenv
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .venv
-          key: venv-docs-${{ runner.os }}-py3.14-${{ hashFiles('**/poetry.lock') }}
+          key: venv-docs-pandapower-${{ runner.os }}-py3.14-${{ hashFiles('**/poetry.lock') }}
 
-      - name: Install project with docs group
-        run: poetry install --no-interaction --with docs
+      # The build executes the example notebooks (mkdocs.yml); one of them
+      # imports pandapower.
+      - name: Install project with docs group and pandapower extra
+        run: poetry install --no-interaction --with docs --extras pandapower
 
+      # --strict (audit pass 19, STD11): the pull-request job in ci.yml
+      # builds strictly, but this push to main is what gets published, and
+      # without the flag it would publish a site with broken references.
       - name: Deploy to GitHub Pages
-        run: poetry run mkdocs gh-deploy --force --clean --verbose
+        run: poetry run mkdocs gh-deploy --strict --force --clean --verbose

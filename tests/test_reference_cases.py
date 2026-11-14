@@ -1,3 +1,4 @@
+# tests/test_reference_cases.py
 """
 The closed-form reference cases, run as tests.
 

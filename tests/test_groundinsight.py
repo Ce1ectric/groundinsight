@@ -1,3 +1,12 @@
+# tests/test_groundinsight.py
+"""
+The public API end to end: build a network, solve a fault, plot the result.
+
+The factory functions, path definition and fault activation are exercised on
+small networks; the plot helpers are called with their default and their
+``"all"`` selections.
+"""
+
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType
 
@@ -171,9 +180,9 @@ def test_fault_activation_and_simulation():
     assert len(net.results) == 0
 
     # Run the fault
-    gi.run_fault(network=net, fault_name="fault1")
+    gi.run_fault(network=net, fault="fault1")
 
-    assert net.faults["fault1"].active == True
+    assert net.faults["fault1"].active is True
     assert len(net.results) > 0
 
 def test_reduction_factor_between_0_1():
@@ -214,9 +223,9 @@ def test_reduction_factor_between_0_1():
     assert len(net.results) == 0
 
     # Run the fault
-    gi.run_fault(network=net, fault_name="fault1")
+    gi.run_fault(network=net, fault="fault1")
 
-    assert net.faults["fault1"].active == True
+    assert net.faults["fault1"].active is True
     assert len(net.results) > 0
 
     # get the result of reduction factor
@@ -226,7 +235,7 @@ def test_reduction_factor_between_0_1():
     # check if the reduction factor is between 0 and 1 for every value of the dict
     for key in reduction_factors:
         assert 0 <= reduction_factors[key] <= 1
- 
+
 def test_plot_bus_voltages_all_parameter():
     """
     Test of bus voltage plot was all possible parameter
@@ -266,7 +275,7 @@ def test_plot_bus_voltages_all_parameter():
     gi.create_paths(network=net)
 
     # Run the fault
-    gi.run_fault(network=net, fault_name="fault1")
+    gi.run_fault(network=net, fault="fault1")
 
     # Plot the bus voltages
     fig = gi.plot_bus_voltages(result=net.results["fault1"], frequencies=[50],
@@ -313,7 +322,7 @@ def test_plot_bus_voltages_default_parameter():
     gi.create_paths(network=net)
 
     # Run the fault
-    gi.run_fault(network=net, fault_name="fault1")
+    gi.run_fault(network=net, fault="fault1")
 
     # Plot the bus voltages
     fig = gi.plot_bus_voltages(result=net.results["fault1"], show=False)
@@ -356,7 +365,7 @@ def test_plot_branch_currents_default_parameter():
     gi.create_paths(network=net)
 
     # Run the fault
-    gi.run_fault(network=net, fault_name="fault1")
+    gi.run_fault(network=net, fault="fault1")
 
     # Plot the branch currents
     fig = gi.plot_branch_currents(result=net.results["fault1"], show=False)
@@ -399,7 +408,7 @@ def test_plot_branch_currents_all_parameter():
     gi.create_paths(network=net)
 
     # Run the fault
-    gi.run_fault(network=net, fault_name="fault1")
+    gi.run_fault(network=net, fault="fault1")
 
     # Plot the branch currents
     fig = gi.plot_branch_currents(result=net.results["fault1"], frequencies=[50],
@@ -443,7 +452,7 @@ def test_plot_bus_currents_default_parameter():
     gi.create_paths(network=net)
 
     # Run the fault
-    gi.run_fault(network=net, fault_name="fault1")
+    gi.run_fault(network=net, fault="fault1")
 
     # Plot the bus currents
     fig = gi.plot_bus_currents(result=net.results["fault1"], show=False)
@@ -486,7 +495,7 @@ def test_plot_bus_currents_all_parameter():
     gi.create_paths(network=net)
 
     # Run the fault
-    gi.run_fault(network=net, fault_name="fault1")
+    gi.run_fault(network=net, fault="fault1")
 
     # Plot the bus currents
     fig = gi.plot_bus_currents(result=net.results["fault1"], frequencies=[50],

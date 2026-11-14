@@ -1,15 +1,15 @@
 # analysis/shortcircuit.py
 
-"""
+r"""
 IEC 60909-0 short-circuit characteristic quantities and their superposition.
 
 ``groundinsight`` solves the *linear* grounding problem: at every frequency
 the nodal system ``Y(f) u(f) = i(f)`` is solved and the contributions of all
 sources add up by superposition. The IEC 60909-0 characteristic quantities
 
-* the **peak short-circuit current** :math:`i_p = \\kappa \\sqrt{2} I_k''`, and
+* the **peak short-circuit current** :math:`i_p = \kappa \sqrt{2} I_k''`, and
 * the **thermally equivalent short-time current**
-  :math:`I_{th} = I_k'' \\sqrt{m + n}`
+  :math:`I_{th} = I_k'' \sqrt{m + n}`
 
 are however *non-linear* functions of the fault-loop ``R/X`` ratio, so they
 must **not** be superposed. This module implements the project rule agreed
@@ -30,14 +30,14 @@ the total current is the sum of the individual peaks,
 
 .. math::
 
-    i_{p,\\Sigma} = \\sqrt{2} \\sum_i \\kappa_i I_i .
+    i_{p,\Sigma} = \sqrt{2} \sum_i \kappa_i I_i .
 
 Writing that as one factor applied to the aggregated current
-:math:`\\sum_i I_i` gives
+:math:`\sum_i I_i` gives
 
 .. math::
 
-    \\kappa_{eff} = \\frac{\\sum_i \\kappa_i I_i}{\\sum_i I_i},
+    \kappa_{eff} = \frac{\sum_i \kappa_i I_i}{\sum_i I_i},
 
 i.e. exactly the current-weighted mean -- it reproduces the sum of the
 individual peaks identically, and degenerates to the common ``kappa`` when
@@ -63,7 +63,9 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from ..diagnostics import InputWarning, ModelAssumptionWarning, emit
 from ..models.core_models import Network
+from ..utils.compat import renamed_parameters
 
 
 logger = logging.getLogger(__name__)
@@ -88,7 +90,13 @@ def kappa_from_r_to_x(r_to_x: float) -> float:
     """
     Peak factor ``kappa`` from the ``R/X`` ratio (IEC 60909-0).
 
-    ``kappa = 1.02 + 0.98 * exp(-3 * R/X)``, bounded to ``(1, 2]``.
+    ``kappa = 1.02 + 0.98 * exp(-3 * R/X)``.
+
+    The range of the expression is ``[1.02, 2]``, not the ``(1, 2]`` the IEC
+    formula is often quoted with: the constant term is 1.02, so the exponential
+    approaches 1.02 from above as ``R/X`` grows and never reaches 1. Consumers
+    that range-check ``kappa`` against ``(1, 2]`` therefore accept everything
+    this function can return, which is the point of saying so here.
 
     The ``R/X`` to insert is the ratio of the **fault loop**, not of the
     positive-sequence system alone. For a three-phase fault the two
@@ -124,7 +132,8 @@ def kappa_from_r_to_x(r_to_x: float) -> float:
     return 1.02 + 0.98 * math.exp(-3.0 * r_to_x)
 
 
-def iec60909_m(kappa: float, f: float, t_k: float) -> float:
+@renamed_parameters(f="frequency", t_k="t_k_s")
+def iec60909_m(kappa: float, frequency: float, t_k_s: float) -> float:
     """
     Heat-effect factor ``m`` of the aperiodic (DC) short-circuit component.
 
@@ -132,6 +141,27 @@ def iec60909_m(kappa: float, f: float, t_k: float) -> float:
     IEC 60909-0. The limits are handled explicitly: ``kappa -> 1`` (no DC
     offset) gives ``m -> 0``; ``kappa -> 2`` (non-decaying DC, ``X/R -> inf``)
     gives ``m -> 2``.
+
+    Parameters
+    ----------
+    kappa : float
+        Peak factor ``kappa`` in ``(1, 2]`` (see :func:`kappa_from_r_to_x`).
+    frequency : float
+        System frequency ``f`` in Hz (50 or 60). The former keyword ``f`` is
+        accepted as a deprecated alias.
+    t_k_s : float
+        Fault duration ``T_k`` in seconds. Must be strictly positive. The
+        former keyword ``t_k`` is accepted as a deprecated alias.
+
+    Returns
+    -------
+    float
+        The dimensionless factor ``m`` (``>= 0``).
+
+    Raises
+    ------
+    ValueError
+        If ``t_k_s`` or ``frequency`` is not strictly positive.
 
     Notes
     -----
@@ -144,25 +174,6 @@ def iec60909_m(kappa: float, f: float, t_k: float) -> float:
     recomputes ``I_th`` with this function instead of copying pandapower's
     ``ith_ka``.
 
-    Parameters
-    ----------
-    kappa : float
-        Peak factor ``kappa`` in ``(1, 2]`` (see :func:`kappa_from_r_to_x`).
-    f : float
-        System frequency in Hz (50 or 60).
-    t_k : float
-        Fault duration ``T_k`` in seconds. Must be strictly positive.
-
-    Returns
-    -------
-    float
-        The dimensionless factor ``m`` (``>= 0``).
-
-    Raises
-    ------
-    ValueError
-        If ``t_k`` or ``f`` is not strictly positive.
-
     Examples
     --------
     >>> iec60909_m(1.0, 50.0, 0.5)
@@ -170,19 +181,19 @@ def iec60909_m(kappa: float, f: float, t_k: float) -> float:
     >>> iec60909_m(2.0, 50.0, 0.5)
     2.0
     """
-    if t_k <= 0:
-        raise ValueError(f"t_k must be strictly positive, got {t_k!r}.")
-    if f <= 0:
-        raise ValueError(f"f must be strictly positive, got {f!r}.")
+    if t_k_s <= 0:
+        raise ValueError(f"t_k_s must be strictly positive, got {t_k_s!r}.")
+    if frequency <= 0:
+        raise ValueError(f"frequency must be strictly positive, got {frequency!r}.")
     if kappa <= 1.0:
         return 0.0
     if kappa >= 2.0:
         return 2.0
     a = math.log(kappa - 1.0)  # negative for 1 < kappa < 2
-    denom = 2.0 * f * t_k * a
+    denom = 2.0 * frequency * t_k_s * a
     if abs(denom) < 1e-12:  # kappa extremely close to 2 -> non-decaying DC
         return 2.0
-    return (math.exp(4.0 * f * t_k * a) - 1.0) / denom
+    return (math.exp(4.0 * frequency * t_k_s * a) - 1.0) / denom
 
 
 def peak_short_circuit_current(i_k: float, kappa: float) -> float:
@@ -221,7 +232,10 @@ def peak_short_circuit_current(i_k: float, kappa: float) -> float:
     return kappa * math.sqrt(2.0) * i_k
 
 
-def thermal_equivalent_current(i_k: float, m: float, n: float = 1.0) -> float:
+@renamed_parameters(n="n_factor")
+def thermal_equivalent_current(
+    i_k: float, m: float, n_factor: float = 1.0
+) -> float:
     """
     Thermally equivalent short-time current ``I_th = I_k'' * sqrt(m + n)``.
 
@@ -233,10 +247,11 @@ def thermal_equivalent_current(i_k: float, m: float, n: float = 1.0) -> float:
     m : float
         DC heat-effect factor from :func:`iec60909_m`. Must be
         non-negative.
-    n : float
-        AC-decay heat factor in ``(0, 1]``. ``1.0`` for the
+    n_factor : float
+        AC-decay heat factor ``n`` in ``(0, 1]``. ``1.0`` for the
         far-from-generator faults typical of distribution grounding
-        studies.
+        studies. The former keyword ``n`` is accepted as a deprecated
+        alias.
 
     Returns
     -------
@@ -246,7 +261,7 @@ def thermal_equivalent_current(i_k: float, m: float, n: float = 1.0) -> float:
     Raises
     ------
     ValueError
-        If ``i_k`` or ``m`` is negative, or ``n`` is not in ``(0, 1]``.
+        If ``i_k`` or ``m`` is negative, or ``n_factor`` is not in ``(0, 1]``.
 
     Notes
     -----
@@ -266,9 +281,9 @@ def thermal_equivalent_current(i_k: float, m: float, n: float = 1.0) -> float:
         raise ValueError(f"i_k must be non-negative, got {i_k!r}.")
     if m < 0:
         raise ValueError(f"m must be non-negative, got {m!r}.")
-    if not 0.0 < n <= 1.0:
-        raise ValueError(f"n must lie in (0, 1], got {n!r}.")
-    return i_k * math.sqrt(m + n)
+    if not 0.0 < n_factor <= 1.0:
+        raise ValueError(f"n_factor must lie in (0, 1], got {n_factor!r}.")
+    return i_k * math.sqrt(m + n_factor)
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +340,21 @@ class FaultShortCircuitData(BaseModel):
         Names of sources that inject current at ``frequency`` but carry no
         60909 data; they are part of the linear solve but excluded from
         the ``kappa`` aggregation.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> net = gi.create_network(name="demo", frequencies=[50.0])
+    >>> bt = gi.BusType(name="b", system_type="s", voltage_level=20.0,
+    ...                 impedance_formula="rho*0 + 1.0")
+    >>> _ = gi.create_bus(name="B1", type=bt, network=net)
+    >>> _ = gi.create_source(name="S1", bus="B1", values={50.0: 1000.0},
+    ...                      network=net, r_to_x=0.1)
+    >>> _ = gi.create_fault(name="F1", bus="B1", scalings={50.0: 1.0},
+    ...                     network=net, t_k_s=0.5)
+    >>> data = gi.resolve_fault_sc_characteristics(net, "F1")
+    >>> data.fault_name, data.i_k_a, round(data.kappa, 4), data.homogeneous
+    ('F1', 1000.0, 1.746, True)
     """
 
     fault_name: str
@@ -350,8 +380,10 @@ class FaultShortCircuitData(BaseModel):
 
 def _source_kappa(source) -> Optional[float]:
     """
-    Return the peak factor of a source: explicit ``kappa`` wins over
-    ``r_to_x``; ``None`` when the source carries neither.
+    Return the peak factor of a source.
+
+    An explicit ``kappa`` wins over ``r_to_x``; ``None`` when the source
+    carries neither.
     """
     kappa = getattr(source, "kappa", None)
     if kappa is not None:
@@ -364,10 +396,10 @@ def _source_kappa(source) -> Optional[float]:
 
 def _source_injection_magnitude(source, freq: float, scaling: float) -> float:
     """
-    Magnitude of the source injection at ``freq``, scaled by the fault
-    scaling -- the same quantity the solver injects, used here as the
-    aggregation weight. Returns ``0.0`` when the source has no value at
-    that frequency.
+    Magnitude of the source injection at ``freq``, scaled by the fault scaling.
+
+    The same quantity the solver injects, used here as the aggregation
+    weight. Returns ``0.0`` when the source has no value at that frequency.
     """
     if source.source_type == "current":
         values = source.values or {}
@@ -388,13 +420,39 @@ def _source_injection_magnitude(source, freq: float, scaling: float) -> float:
     return abs(scaling * complex(u.real, u.imag) / z_c)
 
 
-def _sources_feeding(network: Network, fault_name: str) -> List[str]:
+def sources_feeding(network: Network, fault_name: str) -> List[str]:
     """
     Names of the sources that feed ``fault_name``.
 
-    Uses the enumerated paths when they are available (matching what the
-    solver actually superposes); otherwise falls back to every source
-    sitting on an active bus.
+    Internal API: also used by :mod:`groundinsight.io.pandapower_sc`; not
+    exported from ``groundinsight`` and free to change in any release.
+
+    Uses the enumerated paths when they are available, because they are what
+    the legacy ``phase_current_mode="paths"`` solve actually superposes.
+    The default mode does not enumerate them, so the next step asks the
+    same question directly:
+    :meth:`~groundinsight.models.core_models.Network.sources_reaching` runs a
+    breadth-first search over the active sub-graph and returns exactly the
+    sources a full enumeration would have found. Without it the empty path
+    set would drop straight into the last resort below and count a
+    galvanically isolated infeed towards the characteristics of this fault.
+
+    The last resort -- every source on an active bus -- is unchanged and is
+    reached in exactly the same situation as before: no source connects to
+    the fault at all, so there is nothing to select and the caller is better
+    served by the stored source data than by an empty list.
+
+    Parameters
+    ----------
+    network : Network
+        The network holding the sources and the fault.
+    fault_name : str
+        The fault to find the feeding sources for.
+
+    Returns
+    -------
+    List[str]
+        Source names in the insertion order of ``network.sources``.
     """
     from_paths = {
         path.source
@@ -403,6 +461,11 @@ def _sources_feeding(network: Network, fault_name: str) -> List[str]:
     }
     if from_paths:
         return [name for name in network.sources if name in from_paths]
+
+    if fault_name in network.faults:
+        reaching = network.sources_reaching(fault_name)
+        if reaching:
+            return reaching
 
     result = []
     for name, source in network.sources.items():
@@ -413,16 +476,18 @@ def _sources_feeding(network: Network, fault_name: str) -> List[str]:
     return result
 
 
+@renamed_parameters(fault_name="fault")
 def resolve_fault_sc_characteristics(
     network: Network,
-    fault_name: str,
+    fault: str,
     *,
     frequency: Optional[float] = None,
     aggregation: str = "weighted",
 ) -> FaultShortCircuitData:
     """
-    Aggregate the IEC 60909 data of a fault and its sources into one set of
-    characteristics.
+    Aggregate the IEC 60909 data of a fault and its sources.
+
+    The result is one set of characteristics for the fault.
 
     This is the executable form of the project's superposition rule (see the
     module docstring): the *linear* RMS currents stay superposed by the
@@ -433,8 +498,9 @@ def resolve_fault_sc_characteristics(
     ----------
     network : Network
         The network holding the fault and its sources.
-    fault_name : str
-        Name of the fault to resolve.
+    fault : str
+        Name of the fault to resolve. The former keyword ``fault_name`` is
+        accepted as a deprecated alias.
     frequency : float, optional
         Frequency in Hz at which the source injections are weighted.
         Defaults to the lowest positive frequency of ``network`` (the power
@@ -455,8 +521,43 @@ def resolve_fault_sc_characteristics(
     Raises
     ------
     ValueError
-        If ``fault_name`` is unknown or ``aggregation`` is not one of the
+        If ``fault`` is unknown or ``aggregation`` is not one of the
         supported modes.
+
+    Warns
+    -----
+    ModelAssumptionWarning
+        Code ``SC_KAPPA_MIXED`` (elements: the sources with a ``kappa`` and the
+        fault) when the feeding sources have different R/X: the non-linear
+        IEC 60909 factors are applied once, with the aggregated ``kappa``.
+    InputWarning
+        Code ``SC_DATA_INCOMPLETE`` (elements: the sources without IEC 60909
+        data and the fault) when part of the current comes from sources that
+        carry no ``r_to_x`` or ``kappa``: ``kappa_eff`` then describes only
+        the remaining share and ``i_p`` applies it to the whole current.
+
+    Notes
+    -----
+    **What the aggregation actually does, stated exactly.** The two returned
+    quantities are not taken over the same set of sources, and it matters:
+
+    * ``kappa`` is the weighted mean over the sources that **carry** 60909
+      data (``kappa`` or ``r_to_x``). Sources without it cannot contribute a
+      value and are left out; they are listed in ``sources_without_kappa``.
+    * ``i_k_a`` is the sum over **all** feeding sources, those included.
+
+    A consumer that then forms ``i_p = kappa * sqrt(2) * i_k_a`` -- which is
+    what :func:`~groundinsight.check_conductor_limits` and
+    :func:`~groundinsight.check_node_limits` do -- therefore applies the peak
+    factor of one subset to the current of the whole. Where every source
+    carries data the subsets coincide and the result is exact; where they do
+    not, the answer is an approximation whose quality is the share of the
+    current the data covers. That share is reported in the ``InputWarning``
+    (``SC_DATA_INCOMPLETE``) this function emits, and above half of the
+    current the message says outright that ``i_p`` rests mostly on an
+    assumption. The alternative -- dropping the undocumented sources from
+    ``i_k_a`` as well -- would understate the current, which is the unsafe
+    direction.
 
     Examples
     --------
@@ -477,31 +578,33 @@ def resolve_fault_sc_characteristics(
         raise ValueError(
             f"aggregation must be 'weighted' or 'max', got {aggregation!r}."
         )
-    fault = network.faults.get(fault_name)
-    if fault is None:
+    fault_obj = network.faults.get(fault)
+    if fault_obj is None:
         raise ValueError(
-            f"Unknown fault {fault_name!r}. Known faults: "
+            f"Unknown fault {fault!r}. Known faults: "
             f"{sorted(network.faults)}."
         )
 
     if frequency is None:
         frequency = next((float(x) for x in network.frequencies if x > 0), 50.0)
     frequency = float(frequency)
-    scaling = fault.scalings.get(frequency, 1)
+    scaling = fault_obj.scaling_at(frequency)
 
     weights: Dict[str, float] = {}
     kappas: Dict[str, float] = {}
     r_values: List[float] = []
     without_kappa: List[str] = []
     i_k_total = 0.0
+    weight_without_kappa = 0.0
 
-    for source_name in _sources_feeding(network, fault_name):
+    for source_name in sources_feeding(network, fault):
         source = network.sources[source_name]
         weight = _source_injection_magnitude(source, frequency, scaling)
         kappa_i = _source_kappa(source)
         if kappa_i is None:
             if weight > 0:
                 without_kappa.append(source_name)
+                weight_without_kappa += weight
             i_k_total += weight
             continue
         # A source that carries 60909 data but injects nothing at this
@@ -516,8 +619,8 @@ def resolve_fault_sc_characteristics(
             r_values.append(float(r_to_x_i))
         i_k_total += weight
 
-    n_factor = float(getattr(fault, "n_factor", 1.0) or 1.0)
-    t_k_s = getattr(fault, "t_k_s", None)
+    n_factor = float(getattr(fault_obj, "n_factor", 1.0) or 1.0)
+    t_k_s = getattr(fault_obj, "t_k_s", None)
     t_k_s = None if t_k_s is None else float(t_k_s)
 
     if not kappas:
@@ -525,11 +628,11 @@ def resolve_fault_sc_characteristics(
             logger.debug(
                 "Fault %r: none of the feeding sources (%s) carries IEC 60909 "
                 "data; kappa stays unresolved.",
-                fault_name,
+                fault,
                 ", ".join(without_kappa),
             )
         return FaultShortCircuitData(
-            fault_name=fault_name,
+            fault_name=fault,
             frequency=frequency,
             t_k_s=t_k_s,
             n_factor=n_factor,
@@ -553,24 +656,37 @@ def resolve_fault_sc_characteristics(
             kappa_eff = sum(kappa_list) / len(kappa_list)
 
     if not homogeneous:
-        logger.warning(
-            "Fault %r is fed by sources with different R/X (kappa between "
-            "%.4f and %.4f). The non-linear IEC 60909 factors are applied "
-            "once, with the %s kappa = %.4f. Use the transient solver for an "
-            "exact mixed-R/X result.",
-            fault_name,
-            min(kappa_list),
-            max(kappa_list),
-            aggregation,
-            kappa_eff,
+        emit(
+            ModelAssumptionWarning,
+            f"Fault {fault!r} is fed by sources with different R/X (kappa "
+            f"between {min(kappa_list):.4f} and {max(kappa_list):.4f}). The "
+            f"non-linear IEC 60909 factors are applied once, with the "
+            f"{aggregation} kappa = {kappa_eff:.4f}. Use the transient solver "
+            f"for an exact mixed-R/X result.",
+            code="SC_KAPPA_MIXED",
+            elements=[("source", name) for name in kappas] + [("fault", fault)],
+            stacklevel=2,
         )
     if without_kappa:
-        logger.warning(
-            "Fault %r: source(s) %s inject current at %.1f Hz but carry no "
-            "IEC 60909 data; they are excluded from the kappa aggregation.",
-            fault_name,
-            ", ".join(without_kappa),
-            frequency,
+        share = weight_without_kappa / i_k_total if i_k_total > 0 else 0.0
+        majority = (
+            " That is the majority of the current, so i_p and I_th rest "
+            "mostly on an assumption: give those sources an r_to_x or a "
+            "kappa, or pass kappa explicitly."
+            if share > 0.5
+            else ""
+        )
+        emit(
+            InputWarning,
+            f"Fault {fault!r}: source(s) {', '.join(without_kappa)} inject "
+            f"{100.0 * share:.0f} % of the current at {frequency:.1f} Hz but "
+            f"carry no IEC 60909 data. They are excluded from the kappa "
+            f"aggregation and included in i_k_a, so kappa_eff = {kappa_eff:.4f} "
+            f"is the figure of the remaining {100.0 * (1.0 - share):.0f} % and "
+            f"i_p applies it to the whole current.{majority}",
+            code="SC_DATA_INCOMPLETE",
+            elements=[("source", name) for name in without_kappa] + [("fault", fault)],
+            stacklevel=2,
         )
 
     r_to_x_eff = None
@@ -582,7 +698,7 @@ def resolve_fault_sc_characteristics(
         m = iec60909_m(kappa_eff, frequency, t_k_s)
 
     return FaultShortCircuitData(
-        fault_name=fault_name,
+        fault_name=fault,
         frequency=frequency,
         kappa=kappa_eff,
         r_to_x=r_to_x_eff,

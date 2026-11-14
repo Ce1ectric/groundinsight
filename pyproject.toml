@@ -7,13 +7,21 @@ license = "MIT"
 repository = "https://github.com/Ce1ectric/groundinsight"
 documentation = "https://ce1ectric.github.io/groundinsight/"
 readme = "README.md"
+# ``scripts`` is deliberately NOT packaged. It holds maintainer tooling --
+# the release bumper and the third-party-licence generator -- which has no
+# business in a user's site-packages, and shipping it made the top-level name
+# ``scripts`` importable from any environment that installs groundinsight.
 packages = [
     { include = "groundinsight", from = "src" },
-    { include = "scripts" },
 ]
 
 [tool.poetry.dependencies]
-python = "^3.14"
+# Audit pass 19 (F10): relaxed from "^3.13" to "^3.12". The full suite is
+# green on 3.12, and groundfield -- which requires "^3.12" -- was held at
+# groundinsight 0.3.0 because every later release asked for a newer Python.
+# CI runs 3.12, 3.13 and 3.14. Poetry derives the "Programming Language ::
+# Python :: 3.x" classifiers from this constraint, so they are not repeated.
+python = "^3.12"
 pydantic = "^2.12"
 numpy = "^2.1.0"
 sqlalchemy = "^2.0.32"
@@ -21,7 +29,12 @@ polars = "^1.5.0"
 sympy = "^1.13.2"
 matplotlib = "^3.10"
 scipy = "^1.16"
-pillow = "^11.3.0"
+# Security floor only (audit pass 19, SEC2): groundinsight never imports PIL;
+# matplotlib does, and asks for pillow>=8. 13.0.0 is the first release
+# without a known advisory (12.3.0 still has 39). No upper bound on purpose:
+# the old "^11.3.0" meant "<12", which kept every fix out of reach of anyone
+# installing groundinsight, and a new cap would do the same to the next fix.
+pillow = ">=13.0.0"
 # Optional importer dependencies, installed via the matching extra.
 pandapower = { version = "^3.0", optional = true }
 
@@ -34,11 +47,27 @@ pandapower = ["pandapower"]
 alembic = "^1.13.2"
 sqlalchemy-stubs = "^0.4"
 ipykernel = "^6.29.5"
-pytest = "^8.3.2"
-pytest-cov = "^5.0.0"
-black = "^24.8.0"
+pytest = ">=8.3.2,<10.0.0"
+pytest-cov = ">=5,<8"
 pandapower = "^3.0"
 pyzmq = "^27.0"
+# Test-only imports (audit pass 19): the workflow checks parse the YAML a
+# second time with PyYAML, the SEC6 check runs bandit, and the PQ-INV
+# invariant tests draw networks with hypothesis. All three were missing in
+# CI, which installs only this group; under GROUNDINSIGHT_CI=1 a missing test
+# dependency now fails instead of skipping (tests/conftest.py).
+pyyaml = "^6.0"
+bandit = "^1.9"
+hypothesis = "^6.0"
+# Lint gate: exact pins, because a new release of either linter can report
+# findings in code nobody touched, and the CI lint job must only turn red for
+# a change in the repository. The lint job in .github/workflows/ci.yml
+# installs the same two versions; tests/test_audit_pass19_standards.py checks
+# that both places agree. radon measures the cyclomatic complexity for the
+# complexity ratchet in that test module.
+ruff = "0.17.4"
+numpydoc = "1.11.0"
+radon = "6.0.1"
 
 [tool.poetry.group.docs]
 optional = true
@@ -46,17 +75,164 @@ optional = true
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.6.1"
 mkdocs-material = "^9.5.34"
-mkdocstrings = { extras = ["python"], version = "^0.26.1" }
-pymdown-extensions = "^10.9"
-mkdocs-jupyter = "^0.25.0"
+mkdocstrings = { extras = ["python"], version = ">=0.26.1,<1.1.0" }
+pymdown-extensions = ">=10.9,<13.0"
+mkdocs-jupyter = ">=0.25,<0.27"
+# Old page addresses forward to the pages that replaced them (audit pass
+# 19, D1: pages that were split up or replaced keep their address).
+# Pinned to 1.2.2: the plugin code of 1.2.3 is the same, but 1.2.3 adds
+# a second documentation tool (properdocs, a fork of MkDocs) as a hard
+# dependency only to print a migration banner. Which successor of MkDocs
+# the site moves to is a decision of its own.
+mkdocs-redirects = "1.2.2"
 
+# One console script only: the package's own command line, named after the
+# package (audit pass 19), so it shadows nothing a user already has. The two
+# maintainer commands used to install executables named ``release`` and
+# ``generate-third-party-licenses`` into the PATH of every user who installs
+# groundinsight -- a name as generic as ``release`` shadowing whatever else
+# the user has is not something a library should do. Run them from the
+# repository root instead:
+#
+#     poetry run python scripts/release.py
+#     poetry run python scripts/generate_third_party_licenses.py
 [tool.poetry.scripts]
-release = "scripts.release:main"
-generate-third-party-licenses = "scripts.generate_third_party_licenses:main"
+groundinsight = "groundinsight.cli:main"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-ra"
+testpaths = ["tests", "src/groundinsight"]
+addopts = "-ra --doctest-modules"
+markers = [
+    "slow: size and timing checks (deselect with '-m \"not slow\"')",
+]
+# A warning in the suite is an error unless the test asserts it
+# (pytest.warns) or acknowledges it by name with a reason
+# (tests/_warning_policy.py). Each ignore below says what it hides and why.
+filterwarnings = [
+    # Neither the package nor the tests use deprecated API, the package's own
+    # or a dependency's; a test of a deprecated alias asserts its warning.
+    "error::DeprecationWarning:groundinsight",
+    "error::DeprecationWarning:tests",
+    "error::PendingDeprecationWarning:groundinsight",
+    "error::PendingDeprecationWarning:tests",
+    # Unclosed files and connections, also when the garbage collector finds
+    # them (pytest reports those as unraisable exceptions).
+    "error::ResourceWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+    # Every package warning is asserted or acknowledged, never scrolled past.
+    "error::groundinsight.GroundinsightWarning",
+    # pandapower 3 calls fillna on object columns in its branch and zero-
+    # sequence builders, which pandas 2.2 deprecates. Not ours to fix; it
+    # surfaces only through the optional pandapower import.
+    "ignore:Downcasting object dtype arrays:FutureWarning:pandapower",
+]
+
+# Lint, never format. ruff runs as a linter only: there is no formatter
+# configuration and no formatter in CI, because line breaks follow
+# readability here, and one formatter pass over untouched code would bury
+# every real change under whitespace edits. Every finding is fixed by a
+# deliberate edit; a "# noqa: <code>" carries a reason and stands only where
+# the rule is wrong for that line. Run:
+#     ruff check src tests scripts gui docs/snippets
+[tool.ruff]
+target-version = "py312"
+src = ["src", "tests", "gui"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes: unused imports and variables, undefined names
+    "B",         # bugbear: likely bugs (zip without strict=, raise without from, ...)
+    "N",         # pep8-naming, with the domain names below
+    "D",         # pydocstyle, numpy convention
+    "SIM",       # simplifications
+    "UP",        # pyupgrade, minus the typing spellings below
+    "RUF013",    # implicit Optional
+    "T20",       # print() in library code: the package logs instead
+]
+ignore = [
+    # House style: typing.Optional / List / Dict / Tuple throughout, never
+    # "X | None" or "list[...]" -- one spelling in the whole code base.
+    "UP006", "UP007", "UP035", "UP045",
+    # No formatter is enforced, so there is no line length to enforce either.
+    "E501",
+    # l (length) and I (current) are physics symbols, as in the formula strings.
+    "E741",
+    # The operator overloads of ComplexNumber (__add__, __mul__, ...) are
+    # documented once, on the class.
+    "D105",
+    # Summary lines describe what an object is or returns ("Driving-point
+    # impedance of ..."); the imperative mood is not the house style.
+    "D401",
+    # Yoda conditions: SIM300 takes every upper-case name for a constant, so
+    # the natural "actual == expected" of bus.R, row.I_F_A or row.U_E_V is
+    # flagged, and the only remedy would be the reversed order it warns about.
+    "SIM300",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.pep8-naming]
+# pydantic field validators take cls without an explicit @classmethod.
+classmethod-decorators = ["pydantic.field_validator"]
+# Domain names. Matrix and quantity symbols -- Y admittance, Z impedance,
+# R/L/C/M resistance, inductance, capacitance and mutual inductance, I/U
+# current and voltage -- alone, indexed (Y0) or qualified (Z_self, R_mut),
+# also inside a longer name (bus_Z, _construct_Y_matrices); and the unit
+# suffixes of the naming convention (EPR_V, frequency_Hz, theta_final_C).
+extend-ignore-names = [
+    "Y", "Y[0-9_]*", "Z", "Z[0-9_]*", "R", "R[0-9_]*", "L", "L[0-9_]*",
+    "C", "C[0-9_]*", "M", "M[0-9_]*", "I", "I[0-9_]*", "U", "U[0-9_]*",
+    "*_Y_*", "*_Z_*", "*_Z",
+    "*_A", "*_V", "*_kV", "*_Hz", "*_Ohm", "*_C", "*_mm2",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests are named after what they check; their docstrings are optional and
+# their names may quote the domain symbols of the code under test.
+"tests/**" = ["D", "N"]
+"gui/tests/**" = ["D", "N"]
+# The how-to scripts of the documentation print their results: what a page
+# states as the output is what the script prints.
+"docs/snippets/**" = ["T20"]
+# NiceGUI builds a page by nesting with-blocks: the nesting is the element
+# tree (a menu inside a button), which one combined with-statement hides.
+"gui/groundinsight_gui/**" = ["SIM117"]
+# The numerical kernels write their matrices in MNA notation (G, B, A_CL,
+# K_mut, ...); the names follow the equations, not PEP 8.
+"src/groundinsight/simulation/transient.py" = ["N806"]
+"src/groundinsight/electrical_network.py" = ["N806"]
+
+# numpydoc lint: the docstring sections of the public API. Run:
+# numpydoc lint $(git ls-files 'src/groundinsight/*.py')
+[tool.numpydoc_validation]
+# "all", then the checks that are switched off. Each is a matter of style the
+# code base does not follow, not a missing piece of the contract.
+checks = [
+    "all",
+    "ES01",  # an extended summary is optional
+    "SA01",  # a "See Also" section is optional
+    "EX01",  # Examples: required for every object in groundinsight.__all__,
+             # which tests/test_audit_pass19_standards.py checks instead
+    "SS05",  # summaries describe; no infinitive verb required (cf. ruff D401)
+    "SS03",  # the summary period is ruff's D400
+    "SS06",  # a summary may wrap; ruff's D205 checks the blank line after it
+    "GL01", "GL02", "GL03",  # where the quotes and blank lines go
+    "PR06",  # type spelling ("integer" vs "int")
+    "PR08", "PR09", "RT04", "RT05",  # capital letter and period in descriptions
+    "SA03", "SA04",  # descriptions inside "See Also"
+]
+# Objects that are not public API, matched against "module.Class.method":
+exclude = [
+    '^[^.]+$',             # module docstrings: design notes in headed
+                           # sections of their own (rendered as admonitions),
+                           # not an API object with Parameters or Returns
+    '(^|\.)_',             # private modules, classes and functions and
+                           # everything nested in them; dunder methods
+    '\.model_post_init$',  # pydantic hook
+    '[A-Z]\w*\.validate_\w+$',  # pydantic field and model validators
+]
 
 [build-system]
 requires = ["poetry-core"]

@@ -4,13 +4,14 @@
 """
 Schema migration for existing SQLite databases.
 
-groundinsight up to v0.4.0 keyed ``buses``, ``branches``, ``faults``,
-``sources`` and ``paths`` by element *name alone* and linked them to their
-network through the association tables ``network_buses``, ``network_branches``,
-``network_faults``, ``network_sources`` and ``network_paths``. Two networks
-that contained an element of the same name therefore shared one physical row,
-so saving one network silently rewrote the other. The element tables are now
-keyed by ``(network_name, name)``.
+The legacy schema -- files written by groundinsight 0.4.0 and earlier -- keys
+``buses``, ``branches``, ``faults``, ``sources`` and ``paths`` by element
+*name alone* and links them to their network through the association tables
+``network_buses``, ``network_branches``, ``network_faults``,
+``network_sources`` and ``network_paths``. Two networks that contain an
+element of the same name therefore share one physical row, so saving one
+network silently rewrites the other. The current schema keys the element
+tables by ``(network_name, name)``.
 
 ``Base.metadata.create_all`` only ever creates *missing* tables — it never adds
 a column to an existing one — so an old database file opens without complaint
@@ -44,10 +45,25 @@ Path segment order
     each path bus-by-bus; paths whose segments do not form a chain are listed
     in :attr:`MigrationReport.broken_paths` and must be rebuilt with
     :func:`groundinsight.create_paths`.
+
+Pickled frequency lists
+    In a legacy file ``networks.frequencies`` is a SQLAlchemy ``PickleType``.
+    Loading such a file through the ORM would *execute* it: ``pickle.loads``
+    runs before any Pydantic validator sees the value, so a ``.db`` received
+    from someone else would be arbitrary code execution. The current column
+    is a JSON list, and the legacy blobs are converted here with a
+    restrictive unpickler that only ever
+    resolves ``builtins.list`` / ``float`` / ``int``. Anything else aborts the
+    migration with a :class:`ValueError` and leaves the file untouched; the
+    payload is then a hostile file, not a frequency list.
 """
 
+import builtins
+import io
+import json
 import logging
 import os
+import pickle
 import shutil
 import sqlite3
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -87,9 +103,52 @@ _GLOBAL_TABLES: Tuple[str, ...] = ("bus_types", "branch_types", "complex_numbers
 #: from one that has no default at all.
 _NO_DEFAULT = object()
 
+#: The only globals the legacy ``networks.frequencies`` blob may name. A list
+#: of numbers pickles without any global at all, so in practice
+#: :meth:`_FrequencyUnpickler.find_class` is never reached for a genuine
+#: payload -- it is reached exactly when someone put something else in the
+#: file.
+_ALLOWED_PICKLE_GLOBALS: Set[Tuple[str, str]] = {
+    ("builtins", "list"),
+    ("builtins", "float"),
+    ("builtins", "int"),
+}
+
+
+class _FrequencyUnpickler(pickle.Unpickler):
+    """
+    Unpickler that refuses to resolve anything but plain numbers and lists.
+
+    ``pickle`` executes the object graph it reads: a ``__reduce__`` payload
+    naming ``posix.system`` runs a shell command while it is being loaded, long
+    before the resulting object is looked at. The only defence is to refuse the
+    *name resolution* itself, which is what this class does -- every
+    ``GLOBAL`` / ``STACK_GLOBAL`` opcode goes through
+    :meth:`find_class`.
+
+    Raises
+    ------
+    ValueError
+        For any global outside :data:`_ALLOWED_PICKLE_GLOBALS`. Deliberately a
+        ``ValueError`` and not an ``UnpicklingError``: this is a rejected
+        *value*, and it has to travel out of :func:`migrate_database` without
+        being mistaken for a corrupt-file condition that could be retried.
+    """
+
+    def find_class(self, module: str, name: str):
+        if (module, name) in _ALLOWED_PICKLE_GLOBALS:
+            return getattr(builtins, name)
+        raise ValueError(
+            "Refusing to unpickle the legacy 'networks.frequencies' blob: it "
+            f"names {module}.{name}, which a list of frequencies never "
+            "contains. Loading it would execute code from the database file. "
+            "The file has not been modified -- treat it as untrusted and get "
+            "the network from a source you control."
+        )
+
 
 class MigrationReport(BaseModel):
-    """
+    r"""
     What :func:`migrate_database` did, and what a user has to check afterwards.
 
     Attributes
@@ -124,12 +183,16 @@ class MigrationReport(BaseModel):
         ``"network:path"`` for paths whose reconstructed segment order does
         not form a connected chain.
     defaulted_cells : Dict[str, int]
-        ``"table.column"`` -> how many ``NULL``\\ s were replaced by the
+        ``"table.column"`` -> how many ``NULL``\ s were replaced by the
         column's own declared default (see :func:`_declared_defaults`). A
         non-empty dict means values were filled in, so it counts towards
         :attr:`needs_attention`.
     added_columns : Dict[str, List[str]]
         ``table`` -> columns added in place by the ``"add_columns"`` path.
+    converted_frequencies : List[str]
+        Networks whose pickled ``frequencies`` blob was rewritten as a JSON
+        list. A lossless conversion, so it does *not* count towards
+        :attr:`needs_attention`.
     unloadable : Dict[str, str]
         ``network`` -> the error :func:`groundinsight.load_network_from_db`
         raised for it on the converted file. A network listed here was written
@@ -137,6 +200,14 @@ class MigrationReport(BaseModel):
         :class:`~groundinsight.models.core_models.Network`, almost always
         because a column the database allows to be ``NULL`` is mandatory in the
         Pydantic model. The other networks in the file are unaffected.
+
+    Examples
+    --------
+    >>> from groundinsight import MigrationReport
+    >>> report = MigrationReport(migrated=True, path="grid.db", kind="legacy",
+    ...                          networks=["netA"])
+    >>> report.needs_attention
+    False
     """
 
     migrated: bool = False
@@ -151,11 +222,19 @@ class MigrationReport(BaseModel):
     broken_paths: List[str] = Field(default_factory=list)
     defaulted_cells: Dict[str, int] = Field(default_factory=dict)
     added_columns: Dict[str, List[str]] = Field(default_factory=dict)
+    converted_frequencies: List[str] = Field(default_factory=list)
     unloadable: Dict[str, str] = Field(default_factory=dict)
 
     @property
     def needs_attention(self) -> bool:
-        """``True`` if the migration had to guess or drop something."""
+        """
+        ``True`` if the migration had to guess or drop something.
+
+        Returns
+        -------
+        bool
+            Whether the report lists shared, dropped or unloadable elements.
+        """
         return bool(
             self.shared_elements
             or self.orphaned
@@ -227,12 +306,175 @@ def _declared_defaults(table_name: str) -> Dict[str, Any]:
     for column in table.columns:
         if column.nullable:
             continue
-        default = column.default
-        if default is None or default.is_callable or default.is_sequence:
-            out[column.name] = _NO_DEFAULT
-        else:
-            out[column.name] = default.arg
+        out[column.name] = _scalar_default(column)
     return out
+
+
+def _scalar_default(column) -> Any:
+    """
+    The constant a column declares as its default, or :data:`_NO_DEFAULT`.
+
+    Only a *scalar* default can be written into DDL or into a legacy row.
+    A callable or a sequence default is produced by the running Python
+    process, not by the schema, and is therefore treated as "no default".
+
+    Parameters
+    ----------
+    column : sqlalchemy.Column
+        Column of the current schema.
+
+    Returns
+    -------
+    Any
+        The declared constant, or :data:`_NO_DEFAULT`.
+    """
+    default = column.default
+    if default is None or default.is_callable or default.is_sequence:
+        return _NO_DEFAULT
+    return default.arg
+
+
+def _sql_literal(value: Any) -> str:
+    """
+    Render a scalar default as an SQLite literal for a ``DEFAULT`` clause.
+
+    Parameters
+    ----------
+    value : Any
+        Value from :func:`_scalar_default`.
+
+    Returns
+    -------
+    str
+        The literal.
+
+    Raises
+    ------
+    RuntimeError
+        For a type this module will not render. Refusing is safe -- the
+        caller turns it into the "export to JSON and re-import" message --
+        while a wrong literal would be written into every existing row.
+    """
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return repr(value)
+    if isinstance(value, str):
+        escaped = value.replace("'", "''")
+        return f"'{escaped}'"
+    raise RuntimeError(
+        f"Cannot render the declared default {value!r} as an SQLite literal."
+    )
+
+
+def _decode_legacy_frequencies(blob: bytes) -> List[float]:
+    """
+    Turn a legacy pickled ``networks.frequencies`` blob into a list of floats.
+
+    Uses :class:`_FrequencyUnpickler`, never :func:`pickle.loads`. The result
+    is checked to be a flat sequence of real numbers, so a payload that
+    survives the class filter but is not a frequency list is still rejected.
+
+    Parameters
+    ----------
+    blob : bytes
+        The stored BLOB.
+
+    Returns
+    -------
+    List[float]
+        The frequencies.
+
+    Raises
+    ------
+    ValueError
+        If the blob names a disallowed global, is not a flat sequence of
+        numbers, or cannot be unpickled at all.
+    """
+    try:
+        value = _FrequencyUnpickler(io.BytesIO(blob)).load()
+    except ValueError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - re-raised as a value error
+        raise ValueError(
+            "The legacy 'networks.frequencies' blob could not be read as a "
+            f"pickled list of numbers: {exc}"
+        ) from exc
+
+    if not isinstance(value, (list, tuple)):
+        raise ValueError(
+            "The legacy 'networks.frequencies' blob did not contain a list, "
+            f"but a {type(value).__name__}."
+        )
+    frequencies: List[float] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, (int, float)):
+            raise ValueError(
+                "The legacy 'networks.frequencies' blob contains a "
+                f"{type(item).__name__}, which is not a frequency."
+            )
+        frequencies.append(float(item))
+    return frequencies
+
+
+def _pickled_frequency_networks(conn: sqlite3.Connection) -> List[str]:
+    """Names of networks whose ``frequencies`` cell is still a pickled BLOB."""
+    tables = _table_names(conn)
+    if "networks" not in tables:
+        return []
+    if "frequencies" not in _column_names(conn, "networks"):
+        return []
+    return [
+        name
+        for name, value in conn.execute("SELECT name, frequencies FROM networks")
+        if isinstance(value, (bytes, bytearray))
+    ]
+
+
+def _convert_pickled_frequencies(sqlite_path: str, report: MigrationReport) -> None:
+    """
+    Rewrite pickled ``networks.frequencies`` blobs as JSON lists, in place.
+
+    Every blob is decoded *before* the first write, so a hostile payload aborts
+    the migration with nothing committed rather than half-way through the
+    table.
+
+    Parameters
+    ----------
+    sqlite_path : str
+        The database file.
+    report : MigrationReport
+        Report to record the converted networks in.
+
+    Raises
+    ------
+    ValueError
+        Propagated from :func:`_decode_legacy_frequencies`.
+    """
+    conn = sqlite3.connect(sqlite_path)
+    try:
+        updates: List[Tuple[str, str]] = []
+        for name in _pickled_frequency_networks(conn):
+            row = conn.execute(
+                "SELECT frequencies FROM networks WHERE name = ?", (name,)
+            ).fetchone()
+            updates.append((json.dumps(_decode_legacy_frequencies(bytes(row[0]))), name))
+        if not updates:
+            return
+        conn.executemany(
+            "UPDATE networks SET frequencies = ? WHERE name = ?", updates
+        )
+        conn.commit()
+        report.converted_frequencies = [name for _, name in updates]
+        logger.warning(
+            "Rewrote the pickled frequency list of %s as JSON. A pickled "
+            "column executes code when it is read; the new column cannot.",
+            report.converted_frequencies,
+        )
+    finally:
+        conn.close()
 
 
 def needs_migration(sqlite_path: str) -> str:
@@ -251,8 +493,11 @@ def needs_migration(sqlite_path: str) -> str:
     str
         ``"none"`` if the file is already current, ``"legacy_scoped"`` if the
         element tables are still keyed by name alone and need the full
-        rebuild, or ``"add_columns"`` if the keys are current but columns
-        added by a later release are missing.
+        rebuild, ``"add_columns"`` if the keys are current but columns added
+        by a later release are missing, or ``"pickle_frequencies"`` if the
+        only thing left is the pickled ``networks.frequencies`` column.
+        ``"add_columns"`` also covers a file that needs both -- the in-place
+        path performs both steps.
 
     Examples
     --------
@@ -280,6 +525,8 @@ def needs_migration(sqlite_path: str) -> str:
             for column in table.columns:
                 if column.name not in present:
                     return "add_columns"
+        if _pickled_frequency_networks(conn):
+            return "pickle_frequencies"
         return "none"
     finally:
         conn.close()
@@ -322,8 +569,9 @@ def _read_memberships(
 
     memberships: Dict[str, List[str]] = {}
     owners: Dict[str, List[str]] = {}
+    # B608 not exploitable: key and association are looked up in the module constants above.
     rows = conn.execute(
-        f'SELECT network_name, "{key}" FROM "{association}" ORDER BY rowid'
+        f'SELECT network_name, "{key}" FROM "{association}" ORDER BY rowid'  # nosec B608
     )
     for network_name, element_name in rows:
         if network_name is None or element_name is None:
@@ -344,8 +592,9 @@ def _read_rows(conn: sqlite3.Connection, table: str) -> Dict[str, Dict[str, Any]
     """Read a legacy element table into ``name -> {column: value}``."""
     columns = _column_names(conn, table)
     out: Dict[str, Dict[str, Any]] = {}
-    for row in conn.execute(f'SELECT * FROM "{table}" ORDER BY rowid'):
-        record = dict(zip(columns, row))
+    # B608 not exploitable: the only caller passes one of five literal element-table names.
+    for row in conn.execute(f'SELECT * FROM "{table}" ORDER BY rowid'):  # nosec B608
+        record = dict(zip(columns, row, strict=True))
         out[record["name"]] = record
     return out
 
@@ -481,8 +730,9 @@ def _insert(
             "again."
         )
 
+    # B608 not exploitable: table is a caller literal and quoted lists target (ORM) columns; values use '?'.
     conn.executemany(
-        f'INSERT INTO "{table}" ({quoted}) VALUES ({placeholders})', payload
+        f'INSERT INTO "{table}" ({quoted}) VALUES ({placeholders})', payload  # nosec B608
     )
     report.rows[table] = len(payload)
 
@@ -511,19 +761,31 @@ def _rebuild_from_legacy(
                 report.rows[table] = 0
                 continue
             columns = _column_names(source, table)
+            # B608 not exploitable: table iterates the constant _GLOBAL_TABLES, never a name from the file.
             records = [
-                dict(zip(columns, row))
-                for row in source.execute(f'SELECT * FROM "{table}" ORDER BY rowid')
+                dict(zip(columns, row, strict=True))
+                for row in source.execute(f'SELECT * FROM "{table}" ORDER BY rowid')  # nosec B608
             ]
             _insert(target, table, records, report)
 
         # --- networks -----------------------------------------------------
         network_columns = _column_names(source, "networks")
         network_records = [
-            dict(zip(network_columns, row))
+            dict(zip(network_columns, row, strict=True))
             for row in source.execute("SELECT * FROM networks ORDER BY rowid")
         ]
         report.networks = [record["name"] for record in network_records]
+        # ``frequencies`` was a pickled BLOB in every legacy file; the target
+        # schema stores JSON. Converted here rather than copied so a hostile
+        # blob is rejected before anything is written -- see
+        # :class:`_FrequencyUnpickler`.
+        for record in network_records:
+            value = record.get("frequencies")
+            if isinstance(value, (bytes, bytearray)):
+                record["frequencies"] = json.dumps(
+                    _decode_legacy_frequencies(bytes(value))
+                )
+                report.converted_frequencies.append(record["name"])
         _insert(target, "networks", network_records, report)
 
         # --- network-scoped element tables --------------------------------
@@ -638,10 +900,44 @@ def _verify_loadable(target_path: str, report: MigrationReport) -> None:
         engine.dispose()
 
 
-def _add_missing_columns(sqlite_path: str, report: MigrationReport) -> None:
-    """Add nullable columns introduced by a later release, in place."""
-    from sqlalchemy.schema import CreateColumn
+def _add_column_ddl(column) -> str:
+    """
+    Render the column definition for ``ALTER TABLE ... ADD COLUMN``.
 
+    SQLAlchemy's ``CreateColumn`` cannot be used here. A ``default=`` on a
+    ``Column`` is a *Python-side* default: SQLAlchemy fills it in on insert and
+    emits no ``DEFAULT`` clause, so ``CreateColumn`` renders
+    ``position INTEGER NOT NULL``. SQLite rejects exactly that -- adding a
+    ``NOT NULL`` column to a table that already has rows needs a non-null
+    default to put in them -- and the eight columns introduced with 0.5.0
+    (``buses.position``, ``buses.active``, ``branches.position``,
+    ``branches.active``, ``faults.position``, ``sources.position``,
+    ``sources.source_type``, ``paths.position``) are all of that shape. The
+    declared constant is therefore written into the DDL, which reproduces for
+    the existing rows exactly what the current code would have inserted for a
+    row that never mentioned the column.
+
+    Parameters
+    ----------
+    column : sqlalchemy.Column
+        Column to add.
+
+    Returns
+    -------
+    str
+        ``"name" TYPE [NOT NULL] [DEFAULT literal]``.
+    """
+    pieces = [f'"{column.name}"', column.type.compile(dialect=_sqlite_dialect())]
+    if not column.nullable:
+        pieces.append("NOT NULL")
+    default = _scalar_default(column)
+    if default is not _NO_DEFAULT:
+        pieces.append(f"DEFAULT {_sql_literal(default)}")
+    return " ".join(pieces)
+
+
+def _add_missing_columns(sqlite_path: str, report: MigrationReport) -> None:
+    """Add columns introduced by a later release, in place."""
     metadata = _current_metadata()
     conn = sqlite3.connect(sqlite_path)
     try:
@@ -653,16 +949,18 @@ def _add_missing_columns(sqlite_path: str, report: MigrationReport) -> None:
             for column in table.columns:
                 if column.name in present:
                     continue
-                if not column.nullable and column.default is None:
+                if not column.nullable and _scalar_default(column) is _NO_DEFAULT:
                     raise RuntimeError(
                         f"Cannot add the NOT NULL column "
                         f"{table.name}.{column.name} to an existing database "
-                        "in place. Export the networks to JSON with the "
-                        "release that wrote this file and re-import them into "
-                        "a fresh database."
+                        "in place: the schema declares no constant default to "
+                        "put in the rows that are already there. Export the "
+                        "networks to JSON with the release that wrote this "
+                        "file and re-import them into a fresh database."
                     )
-                ddl = str(CreateColumn(column).compile(dialect=_sqlite_dialect()))
-                conn.execute(f'ALTER TABLE "{table.name}" ADD COLUMN {ddl}')
+                conn.execute(
+                    f'ALTER TABLE "{table.name}" ADD COLUMN {_add_column_ddl(column)}'
+                )
                 report.added_columns.setdefault(table.name, []).append(column.name)
         conn.commit()
     finally:
@@ -709,11 +1007,15 @@ def migrate_database(sqlite_path: str, backup: bool = True) -> MigrationReport:
     Raises
     ------
     RuntimeError
-        If a ``NOT NULL`` column without a default is missing from an
+        If a ``NOT NULL`` column without a declared default is missing from an
         otherwise current file, which cannot be added in place; or if a legacy
         row has no value for a column the current schema requires and cannot
         default (see :func:`_declared_defaults`). In both cases the file on
         disk is left exactly as it was.
+    ValueError
+        If the legacy pickled ``networks.frequencies`` blob names anything but
+        ``list`` / ``float`` / ``int``, or does not decode to a list of
+        numbers. Nothing is written in that case; the file is untrusted.
 
     Examples
     --------
@@ -744,12 +1046,20 @@ def migrate_database(sqlite_path: str, backup: bool = True) -> MigrationReport:
             kind,
         )
 
-    if kind == "add_columns":
+    if kind in ("add_columns", "pickle_frequencies"):
+        # Both steps are no-ops when there is nothing to do, so they can run
+        # unconditionally for either kind -- a file can need both. The
+        # frequency conversion goes first: it is the one that can refuse a
+        # hostile payload, and refusing before any DDL has been executed keeps
+        # the file exactly as it was.
+        _convert_pickled_frequencies(sqlite_path, report)
         _add_missing_columns(sqlite_path, report)
         report.migrated = True
-        logger.warning(
-            "Added columns introduced by a later release: %s", report.added_columns
-        )
+        if report.added_columns:
+            logger.warning(
+                "Added columns introduced by a later release: %s",
+                report.added_columns,
+            )
         return report
 
     target_path = f"{sqlite_path}.migrating"
@@ -805,6 +1115,11 @@ def _log_report(report: MigrationReport) -> None:
             "result is not a connected chain and the path must be rebuilt "
             "with gi.create_paths(network=...): %s",
             report.broken_paths,
+        )
+    if report.converted_frequencies:
+        logger.info(
+            "Converted the pickled frequency list of %s into a JSON column.",
+            report.converted_frequencies,
         )
     if report.defaulted_cells:
         logger.warning(

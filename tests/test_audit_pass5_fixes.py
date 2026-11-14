@@ -24,6 +24,14 @@ implementation block:
    values.
 6. ``Network.set_active_fault(..., keep_results=True)`` preserves
    the cached ``Result`` for the activated fault.
+
+Audit pass 19 (ARC2) replaced the session globals by ``gi.Database``.
+Findings 3 and 4 are kept in their new form: ``db_session`` stays importable
+as a deprecated alias but leaves ``__all__`` (a star import must not raise
+the deprecation), and ``close_dbsession`` still never raises while tearing
+the default database down. The old half-state tests assigned the globals
+directly; that is no longer possible -- such an assignment would only shadow
+the alias for the rest of the process.
 """
 
 from __future__ import annotations
@@ -31,7 +39,6 @@ from __future__ import annotations
 import gc
 import logging
 
-import numpy as np
 import pytest
 from pydantic import ValidationError
 
@@ -39,16 +46,14 @@ import groundinsight as gi
 from groundinsight.models.core_models import (
     BranchType,
     BusType,
-    Fault,
     Result,
-    Source,
 )
 from groundinsight.pathfinder import (
     PathFinder,
-    _FIND_PATHS_CACHE,
-    _GRAPH_CACHE,
     clear_pathfinder_cache,
 )
+
+_EMPTY = {"graph": 0, "paths": 0, "reaches": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -123,18 +128,15 @@ def test_invalidate_paths_does_not_drop_other_networks_cache():
     pf_a.find_paths("B1", "B2")
     pf_b.find_paths("B1", "B2")
 
-    # Sanity: both networks have an entry in the graph cache.
-    keys_a = [k for k in _GRAPH_CACHE if k[1] == "alpha"]
-    keys_b_before = [k for k in _GRAPH_CACHE if k[1] == "beta"]
-    assert keys_a, "expected an alpha entry in _GRAPH_CACHE"
-    assert keys_b_before, "expected a beta entry in _GRAPH_CACHE"
+    # Sanity: both networks have a graph in their own memo (audit pass 19,
+    # ARC2: the memo belongs to the network, no longer to the module).
+    assert net_a.path_cache().sizes()["graph"], "expected an alpha graph"
+    assert net_b.path_cache().sizes()["graph"], "expected a beta graph"
 
     net_a.invalidate_paths()
 
-    keys_a_after = [k for k in _GRAPH_CACHE if k[1] == "alpha"]
-    keys_b_after = [k for k in _GRAPH_CACHE if k[1] == "beta"]
-    assert not keys_a_after, "alpha's cache should be cleared"
-    assert keys_b_after, (
+    assert net_a.path_cache().sizes() == _EMPTY, "alpha's cache should be cleared"
+    assert net_b.path_cache().sizes()["graph"], (
         "beta's cache must survive a network-scoped invalidation on alpha"
     )
 
@@ -145,14 +147,17 @@ def test_clear_pathfinder_cache_unscoped_drops_all_entries():
     net_b = _two_bus_network(name="beta")
     PathFinder(net_a).find_paths("B1", "B2")
     PathFinder(net_b).find_paths("B1", "B2")
-    assert _GRAPH_CACHE, "precondition: cache populated"
+    assert net_a.path_cache().sizes()["graph"], "precondition: cache populated"
+    assert net_b.path_cache().sizes()["graph"], "precondition: cache populated"
     clear_pathfinder_cache()
-    assert not _GRAPH_CACHE
-    assert not _FIND_PATHS_CACHE
+    assert net_a.path_cache().sizes() == _EMPTY
+    assert net_b.path_cache().sizes() == _EMPTY
 
 
 # ---------------------------------------------------------------------------
-# Pass-5 finding 2 — ``pathfinder._GRAPH_CACHE`` includes structural fingerprint.
+# Pass-5 finding 2 — the cache key includes a structural fingerprint.
+# Since audit pass 19 (ARC2) every network has its own memo, so an entry of a
+# collected network cannot be found by a new one at all; the fingerprint stays.
 # ---------------------------------------------------------------------------
 
 
@@ -179,7 +184,7 @@ def test_cache_does_not_falsely_hit_after_id_recycle():
     pf_a = PathFinder(net_a)
     pf_a.find_paths("B1", "B2")
     stale_id = id(net_a)
-    stale_keys = [k for k in _GRAPH_CACHE if k[0] == stale_id]
+    stale_keys = [k for k in net_a.path_cache().keys("graph") if k[0] == stale_id]
     assert stale_keys, "precondition: cache contains alpha"
 
     # Force garbage collection of net_a.
@@ -229,6 +234,8 @@ def test_cache_does_not_falsely_hit_after_id_recycle():
     assert key_c[1] == "gamma"
     assert key_c[2] == 3
     assert key_c[3] == 2
+    # And the new network's memo holds its own graph only.
+    assert net_c.path_cache().keys("graph") == [key_c]
 
 
 # ---------------------------------------------------------------------------
@@ -236,17 +243,28 @@ def test_cache_does_not_falsely_hit_after_id_recycle():
 # ---------------------------------------------------------------------------
 
 
+def _alias(name: str, module=gi):
+    """Read a deprecated session alias and assert its ``DeprecationWarning``."""
+    with pytest.deprecated_call(match=rf"groundinsight\.{name} is deprecated"):
+        return getattr(module, name)
+
+
 def test_db_session_importable_from_top_level():
     """``from groundinsight import db_session`` must not raise."""
     # Re-import path: by attribute first.
-    assert hasattr(gi, "db_session")
+    with pytest.deprecated_call():
+        assert hasattr(gi, "db_session")
     # And via from-import semantics.
-    from groundinsight import db_session  # noqa: F401  -- import must succeed
+    with pytest.deprecated_call():
+        from groundinsight import db_session  # noqa: F401  -- import must succeed
 
 
-def test_db_session_listed_in_dunder_all():
-    assert "db_session" in gi.__all__
-    assert "session" in gi.__all__
+def test_db_session_importable_but_no_longer_in_dunder_all():
+    """Deprecated since pass 19: importable with a warning, not star-exported."""
+    assert "db_session" not in gi.__all__
+    assert "session" not in gi.__all__
+    with pytest.deprecated_call():
+        from groundinsight import db_session  # noqa: F401
 
 
 def test_db_session_alias_tracks_session(tmp_path):
@@ -258,72 +276,60 @@ def test_db_session_alias_tracks_session(tmp_path):
         # module object once, so attribute access stays current — but
         # the symmetric assertion is the contract we ship).
         import groundinsight as gi_ref
-        assert gi_ref.session is gi_ref.db_session
-        assert gi_ref.session is not None
+        assert _alias("session", gi_ref) is _alias("db_session", gi_ref)
+        assert _alias("session", gi_ref) is not None
     finally:
         gi.close_dbsession()
 
 
 # ---------------------------------------------------------------------------
-# Pass-5 finding 4 — ``close_dbsession`` is defensive against half-state.
+# Pass-5 finding 4 — ``close_dbsession`` never raises while tearing down.
 # ---------------------------------------------------------------------------
 
 
-def test_close_dbsession_handles_partial_state_session_only(caplog):
-    """``session is None`` + ``engine is not None`` must not raise."""
-    import groundinsight as gi_mod
-    # Build a half-constructed state manually.
-    from sqlalchemy import create_engine
-    fake_engine = create_engine("sqlite:///:memory:")
-    gi_mod.engine = fake_engine
-    gi_mod.SessionLocal = None
-    gi_mod.session = None
-    gi_mod.db_session = None
-    try:
-        with caplog.at_level(logging.INFO, logger="groundinsight"):
-            gi.close_dbsession()  # must not raise
-    finally:
-        gi_mod.engine = None
-        gi_mod.SessionLocal = None
-        gi_mod.session = None
-        gi_mod.db_session = None
-    # The helper logs that it tore something down (engine in this case).
+def test_close_dbsession_survives_a_failing_engine_dispose(
+    tmp_path, caplog, monkeypatch
+):
+    """A failing teardown step is logged; the default is released anyway."""
+    gi.close_dbsession()
+    database = gi.start_dbsession(str(tmp_path / "dispose.db"))
+
+    def boom():
+        raise RuntimeError("dispose failed")
+
+    monkeypatch.setattr(database.engine, "dispose", boom)
+    with caplog.at_level(logging.INFO, logger="groundinsight"):
+        gi.close_dbsession()  # must not raise
+    assert database.closed
+    assert any("dispose failed" in r.getMessage() for r in caplog.records)
     assert any(
         "Database session closed" in r.getMessage() for r in caplog.records
     )
+    with pytest.raises(RuntimeError, match="not started"):
+        gi.load_bustypes_from_db()
+    # The failed dispose left the engine's pooled connection open; release it
+    # here, or the garbage collector reports it as an unclosed database in
+    # whichever test happens to run next.
+    monkeypatch.undo()
+    database.engine.dispose()
 
 
-def test_close_dbsession_handles_partial_state_no_engine():
-    """``engine is None`` + ``session is not None`` must not raise."""
-    import groundinsight as gi_mod
-    from sqlalchemy.orm import sessionmaker, scoped_session
-    from sqlalchemy import create_engine
-    tmp_engine = create_engine("sqlite:///:memory:")
-    tmp_session_local = sessionmaker(bind=tmp_engine)
-    tmp_scoped = scoped_session(tmp_session_local)
-    try:
-        gi_mod.engine = None  # half-state: session live, engine missing
-        gi_mod.SessionLocal = tmp_session_local
-        gi_mod.session = tmp_scoped
-        gi_mod.db_session = tmp_scoped
-        gi.close_dbsession()  # must not raise
-        assert gi_mod.session is None
-        assert gi_mod.SessionLocal is None
-    finally:
-        tmp_engine.dispose()
-        gi_mod.engine = None
-        gi_mod.SessionLocal = None
-        gi_mod.session = None
-        gi_mod.db_session = None
+def test_close_dbsession_removes_a_live_legacy_session(tmp_path):
+    """The successor of the "session live, engine missing" half-state: a
+    thread-local session handed out through ``gi.session`` is removed too."""
+    gi.close_dbsession()
+    database = gi.start_dbsession(str(tmp_path / "legacy.db"))
+    legacy = _alias("session")
+    legacy().execute(__import__("sqlalchemy").text("SELECT 1"))  # open it
+    gi.close_dbsession()  # must not raise
+    assert database.closed
+    assert _alias("session") is None
+    assert _alias("db_session") is None
 
 
 def test_close_dbsession_with_no_state_just_warns(caplog):
     """Calling close on an idle module emits a WARNING, not an exception."""
-    import groundinsight as gi_mod
-    gi_mod.engine = None
-    gi_mod.SessionLocal = None
-    gi_mod.session = None
-    gi_mod.db_session = None
+    gi.close_dbsession()  # make sure nothing is open
     with caplog.at_level(logging.WARNING, logger="groundinsight"):
         gi.close_dbsession()
     assert any(

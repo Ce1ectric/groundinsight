@@ -1,3 +1,4 @@
+# tests/test_phase_current_distribution.py
 """
 Phase-current distribution over rings, meshes and parallel branches.
 
@@ -34,6 +35,14 @@ import pytest
 
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType
+from tests._warning_policy import acknowledge
+
+#: The ring or parallel-route network of these tests splits its phase current
+#: by the proxy (PHASE_PROXY); the tests are about something else.
+PROXY_SPLIT = acknowledge("PHASE_PROXY")
+
+#: The legacy paths mode on the ring, with default coefficients, on purpose.
+LEGACY_MODE = acknowledge("PARALLEL_COEFFICIENT_DEFAULT", "PHASE_PROXY")
 
 
 FREQ = [50.0]
@@ -159,6 +168,7 @@ def test_a_dead_end_branch_carries_no_phase_current():
 # --- the meshed cases the old scheme got wrong ------------------------------
 
 
+@PROXY_SPLIT
 def test_symmetric_ring_reproduces_the_hand_tuned_reference():
     """
     The ring is the case that used to collapse.
@@ -177,6 +187,7 @@ def test_symmetric_ring_reproduces_the_hand_tuned_reference():
     assert complex(auto[2]) == pytest.approx(complex(hand_tuned[2]), rel=1e-9)
 
 
+@LEGACY_MODE
 def test_the_legacy_mode_still_collapses_the_ring():
     """
     The old behaviour is preserved verbatim under ``phase_current_mode="paths"``.
@@ -184,14 +195,25 @@ def test_the_legacy_mode_still_collapses_the_ring():
     Pinning the degenerate result is deliberate: studies produced before 0.6.0
     have to stay reproducible, and the collapse is the reason the default moved.
     """
-    epr, r, z_g = _solve(
-        _network(RING, ["S", "A", "B", "F"]), phase_current_mode="paths"
-    )
+    net = _network(RING, ["S", "A", "B", "F"])
+    epr, r, z_g = _solve(net, phase_current_mode="paths")
     assert epr == pytest.approx(0.0, abs=1e-9)
     assert r == pytest.approx(0.0, abs=1e-12)
-    assert z_g is None
+    # Audit pass 19, decision F4: Z_G is the driving-point impedance of the
+    # earthing network at the fault bus -- a property of the electrodes and
+    # shields that the collapsed phase split cannot touch (second way: the
+    # reference solver). What collapses is the group quotient, which used to
+    # be Z_G and is now z_earthing_group.
+    from tests import _reference_mna as ref
+
+    z_reference = ref.driving_point_impedance(
+        ref.reference_network(net, 50.0, "F"), "F"
+    )
+    assert abs(complex(z_g) - z_reference) <= 1e-12 * abs(z_reference)
+    assert net.results["F"].reduction_factor.z_earthing_group[50.0] is None
 
 
+@PROXY_SPLIT
 def test_two_parallel_cables_halve_the_potential_rise():
     """
     Two identical cables between the same two buses: the phase current divides
@@ -207,6 +229,7 @@ def test_two_parallel_cables_halve_the_potential_rise():
     assert two[0] < one[0]
 
 
+@PROXY_SPLIT
 def test_the_result_does_not_depend_on_the_branch_declaration_order():
     """
     In the path-based scheme the first path a branch appeared on fixed its
@@ -312,7 +335,7 @@ def test_an_island_no_longer_discards_the_whole_source_contribution():
     assert r == pytest.approx(REDUCTION_FACTOR, rel=1e-9)
 
 
-def test_a_source_cut_off_from_the_fault_is_named_not_silently_dropped(caplog):
+def test_a_source_cut_off_from_the_fault_is_named_not_silently_dropped():
     """
     An intact shield with an interrupted phase conductor.
 
@@ -326,12 +349,13 @@ def test_a_source_cut_off_from_the_fault_is_named_not_silently_dropped(caplog):
     net = _network(
         RADIAL, ["S", "A", "F"], branch_types={"AF": open_phase}
     )
-    with caplog.at_level(logging.WARNING, logger="groundinsight"):
+    # A structured ModelAssumptionWarning since audit pass 19 (PH9), which
+    # also says that the source current still enters the earthing system.
+    with pytest.warns(gi.ModelAssumptionWarning, match="no phase-conductor connection"):
         epr, r, _ = _solve(net)
-    assert any(
-        "no phase-conductor connection" in record.getMessage()
-        for record in caplog.records
-    )
+    assert "SOURCE_WITHOUT_PHASE_PATH" in [
+        d.code for d in net.results["F"].diagnostics
+    ]
     # No phase current means no mutual injection: r collapses to 1 because the
     # solution with and without coupling are the same solution.
     assert r == pytest.approx(1.0, rel=1e-9)
@@ -341,19 +365,21 @@ def test_a_source_cut_off_from_the_fault_is_named_not_silently_dropped(caplog):
 # --- the proxy warning is scoped to the case where the proxy matters --------
 
 
-def test_the_proxy_warning_stays_quiet_on_a_radial_network(caplog):
+def test_the_proxy_warning_stays_quiet_on_a_radial_network():
     """
     Without a cycle the proxy cannot influence anything, so warning about it
     would only train the user to ignore the log.
+
+    Since audit pass 19 (PH3) the note is a structured ModelAssumptionWarning
+    with code PHASE_PROXY rather than a log line, so the result's diagnostics
+    are what is checked; the scope is unchanged.
     """
-    with caplog.at_level(logging.WARNING, logger="groundinsight"):
-        _solve(_network(RADIAL, ["S", "A", "F"]))
-    assert not [
-        r for r in caplog.records if "phase_impedance_formula" in r.getMessage()
-    ]
+    net = _network(RADIAL, ["S", "A", "F"])
+    _solve(net)
+    assert "PHASE_PROXY" not in [d.code for d in net.results["F"].diagnostics]
 
 
-def test_the_proxy_warning_fires_once_on_a_meshed_network(caplog):
+def test_the_proxy_warning_fires_once_on_a_meshed_network():
     """In a ring the split *is* decided by the impedances, so the proxy is a
     modelling assumption and is announced -- once, not once per frequency."""
     bus_type = _bus_type()
@@ -367,11 +393,11 @@ def test_the_proxy_warning_fires_once_on_a_meshed_network(caplog):
         )
     gi.create_fault("F", "F", {50.0: 1.0, 150.0: 1.0, 250.0: 1.0}, active=True, network=net)
     gi.create_source("SRC", "S", {50.0: 1000.0, 150.0: 100.0, 250.0: 50.0}, network=net)
-    with caplog.at_level(logging.WARNING, logger="groundinsight"):
-        gi.run_fault(net, "F")
-    matching = [
-        r for r in caplog.records if "phase_impedance_formula" in r.getMessage()
-    ]
+    # A structured ModelAssumptionWarning since audit pass 19 (PH3), so it is
+    # counted on the result rather than in the log.
+    with pytest.warns(gi.ModelAssumptionWarning, match="phase_impedance_formula"):
+        result = gi.run_fault(net, "F")
+    matching = [d for d in result.diagnostics if d.code == "PHASE_PROXY"]
     assert len(matching) == 1
 
 
@@ -386,6 +412,7 @@ def test_an_unknown_mode_is_rejected_by_name():
         gi.run_fault(net, "F", phase_current_mode="topology")
 
 
+@LEGACY_MODE
 @pytest.mark.parametrize(
     "legacy_flag, expected_epr",
     [(True, EPR_TWO_ROUTES), (False, 0.0)],
@@ -396,7 +423,10 @@ def test_the_deprecated_flag_still_wins_when_passed(legacy_flag, expected_epr, c
     sites -- including ``run_outage_study`` -- are unaffected by the new default,
     and passing it says that it is deprecated.
     """
-    with caplog.at_level(logging.WARNING, logger="groundinsight"):
+    with (
+        caplog.at_level(logging.WARNING, logger="groundinsight"),
+        pytest.warns(DeprecationWarning, match="auto_parallel_coefficients"),
+    ):
         epr, _, _ = _solve(
             _network(RING, ["S", "A", "B", "F"]),
             auto_parallel_coefficients=legacy_flag,

@@ -19,10 +19,12 @@ $$
 
 with
 
-- $Y(f)$ the nodal admittance matrix. The diagonal entries are
-  the bus grounding admittances $1/Z_E(f, \rho)$; the
-  off-diagonal entries are the branch self-admittances
-  $1/Z_b(f, l)$ when `grounding_conductor=True`.
+- $Y(f)$ the nodal admittance matrix. The diagonal holds the
+  admittances of the bus electrodes, $1/Z_B(f, \rho)$ (the symbol
+  $Z_E$ is reserved for the earthing impedance of EN 50522, see the
+  [glossary](../reference/glossary.md)); the branch
+  self-admittances $1/Z_b(f, l)$ of the branches with
+  `grounding_conductor=True` join the buses they connect.
 - $\underline{u}(f)$ the bus-EPR vector.
 - $\underline{i}(f)$ the source currents (scaled by the
   fault scaling at $f$) plus the Norton equivalents of the
@@ -33,12 +35,22 @@ After the per-frequency solve the network derives:
 
 - **Branch currents** from $\Delta u$ and the impressed mutual
   current.
-- **Reduction factors** as the ratio
+- **Two reduction factors.** `value` is the EPR ratio
   $|\underline{u}_\text{with}|/|\underline{u}_\text{without}|$ at
-  the fault bus, where the second solve omits the mutual
-  Norton sources.
-- **Grounding impedance**
-  $Z_G = u_\text{EPR}/(r \cdot I_\text{fault})$ per frequency.
+  the fault bus, where the second solve omits the mutual Norton
+  sources — a property of the line, not the reduction factor of
+  EN 50522. `value_current` is $|I_E|/|I_F|$, the earth-return
+  current over the fault current: the reduction factor $r$ of
+  EN 50522. Both are stored in `ResultReductionFactor`
+  ([which one is which](../reference/conventions.md#which-reduction-factor-is-which)).
+- **Earthing impedance** $Z_G = Z_E = Z_\text{dp}(F)$ per frequency
+  (EN 50522): the driving-point impedance of the earthing network
+  at the fault bus -- electrodes and shields, without the coupling
+  and without Thevenin loop closures. The earthing voltage $U_E$ is
+  the EPR at the fault bus. The current-weighted mean of the earth
+  group and its quotient by $I_E$, reported as $U_E$/$Z_E$ before
+  audit pass 19, remain available as `u_earthing_group` /
+  `z_earthing_group`.
 
 The `ElectricalNetwork` is held as a `PrivateAttr` of `Network`,
 not exposed in the JSON / DB serialisation; it carries the raw
@@ -47,10 +59,11 @@ NumPy / SciPy working arrays used by the LU solver.
 ## Example
 
 ```python
+# fragment: assumes a network `net` with the fault "f1"
 import groundinsight as gi
 
 # Assume `net` was built via gi.create_* factories with a fault `f1`.
-gi.run_fault(network=net, fault_name="f1")  # populates net._enet under the hood
+gi.run_fault(network=net, fault="f1")  # attaches net.electrical_network
 
 # Inspect derived quantities through the public Network accessors:
 df_bus = net.res_buses()           # EPR per bus

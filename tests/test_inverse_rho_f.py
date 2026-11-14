@@ -13,7 +13,6 @@ guarantee that the network state (bus impedances, faults, paths,
 ``active_fault``) is fully restored after every call.
 """
 
-import polars as pl
 import pytest
 
 import groundinsight as gi
@@ -85,7 +84,7 @@ def test_evaluate_max_epr_under_k_matches_baseline():
 
     # Manual baseline at b2 with the original BusType formula.
     gi.create_fault(name="manual", bus="b2", scalings={50: 1.0}, network=net)
-    gi.run_fault(net, fault_name="manual")
+    gi.run_fault(net, fault="manual")
     rb = next(
         rb for rb in net.results["manual"].buses if rb.name == "b2"
     )

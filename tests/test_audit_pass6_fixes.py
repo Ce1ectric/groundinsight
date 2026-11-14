@@ -16,6 +16,11 @@ Pass-6 / Pass-7 findings covered here:
    (``set_pathfinder_cache_size``).
 2. ``outage_context`` invalidates the module-level pathfinder cache
    on exit.
+
+Audit pass 19 (ARC2) moved the memo from module-level dictionaries into the
+network (``network.path_cache()``) and the cap into
+``network.pathfinder_settings``; ``set_pathfinder_cache_size`` is a
+deprecated switch for the default. Findings 1 and 2 are pinned per network.
 3. ``outage_context`` is re-entrant: nested ``with`` blocks restore
    the outermost baseline correctly.
 4. ``Network._validate_frequencies`` rejects negative input but
@@ -50,15 +55,13 @@ from groundinsight.models.core_models import (
 )
 from groundinsight.pathfinder import (
     PathFinder,
-    _FIND_PATHS_CACHE,
-    _GRAPH_CACHE,
+    PathfinderSettings,
     clear_pathfinder_cache,
     get_pathfinder_cache_size,
     set_pathfinder_cache_size,
 )
 from groundinsight.simulation.outage import (
     Outage,
-    _OUTAGE_BASELINE_STACK,
     outage_context,
 )
 
@@ -119,16 +122,40 @@ def _two_bus_network(name: str = "net"):
     return net
 
 
+def _chain_network(name: str = "chain"):
+    """Four buses in a chain: deactivating a branch gives a new topology."""
+    bt = _bus_type()
+    brt = _branch_type()
+    net = gi.create_network(name=name, frequencies=[50.0])
+    for bus in ("B1", "B2", "B3", "B4"):
+        gi.create_bus(name=bus, type=bt, specific_earth_resistance=100.0, network=net)
+    for a, b in (("B1", "B2"), ("B2", "B3"), ("B3", "B4")):
+        gi.create_branch(name=f"L{a[1]}{b[1]}", type=brt, from_bus=a, to_bus=b,
+                         length=1.0, network=net)
+    return net
+
+
+def _search_without(net, branch: str):
+    """Run a path search with ``branch`` switched off; return its topology key."""
+    net.branches[branch].active = False
+    try:
+        finder = PathFinder(net)
+        finder.find_paths("B1", "B4")
+        return finder._topology_key
+    finally:
+        net.branches[branch].active = True
+
+
 @pytest.fixture(autouse=True)
 def _reset_caches_and_cap():
     """Each test starts with a clean cache and the default cap restored."""
     clear_pathfinder_cache()
-    previous = set_pathfinder_cache_size(256)
-    _OUTAGE_BASELINE_STACK.clear()
+    with pytest.deprecated_call():
+        previous = set_pathfinder_cache_size(256)
     yield
     clear_pathfinder_cache()
-    set_pathfinder_cache_size(previous if previous > 0 else 256)
-    _OUTAGE_BASELINE_STACK.clear()
+    with pytest.deprecated_call():
+        set_pathfinder_cache_size(previous if previous > 0 else 256)
 
 
 # ---------------------------------------------------------------------------
@@ -137,52 +164,54 @@ def _reset_caches_and_cap():
 
 
 def test_set_pathfinder_cache_size_returns_previous_and_caps_immediately():
-    """``set_pathfinder_cache_size`` returns the prior cap and caps the cache."""
-    previous = set_pathfinder_cache_size(4)
+    """``set_pathfinder_cache_size`` returns the prior cap and caps the cache.
+
+    Deprecated since audit pass 19: it sets the default of networks without
+    settings of their own and trims their memo at once.
+    """
+    net = _chain_network()
+    for branch in ("L12", "L23", "L34"):
+        _search_without(net, branch)
+    assert net.path_cache().sizes()["graph"] == 3
+    with pytest.deprecated_call():
+        previous = set_pathfinder_cache_size(2)
     assert previous == 256
-    assert get_pathfinder_cache_size() == 4
+    with pytest.deprecated_call():
+        assert get_pathfinder_cache_size() == 2
+    assert net.path_cache().sizes()["graph"] == 2
 
 
 def test_set_pathfinder_cache_size_rejects_non_positive_input():
-    with pytest.raises(ValueError):
-        set_pathfinder_cache_size(0)
-    with pytest.raises(ValueError):
-        set_pathfinder_cache_size(-1)
-    with pytest.raises(ValueError):
-        set_pathfinder_cache_size(1.5)  # type: ignore[arg-type]
+    for bad in (0, -1, 1.5):
+        with pytest.deprecated_call(), pytest.raises(ValueError):
+            set_pathfinder_cache_size(bad)  # type: ignore[arg-type]
 
 
 def test_lru_eviction_drops_oldest_entry():
-    """Building more PathFinders than the cap evicts the LRU entry."""
-    set_pathfinder_cache_size(2)
-    networks = [_two_bus_network(name=f"net_{i}") for i in range(3)]
-    for net in networks:
-        PathFinder(net).find_paths("B1", "B2")
-    # After three insertions with cap=2, only two entries remain.
-    assert len(_GRAPH_CACHE) == 2
-    assert len(_FIND_PATHS_CACHE) == 2
-    # The first network's entries were evicted.
-    remaining_names = {k[1] for k in _GRAPH_CACHE}
-    assert "net_0" not in remaining_names
-    assert {"net_1", "net_2"} <= remaining_names
+    """More topologies than the cap evict the least recently used one."""
+    net = _chain_network()
+    net.pathfinder_settings = PathfinderSettings(cache_size=2)
+    keys = [_search_without(net, branch) for branch in ("L12", "L23", "L34")]
+    # After three insertions with cap=2, only two entries remain per table.
+    assert net.path_cache().sizes()["graph"] == 2
+    assert net.path_cache().sizes()["paths"] == 2
+    # The first topology was evicted.
+    assert net.path_cache().keys("graph") == keys[1:]
 
 
 def test_lru_recency_bump_on_lookup():
     """A re-hit moves the entry to the MRU end and protects it from eviction."""
-    set_pathfinder_cache_size(2)
-    net0 = _two_bus_network(name="net_0")
-    net1 = _two_bus_network(name="net_1")
-    net2 = _two_bus_network(name="net_2")
+    net = _chain_network()
+    net.pathfinder_settings = PathfinderSettings(cache_size=2)
+    first = _search_without(net, "L12")
+    second = _search_without(net, "L23")
+    # Touch the first topology again so the second becomes the LRU entry.
+    assert _search_without(net, "L12") == first
+    third = _search_without(net, "L34")
 
-    PathFinder(net0).find_paths("B1", "B2")
-    PathFinder(net1).find_paths("B1", "B2")
-    # Touch net0 again so net1 becomes the LRU entry.
-    PathFinder(net0).find_paths("B1", "B2")
-    PathFinder(net2).find_paths("B1", "B2")
-
-    remaining_names = {k[1] for k in _GRAPH_CACHE}
-    assert "net_1" not in remaining_names
-    assert {"net_0", "net_2"} <= remaining_names
+    remaining = net.path_cache().keys("graph")
+    assert second not in remaining
+    assert remaining == [first, third]
 
 
 # ---------------------------------------------------------------------------
@@ -195,18 +224,18 @@ def test_outage_context_clears_pathfinder_cache_on_exit():
     net = _two_bus_network(name="net")
     # Prime the cache with the unaltered topology.
     PathFinder(net).find_paths("B1", "B2")
-    base_keys = {k for k in _GRAPH_CACHE if k[1] == "net"}
+    base_keys = set(net.path_cache().keys("graph"))
 
     with outage_context(net, Outage(name="o1", disabled_branches=["L12"])):
         # The inner solve would build a new entry under the active-subset
         # fingerprint with L12 inactive.
         PathFinder(net).find_paths("B1", "B2")
-        inner_keys = {k for k in _GRAPH_CACHE if k[1] == "net"}
+        inner_keys = set(net.path_cache().keys("graph"))
         assert inner_keys != base_keys, "inner topology key should differ"
 
     # On exit, the inner cache entries must be gone — the network-scoped
     # ``clear_pathfinder_cache`` is invoked in the ``finally`` branch.
-    after_keys = {k for k in _GRAPH_CACHE if k[1] == "net"}
+    after_keys = set(net.path_cache().keys("graph"))
     assert all(k not in inner_keys for k in after_keys)
 
 
@@ -252,8 +281,11 @@ def test_outage_context_nested_restores_outer_baseline():
     # original state.
     assert net.branches["L12"].active is True
     assert net.branches["L23"].active is True
-    # The bookkeeping stack must be clean.
-    assert id(net) not in _OUTAGE_BASELINE_STACK
+    # Audit pass 18 (S15): the nesting used to also push onto a
+    # module-level ``_OUTAGE_BASELINE_STACK`` keyed by ``id(network)``
+    # that nothing ever read back. It has been removed -- the per-level
+    # baseline lives in each generator frame, which is what the assertions
+    # above actually exercise. Nothing to check here any more.
 
 
 def test_outage_context_nested_uses_outer_baseline_not_inner_state():

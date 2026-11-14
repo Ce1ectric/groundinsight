@@ -1,8 +1,11 @@
+# scripts/release.py
 """Release automation for groundinsight.
 
 This script bumps the project version in every location where it is
 recorded (``pyproject.toml``, ``src/groundinsight/__init__.py`` and
-``CITATION.cff``), rolls the ``[Unreleased]`` section of ``CHANGELOG.md``
+``CITATION.cff``, and for the GUI distribution released with the library
+``gui/pyproject.toml`` -- its version and its pin of the library -- and
+``gui/groundinsight_gui/__init__.py``), rolls the ``[Unreleased]`` section of ``CHANGELOG.md``
 into a new dated version section, creates a conventional-commit release
 commit, tags it as ``vX.Y.Z`` and pushes both the branch and the tag.
 The PyPI publishing itself is handled by the GitHub Actions workflow
@@ -10,13 +13,18 @@ which triggers on the ``v*`` tag via OIDC Trusted Publishing.
 
 Usage
 -----
-Invoke via the Poetry script entry point::
+``groundinsight`` uses calendar versioning, ``YYYY.M.MICRO``: the calendar
+year, the month *without* a leading zero and a counter that restarts at 0 in
+every month (``2026.11.0``, ``2026.11.1``, ``2026.12.0``, ``2027.1.0``). The
+month carries no leading zero because PEP 440 normalises ``2026.01.0`` to
+``2026.1.0``; a zero-padded tag would never match the version on PyPI.
+Run it from a Poetry environment::
 
-    poetry run release            # defaults to a patch bump
-    poetry run release patch
-    poetry run release minor
-    poetry run release major
-    poetry run release set 1.2.3
+    poetry run python scripts/release.py              # next CalVer version
+    poetry run python scripts/release.py set 2026.11.2
+
+The SemVer bump kinds ``major``/``minor``/``patch`` of the 0.x releases are
+retired; passing one stops with an explanation instead of guessing.
 
 Options
 -------
@@ -38,10 +46,10 @@ Options
 Notes
 -----
 The script expects to be run from the repository root, which is
-automatically derived from the location of ``pyproject.toml``. Semantic
-versioning is enforced: only ``MAJOR.MINOR.PATCH`` strings (with optional
-pre-release suffix) are accepted, and ``set`` refuses to move the version
-backwards.
+automatically derived from the location of ``pyproject.toml``. The version
+month must be the month of the release date (``--date``, default today), so
+the number on PyPI always says when a release was cut, and ``set`` refuses
+to move the version backwards.
 
 ``CHANGELOG.md`` is optional — if it does not exist, the changelog step
 is skipped silently. If it exists, the script looks for a heading of the
@@ -71,6 +79,19 @@ SEMVER_RE = re.compile(
     r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)"
     r"(?:-(?P<pre>[0-9A-Za-z.-]+))?$"
 )
+
+# ``YYYY.M.MICRO`` -- four-digit year, month 1..12 without a leading zero,
+# counter without a leading zero. Anything else is either not PEP 440
+# normalised (``2026.01.0``) or not a calendar version at all.
+CALVER_RE = re.compile(
+    r"^(?P<year>(19|20|21)\d{2})\.(?P<month>[1-9]|1[0-2])\.(?P<micro>0|[1-9]\d*)$"
+)
+
+# The last release published under semantic versioning. Everything after it
+# is a calendar version.
+LAST_SEMVER_RELEASE = "0.6.0"
+
+_RETIRED_KINDS = ("major", "minor", "patch")
 
 
 # Lower-cased strings that mark an '[Unreleased]' section as effectively
@@ -170,6 +191,29 @@ def _version_locations(root: Path) -> list[VersionLocation]:
             ),
             template='version: "{version}"',
         ),
+        # The GUI distribution is released together with the library: same
+        # version, and it pins exactly the library it was released with.
+        VersionLocation(
+            path=root / "gui" / "pyproject.toml",
+            pattern=re.compile(
+                r'^version\s*=\s*"(?P<version>[^"]+)"',
+                flags=re.MULTILINE,
+            ),
+            template='version = "{version}"',
+        ),
+        VersionLocation(
+            path=root / "gui" / "pyproject.toml",
+            pattern=re.compile(r'"groundinsight==(?P<version>[^"]+)"'),
+            template='"groundinsight=={version}"',
+        ),
+        VersionLocation(
+            path=root / "gui" / "groundinsight_gui" / "__init__.py",
+            pattern=re.compile(
+                r'^__version__\s*=\s*"(?P<version>[^"]+)"',
+                flags=re.MULTILINE,
+            ),
+            template='__version__ = "{version}"',
+        ),
     ]
 
 
@@ -250,9 +294,135 @@ def _is_newer(old: str, new: str) -> bool:
         ``True`` iff the semver-tuple of ``new`` compares greater than
         ``old``. Pre-release suffixes are ignored for this comparison.
     """
-    om, oi, op, _ = _parse_semver(old)
-    nm, ni, np_, _ = _parse_semver(new)
-    return (nm, ni, np_) > (om, oi, op)
+    return _release_tuple(new) > _release_tuple(old)
+
+
+def _release_tuple(version: str) -> tuple[int, int, int]:
+    """Return the numeric release segment of a SemVer or CalVer string.
+
+    Both schemes have exactly three numeric components, so comparing the
+    tuples orders ``0.6.0 < 2026.11.0 < 2026.11.1 < 2027.1.0`` correctly.
+
+    Parameters
+    ----------
+    version : str
+        ``X.Y.Z`` with an optional SemVer pre-release suffix.
+
+    Returns
+    -------
+    tuple[int, int, int]
+        The three numeric components.
+
+    Raises
+    ------
+    ValueError
+        If ``version`` has no three-component numeric release segment.
+    """
+    major, minor, patch, _ = _parse_semver(version)
+    return major, minor, patch
+
+
+def validate_calver(version: str, release_date: _datetime.date) -> None:
+    """Check that ``version`` is a valid calendar version for ``release_date``.
+
+    Parameters
+    ----------
+    version : str
+        Candidate version, without the ``v`` tag prefix.
+    release_date : datetime.date
+        Date the release is cut on; its year and month must match.
+
+    Raises
+    ------
+    ValueError
+        If ``version`` is not ``YYYY.M.MICRO`` in PEP 440 normal form, or if
+        its year and month differ from ``release_date``.
+    """
+    match = CALVER_RE.match(version)
+    if match is None:
+        raise ValueError(
+            f"{version!r} is not a calendar version of the form YYYY.M.MICRO "
+            "(year, month 1-12 without a leading zero, counter without a "
+            "leading zero; e.g. 2026.11.0). Leading zeros are rejected because "
+            "PEP 440 strips them, so the tag would not match the version "
+            "published on PyPI."
+        )
+    year, month = int(match["year"]), int(match["month"])
+    if (year, month) != (release_date.year, release_date.month):
+        raise ValueError(
+            f"version {version} names {year}-{month:02d}, but the release "
+            f"date is {release_date.isoformat()}: the version month must be "
+            "the month the release is cut in. Pass --date to release with "
+            "another date."
+        )
+
+
+def next_calver(current: str, release_date: _datetime.date) -> str:
+    """Return the calendar version that follows ``current``.
+
+    The first release in a month gets the counter 0; every further release
+    in the same month increments it.
+
+    Parameters
+    ----------
+    current : str
+        Version recorded in the repository (SemVer before the switch, CalVer
+        after it).
+    release_date : datetime.date
+        Date the release is cut on.
+
+    Returns
+    -------
+    str
+        The next version, ``YYYY.M.MICRO``.
+
+    Raises
+    ------
+    ValueError
+        If the computed version would not be newer than ``current`` -- e.g.
+        when ``current`` was set by hand for a month that has not begun yet.
+    """
+    year, month = release_date.year, release_date.month
+    match = CALVER_RE.match(current)
+    if match and (int(match["year"]), int(match["month"])) == (year, month):
+        candidate = f"{year}.{month}.{int(match['micro']) + 1}"
+    else:
+        candidate = f"{year}.{month}.0"
+    if _release_tuple(candidate) <= _release_tuple(current):
+        raise ValueError(
+            f"the next calendar version for {release_date.isoformat()} would "
+            f"be {candidate}, which is not newer than the current {current}"
+        )
+    return candidate
+
+
+def _write_release_date(path: Path, release_date: _datetime.date) -> None:
+    """Write ``date-released`` into ``CITATION.cff``.
+
+    The line is replaced when present and appended after the ``version``
+    line otherwise, so citation metadata always names the release date of
+    the version it describes.
+
+    Parameters
+    ----------
+    path : Path
+        The ``CITATION.cff`` file.
+    release_date : datetime.date
+        Release date to record.
+    """
+    text = path.read_text(encoding="utf-8")
+    line = f'date-released: "{release_date.isoformat()}"'
+    pattern = re.compile(r"^date-released:.*$", flags=re.MULTILINE)
+    if pattern.search(text):
+        text = pattern.sub(line, text, count=1)
+    else:
+        version_line = re.compile(r"^(version:.*)$", flags=re.MULTILINE)
+        if version_line.search(text):
+            text = version_line.sub(lambda m: f"{m.group(1)}\n{line}", text, count=1)
+        else:
+            text = text.rstrip("\n") + f"\n{line}\n"
+    path.write_text(text, encoding="utf-8")
+    logger.info("updated %s -> date-released %s", path.name, release_date.isoformat())
 
 
 def _read_current_version(location: VersionLocation) -> str:
@@ -519,13 +689,15 @@ def _update_changelog(
     return True
 
 
-def _run_git(args: list[str], *, dry_run: bool) -> None:
-    """Run a git command, honouring ``dry_run``.
+def _run_git(args: list[str], *, root: Path, dry_run: bool) -> None:
+    """Run a git command in the repository root, honouring ``dry_run``.
 
     Parameters
     ----------
     args : list[str]
         Arguments passed to ``git`` (without the ``git`` prefix).
+    root : Path
+        Repository root; the command runs there.
     dry_run : bool
         When ``True`` the command is only logged, not executed.
 
@@ -533,13 +705,48 @@ def _run_git(args: list[str], *, dry_run: bool) -> None:
     ------
     subprocess.CalledProcessError
         If git exits with a non-zero status.
+
+    Notes
+    -----
+    ``cwd=root`` is not cosmetic. The file rewrites use absolute paths, but
+    ``git add`` was handed paths *relative to the repository root* while
+    inheriting the caller's working directory: run from ``scripts/`` or from
+    ``docs/``, the ``add`` failed, the ``commit`` then either failed or
+    committed nothing, and the working tree was left half-bumped -- three
+    rewritten version files and no tag. ``_git_clean`` already passed
+    ``cwd=root``; this brings the write side in line with it.
     """
     command = ["git", *args]
     if dry_run:
         logger.info("[dry-run] %s", " ".join(command))
         return
     logger.info("$ %s", " ".join(command))
-    subprocess.run(command, check=True)
+    subprocess.run(command, cwd=root, check=True)
+
+
+def _git_tag_exists(tag: str, *, root: Path) -> bool:
+    """Return ``True`` if ``tag`` already exists in the repository.
+
+    Parameters
+    ----------
+    tag : str
+        Tag name, e.g. ``"v0.6.1"``.
+    root : Path
+        Repository root.
+
+    Returns
+    -------
+    bool
+        Whether the tag is present.
+    """
+    result = subprocess.run(
+        ["git", "tag", "--list", tag],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() != ""
 
 
 def _git_clean(root: Path) -> bool:
@@ -578,23 +785,28 @@ def _build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         prog="release",
-        description="Bump groundinsight version, commit, tag and push.",
+        description=(
+            "Cut a groundinsight release with a calendar version "
+            "(YYYY.M.MICRO): rewrite the version sources, roll the "
+            "changelog, commit, tag and push."
+        ),
     )
     parser.add_argument(
         "kind",
         nargs="?",
-        default="patch",
-        choices=("major", "minor", "patch", "set"),
+        default="calver",
+        choices=("calver", "set", *_RETIRED_KINDS),
         help=(
-            "semver bump kind; defaults to 'patch' when omitted. "
-            "'set' requires an explicit VERSION argument"
+            "'calver' (default) computes the next calendar version from the "
+            "release date; 'set' takes an explicit VERSION. The SemVer kinds "
+            "major/minor/patch are retired and only explain why"
         ),
     )
     parser.add_argument(
         "version",
         nargs="?",
         default=None,
-        help="explicit version when KIND is 'set'",
+        help="explicit calendar version when KIND is 'set', e.g. 2026.11.2",
     )
     parser.add_argument(
         "--dry-run",
@@ -652,23 +864,36 @@ def main(argv: list[str] | None = None) -> int:
     locations = _version_locations(root)
 
     # Consistency check: every location must report the same current version.
-    current_versions = {loc.path: _read_current_version(loc) for loc in locations}
-    distinct = set(current_versions.values())
+    current_versions = [(loc.path, _read_current_version(loc)) for loc in locations]
+    distinct = {version for _, version in current_versions}
     if len(distinct) != 1:
-        for path, version in current_versions.items():
+        for path, version in current_versions:
             logger.error("  %s: %s", path, version)
         logger.error("version drift detected; aborting")
         return 2
     current = distinct.pop()
     logger.info("current version: %s", current)
 
+    # The release date fixes the version month, so it is resolved first.
+    release_date = args.date if args.date is not None else _datetime.date.today()
+
     # Determine the new version.
+    if args.kind in _RETIRED_KINDS:
+        logger.error(
+            "'%s' is a semantic-versioning bump, and groundinsight switched to "
+            "calendar versioning (YYYY.M.MICRO) after %s. Run the script "
+            "without a kind to get the next calendar version, or use "
+            "'set YYYY.M.MICRO'.",
+            args.kind,
+            LAST_SEMVER_RELEASE,
+        )
+        return 2
     if args.kind == "set":
         if args.version is None:
             logger.error("'set' requires a VERSION argument")
             return 2
         try:
-            _parse_semver(args.version)
+            validate_calver(args.version, release_date)
         except ValueError as exc:
             logger.error("%s", exc)
             return 2
@@ -681,7 +906,11 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
     else:
-        new_version = _bump(current, args.kind)
+        try:
+            new_version = next_calver(current, release_date)
+        except ValueError as exc:
+            logger.error("%s", exc)
+            return 2
     logger.info("new version:     %s", new_version)
 
     if not args.allow_dirty and not _git_clean(root):
@@ -690,24 +919,48 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    # Refuse a tag that already exists *before* rewriting any file. Without
+    # this the three version files were rewritten and committed, and only the
+    # ``git tag`` at the very end failed -- leaving a release commit with no
+    # tag, which the release workflow never sees and which the next run then
+    # reports as "version drift".
+    tag = f"v{new_version}"
+    if _git_tag_exists(tag, root=root):
+        logger.error(
+            "tag %s already exists. Re-publishing an existing tag is a job "
+            "for the release workflow's workflow_dispatch input, not for a "
+            "second bump; if the tag is wrong, delete it locally and on the "
+            "remote first.",
+            tag,
+        )
+        return 2
+
     # Rewrite files.
     for location in locations:
         if args.dry_run:
             logger.info(
                 "[dry-run] would update %s: %s -> %s",
-                location.path.name,
+                location.path.relative_to(root),
                 current,
                 new_version,
             )
         else:
             _write_new_version(location, new_version)
+    citation = root / "CITATION.cff"
+    if citation.is_file():
+        if args.dry_run:
+            logger.info(
+                "[dry-run] would set date-released in CITATION.cff to %s",
+                release_date.isoformat(),
+            )
+        else:
+            _write_release_date(citation, release_date)
 
     # Roll the '[Unreleased]' block of CHANGELOG.md into a new dated
     # version section. Failures raise and abort the release before any
     # git operations are performed, leaving the working tree untouched
     # except for the version-string files (which are still easy to
     # revert with 'git checkout --').
-    release_date = args.date if args.date is not None else _datetime.date.today()
     try:
         changelog_updated = _update_changelog(
             root,
@@ -721,20 +974,21 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # Stage, commit, tag, push.
-    rel_paths = [str(loc.path.relative_to(root)) for loc in locations]
+    rel_paths = list(dict.fromkeys(str(loc.path.relative_to(root)) for loc in locations))
     if changelog_updated:
         rel_paths.append("CHANGELOG.md")
-    _run_git(["add", *rel_paths], dry_run=args.dry_run)
+    _run_git(["add", *rel_paths], root=root, dry_run=args.dry_run)
     commit_message = f"chore(release): v{new_version}"
-    _run_git(["commit", "-m", commit_message], dry_run=args.dry_run)
-    tag = f"v{new_version}"
-    _run_git(["tag", "-a", tag, "-m", commit_message], dry_run=args.dry_run)
+    _run_git(["commit", "-m", commit_message], root=root, dry_run=args.dry_run)
+    _run_git(
+        ["tag", "-a", tag, "-m", commit_message], root=root, dry_run=args.dry_run
+    )
 
     if args.no_push:
         logger.info("skipping push (--no-push)")
     else:
-        _run_git(["push"], dry_run=args.dry_run)
-        _run_git(["push", "origin", tag], dry_run=args.dry_run)
+        _run_git(["push"], root=root, dry_run=args.dry_run)
+        _run_git(["push", "origin", tag], root=root, dry_run=args.dry_run)
 
     logger.info("release %s complete", tag)
     return 0

@@ -9,7 +9,9 @@ to a single voltage level. ``in_service=False`` flags propagate to
 :attr:`Bus.active <groundinsight.models.core_models.Bus.active>` and
 :attr:`Branch.active <groundinsight.models.core_models.Branch.active>`
 so they integrate cleanly with the outage / what-if machinery in
-:mod:`groundinsight.simulation.outage`.
+:mod:`groundinsight.simulation.outage`. Switches keep their state: an open
+line switch opens the phase conductor of its line (the screen stays), a
+closed bus-to-bus switch can become a bond (``switch_branch_type``).
 
 The importer does **not** rebuild grounding semantics from pandapower
 parameters. Cable shield impedances, cross-couplings and reduction
@@ -36,6 +38,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import polars as pl
 
+from groundinsight.diagnostics import InputWarning, emit
 from groundinsight.models.core_models import Branch, Bus, Network
 
 from .defaults import ImportDefaults
@@ -56,6 +59,20 @@ _PREVIEW_LINE_REASON_SELF_LOOP = "self_loop"
 _PREVIEW_LINE_REASON_ZERO_LENGTH = "zero_length"
 _PREVIEW_LINE_REASON_NEGATIVE_LENGTH = "negative_length"
 
+#: Reasons for the element kinds this importer does not model.
+_PREVIEW_SWITCH_REASON_NOT_IMPORTED = "no_switch_branch_type"
+_PREVIEW_SWITCH_REASON_OPEN = "switch_open"
+_PREVIEW_SWITCH_REASON_NOT_BUS_BUS = "switch_not_bus_to_bus"
+_PREVIEW_SWITCH_REASON_OFF_LEVEL = "endpoint_off_target_voltage_level"
+#: Line switches (``et == "l"``), see :func:`_classify_line_switches`. An open
+#: one is a *kept* row -- the import acts on it -- and its line row carries the
+#: same reason.
+_PREVIEW_SWITCH_REASON_LINE_OPEN = "line_switch_open"
+_PREVIEW_SWITCH_REASON_LINE_CLOSED = "line_switch_closed"
+_PREVIEW_SWITCH_REASON_LINE_NOT_IMPORTED = "line_not_imported"
+_PREVIEW_TRAFO_REASON = "trafos_are_not_modelled"
+_PREVIEW_IMPEDANCE_REASON = "impedance_elements_are_not_modelled"
+
 #: Skip reasons that :func:`from_pandapower` refuses to import silently.
 _FATAL_LINE_REASONS = (
     _PREVIEW_LINE_REASON_ZERO_LENGTH,
@@ -63,7 +80,7 @@ _FATAL_LINE_REASONS = (
 )
 
 #: Fallback length in km for a line whose ``length_km`` is missing. Applied
-#: only together with a ``logger.warning`` -- see :func:`_length_km`.
+#: only together with an ``InputWarning`` -- see :func:`_length_km`.
 _MISSING_LENGTH_FALLBACK_KM = 1.0
 
 #: Output schema of :func:`preview_pandapower_import`, in output order.
@@ -90,9 +107,12 @@ _PREVIEW_SCHEMA: Dict[str, Any] = {
 }
 
 
-def _require_pandapower():
+def require_pandapower():
     """
     Import ``pandapower`` lazily and raise a clear error if it is missing.
+
+    Internal API: also used by :mod:`groundinsight.io.pandapower_sc`; not
+    exported from ``groundinsight`` and free to change in any release.
 
     Returns
     -------
@@ -136,10 +156,31 @@ def _line_label(row_name: Any, idx: int) -> str:
     return name
 
 
-def _bus_index_to_name(net) -> Dict[int, str]:
+def _switch_label(row_name: Any, idx: int) -> str:
+    """Resolve a stable switch label from ``pp.switch.name``, prefixed ``switch_``."""
+    name = _bus_label(row_name, idx)
+    return name if name.startswith("switch") else f"switch_{name}"
+
+
+def bus_index_to_name(net) -> Dict[int, str]:
     """
-    Build the ``pp.bus.index -> stable name`` map used to resolve
-    ``pp.line.from_bus`` / ``to_bus`` references.
+    Build the ``pp.bus.index -> stable name`` map.
+
+    Internal API: also used by :mod:`groundinsight.io.pandapower_sc`; not
+    exported from ``groundinsight`` and free to change in any release.
+
+    The map resolves the ``pp.line.from_bus`` / ``to_bus`` references.
+
+    Parameters
+    ----------
+    net : pandapowerNet
+        The pandapower network.
+
+    Returns
+    -------
+    dict of int to str
+        Bus name per ``net.bus`` index; a repeated name gets the index
+        appended (``"<name>__<index>"``).
     """
     mapping: Dict[int, str] = {}
     seen: Dict[str, int] = {}
@@ -155,10 +196,11 @@ def _bus_index_to_name(net) -> Dict[int, str]:
 
 def _line_index_to_name(net) -> Dict[int, str]:
     """
-    Build the ``pp.line.index -> stable name`` map. pandapower does not enforce
-    unique line names (CIM/CSV/DGS imports routinely carry blank or repeated
-    names), so duplicates are disambiguated by appending the index -- mirroring
-    :func:`_bus_index_to_name`. Without this, two equally-named lines collide on
+    Build the ``pp.line.index -> stable name`` map.
+
+    pandapower does not enforce unique line names (CIM/CSV/DGS imports
+    routinely carry blank or repeated names), so duplicates are disambiguated
+    by appending the index -- mirroring :func:`bus_index_to_name`. Without this, two equally-named lines collide on
     :meth:`Network.add_branch` and abort the whole import while the preview
     still reports both as ``keep``.
     """
@@ -186,8 +228,7 @@ def _bus_in_service(row) -> bool:
 
 def _parse_length_km(value: Any) -> Optional[float]:
     """
-    Return ``length_km`` as ``float`` or ``None`` if it carries no usable
-    number.
+    Return ``length_km`` as ``float``, or ``None`` without a usable number.
 
     This is the side-effect-free counterpart of :func:`_length_km`,
     mirroring :func:`_parse_vn_kv`: it distinguishes "no value" (missing
@@ -225,8 +266,8 @@ def _length_km(row, *, name: str, pp_index: int) -> float:
     length_km`` contract documented on :func:`from_pandapower` holds
     exactly. Only a *missing* length (absent column, ``None``, ``NaN``,
     ``inf`` or an unparsable value) falls back to
-    ``_MISSING_LENGTH_FALLBACK_KM``, and that fallback is announced with a
-    ``logger.warning`` rather than applied silently: a fabricated
+    ``_MISSING_LENGTH_FALLBACK_KM``, and that fallback is announced with an
+    ``InputWarning`` ``IMPORT_LENGTH_DEFAULT`` rather than applied silently: a fabricated
     kilometre of conductor rescales every self and mutual impedance of the
     branch (``Z ~ ... * l``) and there is nothing in the resulting model
     that would betray it.
@@ -252,15 +293,17 @@ def _length_km(row, *, name: str, pp_index: int) -> float:
     """
     length = _parse_length_km(row.get("length_km"))
     if length is None:
-        logger.warning(
-            "Line row #%d (%s) has no usable length_km (%r) — falling back to "
-            "%.3f km. Every self and mutual impedance of this branch scales "
-            "with the length, so set an explicit length_km in pandapower or "
-            "retype the branch after the import.",
-            pp_index,
-            name,
-            row.get("length_km"),
-            _MISSING_LENGTH_FALLBACK_KM,
+        emit(
+            InputWarning,
+            f"Line row #{pp_index} ({name}) has no usable length_km "
+            f"({row.get('length_km')!r}) — falling back to "
+            f"{_MISSING_LENGTH_FALLBACK_KM:.3f} km. Every self and mutual "
+            f"impedance of this branch scales with the length, so set an "
+            f"explicit length_km in pandapower or retype the branch after the "
+            f"import.",
+            code="IMPORT_LENGTH_DEFAULT",
+            elements=[("branch", name)],
+            stacklevel=3,
         )
         return _MISSING_LENGTH_FALLBACK_KM
     return length
@@ -294,8 +337,8 @@ def _classify_buses(
     Split ``net.bus`` into kept indices and skipped rows.
 
     Buses whose ``vn_kv`` value is missing, ``None`` or ``NaN`` are
-    skipped with the dedicated ``vn_kv_unparsable`` reason and a
-    ``logger.warning(...)`` so the user notices unexpected data instead
+    skipped with the dedicated ``vn_kv_unparsable`` reason and an
+    ``InputWarning`` ``IMPORT_BUS_SKIPPED`` so the user notices unexpected data instead
     of having it silently re-classified as a voltage-level mismatch.
 
     Returns
@@ -312,11 +355,13 @@ def _classify_buses(
         raw_vn = row.get("vn_kv")
         vn = _parse_vn_kv(raw_vn)
         if vn is None:
-            logger.warning(
-                "Bus row #%d (%s) has unparsable vn_kv=%r — skipped.",
-                int(idx),
-                name,
-                raw_vn,
+            emit(
+                InputWarning,
+                f"Bus row #{int(idx)} ({name}) has unparsable vn_kv={raw_vn!r} "
+                f"— skipped.",
+                code="IMPORT_BUS_SKIPPED",
+                elements=[("bus", name)],
+                stacklevel=3,
             )
             skipped.append(
                 {
@@ -328,7 +373,11 @@ def _classify_buses(
                 }
             )
             continue
-        if vn != float(voltage_level_kV):
+        # ``isclose`` rather than ``!=``: a vn_kv that arrived through a CSV
+        # or a DGS export carries rounding noise (20.000000000000004), and an
+        # exact comparison then reports every bus of the target level as a
+        # ``voltage_level_mismatch`` -- an empty import with no explanation.
+        if not math.isclose(vn, float(voltage_level_kV), rel_tol=1e-9, abs_tol=0.0):
             skipped.append(
                 {
                     "kind": "bus",
@@ -350,9 +399,11 @@ def _classify_lines(
     line_name_by_index: Dict[int, str],
 ) -> Tuple[List[int], List[Dict[str, Any]]]:
     """
-    Split ``net.line`` into kept indices and skipped rows. A line is kept
-    iff both endpoints are on the target voltage level (i.e. their pp
-    indices are in ``kept_bus_indices``) and it carries a usable length.
+    Split ``net.line`` into kept indices and skipped rows.
+
+    A line is kept iff both endpoints are on the target voltage level (i.e.
+    their pp indices are in ``kept_bus_indices``) and it carries a usable
+    length.
 
     The ``length_km`` checks come **last**, after every topological check,
     so that a zero-length line on an off-target voltage level is reported
@@ -367,6 +418,12 @@ def _classify_lines(
         (``None`` when unusable) -- the missing-length fallback of
         :func:`_length_km` is deliberately not applied to a row that is
         not imported.
+
+    Warns
+    -----
+    InputWarning
+        ``IMPORT_LINE_SKIPPED`` (elements: the line) for a self-loop and for
+        a line whose length cannot be imported.
     """
     kept: List[int] = []
     skipped: List[Dict[str, Any]] = []
@@ -422,11 +479,13 @@ def _classify_lines(
             # Self-loops would map to a Branch(from_bus=X, to_bus=X) and
             # trip Network.add_branch validators only on some code
             # paths; skip them explicitly with a clear reason.
-            logger.warning(
-                "Line row #%d (%s) is a self-loop on bus %r — skipped.",
-                int(idx),
-                line_name_by_index[int(idx)],
-                bus_name_by_index[from_idx],
+            emit(
+                InputWarning,
+                f"Line row #{int(idx)} ({line_name_by_index[int(idx)]}) is a "
+                f"self-loop on bus {bus_name_by_index[from_idx]!r} — skipped.",
+                code="IMPORT_LINE_SKIPPED",
+                elements=[("branch", line_name_by_index[int(idx)])],
+                stacklevel=3,
             )
             skipped.append(
                 {
@@ -454,13 +513,14 @@ def _classify_lines(
                 if length == 0.0
                 else _PREVIEW_LINE_REASON_NEGATIVE_LENGTH
             )
-            logger.warning(
-                "Line row #%d (%s) has length_km=%r, which cannot be imported "
-                "as a branch (%s).",
-                int(idx),
-                line_name_by_index[int(idx)],
-                raw_length,
-                reason,
+            emit(
+                InputWarning,
+                f"Line row #{int(idx)} ({line_name_by_index[int(idx)]}) has "
+                f"length_km={raw_length!r}, which cannot be imported as a "
+                f"branch ({reason}).",
+                code="IMPORT_LINE_SKIPPED",
+                elements=[("branch", line_name_by_index[int(idx)])],
+                stacklevel=3,
             )
             skipped.append(
                 {
@@ -479,10 +539,457 @@ def _classify_lines(
     return kept, skipped
 
 
+def _classify_switches(
+    net, kept_bus_indices: set, bus_name_by_index: Dict[int, str], defaults
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Split ``net.switch`` into importable bus-bus bonds and skipped rows.
+
+    A **closed bus-to-bus switch** (``et == "b"``, ``closed``) bonds two
+    grounding systems. Dropping it is not a conservative simplification: the
+    bus behind the switch then has no galvanic connection at all and the
+    solver reports 0 V for it, which reads as "this station is safe" -- the
+    one answer a grounding study must never produce by accident -- which is
+    why it is reported rather than dropped without a word.
+
+    An *open* switch is genuinely no connection and is reported as skipped.
+    A switch at a line end (``et == "l"``) is the switching state of that
+    line and is evaluated by :func:`_classify_line_switches`; one at a
+    transformer terminal (``"t"``, ``"t3"``) is the switching state of an
+    element this importer does not model and is reported as skipped.
+
+    Parameters
+    ----------
+    net : pandapower.auxiliary.pandapowerNet
+        The source net.
+    kept_bus_indices : set
+        Bus indices on the target voltage level.
+    bus_name_by_index : Dict[int, str]
+        Bus index -> groundinsight bus name.
+    defaults : ImportDefaults
+        Supplies ``switch_branch_type``; a bond can only be built when the
+        caller has said what a bonded connection looks like electrically.
+
+    Returns
+    -------
+    Tuple[List[Dict], List[Dict]]
+        Records for the switches to import, and skip records for the rest.
+    """
+    switch_table = getattr(net, "switch", None)
+    if switch_table is None or len(switch_table) == 0:
+        return [], []
+
+    kept: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+    for idx, row in switch_table.iterrows():
+        name = _switch_label(row.get("name"), int(idx))
+        from_idx = row.get("bus")
+        to_idx = row.get("element")
+        element_type = str(row.get("et", "") or "")
+        closed = bool(row.get("closed", True))
+
+        record = {
+            "kind": "switch",
+            "pp_index": int(idx),
+            "name": name,
+            "from_bus": None,
+            "to_bus": None,
+        }
+        if element_type == "l":
+            continue  # a line switch: _classify_line_switches
+        if element_type != "b":
+            skipped.append({**record, "reason": _PREVIEW_SWITCH_REASON_NOT_BUS_BUS})
+            continue
+        try:
+            from_idx = int(from_idx)
+            to_idx = int(to_idx)
+        except (TypeError, ValueError):
+            skipped.append({**record, "reason": _PREVIEW_LINE_REASON_BUS_MISSING})
+            continue
+        if from_idx not in kept_bus_indices or to_idx not in kept_bus_indices:
+            skipped.append({**record, "reason": _PREVIEW_SWITCH_REASON_OFF_LEVEL})
+            continue
+
+        record["from_bus"] = bus_name_by_index[from_idx]
+        record["to_bus"] = bus_name_by_index[to_idx]
+        if from_idx == to_idx:
+            skipped.append({**record, "reason": _PREVIEW_LINE_REASON_SELF_LOOP})
+            continue
+        if not closed:
+            skipped.append({**record, "reason": _PREVIEW_SWITCH_REASON_OPEN})
+            continue
+        if defaults is None or defaults.switch_branch_type is None:
+            skipped.append(
+                {**record, "reason": _PREVIEW_SWITCH_REASON_NOT_IMPORTED}
+            )
+            continue
+        kept.append(record)
+    return kept, skipped
+
+
+def _classify_line_switches(
+    net, kept_lines: set, bus_name_by_index: Dict[int, str]
+) -> Tuple[Dict[int, List[Dict[str, Any]]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Evaluate the line switches of ``net.switch``.
+
+    pandapower puts a line switch (``et == "l"``) at one end of a line: between
+    the bus ``bus`` and the line ``element``, at the end of the line that meets
+    ``bus``. Open, it disconnects the phase conductors of the line at that end,
+    so the line can carry no fault current. The cable screen -- or the earth
+    wire of an overhead line -- is bonded to the station earth independently of
+    the switch and stays connected at both ends, and pandapower carries nothing
+    that would say otherwise. A line with at least one open switch is therefore
+    imported with an open phase conductor and its screen
+    (:func:`_phase_open_type`); a closed line switch changes nothing.
+
+    Without this evaluation a ring operated open at a line switch would
+    arrive closed, and the fault current would divide over a route that does
+    not exist in operation.
+
+    Parameters
+    ----------
+    net : pandapower.auxiliary.pandapowerNet
+        The source net.
+    kept_lines : set of int
+        Indices of the lines the import builds.
+    bus_name_by_index : Dict[int, str]
+        Bus index -> groundinsight bus name.
+
+    Returns
+    -------
+    tuple of (dict, list of dict, list of dict)
+        Line index -> records of its open switches (imported lines only, in the
+        order of ``net.switch``); preview records of those open switches; skip
+        records of the other line switches (closed, or at a line that is not
+        imported).
+    """
+    switch_table = getattr(net, "switch", None)
+    if switch_table is None or len(switch_table) == 0:
+        return {}, [], []
+
+    open_by_line: Dict[int, List[Dict[str, Any]]] = {}
+    kept: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+    for idx, row in switch_table.iterrows():
+        if str(row.get("et", "") or "") != "l":
+            continue
+        record: Dict[str, Any] = {
+            "kind": "switch",
+            "pp_index": int(idx),
+            "name": _switch_label(row.get("name"), int(idx)),
+            "from_bus": None,
+            "to_bus": None,
+        }
+        try:
+            bus_idx = int(row.get("bus"))
+            line_idx = int(row.get("element"))
+        except (TypeError, ValueError):
+            skipped.append({**record, "reason": _PREVIEW_SWITCH_REASON_LINE_NOT_IMPORTED})
+            continue
+        record["from_bus"] = bus_name_by_index.get(bus_idx)
+        if line_idx not in kept_lines:
+            skipped.append({**record, "reason": _PREVIEW_SWITCH_REASON_LINE_NOT_IMPORTED})
+            continue
+        if bool(row.get("closed", True)):
+            skipped.append({**record, "reason": _PREVIEW_SWITCH_REASON_LINE_CLOSED})
+            continue
+        kept.append({**record, "reason": _PREVIEW_SWITCH_REASON_LINE_OPEN})
+        open_by_line.setdefault(line_idx, []).append(record)
+    return open_by_line, kept, skipped
+
+
+def _phase_open_type(defaults):
+    """
+    The branch type of a line whose phase conductor is open at a switch.
+
+    ``defaults.default_branch_type`` with ``phase_impedance_formula = "nan"``,
+    the open-end sentinel: the phase-conductor network of the default
+    ``phase_current_mode="auto"`` has no admittance on such a branch, so it
+    carries no phase current and induces no coupling, while its screen -- the
+    self and mutual impedance, unchanged -- stays in the earthing network and
+    still joins the two stations. A phase impedance derived from the line data
+    (``derive_phase_impedance``) has no meaning for an open conductor and is
+    not used.
+
+    Parameters
+    ----------
+    defaults : ImportDefaults
+        The import defaults.
+
+    Returns
+    -------
+    BranchType
+        ``<default_branch_type.name>_phase_open``.
+    """
+    base = defaults.default_branch_type
+    return base.model_copy(
+        update={"name": f"{base.name}_phase_open", "phase_impedance_formula": "nan"}
+    )
+
+
+def _warn_about_open_line_switches(
+    open_switches: Dict[int, List[Dict[str, Any]]], line_name_by_index: Dict[int, str]
+) -> None:
+    """
+    Name every line imported with an open phase conductor, and its switches.
+
+    Parameters
+    ----------
+    open_switches : dict of int to list of dict
+        Line index -> records of its open switches, from
+        :func:`_classify_line_switches`.
+    line_name_by_index : Dict[int, str]
+        Line index -> groundinsight branch name.
+
+    Warns
+    -----
+    InputWarning
+        ``IMPORT_LINE_SWITCH_OPEN`` (severity ``info``; elements: the branch
+        and the switches) once per line with an open line switch.
+    """
+    for line_idx, switches in open_switches.items():
+        line = line_name_by_index[line_idx]
+        where = ", ".join(f"{s['name']} at bus {s['from_bus']!r}" for s in switches)
+        emit(
+            InputWarning,
+            f"Line {line!r} is open at {where}: imported with an open phase "
+            f"conductor (phase_impedance_formula 'nan'), so it carries no fault "
+            f"current. Its screen stays in the earthing network, bonded at both "
+            f"stations as it is when a line switch opens; set the branch inactive "
+            f"if the screen is interrupted as well.",
+            code="IMPORT_LINE_SWITCH_OPEN",
+            elements=[("branch", line)] + [("switch", s["name"]) for s in switches],
+            severity="info",
+            stacklevel=3,
+        )
+
+
+def _unmodelled_elements(net) -> List[Dict[str, Any]]:
+    """
+    Skip records for the element tables this importer does not model.
+
+    ``net.trafo``, ``net.trafo3w`` and ``net.impedance`` all carry a
+    connection between two buses that the grounding model has no
+    representation for. They were discarded without a count, a log line or a
+    preview row, so a user comparing bus counts had no way of telling that
+    anything had been left out.
+
+    Parameters
+    ----------
+    net : pandapower.auxiliary.pandapowerNet
+        The source net.
+
+    Returns
+    -------
+    List[Dict]
+        Skip records ready for the preview frame.
+    """
+    records: List[Dict[str, Any]] = []
+    for table_name, kind, reason in (
+        ("trafo", "trafo", _PREVIEW_TRAFO_REASON),
+        ("trafo3w", "trafo", _PREVIEW_TRAFO_REASON),
+        ("impedance", "impedance", _PREVIEW_IMPEDANCE_REASON),
+    ):
+        table = getattr(net, table_name, None)
+        if table is None or len(table) == 0:
+            continue
+        for idx, row in table.iterrows():
+            records.append(
+                {
+                    "kind": kind,
+                    "pp_index": int(idx),
+                    "name": _bus_label(row.get("name"), int(idx)),
+                    "from_bus": None,
+                    "to_bus": None,
+                    "reason": reason,
+                }
+            )
+    return records
+
+
+def _warn_about_unimported(
+    switch_skips: List[Dict[str, Any]], unmodelled: List[Dict[str, Any]]
+) -> None:
+    """
+    Say out loud what was left out, grouped by reason.
+
+    Parameters
+    ----------
+    switch_skips : list of dict
+        The skipped switch records of the import.
+    unmodelled : list of dict
+        The transformer and impedance records the grounding model has no
+        representation for.
+
+    Warns
+    -----
+    InputWarning
+        ``IMPORT_SWITCH_NOT_IMPORTED`` (elements: the buses the closed
+        switches would bond) and ``IMPORT_ELEMENT_NOT_IMPORTED`` (transformer
+        and impedance elements).
+    """
+    bonds = [e for e in switch_skips
+             if e["reason"] == _PREVIEW_SWITCH_REASON_NOT_IMPORTED]
+    if bonds:
+        bonded = sorted({e[end] for e in bonds for end in ("from_bus", "to_bus")
+                         if e.get(end)})
+        emit(
+            InputWarning,
+            f"{len(bonds)} closed bus-to-bus switch(es) were not imported: "
+            f"{', '.join(sorted(e['name'] for e in bonds))}. A closed switch "
+            f"bonds two grounding systems; without it the bus behind it has no "
+            f"galvanic connection and the solver reports 0 V for it, which "
+            f"reads as a safe station. Set ImportDefaults.switch_branch_type to "
+            f"import them as short branches.",
+            code="IMPORT_SWITCH_NOT_IMPORTED",
+            elements=[("bus", name) for name in bonded],
+            stacklevel=3,
+        )
+    for kind in ("trafo", "impedance"):
+        rows = [e for e in unmodelled if e["kind"] == kind]
+        if rows:
+            emit(
+                InputWarning,
+                f"{len(rows)} {kind} element(s) were not imported "
+                f"({rows[0]['reason']}). They connect buses that the grounding "
+                f"model has no representation for; check "
+                f"preview_pandapower_import() for the full list.",
+                code="IMPORT_ELEMENT_NOT_IMPORTED",
+                stacklevel=3,
+            )
+
+
+def _phase_impedance_formula(row) -> Optional[str]:
+    """
+    Per-line phase-conductor impedance from the pandapower line data.
+
+    ``phase_current_mode="auto"`` -- the default of
+    :func:`~groundinsight.run_fault` -- solves a reduced *phase-conductor*
+    network, and it needs a ``phase_impedance_formula`` to do so. Without one
+    every imported mesh falls back to the path-based proxy, which is exactly
+    the case the automatic mode exists for. ``r_ohm_per_km`` and
+    ``x_ohm_per_km`` are the positive-sequence values pandapower carries for
+    every line, and ``Branch.length`` is in km, so ``(r + I*x)*l`` is the
+    series impedance of the phase conductor of that line.
+
+    The *earth-return* formulas are deliberately not derived: they depend on
+    the soil resistivity and the cable geometry, neither of which pandapower
+    carries, and inventing them would produce a network that solves cleanly
+    and is wrong.
+
+    Parameters
+    ----------
+    row : pandas.Series
+        A row of ``net.line``.
+
+    Returns
+    -------
+    Optional[str]
+        The formula, or ``None`` when the line carries no usable r/x.
+    """
+    try:
+        r = float(row.get("r_ohm_per_km"))
+        x = float(row.get("x_ohm_per_km"))
+    except (TypeError, ValueError):
+        return None
+    if not (math.isfinite(r) and math.isfinite(x)):
+        return None
+    if r < 0 or x < 0:
+        return None
+    if r == 0.0 and x == 0.0:
+        return None
+    return f"({r!r} + I * {x!r}) * l"
+
+
+def _branch_type_for_line(defaults, row, cache: Dict[str, Any]):
+    """
+    The :class:`BranchType` an imported line gets.
+
+    Without ``defaults.derive_phase_impedance`` this is
+    ``defaults.default_branch_type``, unchanged. With it, a variant carrying a
+    per-line ``phase_impedance_formula`` derived from the pandapower line data
+    is used; variants are cached by formula, so a net with three cable types
+    produces three branch types rather than one per line.
+
+    Parameters
+    ----------
+    defaults : ImportDefaults
+        The import defaults.
+    row : pandas.Series
+        A row of ``net.line``.
+    cache : Dict[str, Any]
+        Formula -> derived ``BranchType``, shared across one import.
+
+    Returns
+    -------
+    BranchType
+        The type to assign.
+    """
+    if not getattr(defaults, "derive_phase_impedance", False):
+        return defaults.default_branch_type
+    formula = _phase_impedance_formula(row)
+    if formula is None:
+        return defaults.default_branch_type
+    if formula not in cache:
+        base = defaults.default_branch_type
+        cache[formula] = base.model_copy(
+            update={
+                "name": f"{base.name}_phase{len(cache) + 1}",
+                "phase_impedance_formula": formula,
+            }
+        )
+    return cache[formula]
+
+
+def _check_voltage_level_consistency(defaults, voltage_level_kV: float) -> None:
+    """
+    Warn when the default bus type describes a different voltage level.
+
+    ``voltage_level_kV`` selects which pandapower buses are imported;
+    ``defaults.default_bus_type.voltage_level`` states which level the type
+    was written for. Nothing else connects the two: unchecked, importing the
+    0.4 kV level with a 20 kV bus type would go through silently and produce a
+    network whose every bus claims the wrong nominal voltage -- which would
+    then show up in a touch-voltage assessment, several steps away from the
+    import.
+
+    A warning, not an error: the two are genuinely independent, and a user may
+    have a good reason (a type shared across levels). But it must be visible.
+
+    Parameters
+    ----------
+    defaults : ImportDefaults
+        The import defaults.
+    voltage_level_kV : float
+        The level being imported.
+
+    Warns
+    -----
+    InputWarning
+        ``IMPORT_VOLTAGE_LEVEL_MISMATCH`` (elements: the default bus type).
+    """
+    declared = getattr(defaults.default_bus_type, "voltage_level", None)
+    if declared is None:
+        return
+    if not math.isclose(float(declared), float(voltage_level_kV), rel_tol=1e-9):
+        emit(
+            InputWarning,
+            f"ImportDefaults.default_bus_type '{defaults.default_bus_type.name}' "
+            f"declares voltage_level={float(declared):g} kV but the import "
+            f"selects {float(voltage_level_kV):g} kV. Every imported bus will "
+            f"carry the type's value, which is what a touch-voltage assessment "
+            f"reads. Give the type the level you are importing, or confirm that "
+            f"it is meant to be shared across levels.",
+            code="IMPORT_VOLTAGE_LEVEL_MISMATCH",
+            elements=[("bus_type", defaults.default_bus_type.name)],
+            stacklevel=3,
+        )
+
+
 def _reject_unusable_lengths(skipped_lines: List[Dict[str, Any]]) -> None:
     """
-    Abort the import if a line that is otherwise importable carries a
-    non-positive ``length_km``.
+    Abort the import on an importable line with a non-positive ``length_km``.
 
     Rejecting is the deliberate choice over silently importing the value.
     A zero-length line is a jumper or bus coupler and is perfectly normal
@@ -536,8 +1043,10 @@ def from_pandapower(
     include_trafos: bool = False,
 ) -> Network:
     """
-    Build a :class:`~groundinsight.models.core_models.Network` from a
-    pandapower ``net``, restricted to a single voltage level.
+    Build a :class:`~groundinsight.models.core_models.Network` from pandapower.
+
+    The import is restricted to a single voltage level of the pandapower
+    ``net``.
 
     The mapping is intentionally narrow:
 
@@ -549,17 +1058,37 @@ def from_pandapower(
       level become :class:`~groundinsight.models.core_models.Branch`
       instances using ``defaults.default_branch_type`` with
       ``length=length_km``. ``in_service=False`` propagates to
-      ``Branch.active=False``.
-    - Switches, ext_grids, sgens, loads etc. are ignored. Trafos are
-      skipped unless ``include_trafos=True``, which is reserved for a
-      future release (raises ``NotImplementedError`` for now).
+      ``Branch.active=False``. With
+      ``defaults.derive_phase_impedance=True`` each line additionally gets
+      a ``phase_impedance_formula`` derived from its ``r_ohm_per_km`` /
+      ``x_ohm_per_km``, which is what ``phase_current_mode="auto"`` needs;
+      the earth-return formulas stay as the caller set them.
+    - **Closed bus-to-bus switches** become short branches when
+      ``defaults.switch_branch_type`` is set. Without it they are not
+      imported, and the omission is logged and listed by
+      :func:`preview_pandapower_import`, because a bus reachable only
+      through a switch otherwise appears galvanically isolated and reports
+      0 V.
+    - **Open line switches** (``et == "l"``) open the phase conductor of
+      their line: it is imported with ``phase_impedance_formula = "nan"``
+      and carries no fault current, while its screen stays connected at
+      both stations, as it does when a line switch opens. A ring operated
+      open at a line switch therefore arrives open. The legacy
+      ``phase_current_mode="paths"`` enumerates routes over every active
+      branch and does not see an open phase conductor; the default mode
+      does. Switches at transformer terminals change nothing: transformers
+      are not imported.
+    - ext_grids, sgens, loads etc. are ignored. Trafos, three-winding
+      trafos and ``net.impedance`` elements are skipped (and reported);
+      ``include_trafos=True`` is reserved and raises
+      ``NotImplementedError``.
 
     No fault, source or path is created — those are left to the caller.
 
     ``length = length_km`` holds literally: a length is never rescaled.
     A line whose ``length_km`` is missing (``None`` / ``NaN`` / ``inf`` /
-    unparsable) is imported with a fallback of 1.0 km **and** a
-    ``logger.warning`` naming the row, because that fallback silently
+    unparsable) is imported with a fallback of 1.0 km **and** an
+    ``InputWarning`` ``IMPORT_LENGTH_DEFAULT`` naming the row, because that fallback silently
     rescales every impedance of the branch. A line whose ``length_km`` is
     zero or negative is not importable at all and raises ``ValueError``;
     see :func:`_reject_unusable_lengths` for the reasoning and
@@ -599,6 +1128,24 @@ def from_pandapower(
     NotImplementedError
         If ``include_trafos=True``.
 
+    Warns
+    -----
+    InputWarning
+        Whatever the import had to decide on the user's behalf, each with the
+        elements concerned: ``IMPORT_LENGTH_DEFAULT`` (a line without usable
+        length got the fallback length), ``IMPORT_BUS_SKIPPED`` (a bus with
+        an unparsable ``vn_kv``), ``IMPORT_LINE_SKIPPED`` (a self-loop, or a
+        line whose length cannot be imported), ``IMPORT_SWITCH_NOT_IMPORTED``
+        (closed bus-to-bus switches without ``switch_branch_type``),
+        ``IMPORT_LINE_SWITCH_OPEN`` (severity ``info``: a line imported with an
+        open phase conductor because of an open line switch; elements: the
+        branch and the switches),
+        ``IMPORT_ELEMENT_NOT_IMPORTED`` (transformers and impedance
+        elements), ``IMPORT_VOLTAGE_LEVEL_MISMATCH`` (the default bus type
+        declares another voltage level) and ``IMPORT_EMPTY`` (no bus or no
+        branch was imported). A GUI collects them with
+        :func:`groundinsight.diagnostics.collecting`.
+
     Examples
     --------
     >>> import pandapower as pp                                      # doctest: +SKIP
@@ -611,7 +1158,7 @@ def from_pandapower(
     ...     network_name="kerber_lv",
     ... )
     """
-    _require_pandapower()
+    require_pandapower()
 
     if include_trafos:
         raise NotImplementedError(
@@ -621,10 +1168,12 @@ def from_pandapower(
     if not defaults.frequencies:
         raise ValueError("ImportDefaults.frequencies must not be empty.")
 
+    _check_voltage_level_consistency(defaults, voltage_level_kV)
+
     name = network_name or getattr(net, "name", None) or "pandapower_import"
     network = Network(name=str(name), frequencies=list(defaults.frequencies))
 
-    bus_name_by_index = _bus_index_to_name(net)
+    bus_name_by_index = bus_index_to_name(net)
     line_name_by_index = _line_index_to_name(net)
     kept_bus_indices, _ = _classify_buses(net, voltage_level_kV)
     kept_bus_set = set(kept_bus_indices)
@@ -647,14 +1196,23 @@ def from_pandapower(
         net, kept_bus_set, bus_name_by_index, line_name_by_index
     )
     _reject_unusable_lengths(skipped_lines)
+    open_switches, _, _ = _classify_line_switches(
+        net, set(kept_lines), bus_name_by_index
+    )
+    phase_open_type = _phase_open_type(defaults) if open_switches else None
+    derived_types: Dict[str, Any] = {}
     for idx in kept_lines:
         row = net.line.loc[idx]
         from_idx = int(row["from_bus"])
         to_idx = int(row["to_bus"])
+        if int(idx) in open_switches:
+            branch_type = phase_open_type
+        else:
+            branch_type = _branch_type_for_line(defaults, row, derived_types)
         branch = Branch(
             name=line_name_by_index[int(idx)],
             description=str(row.get("name") or "") or None,
-            type=defaults.default_branch_type,
+            type=branch_type,
             length=_length_km(
                 row, name=line_name_by_index[int(idx)], pp_index=int(idx)
             ),
@@ -666,18 +1224,50 @@ def from_pandapower(
             active=_bus_in_service(row),
         )
         network.add_branch(branch)
+    _warn_about_open_line_switches(open_switches, line_name_by_index)
+
+    # Closed bus-to-bus switches: a bond, not a line -- see _classify_switches.
+    kept_switches, skipped_switches = _classify_switches(
+        net, kept_bus_set, bus_name_by_index, defaults
+    )
+    for record in kept_switches:
+        network.add_branch(
+            Branch(
+                name=record["name"],
+                description="closed bus-to-bus switch",
+                type=defaults.switch_branch_type,
+                length=float(defaults.switch_length_km),
+                from_bus=record["from_bus"],
+                to_bus=record["to_bus"],
+                self_impedance={},
+                mutual_impedance={},
+                specific_earth_resistance=float(defaults.rho),
+                active=True,
+            )
+        )
+    _warn_about_unimported(skipped_switches, _unmodelled_elements(net))
+
+    if derived_types:
+        logger.info(
+            "Derived %d phase-impedance branch type(s) from r_ohm_per_km / "
+            "x_ohm_per_km; the earth-return formulas stay at '%s'.",
+            len(derived_types),
+            defaults.default_branch_type.name,
+        )
 
     if not network.buses or not network.branches:
         # Promote the zero-bus / zero-branch case to a warning so the
         # user notices that the import produced an unusable result
         # (typically because of a wrong ``voltage_level_kV`` argument).
-        logger.warning(
-            "Imported pandapower net into '%s': %d buses, %d branches at %.3f kV — "
-            "result is empty or branch-less; verify the voltage_level_kV argument.",
-            network.name,
-            len(network.buses),
-            len(network.branches),
-            float(voltage_level_kV),
+        emit(
+            InputWarning,
+            f"Imported pandapower net into '{network.name}': "
+            f"{len(network.buses)} buses, {len(network.branches)} branches at "
+            f"{float(voltage_level_kV):.3f} kV — result is empty or "
+            f"branch-less; verify the voltage_level_kV argument.",
+            code="IMPORT_EMPTY",
+            elements=[("network", network.name)],
+            stacklevel=2,
         )
     else:
         logger.info(
@@ -695,16 +1285,21 @@ def preview_pandapower_import(
     *,
     voltage_level_kV: float,
     include_trafos: bool = False,
+    defaults: Optional[ImportDefaults] = None,
 ) -> pl.DataFrame:
     """
-    Return a Polars DataFrame describing what :func:`from_pandapower`
-    would do on this ``net`` at this voltage level, without building a
-    Network.
+    Describe what :func:`from_pandapower` would import, without importing.
+
+    The Polars DataFrame describes the import of this ``net`` at this voltage
+    level; no Network is built.
 
     The frame has the following columns:
 
-    - ``kind``           -- ``"bus"``, ``"line"`` or ``"trafo"`` (the
-      trafo kind only appears when ``include_trafos=True``).
+    - ``kind``           -- ``"bus"``, ``"line"``, ``"switch"``,
+      ``"trafo"`` or ``"impedance"``. The last two are always
+      ``status="skip"``; a ``"switch"`` row is ``"keep"`` for a closed
+      bus-to-bus switch when a ``defaults`` with a ``switch_branch_type`` is
+      passed, and for an open line switch of an imported line.
     - ``status``         -- ``"keep"`` or ``"skip"``.
     - ``pp_index``       -- The pandapower index of the row.
     - ``name``           -- Resolved groundinsight name (with fallback).
@@ -719,7 +1314,9 @@ def preview_pandapower_import(
       line it is the raw parsed value, ``None`` when unusable.
     - ``in_service``     -- Boolean flag from pandapower (best effort).
     - ``reason``         -- Skip reason if ``status == "skip"``,
-      ``None`` otherwise.
+      ``None`` otherwise -- except ``"line_switch_open"`` on the kept row of
+      an open line switch and on the row of its line, which is imported
+      with an open phase conductor.
 
     The dtypes are pinned by ``_PREVIEW_SCHEMA`` rather than inferred, so
     the frame is identical in shape for a two-bus net and for a
@@ -744,6 +1341,14 @@ def preview_pandapower_import(
         future release — setting this to ``True`` raises
         :class:`NotImplementedError` so that ``preview ↔ commit`` cannot
         disagree silently about trafo handling.
+    defaults : ImportDefaults, optional
+        The same defaults that will be passed to :func:`from_pandapower`.
+        Only the switch handling depends on them: without a
+        ``switch_branch_type`` no switch can be imported, so passing the
+        defaults is what lets the preview show a closed bus-to-bus switch as
+        ``status="keep"`` rather than as skipped. Everything else is
+        independent of the defaults, so ``None`` still gives a correct
+        bus/line preview.
 
     Returns
     -------
@@ -755,8 +1360,17 @@ def preview_pandapower_import(
     ------
     NotImplementedError
         If ``include_trafos=True``.
+
+    Examples
+    --------
+    >>> import polars as pl
+    >>> import pandapower.networks as pn  # doctest: +SKIP
+    >>> import groundinsight as gi
+    >>> frame = gi.preview_pandapower_import(  # doctest: +SKIP
+    ...     pn.example_simple(), voltage_level_kV=20.0)
+    >>> frame.filter(pl.col("status") == "skip")  # doctest: +SKIP
     """
-    _require_pandapower()
+    require_pandapower()
 
     if include_trafos:
         raise NotImplementedError(
@@ -765,12 +1379,18 @@ def preview_pandapower_import(
             "behaviour of from_pandapower()."
         )
 
-    bus_name_by_index = _bus_index_to_name(net)
+    bus_name_by_index = bus_index_to_name(net)
     line_name_by_index = _line_index_to_name(net)
     kept_bus_indices, skipped_buses = _classify_buses(net, voltage_level_kV)
     kept_bus_set = set(kept_bus_indices)
     kept_lines, skipped_lines = _classify_lines(
         net, kept_bus_set, bus_name_by_index, line_name_by_index
+    )
+    kept_switches, skipped_switches = _classify_switches(
+        net, kept_bus_set, bus_name_by_index, defaults
+    )
+    open_switches, open_line_switches, other_line_switches = _classify_line_switches(
+        net, set(kept_lines), bus_name_by_index
     )
 
     rows: List[Dict[str, Any]] = []
@@ -826,7 +1446,9 @@ def preview_pandapower_import(
                     row, name=line_name_by_index[int(idx)], pp_index=int(idx)
                 ),
                 "in_service": _bus_in_service(row),
-                "reason": None,
+                "reason": _PREVIEW_SWITCH_REASON_LINE_OPEN
+                if int(idx) in open_switches
+                else None,
             }
         )
 
@@ -844,6 +1466,74 @@ def preview_pandapower_import(
                 "length_km": entry.get("length_km"),
                 "in_service": None,
                 "reason": entry["reason"],
+            }
+        )
+
+    # Switches: kept only when a switch_branch_type was supplied.
+    for record in kept_switches:
+        rows.append(
+            {
+                "kind": "switch",
+                "status": "keep",
+                "pp_index": record["pp_index"],
+                "name": record["name"],
+                "vn_kv": None,
+                "from_bus": record["from_bus"],
+                "to_bus": record["to_bus"],
+                "length_km": float(defaults.switch_length_km)
+                if defaults is not None
+                else None,
+                "in_service": True,
+                "reason": None,
+            }
+        )
+    # Open line switches of imported lines: they open the phase conductor.
+    for record in open_line_switches:
+        rows.append(
+            {
+                "kind": "switch",
+                "status": "keep",
+                "pp_index": record["pp_index"],
+                "name": record["name"],
+                "vn_kv": None,
+                "from_bus": record["from_bus"],
+                "to_bus": None,
+                "length_km": None,
+                "in_service": True,
+                "reason": record["reason"],
+            }
+        )
+    for record in skipped_switches + other_line_switches:
+        rows.append(
+            {
+                "kind": "switch",
+                "status": "skip",
+                "pp_index": record["pp_index"],
+                "name": record["name"],
+                "vn_kv": None,
+                "from_bus": record.get("from_bus"),
+                "to_bus": record.get("to_bus"),
+                "length_km": None,
+                "in_service": None,
+                "reason": record["reason"],
+            }
+        )
+
+    # Trafos and impedance elements: never imported, but now counted and named
+    # instead of vanishing between the bus and the line tables.
+    for record in _unmodelled_elements(net):
+        rows.append(
+            {
+                "kind": record["kind"],
+                "status": "skip",
+                "pp_index": record["pp_index"],
+                "name": record["name"],
+                "vn_kv": None,
+                "from_bus": None,
+                "to_bus": None,
+                "length_km": None,
+                "in_service": None,
+                "reason": record["reason"],
             }
         )
 

@@ -23,20 +23,25 @@ import numpy as np
 import pytest
 
 import groundinsight as gi
+from groundinsight.diagnostics import collecting
 from groundinsight.models.core_models import (
     BranchType,
     BusType,
-    ComplexNumber,
     Fault,
-    Source,
 )
 from groundinsight.pathfinder import (
     PathFinder,
-    _FIND_PATHS_CACHE,
-    _GRAPH_CACHE,
     clear_pathfinder_cache,
 )
 from groundinsight.simulation import waveforms
+from tests._warning_policy import acknowledge
+
+#: The importer reports the malformed rows these tests feed it; the tests
+#: assert the structured records.
+IMPORT_REPORTS = acknowledge(
+    "IMPORT_BUS_SKIPPED", "IMPORT_EMPTY", "IMPORT_LINE_SKIPPED",
+    "IMPORT_VOLTAGE_LEVEL_MISMATCH"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -214,10 +219,11 @@ def test_start_dbsession_same_path_warns_and_reuses(tmp_path, caplog):
 def test_start_dbsession_force_disposes_old_engine(tmp_path):
     db_a = tmp_path / "a.db"
     db_b = tmp_path / "b.db"
-    gi.start_dbsession(str(db_a))
+    first = gi.start_dbsession(str(db_a))
     try:
-        gi.start_dbsession(str(db_b), force=True)
-        assert "b.db" in str(gi.engine.url)
+        second = gi.start_dbsession(str(db_b), force=True)
+        assert "b.db" in str(second.engine.url)
+        assert first.closed  # the old engine went with its database
     finally:
         gi.close_dbsession()
 
@@ -230,7 +236,7 @@ def test_start_dbsession_force_disposes_old_engine(tmp_path):
 def test_fault_scalings_int_keys_coerced_to_float():
     fault = Fault(name="F", bus="B1", scalings={50: 1.0})
     assert list(fault.scalings.keys()) == [50.0]
-    assert all(isinstance(k, float) for k in fault.scalings.keys())
+    assert all(isinstance(k, float) for k in fault.scalings)
 
 
 def test_fault_scalings_mixed_int_and_float_keys_yield_float_keys_only():
@@ -248,7 +254,7 @@ def test_fault_scalings_mixed_int_and_float_keys_yield_float_keys_only():
         scalings={50: 1.0, 100: 0.5},
     )
     assert sorted(fault.scalings.keys()) == [50.0, 100.0]
-    assert all(isinstance(k, float) for k in fault.scalings.keys())
+    assert all(isinstance(k, float) for k in fault.scalings)
 
 
 def test_fault_scalings_unparsable_key_rejected():
@@ -259,6 +265,8 @@ def test_fault_scalings_unparsable_key_rejected():
 
 # ---------------------------------------------------------------------------
 # 6. ``PathFinder`` reuses the adjacency graph on the same topology.
+#    Since audit pass 19 (ARC2) the memo is the network's own
+#    (``network.path_cache()``) instead of module-level dictionaries.
 # ---------------------------------------------------------------------------
 
 
@@ -267,9 +275,9 @@ def test_pathfinder_reuses_graph_cache_across_instances():
     net = _ring_network()
 
     finder_a = PathFinder(net)
-    cache_size_after_first = len(_GRAPH_CACHE)
+    cache_size_after_first = net.path_cache().sizes()["graph"]
     finder_b = PathFinder(net)
-    cache_size_after_second = len(_GRAPH_CACHE)
+    cache_size_after_second = net.path_cache().sizes()["graph"]
 
     # Second instance must hit the cache — no new graph entry.
     assert cache_size_after_second == cache_size_after_first
@@ -290,7 +298,7 @@ def test_pathfinder_find_paths_memoised():
     # by fixed index so the assertion survives further key changes.
     cache_entries = sum(
         1
-        for key in _FIND_PATHS_CACHE
+        for key in net.path_cache().keys("paths")
         if "B1" in key and "B3" in key
     )
     assert cache_entries == 1
@@ -303,10 +311,9 @@ def test_invalidate_paths_clears_cache():
     clear_pathfinder_cache()
     net = _ring_network()
     PathFinder(net).find_paths("B1", "B3")
-    assert _GRAPH_CACHE
+    assert net.path_cache().sizes()["graph"]
     net.invalidate_paths()
-    assert not _GRAPH_CACHE
-    assert not _FIND_PATHS_CACHE
+    assert net.path_cache().sizes() == {"graph": 0, "paths": 0, "reaches": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -431,23 +438,25 @@ def _defaults_20kV():
     )
 
 
-def test_pandapower_empty_network_emits_warning(pp_module, caplog):
-    """Mis-set voltage_level_kV produces an empty Network with a warning."""
+@IMPORT_REPORTS
+def test_pandapower_empty_network_emits_warning(pp_module):
+    """Mis-set voltage_level_kV produces an empty Network with a warning
+    (an InputWarning IMPORT_EMPTY since audit pass 19, formerly a log line)."""
     net = _minimal_pp_net_two_buses_one_line(pp_module, vn_kv_b=20.0)
     defaults = _defaults_20kV()
-    with caplog.at_level(
-        logging.WARNING, logger="groundinsight.io.pandapower_import"
-    ):
+    with collecting() as records:
         result = gi.from_pandapower(
             net, defaults=defaults, voltage_level_kV=0.4
         )
     assert len(result.buses) == 0
     assert any(
-        "empty or branch-less" in r.getMessage() for r in caplog.records
+        r.code == "IMPORT_EMPTY" and "empty or branch-less" in r.message
+        for r in records
     )
 
 
-def test_pandapower_self_loop_skipped_with_warning(pp_module, caplog):
+@IMPORT_REPORTS
+def test_pandapower_self_loop_skipped_with_warning(pp_module):
     """Pandapower line with from_bus == to_bus must be skipped, not imported."""
     pp = pp_module
     net = pp.create_empty_network()
@@ -464,17 +473,18 @@ def test_pandapower_self_loop_skipped_with_warning(pp_module, caplog):
         name="self",
     )
     defaults = _defaults_20kV()
-    with caplog.at_level(
-        logging.WARNING, logger="groundinsight.io.pandapower_import"
-    ):
+    with collecting() as records:
         result = gi.from_pandapower(
             net, defaults=defaults, voltage_level_kV=20.0
         )
     assert len(result.branches) == 0
-    assert any("self-loop" in r.getMessage() for r in caplog.records)
+    assert any(
+        r.code == "IMPORT_LINE_SKIPPED" and "self-loop" in r.message for r in records
+    )
 
 
-def test_pandapower_vn_kv_none_skipped_with_warning(pp_module, caplog):
+@IMPORT_REPORTS
+def test_pandapower_vn_kv_none_skipped_with_warning(pp_module):
     """Bus with vn_kv=None must be skipped explicitly, not silently zeroed."""
     pp = pp_module
     net = pp.create_empty_network()
@@ -484,15 +494,16 @@ def test_pandapower_vn_kv_none_skipped_with_warning(pp_module, caplog):
     # importer reads via row.get() and must cope with corrupted nets.
     net.bus.at[1, "vn_kv"] = None
     defaults = _defaults_20kV()
-    with caplog.at_level(
-        logging.WARNING, logger="groundinsight.io.pandapower_import"
-    ):
+    with collecting() as records:
         result = gi.from_pandapower(
             net, defaults=defaults, voltage_level_kV=20.0
         )
     assert "B0" in result.buses
     assert "B1" not in result.buses
-    assert any("unparsable vn_kv" in r.getMessage() for r in caplog.records)
+    assert any(
+        r.code == "IMPORT_BUS_SKIPPED" and "unparsable vn_kv" in r.message
+        for r in records
+    )
 
 
 def test_preview_pandapower_import_has_include_trafos(pp_module):

@@ -37,6 +37,8 @@ the database. ``PathDB.segments`` in particular is order-sensitive: the solver w
 segments from the source bus onwards and fails if consecutive segments do not connect.
 """
 
+from typing import Optional
+
 from sqlalchemy import (
     Column,
     Integer,
@@ -47,7 +49,6 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     JSON,
     Boolean,
-    PickleType,
 )
 from .core_models import (
     ComplexNumber,
@@ -60,6 +61,7 @@ from .core_models import (
     Path,
     Network,
     Result,
+    json_safe_float,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -79,11 +81,37 @@ class ComplexNumberDB(Base):
     value = Column(JSON, nullable=False)
 
     def to_pydantic(self):
+        """
+        Convert the row back into a Pydantic :class:`ComplexNumber`.
+
+        Returns
+        -------
+        ComplexNumber
+            A fresh model object.
+        """
         return ComplexNumber(**self.value)
 
     @classmethod
     def from_pydantic(cls, complex_number: ComplexNumber):
-        return cls(value={"real": complex_number.real, "imag": complex_number.imag})
+        """
+        Build a ``ComplexNumberDB`` row from a Pydantic :class:`ComplexNumber`.
+
+        Parameters
+        ----------
+        complex_number : ComplexNumber
+            The model to convert.
+
+        Returns
+        -------
+        ComplexNumberDB
+            The unattached database row.
+        """
+        return cls(
+            value={
+                "real": json_safe_float(complex_number.real),
+                "imag": json_safe_float(complex_number.imag),
+            }
+        )
 
 
 class BusTypeDB(Base):
@@ -121,6 +149,14 @@ class BusTypeDB(Base):
     electrode_current_split = Column(Float, nullable=True)
 
     def to_pydantic(self):
+        """
+        Convert the row back into a Pydantic :class:`BusType`.
+
+        Returns
+        -------
+        BusType
+            A fresh model object.
+        """
         # The scalar-with-default columns are stored nullable so that rows
         # written before these fields existed still load; ``None`` therefore
         # has to be mapped back onto the pydantic default rather than passed
@@ -164,6 +200,19 @@ class BusTypeDB(Base):
 
     @classmethod
     def from_pydantic(cls, bus_type: BusType):
+        """
+        Build a ``BusTypeDB`` row from a Pydantic :class:`BusType`.
+
+        Parameters
+        ----------
+        bus_type : BusType
+            The model to convert.
+
+        Returns
+        -------
+        BusTypeDB
+            The unattached database row.
+        """
         return cls(
             name=bus_type.name,
             description=bus_type.description,
@@ -187,26 +236,38 @@ class BusTypeDB(Base):
 
 
 def _real_dict_to_json(values):
-    """Serialise a ``Dict[float, float]`` to JSON-compatible form (string
-    keys), or ``None`` if the input is ``None``/empty."""
+    """
+    Serialise a ``Dict[float, float]`` to JSON-compatible form.
+
+    The keys become strings; ``None`` or an empty mapping gives ``None``.
+    """
     if not values:
         return None
-    return {str(freq): float(val) for freq, val in values.items()}
+    # ``json_safe_float`` keeps the stored document RFC 8259 valid; a bare
+    # ``inf`` would render as ``Infinity`` and SQLite's ``json_valid()`` would
+    # report 0 for the whole column.
+    return {str(freq): json_safe_float(float(val)) for freq, val in values.items()}
 
 
 def _real_dict_from_json(stored):
-    """Deserialise a JSON ``{str(freq): float}`` back into
-    ``Dict[float, float]``, or ``None`` if missing."""
+    """
+    Deserialise a JSON ``{str(freq): float}`` back into ``Dict[float, float]``.
+
+    A missing value gives ``None``.
+    """
     if not stored:
         return None
     return {float(freq): float(val) for freq, val in stored.items()}
 
 
 def _results_to_json(results):
-    """Serialise ``Dict[str, Result]`` to a JSON-compatible mapping, or
-    ``None`` when there are no results to store. Previously the SQLite backend
-    dropped ``Network.results`` entirely while the JSON backend kept them; this
-    restores parity so a solved network survives a database round-trip."""
+    """
+    Serialise ``Dict[str, Result]`` to a JSON-compatible mapping.
+
+    ``None`` when there are no results to store. The database keeps
+    ``Network.results`` like the JSON file does, so a solved network survives
+    either round-trip.
+    """
     if not results:
         return None
     return {name: res.model_dump(mode="json") for name, res in results.items()}
@@ -301,7 +362,7 @@ class BusDB(Base):
         )
 
     @classmethod
-    def from_pydantic(cls, bus: Bus, network_name: str = None, position: int = 0):
+    def from_pydantic(cls, bus: Bus, network_name: Optional[str] = None, position: int = 0):
         """Build a ``BusDB`` row from a Pydantic :class:`Bus`.
 
         Parameters
@@ -324,7 +385,10 @@ class BusDB(Base):
         # Convert impedance to JSON serializable format
         impedance = (
             {
-                str(freq): {"real": imp.real, "imag": imp.imag}
+                str(freq): {
+                    "real": json_safe_float(imp.real),
+                    "imag": json_safe_float(imp.imag),
+                }
                 for freq, imp in bus.impedance.items()
             }
             if bus.impedance
@@ -376,6 +440,14 @@ class BranchTypeDB(Base):
     theta_final_C = Column(Float, nullable=True)
 
     def to_pydantic(self):
+        """
+        Convert the row back into a Pydantic :class:`BranchType`.
+
+        Returns
+        -------
+        BranchType
+            A fresh model object.
+        """
         return BranchType(
             name=self.name,
             description=self.description,
@@ -396,6 +468,19 @@ class BranchTypeDB(Base):
 
     @classmethod
     def from_pydantic(cls, branch_type: BranchType):
+        """
+        Build a ``BranchTypeDB`` row from a Pydantic :class:`BranchType`.
+
+        Parameters
+        ----------
+        branch_type : BranchType
+            The model to convert.
+
+        Returns
+        -------
+        BranchTypeDB
+            The unattached database row.
+        """
         return cls(
             name=branch_type.name,
             description=branch_type.description,
@@ -462,10 +547,9 @@ class BranchDB(Base):
 
     type = relationship("BranchTypeDB", backref="branches")
     network = relationship("NetworkDB", back_populates="branches")
-    # ``from_bus`` / ``to_bus`` object relationships were dropped together
-    # with the single-column bus key: ``to_pydantic`` only ever needed the
-    # plain names, and mapping them over the composite key would overlap
-    # with ``network`` on the shared ``network_name`` column.
+    # No ``from_bus`` / ``to_bus`` object relationships: ``to_pydantic``
+    # needs only the plain names, and mapping them over the composite bus key
+    # would overlap with ``network`` on the shared ``network_name`` column.
 
     def to_pydantic(self):
         """Convert the row back into a Pydantic :class:`Branch`.
@@ -540,7 +624,7 @@ class BranchDB(Base):
         )
 
     @classmethod
-    def from_pydantic(cls, branch: Branch, network_name: str = None, position: int = 0):
+    def from_pydantic(cls, branch: Branch, network_name: Optional[str] = None, position: int = 0):
         """Build a ``BranchDB`` row from a Pydantic :class:`Branch`.
 
         Parameters
@@ -561,7 +645,10 @@ class BranchDB(Base):
         # Convert impedance to JSON serializable format
         self_impedance = (
             {
-                str(freq): {"real": imp.real, "imag": imp.imag}
+                str(freq): {
+                    "real": json_safe_float(imp.real),
+                    "imag": json_safe_float(imp.imag),
+                }
                 for freq, imp in branch.self_impedance.items()
             }
             if branch.self_impedance
@@ -570,7 +657,10 @@ class BranchDB(Base):
 
         mutual_impedance = (
             {
-                str(freq): {"real": imp.real, "imag": imp.imag}
+                str(freq): {
+                    "real": json_safe_float(imp.real),
+                    "imag": json_safe_float(imp.imag),
+                }
                 for freq, imp in branch.mutual_impedance.items()
             }
             if branch.mutual_impedance
@@ -579,7 +669,10 @@ class BranchDB(Base):
 
         phase_impedance = (
             {
-                str(freq): {"real": imp.real, "imag": imp.imag}
+                str(freq): {
+                    "real": json_safe_float(imp.real),
+                    "imag": json_safe_float(imp.imag),
+                }
                 for freq, imp in branch.phase_impedance.items()
             }
             if branch.phase_impedance
@@ -642,6 +735,14 @@ class FaultDB(Base):
     network = relationship("NetworkDB", back_populates="faults")
 
     def to_pydantic(self):
+        """
+        Convert the row back into a Pydantic :class:`Fault`.
+
+        Returns
+        -------
+        Fault
+            A fresh model object.
+        """
         # Convert scalings JSON to Dict[float, float]
         scalings = {float(freq): scale for freq, scale in self.scalings.items()}
 
@@ -656,11 +757,11 @@ class FaultDB(Base):
             # instead of failing validation on None.
             n_factor=1.0 if self.n_factor is None else self.n_factor,
         )
-        fault._set_active(self.active)
+        fault.mark_active(self.active)
         return fault
 
     @classmethod
-    def from_pydantic(cls, fault: Fault, network_name: str = None, position: int = 0):
+    def from_pydantic(cls, fault: Fault, network_name: Optional[str] = None, position: int = 0):
         """Build a ``FaultDB`` row from a Pydantic :class:`Fault`.
 
         Parameters
@@ -696,8 +797,8 @@ class SourceDB(Base):
     """
     SourceDB Model.
 
-    Represents a Source in the database. Both the legacy current-source mode
-    and the Thevenin (voltage-source) mode are persisted in the same row.
+    Represents a Source in the database. Both the current-source mode and
+    the Thevenin (voltage-source) mode are persisted in the same row.
     The ``source_type`` column selects which of ``values`` and the pair
     ``(voltage, source_impedance)`` carries the actual data; the other
     fields are stored as ``NULL``.
@@ -735,9 +836,12 @@ class SourceDB(Base):
 
     @staticmethod
     def _freq_dict_to_pydantic(stored):
-        """Convert a JSON-serialised ``{str(freq): {real, imag}}`` mapping
-        back into ``Dict[float, ComplexNumber]``. Returns ``None`` if the
-        stored value is missing."""
+        """
+        Convert a stored ``{str(freq): {real, imag}}`` mapping back.
+
+        The result is a ``Dict[float, ComplexNumber]``; a missing stored value
+        gives ``None``.
+        """
         if stored is None:
             return None
         result = {}
@@ -751,20 +855,33 @@ class SourceDB(Base):
 
     @staticmethod
     def _freq_dict_to_json(values):
-        """Convert ``Dict[float, ComplexNumber]`` (or scalars) into a JSON-
-        serialisable mapping with string keys, or ``None`` if the input is
-        ``None``."""
+        """
+        Convert ``Dict[float, ComplexNumber]`` (or scalars) for JSON storage.
+
+        The mapping gets string keys; ``None`` gives ``None``.
+        """
         if values is None:
             return None
         out = {}
         for freq, val in values.items():
             if isinstance(val, ComplexNumber):
-                out[str(freq)] = {"real": val.real, "imag": val.imag}
+                out[str(freq)] = {
+                    "real": json_safe_float(val.real),
+                    "imag": json_safe_float(val.imag),
+                }
             else:
                 out[str(freq)] = val  # Assume float or int
         return out
 
     def to_pydantic(self):
+        """
+        Convert the row back into a Pydantic :class:`Source`.
+
+        Returns
+        -------
+        Source
+            A fresh model object.
+        """
         source_type = self.source_type or "current"
         return Source(
             name=self.name,
@@ -780,7 +897,7 @@ class SourceDB(Base):
         )
 
     @classmethod
-    def from_pydantic(cls, source: Source, network_name: str = None, position: int = 0):
+    def from_pydantic(cls, source: Source, network_name: Optional[str] = None, position: int = 0):
         """Build a ``SourceDB`` row from a Pydantic :class:`Source`.
 
         Parameters
@@ -819,12 +936,12 @@ class PathSegmentDB(Base):
     PathSegmentDB Model.
 
     One ordered segment of a :class:`PathDB`, pointing at a branch of the same
-    network. This used to be a plain association table without an ordering
-    column, so a round-trip returned ``Path.segments`` in an unspecified order.
-    Segment order is semantically meaningful -- the solver walks the segments
-    from the source bus onwards and raises if a segment does not connect to the
-    current bus -- hence the explicit ``position`` column, which is part of the
-    primary key and drives ``PathDB.segments``' ``order_by``.
+    network. Segment order is semantically meaningful -- the solver walks the
+    segments from the source bus onwards and raises if a segment does not
+    connect to the current bus -- hence the explicit ``position`` column,
+    which is part of the primary key and drives ``PathDB.segments``'
+    ``order_by``. A plain association table would return ``Path.segments`` in
+    an unspecified order.
     """
 
     __tablename__ = "path_segments"
@@ -935,7 +1052,7 @@ class PathDB(Base):
         )
 
     @classmethod
-    def from_pydantic(cls, path: Path, network_name: str = None, position: int = 0):
+    def from_pydantic(cls, path: Path, network_name: Optional[str] = None, position: int = 0):
         """Build a ``PathDB`` row from a Pydantic :class:`Path`.
 
         Parameters
@@ -985,7 +1102,16 @@ class NetworkDB(Base):
 
     name = Column(String, primary_key=True)
     description = Column(Text, nullable=True)
-    frequencies = Column(PickleType)  # Store list of frequencies
+    # Plain JSON list of floats, not a ``PickleType``: a pickle column makes
+    # loading a database an *execution* of whatever the file contains.
+    # ``pickle.loads`` runs before any Pydantic validator ever sees the value,
+    # so a ``.db`` handed over by someone else would be arbitrary code
+    # execution -- the very thing ``utils.validations.assert_safe_formula``
+    # exists to prevent on the formula side. A frequency list is a list of
+    # numbers and needs no object graph, so JSON is both sufficient and inert.
+    # Existing files written with the pickle column are converted by
+    # :func:`groundinsight.database.migration.migrate_database`.
+    frequencies = Column(JSON)  # Store list of frequencies
     results = Column(JSON, nullable=True)  # {fault_name: Result} serialised as JSON
     # Plain column rather than a foreign key into ``faults``: the faults table
     # now points back at ``networks``, and declaring both directions would make
@@ -1026,6 +1152,17 @@ class NetworkDB(Base):
     )
 
     def to_pydantic(self):
+        """
+        Convert the row back into a Pydantic :class:`Network`.
+
+        Buses, branches, faults, sources, paths and stored results are
+        converted with it.
+
+        Returns
+        -------
+        Network
+            A fresh model object.
+        """
         return Network(
             name=self.name,
             description=self.description,
@@ -1041,6 +1178,19 @@ class NetworkDB(Base):
 
     @classmethod
     def from_pydantic(cls, network: Network):
+        """
+        Build a ``NetworkDB`` row from a Pydantic :class:`Network`.
+
+        Parameters
+        ----------
+        network : Network
+            The model to convert.
+
+        Returns
+        -------
+        NetworkDB
+            The unattached database row.
+        """
         return cls(
             name=network.name,
             description=network.description,

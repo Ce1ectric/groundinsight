@@ -1,0 +1,63 @@
+# The desktop and browser front end of groundinsight, a distribution of its
+# own in the library's repository (maintainer decision, GUI phase 0):
+#
+# * the library stays free of UI dependencies -- ``pytest --doctest-modules``
+#   over src/groundinsight would otherwise import NiceGUI in every run, and a
+#   server or a notebook would install a web framework it never uses;
+# * it is released together with the library and carries the same version,
+#   pinned in its dependency: scripts/release.py rewrites both lines below,
+#   and the release workflow refuses a tag where they disagree.
+#
+# Development install from the repository root (pip resolves groundinsight
+# from the checkout, because both are given):
+#
+#     pip install -e . -e "./gui[test]"
+#     cd gui && python -m pytest
+[project]
+name = "groundinsight-gui"
+version = "0.6.0"
+description = "Desktop and browser front end for groundinsight (NiceGUI)"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Christian Ehlert", email = "christian.ehlert@mailbox.org" }]
+requires-python = ">=3.12"
+dependencies = [
+    "groundinsight==0.6.0",
+    # 4.0 changed run.cpu_bound, the process start method and the DOM ids;
+    # a minor release is an upgrade made on purpose, with the GUI tests.
+    "nicegui>=4.0,<4.1",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.optional-dependencies]
+# ``--native`` opens a desktop window through pywebview instead of a browser.
+native = ["nicegui[native]>=4.0,<4.1"]
+# What the CI's GUI job installs to run gui/tests (the same range as the
+# library's dev group).
+test = ["pytest>=8.3.2,<10.0.0"]
+
+[project.scripts]
+groundinsight-gui = "groundinsight_gui.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/Ce1ectric/groundinsight"
+Documentation = "https://ce1ectric.github.io/groundinsight/"
+
+[tool.poetry]
+packages = [{ include = "groundinsight_gui" }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The NiceGUI ``user`` fixture simulates a browser without one; its async
+# tests run on anyio's pytest plugin, which NiceGUI's dependencies install.
+addopts = "-ra -p nicegui.testing.user_plugin"
+# No main file: each test registers the pages it needs through build_app().
+main_file = ""
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"

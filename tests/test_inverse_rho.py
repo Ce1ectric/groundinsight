@@ -68,7 +68,7 @@ def _build_two_bus_net(rho0: float = 100.0):
 
 
 def _baseline_epr(net, fault_name="flt", fault_bus="b1"):
-    gi.run_fault(net, fault_name=fault_name)
+    gi.run_fault(net, fault=fault_name)
     return next(
         rb for rb in net.results[fault_name].buses if rb.name == fault_bus
     ).uepr
@@ -86,7 +86,7 @@ def test_find_max_rho_scaling_anchored_at_unity():
     epr0 = _baseline_epr(net)
 
     result = find_max_rho_scaling(
-        net, "flt", ["b0", "b1"], u_max=epr0, tol_rel=1e-5,
+        net, "flt", ["b0", "b1"], u_limit=epr0, tol_rel=1e-5,
     )
 
     assert result["c_max"] == pytest.approx(1.0, rel=2e-5)
@@ -102,7 +102,7 @@ def test_find_max_rho_scaling_halved_u_max_gives_smaller_c():
     epr0 = _baseline_epr(net)
 
     result = find_max_rho_scaling(
-        net, "flt", ["b0", "b1"], u_max=0.5 * epr0, tol_rel=1e-4,
+        net, "flt", ["b0", "b1"], u_limit=0.5 * epr0, tol_rel=1e-4,
     )
 
     assert 0 < result["c_max"] < 1.0
@@ -118,7 +118,7 @@ def test_find_max_rho_scaling_admissible_returns_upper_bound():
 
     # Pick u_max far above the maximum reachable EPR within a tight bracket.
     result = find_max_rho_scaling(
-        net, "flt", ["b0", "b1"], u_max=1e6 * epr0, c_bounds=(0.1, 10.0),
+        net, "flt", ["b0", "b1"], u_limit=1e6 * epr0, c_bounds=(0.1, 10.0),
     )
 
     assert result["c_max"] == pytest.approx(10.0, rel=1e-12)
@@ -132,33 +132,36 @@ def test_find_max_rho_scaling_admissible_returns_upper_bound():
 
 def test_find_max_rho_scaling_rejects_non_positive_u_max():
     net = _build_two_bus_net()
-    with pytest.raises(ValueError, match="u_max"):
-        find_max_rho_scaling(net, "flt", ["b0"], u_max=0.0)
+    # The limit is called ``u_limit`` since audit pass 19 (USE8); ``u_max``
+    # is still accepted as a deprecated alias, so the old call raises with
+    # the new name in the message.
+    with pytest.raises(ValueError, match="u_limit"):
+        find_max_rho_scaling(net, "flt", ["b0"], u_limit=0.0)
 
 
 def test_find_max_rho_scaling_rejects_empty_bus_list():
     net = _build_two_bus_net()
     with pytest.raises(ValueError, match="bus_names"):
-        find_max_rho_scaling(net, "flt", [], u_max=10.0)
+        find_max_rho_scaling(net, "flt", [], u_limit=10.0)
 
 
 def test_find_max_rho_scaling_rejects_unknown_bus():
     net = _build_two_bus_net()
     with pytest.raises(ValueError, match="Unknown bus"):
-        find_max_rho_scaling(net, "flt", ["does_not_exist"], u_max=10.0)
+        find_max_rho_scaling(net, "flt", ["does_not_exist"], u_limit=10.0)
 
 
 def test_find_max_rho_scaling_rejects_unknown_fault():
     net = _build_two_bus_net()
     with pytest.raises(ValueError, match="Unknown fault"):
-        find_max_rho_scaling(net, "no_such_fault", ["b0"], u_max=10.0)
+        find_max_rho_scaling(net, "no_such_fault", ["b0"], u_limit=10.0)
 
 
 def test_find_max_rho_scaling_rejects_invalid_bracket():
     net = _build_two_bus_net()
     with pytest.raises(ValueError, match="c_bounds"):
         find_max_rho_scaling(
-            net, "flt", ["b0"], u_max=10.0, c_bounds=(2.0, 1.0),
+            net, "flt", ["b0"], u_limit=10.0, c_bounds=(2.0, 1.0),
         )
 
 
@@ -170,7 +173,7 @@ def test_find_max_rho_scaling_unreachable_u_max():
     with pytest.raises(ValueError, match="below the EPR"):
         find_max_rho_scaling(
             net, "flt", ["b0", "b1"],
-            u_max=1e-9, c_bounds=(0.1, 10.0),
+            u_limit=1e-9, c_bounds=(0.1, 10.0),
         )
 
 
@@ -187,7 +190,7 @@ def test_find_max_rho_scaling_restores_rho_after_success():
     rho0_b1 = net.buses["b1"].specific_earth_resistance
 
     epr0 = _baseline_epr(net)
-    find_max_rho_scaling(net, "flt", ["b0", "b1"], u_max=0.5 * epr0)
+    find_max_rho_scaling(net, "flt", ["b0", "b1"], u_limit=0.5 * epr0)
 
     assert net.buses["b0"].specific_earth_resistance == pytest.approx(rho0_b0)
     assert net.buses["b1"].specific_earth_resistance == pytest.approx(rho0_b1)
@@ -201,7 +204,7 @@ def test_find_max_rho_scaling_restores_rho_after_failure():
     with pytest.raises(ValueError):
         find_max_rho_scaling(
             net, "flt", ["b0", "b1"],
-            u_max=1e-9, c_bounds=(0.1, 10.0),
+            u_limit=1e-9, c_bounds=(0.1, 10.0),
         )
 
     assert net.buses["b0"].specific_earth_resistance == pytest.approx(100.0)

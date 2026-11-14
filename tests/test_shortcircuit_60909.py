@@ -27,6 +27,7 @@ P5  superposing the linear RMS currents and then applying a
 from __future__ import annotations
 
 import math
+from itertools import pairwise
 
 import pytest
 
@@ -38,6 +39,13 @@ from groundinsight.analysis.shortcircuit import (
     resolve_fault_sc_characteristics,
     thermal_equivalent_current,
 )
+from tests._warning_policy import acknowledge
+
+#: Sources with different R/X are the subject of these tests.
+KAPPA_MIXED = acknowledge("SC_KAPPA_MIXED")
+
+#: A source without IEC 60909 data, on purpose.
+SC_DATA = acknowledge("SC_DATA_INCOMPLETE")
 
 
 C_MAX = 1.1
@@ -95,7 +103,7 @@ def _gi_net(cross_section_mm2=50.0, buses=("HV", "MV1", "MV2")):
     )
     for name in buses:
         gi.create_bus(name=name, type=bt, network=net)
-    for a, b in zip(buses, buses[1:]):
+    for a, b in pairwise(buses):
         gi.create_branch(name=f"{a}-{b}", type=ct, from_bus=a, to_bus=b,
                          length=1.0, network=net)
     gi.create_source(name="src", bus=buses[0], values={50.0: 1000.0}, network=net)
@@ -202,7 +210,7 @@ def test_p4_m_is_continuous_and_tends_to_two():
     """pandapower zeroes m for kappa > 1.99; the analytic limit is 2."""
     f, t_k = 50.0, 1.0
     m_values = [iec60909_m(k, f, t_k) for k in (1.99, 1.995, 1.999, 2.0)]
-    assert all(b >= a for a, b in zip(m_values, m_values[1:])), m_values
+    assert all(b >= a for a, b in pairwise(m_values)), m_values
     assert m_values[-1] == pytest.approx(2.0)
     # No collapse: the value just below the limit stays close to it.
     assert iec60909_m(1.999, f, t_k) > 1.0
@@ -239,6 +247,7 @@ def _two_source_network(rx_a=0.02, rx_b=0.60, i_a=800.0, i_b=400.0):
     return net
 
 
+@KAPPA_MIXED
 def test_p5_weighted_kappa_reproduces_the_sum_of_individual_peaks():
     i_a, rx_a = 800.0, 0.02
     i_b, rx_b = 400.0, 0.60
@@ -254,6 +263,7 @@ def test_p5_weighted_kappa_reproduces_the_sum_of_individual_peaks():
     assert data.sources_without_kappa == []
 
 
+@KAPPA_MIXED
 def test_p5_max_aggregation_is_conservative():
     net = _two_source_network()
     weighted = resolve_fault_sc_characteristics(net, "F", aggregation="weighted")
@@ -271,6 +281,7 @@ def test_p5_homogeneous_sources_keep_the_common_kappa():
     assert data.r_to_x == pytest.approx(0.25)
 
 
+@SC_DATA
 def test_resolve_reports_sources_without_characteristics():
     net = _two_source_network()
     net.sources["b"].r_to_x = None
@@ -311,6 +322,7 @@ def test_peak_and_thermal_current_formulas():
         thermal_equivalent_current(1000.0, -0.1, 1.0)
 
 
+@KAPPA_MIXED
 def test_explicit_kappa_beats_r_to_x_on_a_source():
     net = _two_source_network()
     net.sources["a"].kappa = 1.5
@@ -378,12 +390,11 @@ def test_characteristics_survive_sqlite_roundtrip(tmp_path):
     from groundinsight.database.crud import load_network, save_network
 
     net = _characterised_network()
-    gi.start_dbsession(str(tmp_path / "sc.db"))
-    try:
-        save_network(net, gi.session, overwrite=True)
-        loaded = load_network(net.name, gi.session)
-    finally:
-        gi.close_dbsession()
+    database = gi.Database(tmp_path / "sc.db")
+    with database.session() as session:
+        save_network(net, session, overwrite=True)
+        loaded = load_network(net.name, session)
+    database.close()
 
     assert loaded.sources["src"].i_k_a == pytest.approx(4321.0)
     assert loaded.sources["src"].kappa == pytest.approx(1.75)
@@ -396,12 +407,11 @@ def test_sources_without_characteristics_still_roundtrip(tmp_path):
     from groundinsight.database.crud import load_network, save_network
 
     net = _gi_net()
-    gi.start_dbsession(str(tmp_path / "plain.db"))
-    try:
-        save_network(net, gi.session, overwrite=True)
-        loaded = load_network(net.name, gi.session)
-    finally:
-        gi.close_dbsession()
+    database = gi.Database(tmp_path / "plain.db")
+    with database.session() as session:
+        save_network(net, session, overwrite=True)
+        loaded = load_network(net.name, session)
+    database.close()
 
     assert loaded.sources["src"].i_k_a is None
     assert loaded.sources["src"].kappa is None
@@ -528,7 +538,7 @@ def test_explicit_arguments_override_the_stored_characteristics():
     gi.run_fault(net, "F")
 
     stored = gi.check_conductor_limits(net, "F").to_dicts()[0]
-    overridden = gi.check_conductor_limits(net, "F", t_k=1.0, kappa=1.2).to_dicts()[0]
+    overridden = gi.check_conductor_limits(net, "F", t_k_s=1.0, kappa=1.2).to_dicts()[0]
 
     assert overridden["t_k_s"] == pytest.approx(1.0)
     assert overridden["kappa"] == pytest.approx(1.2)

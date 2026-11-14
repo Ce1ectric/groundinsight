@@ -12,6 +12,14 @@ line, ring and mesh networks.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/pypi/pyversions/groundinsight.svg)](https://pypi.org/project/groundinsight/)
 
+!!! warning "Scope of the results"
+
+    groundinsight is a research and engineering tool. Its results support, but
+    do not replace, an assessment according to EN 50522 / IEC 61936-1 by a
+    qualified person, including the measurements the standards require. The
+    software is provided under the MIT License, without warranty of any kind.
+    See [Standards and scope](explanation/standards.md).
+
 ## What groundinsight does
 
 Modern medium-voltage distribution networks are meshed through shared grounding
@@ -70,11 +78,12 @@ gi.create_branch(
 gi.create_source(name="infeed", bus="src", values={50: 1000.0}, network=net)
 gi.create_fault(name="f1", bus="flt", scalings={50: 1.0}, network=net)
 
-gi.run_fault(network=net, fault_name="f1")
+gi.run_fault(network=net, fault="f1")
 print(net.res_all_impedances())
 ```
 
-See the [Quickstart](quickstart.md) for the full walkthrough.
+[Your first fault calculation](getting-started/first-calculation.md) builds this
+network step by step and checks every number by hand.
 
 ## Feature overview
 
@@ -87,17 +96,18 @@ See the [Quickstart](quickstart.md) for the full walkthrough.
   mutual coupling at the fault bus (`value`), and the share of the fault
   current returning through earth (`value_current`) — the EN 50522 quantity,
   and the one that responds to the electrode at the fault bus, see
-  [Concepts](concepts.md)
+  [Reduction factors and earthing impedance](explanation/reduction-factors.md)
 - **Phase currents from a solve on the phase-conductor network**
-  (`phase_current_mode="auto"`), so rings, meshes and parallel cables no
-  longer collapse onto enumerated paths;
-  `BranchType.phase_impedance_formula` describes the faulted conductor
+  (`phase_current_mode="auto"`), so the fault current divides over rings,
+  meshes and parallel cables as the conductors carry it;
+  `BranchType.phase_impedance_formula` describes the faulted conductor, see
+  [Phase currents in rings and meshes](explanation/phase-currents.md)
 - **Splitting the network at the fault** (`gi.Cut`, `gi.analyze_cuts`) —
   what each direction contributes, from source-free current division, see
   [Fault-location decomposition](api/decomposition.md)
 - **Parameter sweeps** (`run_sweep`, `rho_f_points`) into long-format
   frames, with `summarize` and `classify` for statistics and
-  user-supplied limit bands, see [Parameter sweeps](api/sweep.md)
+  user-supplied limit bands, see [Parameter sweeps and statistics](howto/sweeps.md)
 - **Characterising a location without its electrode** (`bus_response`):
   two solves determine the response for every electrode impedance, see
   [Location response](api/response.md)
@@ -120,14 +130,19 @@ See the [Quickstart](quickstart.md) for the full walkthrough.
 
 ## Where to go next
 
-- [Installation](installation.md) — how to get `groundinsight` onto your system.
-- [Quickstart](quickstart.md) — end-to-end walkthrough of a minimal network.
-- [Concepts](concepts.md) — the physical and numerical model behind the code.
+- [Getting started](getting-started/index.md) — installation with a self-test, and
+  two tutorials: a line and a ring, with every number checked by hand.
+- [How-to guides](howto/types-from-datasheets.md) — one task each: types from
+  data sheets, harmonics and DC, EN 50522 checks, sweeps, outages, imports,
+  thermal and transient studies, persistence, large networks, diagnostics.
+- [Understanding the model](explanation/index.md) — the physical and numerical model
+  behind the code, its assumptions and their limits.
 - [Transient simulation](transient.md) — FFT and state-space solver paths for
   time-domain studies on top of the stationary network.
-- [Examples](examples/index.md) — notebooks covering the minimal case,
-  stationary and transient MV ring studies, a pandapower import and a
-  fault sweep across an MV cable line.
+- [Examples](examples/index.md) — notebooks, executed when the site is built:
+  the minimal case, stationary and transient MV ring studies, a pandapower
+  import, a fault sweep, and the analysis layer — cuts, the location
+  response, phase currents in meshes, direct current and thermal limits.
 - [API reference](api/index.md) — function-by-function documentation.
 
 ## Citation

@@ -32,7 +32,9 @@ T3. ``transient._solve_state_space`` derives the Carson mutual-coupling
        straight after ``build_network``, without a preceding ``run_fault`` --
        every factor silently stayed zero and the entire mutual coupling was
        dropped. The measured peak EPR was 71 % off. The solver now rebuilds
-       the paths and says so via ``logger.warning``.
+       the paths and says so via ``logger.warning``. (Superseded in audit
+       pass 19, PH2: the split comes from the phase-network solve and needs
+       no paths; see ``test_audit_pass19_transient.py``.)
     b) The factors were accumulated with ``+=`` behind a merely *per-path*
        ``seen`` set, so a branch shared by two parallel routes of one source
        (the common trunk of a ring) got a factor of 2.0. That contradicts the
@@ -58,6 +60,11 @@ from groundinsight.models.core_models import BusType, BranchType
 from groundinsight.pathfinder import PathFinder, clear_pathfinder_cache
 from groundinsight.simulation import waveforms
 from groundinsight.simulation.transient import TransientStudy
+from tests._warning_policy import acknowledge
+
+#: The ring or parallel-route network of these tests splits its phase current
+#: by the proxy (PHASE_PROXY); the tests are about something else.
+RING = acknowledge("PHASE_PROXY")
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +137,7 @@ def test_fault_added_after_first_solve_invalidates_the_path_set():
     gi.run_fault(net, "F1")                       # builds the paths for F1 only
     gi.create_fault(name="F2", bus="D", scalings={50.0: 1.0}, network=net)
 
-    assert net._needs_path_rebuild() is True
+    assert net.needs_path_rebuild() is True
 
     gi.run_fault(net, "F2")
     actual = _epr(net, "F2")
@@ -160,7 +167,7 @@ def test_source_added_after_first_solve_invalidates_the_path_set():
     gi.run_fault(net, "F")
     gi.create_source(name="S2", bus="D", values={50.0: 1000 + 0j}, network=net)
 
-    assert net._needs_path_rebuild() is True
+    assert net.needs_path_rebuild() is True
 
     gi.run_fault(net, "F")
     actual = _epr(net, "F")
@@ -205,7 +212,7 @@ def test_find_max_rho_scaling_does_not_reuse_a_stale_path_set():
     gi.create_fault(name="fltA", bus="b1", scalings={50.0: 1.0}, network=control)
     gi.create_fault(name="fltB", bus="b2", scalings={50.0: 1.0}, network=control)
     gi.run_fault(control, "fltB")
-    expected = find_max_rho_scaling(control, "fltB", buses, u_max=10.0,
+    expected = find_max_rho_scaling(control, "fltB", buses, u_limit=10.0,
                                     c_bounds=(1e-3, 1e3))
 
     # The defect path: solve fltA first, add fltB afterwards.
@@ -213,7 +220,7 @@ def test_find_max_rho_scaling_does_not_reuse_a_stale_path_set():
     gi.create_fault(name="fltA", bus="b1", scalings={50.0: 1.0}, network=net)
     gi.run_fault(net, "fltA")
     gi.create_fault(name="fltB", bus="b2", scalings={50.0: 1.0}, network=net)
-    actual = find_max_rho_scaling(net, "fltB", buses, u_max=10.0,
+    actual = find_max_rho_scaling(net, "fltB", buses, u_limit=10.0,
                                   c_bounds=(1e-3, 1e3))
 
     # The bisection must actually have run, i.e. not returned the bracket.
@@ -260,6 +267,7 @@ def test_pathfinder_cache_key_keeps_parallel_branches_apart():
     ]
 
 
+@RING
 def test_run_fault_rebuilds_paths_after_parallel_branch_rewiring():
     """End-to-end twin of the cache-key test -- pre-fix EPR was ~33 % off."""
     clear_pathfinder_cache()
@@ -279,11 +287,16 @@ def test_run_fault_rebuilds_paths_after_parallel_branch_rewiring():
 
     net.branches["L4"].to_bus = "B"
 
-    assert net._needs_path_rebuild() is True
+    assert net.needs_path_rebuild() is True
 
     gi.run_fault(net, "F")
     actual = _epr(net, "F")
 
+    # Audit pass 18 (K2): run_fault no longer enumerates the paths in the
+    # default mode. The rebuild it does perform is the one that matters --
+    # the EPR below is computed from the rewired topology -- and the path
+    # set itself is still rebuilt correctly when asked for.
+    gi.create_paths(net)
     assert len(net.paths) == 2
     # The rewiring really changes the answer, so an unchanged result would be
     # a genuine failure rather than a coincidence.
@@ -346,7 +359,7 @@ def _two_bus_coupled_network(name):
 
 
 def _run_transient(net, buses, branches, solver="state_space"):
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform(
         "src",
         waveforms.sinusoidal_with_dc_offset(amplitude=_AMPL, frequency_hz=_F),
@@ -361,6 +374,13 @@ def test_state_space_mutual_coupling_without_a_preceding_run_fault(caplog):
 
     Pre-fix run A (paths empty) reported 107.71 V against 62.82 V for run B,
     a 71 % error, and neither run warned.
+
+    Audit pass 19 (PH2): the coupling no longer reads ``network.paths`` at
+    all -- the phase split comes from the stationary phase-network solve --
+    so there is nothing to rebuild. Until pass 18 this test asserted the
+    rebuild and its log line; it now asserts the stronger property that the
+    paths stay untouched while the numbers are the same with and without a
+    preceding ``run_fault``.
     """
     net = _two_bus_coupled_network("p10_t3a")
     assert not net.paths                      # no run_fault has happened yet
@@ -368,15 +388,13 @@ def test_state_space_mutual_coupling_without_a_preceding_run_fault(caplog):
     with caplog.at_level(logging.WARNING):
         study_a, result_a = _run_transient(net, ["bus1", "bus2"], ["branch1"])
 
-    assert any("paths" in record.message for record in caplog.records), (
-        "the solver must say that it rebuilt the paths"
-    )
-    assert net.paths, "the solver must have rebuilt the paths"
+    assert not net.paths, "the transient must not need (or build) paths"
+    assert not any("paths" in record.message for record in caplog.records)
 
     peak_a = _steady_peak(result_a.time_s, result_a.epr_t["bus2"])
 
     # Run B: exactly the same study, but after a normal stationary solve.
-    gi.run_fault(net, fault_name="F1")
+    gi.run_fault(net, fault="F1")
     _, result_b = _run_transient(net, ["bus1", "bus2"], ["branch1"])
     peak_b = _steady_peak(result_b.time_s, result_b.epr_t["bus2"])
 
@@ -415,6 +433,7 @@ def _ring_coupled_network(name):
     return net
 
 
+@RING
 def test_state_space_mutual_factor_is_first_path_wins_not_accumulated():
     """T3b -- a branch on two parallel paths of one source got factor 2.0.
 
@@ -423,13 +442,19 @@ def test_state_space_mutual_factor_is_first_path_wins_not_accumulated():
     exactly why no existing test caught it.
     """
     net = _ring_coupled_network("p10_t3b")
-    gi.run_fault(net, fault_name="F1")
+    gi.run_fault(net, fault="F1")
+    # Audit pass 18 (K2): paths are no longer a side effect of run_fault.
+    gi.create_paths(net)
     assert len(net.paths) == 2, "the ring must produce two parallel paths"
 
     study, result = _run_transient(net, ["C", "D"], ["bCD"])
     _, phase_factors, _ = study._TransientStudy__mutual_for_output
 
-    assert phase_factors == {("bCD", "src"): 1.0}
+    # Audit pass 19 (PH2): the factor is the per-unit phase current of the
+    # stationary phase-network solve, a complex number with rounding in the
+    # last digits, no longer the exact path factor 1.0.
+    assert set(phase_factors) == {("bCD", "src")}
+    assert phase_factors[("bCD", "src")] == pytest.approx(1.0, abs=1e-12)
 
     results = net.results["F1"]
     expected_d = _stationary_magnitude(
@@ -461,12 +486,16 @@ def test_state_space_mutual_factor_control_single_path():
     net.branches["bBE"].active = False
     net.branches["bEC"].active = False
     net.buses["E"].active = False
-    gi.run_fault(net, fault_name="F1")
+    gi.run_fault(net, fault="F1")
+    # Audit pass 18 (K2): paths are no longer a side effect of run_fault.
+    gi.create_paths(net)
     assert len(net.paths) == 1
 
     study, result = _run_transient(net, ["C", "D"], ["bCD"])
     _, phase_factors, _ = study._TransientStudy__mutual_for_output
-    assert phase_factors == {("bCD", "src"): 1.0}
+    # Audit pass 19 (PH2): per-unit phase current of the phase-network solve.
+    assert set(phase_factors) == {("bCD", "src")}
+    assert phase_factors[("bCD", "src")] == pytest.approx(1.0, abs=1e-12)
 
     expected_d = _stationary_magnitude(
         next(b for b in net.results["F1"].buses if b.name == "D").uepr_freq

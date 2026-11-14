@@ -23,6 +23,14 @@ and medium-voltage grounding studies:
 
 Custom waveforms can be defined as any user function that accepts a 1-D
 ``np.ndarray`` of time samples and returns an array of the same shape.
+
+Examples
+--------
+>>> import numpy as np
+>>> from groundinsight.simulation import waveforms
+>>> pulse = waveforms.step(100.0, t_on=0.01, t_off=0.03)
+>>> pulse(np.array([0.0, 0.02, 0.04])).tolist()
+[0.0, 100.0, 0.0]
 """
 
 import numpy as np

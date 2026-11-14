@@ -1,6 +1,6 @@
 # analysis/thermal.py
 
-"""
+r"""
 Thermal short-circuit rating of grounding conductors (IEC 60949 / IEC 60909-0).
 
 This module adds a conductor-integrity check on top of the stationary
@@ -15,7 +15,7 @@ Two standards are combined:
 
   .. math::
 
-      I_{th} = I_k \\cdot \\sqrt{m + n}
+      I_{th} = I_k \cdot \sqrt{m + n}
 
   where :math:`I_k` is the RMS short-circuit current (here the RMS shield
   current from :func:`groundinsight.run_fault`), ``m`` accounts for the
@@ -24,10 +24,10 @@ Two standards are combined:
 
   .. math::
 
-      m = \\frac{1}{2 f T_k \\ln(\\kappa - 1)}
-          \\left(e^{4 f T_k \\ln(\\kappa - 1)} - 1\\right)
+      m = \frac{1}{2 f T_k \ln(\kappa - 1)}
+          \left(e^{4 f T_k \ln(\kappa - 1)} - 1\right)
 
-  with the peak factor :math:`\\kappa` (from the network ``R/X`` ratio),
+  with the peak factor :math:`\kappa` (from the network ``R/X`` ratio),
   the system frequency ``f`` and the fault duration ``T_k``. ``n = 1`` for
   the far-from-generator faults typical of distribution grounding studies.
 
@@ -37,10 +37,10 @@ Two standards are combined:
 
   .. math::
 
-      I_{adm} = \\frac{k \\, S}{\\sqrt{T_k}}, \\qquad
-      k = K \\, \\sqrt{\\ln\\!\\frac{\\theta_f + \\beta}{\\theta_i + \\beta}}
+      I_{adm} = \frac{k \, S}{\sqrt{T_k}}, \qquad
+      k = K \, \sqrt{\ln\!\frac{\theta_f + \beta}{\theta_i + \beta}}
 
-  with the material base constant :math:`K = \\sqrt{Q_c(\\beta+20)/\\rho_{20}}`,
+  with the material base constant :math:`K = \sqrt{Q_c(\beta+20)/\rho_{20}}`,
   the reciprocal temperature coefficient ``β``, and the initial / final
   conductor temperatures ``θ_i`` / ``θ_f``. The tabulated ``K`` and ``β``
   below reproduce the standard ``k`` tables (e.g. copper XLPE
@@ -70,12 +70,16 @@ from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 import polars as pl
 
+from ..diagnostics import InputWarning, ModelAssumptionWarning, emit
 from ..models.core_models import Network
+from ..utils.compat import renamed_parameters
+from ._guards import require_complete_results
 from .shortcircuit import (
     iec60909_m,
     kappa_from_r_to_x,
     peak_short_circuit_current,
     resolve_fault_sc_characteristics,
+    thermal_equivalent_current,
 )
 
 
@@ -91,12 +95,11 @@ logger = logging.getLogger(__name__)
 #
 # ``theta_final_default_C`` is 300 C for every material, which is the value
 # EN 50522 Table 2 gives for a bare or galvanised earthing conductor or earth
-# electrode. Earlier releases defaulted ``Steel`` to 400 C; that was *higher*,
-# i.e. more permissive -- the unsafe direction for a limit check -- than both
-# EN 50522 and the National Grid Earthing Technical Specification (Table 5a:
-# steel 300 C), and was lowered to 300 C. Studies that relied on the old
-# default get a smaller ``k`` and therefore a smaller admissible current; pass
-# ``theta_final_C=400.0`` explicitly to reproduce them.
+# electrode. A default of 400 C for ``Steel`` would be *higher*, i.e. more
+# permissive -- the unsafe direction for a limit check -- than both EN 50522
+# and the National Grid Earthing Technical Specification (Table 5a: steel
+# 300 C). A study that has a reason for 400 C passes ``theta_final_C=400.0``
+# explicitly.
 IEC60949_MATERIALS: Dict[str, Dict[str, float]] = {
     "Cu": {"K": 226.0, "beta": 234.5, "theta_final_default_C": 300.0},
     "Al": {"K": 148.0, "beta": 228.0, "theta_final_default_C": 300.0},
@@ -151,10 +154,7 @@ CABLE_INSULATION_LIMITS: Dict[str, float] = {
 # ------
 # EN 50522 Table 2 for the uninsulated rows, as printed in the edition held by
 # the author of this package; IEC 60364-5-54 Table 54.2 for the insulated ones
-# (see :data:`CABLE_INSULATION_LIMITS`). Earlier releases of groundinsight
-# carried placeholder values taken from the National Grid Earthing Technical
-# Specification, Table 5a (bare Cu 405 C, bare Al 325 C, bare steel 300 C);
-# those have been replaced.
+# (see :data:`CABLE_INSULATION_LIMITS`).
 FINAL_TEMPERATURES: Dict[str, Dict[str, float]] = {
     "Cu": {
         "bare": 300.0,              # EN 50522 Table 2
@@ -264,6 +264,8 @@ class _SCInputs(NamedTuple):
 #: empty frame *selectable* instead of degenerating into a schema-less
 #: ``pl.DataFrame([])`` on which ``pl.col(...)`` raises.
 _COMMON_SCHEMA: Dict[str, Any] = {
+    "I_dc_A": pl.Float64,
+    "I_ac_rms_A": pl.Float64,
     "i_p_A": pl.Float64,
     "kappa": pl.Float64,
     "m": pl.Float64,
@@ -298,7 +300,8 @@ _NODE_SCHEMA: Dict[str, Any] = {
 
 
 def _warn_half_declared(
-    incomplete: Sequence[Tuple[str, str]], fault_name: str, kind: str
+    incomplete: Sequence[Tuple[str, str]], fault_name: str, kind: str,
+    element_kind: str,
 ) -> None:
     """
     Warn about elements that carry *one* half of their thermal data.
@@ -318,66 +321,165 @@ def _warn_half_declared(
         Name of the fault being checked, for the message.
     kind : str
         Already-pluralised noun for the message, e.g. ``"branch(es)"``.
+    element_kind : str
+        Diagnostic element kind, ``"branch"`` or ``"bus"``; a node element
+        label ``"bus/element"`` refers to its bus.
+
+    Warns
+    -----
+    InputWarning
+        Code ``THERMAL_DATA_INCOMPLETE``, elements the half-declared branches
+        or buses and the fault. A warning, not a log line: an unassessed row
+        reads like a passed one, so the reader of the table has to know.
     """
     if not incomplete:
         return
     detail = ", ".join(f"{label} (missing {field})" for label, field in incomplete)
-    logger.warning(
-        "%d %s carry only half of their thermal data and were NOT assessed "
-        "for fault '%s': %s. Declare both the material and the cross-section, "
-        "or neither -- rows with 'within_limit = None' are unassessed, not "
-        "passed.",
-        len(incomplete), kind, fault_name, detail,
+    names = list(dict.fromkeys(label.split("/")[0] for label, _ in incomplete))
+    emit(
+        InputWarning,
+        f"{len(incomplete)} {kind} carry only half of their thermal data and "
+        f"were NOT assessed for fault '{fault_name}': {detail}. Declare both "
+        f"the material and the cross-section, or neither -- rows with "
+        f"'within_limit = None' are unassessed, not passed.",
+        code="THERMAL_DATA_INCOMPLETE",
+        elements=[(element_kind, name) for name in names] + [("fault", fault_name)],
+        stacklevel=3,
     )
 
 
-def _require_complete_results(
-    fault_name: str, expected: Sequence[str], reported: Sequence[str], kind: str
+def _warn_dc_excluded(
+    rows: Sequence[Dict[str, Any]],
+    fault_name: str,
+    element_key: str,
+    element_kind: str,
 ) -> None:
     """
-    Fail loudly when the stored result does not cover the whole network.
+    Say that a direct current was left out of the adiabatic check (PH10).
 
-    A limit check that silently reports *nothing* is worse than one that
-    raises: the natural safety gates (iterating the rows, or testing
-    ``frame.is_empty()``) then read an incomplete result as "no violations",
-    and the ``logger.warning`` channel of the check goes silent as well.
+    :func:`_split_dc` takes the 0 Hz bin out of ``I_th``, because ``m``
+    already carries the DC content of an *alternating* fault current. A
+    direct current that genuinely flows during ``T_k`` -- a DC railway, a
+    cathodic-protection rectifier -- is then missing: it adds about
+    ``I_dc**2`` to ``I_th**2``, and the check is unconservative in that
+    case. Said once per call, with the largest increase of ``I_th`` that
+    ``I_th**2 = I_ac**2 * (m + n) + I_dc**2`` gives.
 
-    This happens in practice: ``ElectricalNetwork.solve_network()`` resets
-    ``network.results[fault]`` and only :meth:`~groundinsight.electrical_network.
-    ElectricalNetwork.compute_branch_currents` refills the branch list, so
-    solving a hand-built :class:`ElectricalNetwork` for inspection leaves the
-    stored result without any branches. Adding a branch or activating a bus
-    after :func:`groundinsight.run_fault` leaves the same gap.
+    Notes
+    -----
+    The Joule integral of ``I_dc + i_ac(t)`` over ``T_k`` is
+    ``T_k * (I_ac**2 * (m + n) + I_dc**2)`` plus the cross term
+    ``2 * I_dc * integral(i_ac dt)``. The periodic part of ``i_ac`` integrates
+    to nothing over whole cycles, the decaying DC offset does not: with full
+    offset the cross term is ``+-2 * sqrt(2) * I_dc * I_ac * tau *
+    (1 - exp(-T_k/tau))``, of either sign depending on the switching
+    instant. The quoted increase leaves it out and is therefore indicative:
+    for 1000 A AC, 700 A DC, R/X = 0.1, 50 Hz and ``T_k`` = 0.5 s the
+    numerically integrated current with full offset gives an ``I_th`` 3.7 %
+    above or 4.4 % below the formula, and the cross term itself agrees with
+    the closed form above.
 
     Parameters
     ----------
+    rows : sequence of dict
+        The rows of the check, with ``I_dc_A``, ``I_ac_rms_A``, ``m``, ``n``
+        and ``I_th_A``.
     fault_name : str
-        Name of the fault whose result is being checked, for the message.
-    expected : Sequence[str]
-        Names that a complete result must contain.
-    reported : Sequence[str]
-        Names actually present in the stored result.
-    kind : str
-        ``"branch"`` or ``"bus"``, used in the message only.
-
-    Raises
-    ------
-    ValueError
-        If any expected name is missing from the stored result.
+        The checked fault.
+    element_key : str
+        Row key naming the element (``"branch_name"`` or ``"bus_name"``).
+    element_kind : str
+        Diagnostic element kind (``"branch"`` or ``"bus"``).
     """
-    missing = [name for name in expected if name not in set(reported)]
-    if not missing:
+    with_dc = [row for row in rows if row["I_dc_A"]]
+    if not with_dc:
         return
-    shown = missing[:5]
-    suffix = "" if len(missing) == len(shown) else f", ... (+{len(missing) - len(shown)})"
-    raise ValueError(
-        f"Incomplete results for fault {fault_name!r}: {len(missing)} of "
-        f"{len(expected)} {kind}es are missing from the stored result "
-        f"({shown}{suffix}). The check would silently report no violations "
-        f"for them. Call run_fault(network, {fault_name!r}) to rebuild the "
-        f"results; note that calling ElectricalNetwork.solve_network() on its "
-        f"own resets them and must be followed by compute_branch_currents()."
+    increases = [
+        math.sqrt(row["I_ac_rms_A"] ** 2 * (row["m"] + row["n"]) + row["I_dc_A"] ** 2)
+        / row["I_th_A"]
+        - 1.0
+        for row in with_dc
+        if row["I_th_A"]
+    ]
+    largest_dc = max(row["I_dc_A"] for row in with_dc)
+    names = list(dict.fromkeys(row[element_key] for row in with_dc))
+    increase_text = (
+        f" -- here up to {100.0 * max(increases):.1f} % more I_th"
+        if increases
+        else ""
     )
+    emit(
+        ModelAssumptionWarning,
+        f"Fault '{fault_name}': the 0 Hz component (up to {largest_dc:.4g} A, on "
+        f"{len(names)} {element_kind}(es): {', '.join(names[:5])}"
+        f"{', ...' if len(names) > 5 else ''}) is excluded from the adiabatic "
+        f"short-time check, because I_th = I_ac * sqrt(m + n) already carries "
+        f"the DC content of an alternating fault current through m. If a "
+        f"genuine direct current flows during T_k (a DC railway, a rectifier) "
+        f"it adds about I_dc**2 to I_th**2 (I_th**2 = I_ac**2 * (m + n) + "
+        f"I_dc**2, leaving out a cross term with the decaying DC offset of "
+        f"either sign){increase_text} -- and the check as reported is then "
+        f"unconservative. It is reported in the I_dc_A column for the "
+        f"continuous rating.",
+        code="THERMAL_DC_EXCLUDED",
+        elements=[(element_kind, name) for name in names] + [("fault", fault_name)],
+        stacklevel=3,
+    )
+
+
+#: Shared guard, kept importable here under its historic name so the two
+#: thermal checks below read as they did before it moved to ``_guards``.
+_require_complete_results = require_complete_results
+
+
+def _split_dc(
+    rms: float, per_frequency: Optional[Dict[float, Any]], has_dc_bin: bool
+) -> Tuple[Optional[float], float]:
+    """
+    Separate the 0 Hz component out of an RMS current.
+
+    IEC 60909-0 counts the DC content of the fault current **once**, through
+    ``m``: ``I_th = I_k'' * sqrt(m + n)`` where ``I_k''`` is the *AC* initial
+    symmetrical current. ``ResultBranch.i_s`` and ``ResultBus.i_inj`` / ``ia``
+    are ``sqrt(sum_f |X(f)|^2)`` over **all** frequencies of the study, 0 Hz
+    included -- so a network solved with a DC bin fed its direct current into
+    ``I_th`` twice: once inside the RMS and once through ``m``. Measured on
+    the audit case, ``[50 Hz]`` gave ``I_th = 1028 A`` and ``[0, 50 Hz]`` with
+    700 A of direct current gave 1255 A, and none of that difference is
+    physics.
+
+    The DC bin is therefore taken out and reported in its own column. It is
+    *not* discarded: a direct current through an earthing conductor is a real
+    thermal load, but it is a continuous one and belongs in the continuous
+    rating rather than in an adiabatic short-time check.
+
+    Parameters
+    ----------
+    rms : float
+        The stored RMS value over all frequencies.
+    per_frequency : dict of float to ComplexNumber, optional
+        The per-frequency phasors of the same quantity.
+    has_dc_bin : bool
+        Whether the network was solved with a 0 Hz frequency at all. When it
+        was not there is nothing to separate and the DC column stays ``None``,
+        which reads differently from a measured zero.
+
+    Returns
+    -------
+    tuple of (float or None, float)
+        ``(I_dc, I_ac_rms)``. ``I_ac_rms`` is ``rms`` itself when there is no
+        DC bin.
+    """
+    if not has_dc_bin or not per_frequency:
+        return None, rms
+    value = per_frequency.get(0.0)
+    if value is None:
+        return None, rms
+    i_dc = abs(complex(value))
+    # Numerically the difference can come out very slightly negative when the
+    # DC bin *is* the whole current; clamp rather than hand sqrt a -1e-17.
+    i_ac = math.sqrt(max(rms * rms - i_dc * i_dc, 0.0))
+    return i_dc, i_ac
 
 
 def _resolve_sc_inputs(
@@ -403,8 +505,22 @@ def _resolve_sc_inputs(
     ------
     ValueError
         If ``fault_name`` has no results, if both ``kappa`` and ``r_to_x``
-        are given, if ``t_k`` is neither given nor stored and positive, or
-        if ``kappa`` can be resolved from neither arguments nor sources.
+        are given, if ``t_k`` is neither given nor stored and positive, if
+        ``kappa`` can be resolved from neither arguments nor sources, or if
+        the resolved ``kappa`` is outside ``(1, 2]`` or ``n`` outside
+        ``(0, 1]``.
+
+    Notes
+    -----
+    ``kappa`` and ``n`` are range-checked here rather than where they are
+    used, because both fail *silently downwards* and both reach this
+    function from three places (argument, ``Fault`` / ``Source`` field,
+    ``kappa_from_r_to_x``). ``kappa = -1`` gives ``i_p/I = -1.41``, a peak
+    current pointing the wrong way; ``kappa = 0.5`` gives 0.71, an
+    under-estimate that a limit check reports as headroom. ``n = 3`` raises
+    ``I_th`` by 70 % and ``n = -2`` reaches ``math.sqrt`` as a bare
+    ``math domain error``. The docstrings of both public checks have
+    promised these ranges all along.
     """
     if kappa is not None and r_to_x is not None:
         raise ValueError(
@@ -424,16 +540,25 @@ def _resolve_sc_inputs(
         if t_k is None:
             raise ValueError(
                 f"No fault duration available for fault {fault_name!r}. Pass "
-                "t_k=... explicitly or set Fault.t_k_s on the fault."
+                "t_k_s=... explicitly or set Fault.t_k_s on the fault."
             )
     t_k = float(t_k)
     if t_k <= 0:
-        raise ValueError(f"t_k must be strictly positive, got {t_k!r}.")
+        raise ValueError(f"t_k_s must be strictly positive, got {t_k!r}.")
 
     # --- AC heat factor n ----------------------------------------------
     if n is None:
         n = float(getattr(fault, "n_factor", 1.0) or 1.0)
     n = float(n)
+    if not (math.isfinite(n) and 0.0 < n <= 1.0):
+        raise ValueError(
+            f"n_factor must lie in (0, 1], got {n!r}. It is the AC-decay heat "
+            f"factor n of IEC 60909-0: 1.0 for a far-from-generator fault and "
+            f"below that where the AC component decays. A value above one "
+            f"raises I_th without any physical reading (n = 3 by 70 %), and "
+            f"a negative one reaches sqrt(m + n) as a bare math domain "
+            f"error. Pass n_factor=... explicitly or fix Fault.n_factor."
+        )
 
     if f is None:
         f = next((float(x) for x in network.frequencies if x > 0), 50.0)
@@ -455,6 +580,18 @@ def _resolve_sc_inputs(
                 "gi.apply_shortcircuit_characteristics from a pandapower run)."
             )
     kappa = float(kappa)
+    if not (math.isfinite(kappa) and 1.0 < kappa <= 2.0):
+        raise ValueError(
+            f"kappa must lie in (1, 2], got {kappa!r}. It is the IEC 60909-0 "
+            f"peak factor i_p / (sqrt(2) * I_k''): one means no DC offset at "
+            f"all, two is the theoretical maximum of a purely inductive "
+            f"circuit. Outside that range the results are not conservative "
+            f"but wrong in the unsafe direction -- kappa = 0.5 gives a peak "
+            f"below the AC amplitude, kappa = -1 one that points the other "
+            f"way, and a limit check reports both as headroom. Pass kappa "
+            f"or r_to_x explicitly, or fix the value stored on the sources "
+            f"feeding fault {fault_name!r}."
+        )
 
     m = iec60909_m(kappa, f, t_k)
     return _SCInputs(
@@ -528,11 +665,12 @@ def iec60949_k(
     )
 
 
+@renamed_parameters(t_k="t_k_s")
 def admissible_short_circuit_current(
-    k: float, cross_section_mm2: float, t_k: float
+    k: float, cross_section_mm2: float, t_k_s: float
 ) -> float:
     """
-    Adiabatic admissible short-circuit current ``I_adm = k*S/sqrt(t_k)``.
+    Adiabatic admissible short-circuit current ``I_adm = k*S/sqrt(t_k_s)``.
 
     Parameters
     ----------
@@ -540,8 +678,9 @@ def admissible_short_circuit_current(
         Material constant from :func:`iec60949_k`, in A·s^0.5/mm².
     cross_section_mm2 : float
         Conductor cross-section ``S`` in mm². Must be strictly positive.
-    t_k : float
-        Fault duration in seconds. Must be strictly positive.
+    t_k_s : float
+        Fault duration ``T_k`` in seconds. Must be strictly positive. The
+        former keyword ``t_k`` is accepted as a deprecated alias.
 
     Returns
     -------
@@ -551,26 +690,34 @@ def admissible_short_circuit_current(
     Raises
     ------
     ValueError
-        If ``cross_section_mm2`` or ``t_k`` is not strictly positive.
+        If ``cross_section_mm2`` or ``t_k_s`` is not strictly positive.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> k = gi.iec60949_k("Cu", theta_initial_C=20.0, theta_final_C=200.0)
+    >>> round(gi.admissible_short_circuit_current(k, 35.0, 1.0))
+    5785
     """
     if cross_section_mm2 <= 0:
         raise ValueError(
             f"cross_section_mm2 must be strictly positive, got {cross_section_mm2!r}."
         )
-    if t_k <= 0:
-        raise ValueError(f"t_k must be strictly positive, got {t_k!r}.")
-    return k * cross_section_mm2 / math.sqrt(t_k)
+    if t_k_s <= 0:
+        raise ValueError(f"t_k_s must be strictly positive, got {t_k_s!r}.")
+    return k * cross_section_mm2 / math.sqrt(t_k_s)
 
 
+@renamed_parameters(fault_name="fault", t_k="t_k_s", n="n_factor", f="frequency")
 def check_conductor_limits(
     network: Network,
-    fault_name: str,
-    t_k: Optional[float] = None,
+    fault: str,
+    t_k_s: Optional[float] = None,
     *,
     kappa: Optional[float] = None,
     r_to_x: Optional[float] = None,
-    n: Optional[float] = None,
-    f: Optional[float] = None,
+    n_factor: Optional[float] = None,
+    frequency: Optional[float] = None,
     aggregation: str = "weighted",
 ) -> pl.DataFrame:
     """
@@ -578,7 +725,7 @@ def check_conductor_limits(
 
     For the given fault the RMS shield current of every branch (from the
     most recent :func:`groundinsight.run_fault`) is converted into the
-    thermally equivalent short-time current ``I_th = I_s_rms * sqrt(m + n)``
+    thermally equivalent short-time current ``I_th = I_ac_rms * sqrt(m + n)``
     (IEC 60909-0) and compared against the admissible adiabatic current
     ``I_adm = k * S / sqrt(t_k)`` (IEC 60949) of the branch conductor. A
     branch is checked only if its :class:`BranchType` carries both
@@ -591,14 +738,34 @@ def check_conductor_limits(
        its currents (``I_s_rms_A``, ``i_p_A``, ``I_th_A``) and only the
        judgement columns are ``None``. Declaring *half* of it
        (a material without a cross-section or the reverse) is the one case
-       that is announced with a ``logging.WARNING``, because such a row is
+       that is announced, with an ``InputWarning``
+       (``THERMAL_DATA_INCOMPLETE``), because such a row is
        indistinguishable from a passing one at a glance.
 
-    All three IEC 60909 inputs — ``t_k``, ``kappa`` and ``n`` — can either
-    be passed explicitly or be left to the network data:
+    .. note::
+       **The 0 Hz bin is taken out of** ``I_th``. ``ResultBranch.i_s`` is
+       ``sqrt(sum_f |I(f)|^2)`` over every frequency of the study, and
+       ``sqrt(m + n)`` already accounts for the DC content of the fault
+       current through ``m``. A network solved with a 0 Hz bin would
+       therefore carry its direct current into ``I_th`` twice — measured on
+       the audit case, ``[50 Hz]`` gave 1028 A and ``[0, 50 Hz]`` with 700 A
+       of direct current gave 1255 A, none of which is physics. The direct
+       current is reported in its own column ``I_dc_A`` instead
+       (``None`` when the study has no 0 Hz bin, which reads differently
+       from a measured zero), and ``I_ac_rms_A`` carries the RMS the check
+       is built on. A standing direct current is a real thermal load, but a
+       continuous one: it belongs in the conductor's continuous rating, not
+       in an adiabatic short-time check. Where a direct current is present
+       the check says so with a ``ModelAssumptionWarning``
+       ``THERMAL_DC_EXCLUDED``: if it flows *during* ``T_k`` it adds about
+       ``I_dc**2`` to ``I_th**2`` and the reported check is unconservative
+       (PH10).
 
-    * ``t_k`` falls back to ``Fault.t_k_s``,
-    * ``n`` falls back to ``Fault.n_factor`` (default ``1.0``),
+    All three IEC 60909 inputs — ``t_k_s``, ``kappa`` and ``n_factor`` — can
+    either be passed explicitly or be left to the network data:
+
+    * ``t_k_s`` falls back to ``Fault.t_k_s``,
+    * ``n_factor`` falls back to ``Fault.n_factor`` (default ``1.0``),
     * ``kappa`` falls back to the current-weighted aggregation over the
       feeding sources' ``kappa`` / ``r_to_x``, see
       :func:`~groundinsight.analysis.shortcircuit.resolve_fault_sc_characteristics`.
@@ -609,11 +776,11 @@ def check_conductor_limits(
     Parameters
     ----------
     network : Network
-        A network that already has results for ``fault_name`` (call
+        A network that already has results for ``fault`` (call
         :func:`run_fault` first).
-    fault_name : str
+    fault : str
         Name of the solved fault whose branch currents are checked.
-    t_k : float, optional
+    t_k_s : float, optional
         Fault duration ``T_k`` in seconds. Must be strictly positive.
         Defaults to ``Fault.t_k_s`` of the named fault.
     kappa : float, optional
@@ -623,13 +790,16 @@ def check_conductor_limits(
     r_to_x : float, optional
         ``R/X`` ratio at the fault, converted to ``kappa`` internally.
         Mutually exclusive with ``kappa``.
-    n : float, optional
+    n_factor : float, optional
         AC-decay heat factor ``n`` (IEC 60909-0). Defaults to
         ``Fault.n_factor``, i.e. ``1.0`` (far-from-generator;
         ``I_k'' = I_k``).
-    f : float, optional
+    frequency : float, optional
         System frequency in Hz used in the ``m`` factor. Defaults to the
         lowest positive frequency of ``network`` (usually 50), or ``50.0``.
+        The former keywords ``fault_name``, ``t_k``, ``n`` and ``f`` are
+        accepted as deprecated aliases of ``fault``, ``t_k_s``,
+        ``n_factor`` and ``frequency``.
     aggregation : {'weighted', 'max'}, default 'weighted'
         Only relevant when ``kappa`` is resolved from the sources.
         ``"weighted"`` reproduces the sum of the individual source peaks
@@ -644,49 +814,73 @@ def check_conductor_limits(
         ``I_th_factor``, ``I_th_A``, ``material``, ``cross_section_mm2``,
         ``k``, ``I_admissible_A``, ``utilization`` (``I_th / I_adm``) and
         ``within_limit`` (``bool`` or ``None`` when the branch has no
-        thermal parameters). ``i_p_A = kappa * sqrt(2) * I_s_rms`` is the
-        peak current of that branch and is the input for a later
+        thermal parameters), plus ``I_dc_A`` and ``I_ac_rms_A`` (see the
+        note on the DC bin below). ``i_p_A = kappa * sqrt(2) * I_ac_rms`` is
+        the peak current of that branch and is the input for a later
         electrodynamic-force check.
 
     Raises
     ------
     ValueError
-        If ``t_k`` is neither given nor stored and positive, if both
+        If ``t_k_s`` is neither given nor stored and positive, if both
         ``kappa`` and ``r_to_x`` are given, if ``kappa`` can be resolved
         from neither the arguments nor the sources, or if ``network`` has
-        no results for ``fault_name``. Also if the stored result does not
+        no results for ``fault``. Also if the stored result does not
         cover every branch of the network -- an incomplete result would
         silently report the missing branches as free of violations. Re-run
         :func:`groundinsight.run_fault` in that case.
 
+    Warns
+    -----
+    InputWarning
+        ``THERMAL_DATA_INCOMPLETE`` for branches whose type declares only one
+        of material and cross-section (their rows stay unassessed), and
+        ``SC_DATA_INCOMPLETE`` from :func:`resolve_fault_sc_characteristics`.
+    ModelAssumptionWarning
+        ``THERMAL_DC_EXCLUDED`` (see below), and ``SC_KAPPA_MIXED`` from
+        :func:`resolve_fault_sc_characteristics`.
+
     Examples
     --------
-    >>> gi.check_conductor_limits(net, "F1", t_k=0.5, r_to_x=0.1)  # doctest: +SKIP
-    >>> gi.check_conductor_limits(net, "F1")  # all inputs from the model  # doctest: +SKIP
+    Without thermal data on the branch types every branch is reported with its
+    currents, and the judgement is ``None``:
+
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> _ = gi.run_fault(net, "fault")
+    >>> frame = gi.check_conductor_limits(net, "fault", t_k_s=0.5, kappa=1.8)
+    >>> [(row["branch_name"], round(row["I_s_rms_A"], 2), row["within_limit"])
+    ...  for row in frame.iter_rows(named=True)]
+    [('b12', 84.11, None), ('b23', 84.11, None)]
     """
     sc = _resolve_sc_inputs(
-        network, fault_name, t_k, kappa, r_to_x, n, f, aggregation
+        network, fault, t_k_s, kappa, r_to_x, n_factor, frequency, aggregation
     )
     t_k, kappa, m, n, i_th_factor = (
         sc.t_k, sc.kappa, sc.m, sc.n, sc.i_th_factor
     )
 
-    result = network.results[fault_name]
+    result = network.results[fault]
     # ``compute_branch_currents`` emits a row for *every* branch, including
     # inactive and open ones, so any missing name means the stored result is
     # stale or half-built. See _require_complete_results.
     _require_complete_results(
-        fault_name,
+        fault,
         list(network.branches),
         [rb.name for rb in result.branches],
         "branch",
     )
+    has_dc_bin = any(float(x) == 0.0 for x in network.frequencies)
     rows: List[Dict[str, Any]] = []
     incomplete: List[Tuple[str, str]] = []
     for result_branch in result.branches:
         name = result_branch.name
         i_s_rms = float(result_branch.i_s)
-        i_th = i_s_rms * i_th_factor
+        i_dc, i_ac_rms = _split_dc(
+            i_s_rms, getattr(result_branch, "i_s_freq", None), has_dc_bin
+        )
+        i_th = thermal_equivalent_current(i_ac_rms, m, n)
 
         branch = network.branches.get(name)
         material = None
@@ -717,7 +911,9 @@ def check_conductor_limits(
             {
                 "branch_name": name,
                 "I_s_rms_A": i_s_rms,
-                "i_p_A": peak_short_circuit_current(i_s_rms, kappa),
+                "I_dc_A": i_dc,
+                "I_ac_rms_A": float(i_ac_rms),
+                "i_p_A": peak_short_circuit_current(i_ac_rms, kappa),
                 "kappa": float(kappa),
                 "m": float(m),
                 "n": float(n),
@@ -733,14 +929,15 @@ def check_conductor_limits(
             }
         )
 
-    _warn_half_declared(incomplete, fault_name, "branch(es)")
+    _warn_half_declared(incomplete, fault, "branch(es)", "branch")
+    _warn_dc_excluded(rows, fault, "branch_name", "branch")
 
     violations = [r["branch_name"] for r in rows if r["within_limit"] is False]
     if violations:
         logger.warning(
             "Thermal limit exceeded on %d branch(es) for fault '%s' "
             "(t_k=%.3g s, kappa=%.3f): %s",
-            len(violations), fault_name, t_k, kappa, violations,
+            len(violations), fault, t_k, kappa, violations,
         )
 
     return pl.DataFrame(rows, schema=_BRANCH_SCHEMA)
@@ -760,15 +957,16 @@ _NODE_ELEMENTS: Dict[str, Dict[str, str]] = {
 }
 
 
+@renamed_parameters(fault_name="fault", t_k="t_k_s", n="n_factor", f="frequency")
 def check_node_limits(
     network: Network,
-    fault_name: str,
-    t_k: Optional[float] = None,
+    fault: str,
+    t_k_s: Optional[float] = None,
     *,
     kappa: Optional[float] = None,
     r_to_x: Optional[float] = None,
-    n: Optional[float] = None,
-    f: Optional[float] = None,
+    n_factor: Optional[float] = None,
+    frequency: Optional[float] = None,
     aggregation: str = "weighted",
     elements: Sequence[str] = ("earthing_conductor", "electrode"),
 ) -> pl.DataFrame:
@@ -807,14 +1005,91 @@ def check_node_limits(
        still solves and is still reported here — every active bus appears
        with its currents and only the judgement columns are ``None``.
        Declaring *half* of it (a material without a cross-section or the
-       reverse) is the one case that is announced with a
-       ``logging.WARNING``, because such a row is indistinguishable from a
-       passing one at a glance.
+       reverse) is the one case that is announced, with an ``InputWarning``
+       (``THERMAL_DATA_INCOMPLETE``), because such a row is
+       indistinguishable from a passing one at a glance.
 
-    Current split
-    -------------
-    Each element carries a free factor ``current_split`` in ``(0, 1]``
-    (``BusType.earthing_conductor_current_split`` /
+    .. note::
+       **The 0 Hz bin is taken out of** ``I_th``, exactly as in
+       :func:`check_conductor_limits`: ``ResultBus.i_inj`` and
+       ``ResultBus.ia`` are RMS values over every frequency of the study,
+       and ``sqrt(m + n)`` already carries the DC content through ``m``, so
+       a study with a 0 Hz bin counted its direct current twice. It is
+       reported in ``I_dc_A`` instead (``None`` without a 0 Hz bin), and
+       ``I_ac_rms_A`` is what ``I_th`` and ``i_p`` are built on. Where a
+       direct current is present the same ``ModelAssumptionWarning``
+       ``THERMAL_DC_EXCLUDED`` is raised as in
+       :func:`check_conductor_limits` (PH10).
+
+    Parameters
+    ----------
+    network : Network
+        A network that already has results for ``fault`` (call
+        :func:`run_fault` first).
+    fault : str
+        Name of the solved fault whose bus currents are checked.
+    t_k_s : float, optional
+        Fault duration ``T_k`` in seconds. Defaults to ``Fault.t_k_s``.
+    kappa : float, optional
+        Peak factor ``kappa`` in ``(1, 2]``. Mutually exclusive with
+        ``r_to_x``. Resolved from the sources when neither is given.
+    r_to_x : float, optional
+        ``R/X`` ratio at the fault, converted to ``kappa`` internally.
+        Mutually exclusive with ``kappa``.
+    n_factor : float, optional
+        AC-decay heat factor ``n`` (IEC 60909-0). Defaults to
+        ``Fault.n_factor``, i.e. ``1.0``.
+    frequency : float, optional
+        System frequency in Hz used in the ``m`` factor. Defaults to the
+        lowest positive frequency of ``network``, or ``50.0``. The former
+        keywords ``fault_name``, ``t_k``, ``n`` and ``f`` are accepted as
+        deprecated aliases of ``fault``, ``t_k_s``, ``n_factor`` and
+        ``frequency``.
+    aggregation : {'weighted', 'max'}, default 'weighted'
+        Only relevant when ``kappa`` is resolved from the sources; see
+        :func:`check_conductor_limits`.
+    elements : sequence of str, default ``('earthing_conductor', 'electrode')``
+        Which of the two elements to report. Pass a single-element
+        sequence to restrict the frame.
+
+    Returns
+    -------
+    polars.DataFrame
+        Long format, one row per bus and requested element, with the
+        columns ``bus_name``, ``element``, ``I_rms_A`` (the bus current
+        before the split), ``current_split``, ``I_conductor_A``,
+        ``i_p_A``, ``kappa``, ``m``, ``n``, ``t_k_s``, ``I_th_factor``,
+        ``I_th_A``, ``I_dc_A``, ``I_ac_rms_A``, ``material``,
+        ``cross_section_mm2``, ``k``,
+        ``I_admissible_A``, ``utilization`` and ``within_limit``.
+        ``within_limit`` is ``None`` where the ``BusType`` declares no
+        material / cross-section for that element — the current columns
+        are still filled, so an undimensioned bus shows what it would have
+        to carry.
+
+    Raises
+    ------
+    ValueError
+        For an unknown entry in ``elements``, and for the same conditions
+        as :func:`check_conductor_limits` (no results, missing ``t_k_s``,
+        unresolvable ``kappa``, both ``kappa`` and ``r_to_x`` given, or a
+        stored result that does not cover every *active* bus).
+
+    Warns
+    -----
+    InputWarning
+        ``THERMAL_DATA_INCOMPLETE`` for buses whose type declares only one of
+        material and cross-section for an element (those rows stay
+        unassessed), and ``SC_DATA_INCOMPLETE`` from
+        :func:`resolve_fault_sc_characteristics`.
+    ModelAssumptionWarning
+        ``THERMAL_DC_EXCLUDED`` and ``SC_KAPPA_MIXED``, as for
+        :func:`check_conductor_limits`.
+
+    Notes
+    -----
+    **Current split.** Each element carries a free factor ``current_split``
+    in ``(0, 1]`` (``BusType.earthing_conductor_current_split`` /
     ``BusType.electrode_current_split``), applied as
     ``I_conductor = I_rms * current_split``. It expresses how the bus
     current divides between physically parallel paths that the nodal model
@@ -833,65 +1108,11 @@ def check_node_limits(
     at the model level — more current than the bus carries is an error, not
     a split.
 
-    Superposition
-    -------------
-    Identical to the branch check: the frequency-domain solve superposes
-    the *linear* AC RMS currents, and the *non-linear* IEC 60909 factors
-    ``kappa`` / ``m`` are applied once to the aggregate. ``i_p`` and
-    ``I_th`` are never superposed directly.
+    **Superposition.** Identical to the branch check: the frequency-domain
+    solve superposes the *linear* AC RMS currents, and the *non-linear*
+    IEC 60909 factors ``kappa`` / ``m`` are applied once to the aggregate.
+    ``i_p`` and ``I_th`` are never superposed directly.
 
-    Parameters
-    ----------
-    network : Network
-        A network that already has results for ``fault_name`` (call
-        :func:`run_fault` first).
-    fault_name : str
-        Name of the solved fault whose bus currents are checked.
-    t_k : float, optional
-        Fault duration ``T_k`` in seconds. Defaults to ``Fault.t_k_s``.
-    kappa : float, optional
-        Peak factor ``kappa`` in ``(1, 2]``. Mutually exclusive with
-        ``r_to_x``. Resolved from the sources when neither is given.
-    r_to_x : float, optional
-        ``R/X`` ratio at the fault, converted to ``kappa`` internally.
-        Mutually exclusive with ``kappa``.
-    n : float, optional
-        AC-decay heat factor ``n`` (IEC 60909-0). Defaults to
-        ``Fault.n_factor``, i.e. ``1.0``.
-    f : float, optional
-        System frequency in Hz used in the ``m`` factor. Defaults to the
-        lowest positive frequency of ``network``, or ``50.0``.
-    aggregation : {'weighted', 'max'}, default 'weighted'
-        Only relevant when ``kappa`` is resolved from the sources; see
-        :func:`check_conductor_limits`.
-    elements : sequence of str, default ``('earthing_conductor', 'electrode')``
-        Which of the two elements to report. Pass a single-element
-        sequence to restrict the frame.
-
-    Returns
-    -------
-    polars.DataFrame
-        Long format, one row per bus and requested element, with the
-        columns ``bus_name``, ``element``, ``I_rms_A`` (the bus current
-        before the split), ``current_split``, ``I_conductor_A``,
-        ``i_p_A``, ``kappa``, ``m``, ``n``, ``t_k_s``, ``I_th_factor``,
-        ``I_th_A``, ``material``, ``cross_section_mm2``, ``k``,
-        ``I_admissible_A``, ``utilization`` and ``within_limit``.
-        ``within_limit`` is ``None`` where the ``BusType`` declares no
-        material / cross-section for that element — the current columns
-        are still filled, so an undimensioned bus shows what it would have
-        to carry.
-
-    Raises
-    ------
-    ValueError
-        For an unknown entry in ``elements``, and for the same conditions
-        as :func:`check_conductor_limits` (no results, missing ``t_k``,
-        unresolvable ``kappa``, both ``kappa`` and ``r_to_x`` given, or a
-        stored result that does not cover every *active* bus).
-
-    Notes
-    -----
     A bus that is *both* the fault bus and the only source bus gets
     ``i_inj = 0``: the current never enters the grounding system, it
     circulates in the phase conductor. That is physically correct and not
@@ -903,10 +1124,18 @@ def check_node_limits(
 
     Examples
     --------
-    >>> gi.run_fault(net, "F1")                       # doctest: +SKIP
-    >>> gi.check_node_limits(net, "F1").filter(       # doctest: +SKIP
-    ...     pl.col("element") == "electrode"
-    ... )
+    The electrode currents of the minimal network; without thermal data on the
+    bus type the judgement is ``None``:
+
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> _ = gi.run_fault(net, "fault")
+    >>> frame = gi.check_node_limits(net, "fault", t_k_s=0.5, kappa=1.8,
+    ...                              elements=["electrode"])
+    >>> [(row["bus_name"], round(row["I_rms_A"], 2), row["within_limit"])
+    ...  for row in frame.iter_rows(named=True)]
+    [('bus1', 18.03, None), ('bus2', 0.0, None), ('bus3', 18.03, None)]
     """
     unknown = [e for e in elements if e not in _NODE_ELEMENTS]
     if unknown:
@@ -916,19 +1145,20 @@ def check_node_limits(
         )
 
     sc = _resolve_sc_inputs(
-        network, fault_name, t_k, kappa, r_to_x, n, f, aggregation
+        network, fault, t_k_s, kappa, r_to_x, n_factor, frequency, aggregation
     )
 
-    result = network.results[fault_name]
+    result = network.results[fault]
     # ``solve_network`` emits a row for every *active* bus (inactive ones are
     # removed from the nodal system and carry no EPR), so the expectation is
     # the set of active buses. See _require_complete_results.
     _require_complete_results(
-        fault_name,
+        fault,
         [name for name, bus in network.buses.items() if bus.active],
         [rb.name for rb in result.buses],
         "bus",
     )
+    has_dc_bin = any(float(x) == 0.0 for x in network.frequencies)
     rows: List[Dict[str, Any]] = []
     incomplete: List[Tuple[str, str]] = []
     for result_bus in result.buses:
@@ -957,7 +1187,18 @@ def check_node_limits(
                 cross_section = getattr(btype, f"{prefix}cross_section_mm2", None)
 
             i_conductor = i_rms * split
-            i_th = i_conductor * sc.i_th_factor
+            i_dc, i_ac_conductor = _split_dc(
+                i_conductor,
+                {
+                    freq: value * split
+                    for freq, value in (
+                        getattr(result_bus, spec["current_attr"] + "_freq", None)
+                        or {}
+                    ).items()
+                },
+                has_dc_bin,
+            )
+            i_th = thermal_equivalent_current(i_ac_conductor, sc.m, sc.n)
 
             if material is not None and cross_section is not None:
                 k_val = iec60949_k(
@@ -982,7 +1223,9 @@ def check_node_limits(
                     "I_rms_A": i_rms,
                     "current_split": split,
                     "I_conductor_A": i_conductor,
-                    "i_p_A": peak_short_circuit_current(i_conductor, sc.kappa),
+                    "I_dc_A": i_dc,
+                    "I_ac_rms_A": float(i_ac_conductor),
+                    "i_p_A": peak_short_circuit_current(i_ac_conductor, sc.kappa),
                     "kappa": sc.kappa,
                     "m": sc.m,
                     "n": sc.n,
@@ -998,7 +1241,8 @@ def check_node_limits(
                 }
             )
 
-    _warn_half_declared(incomplete, fault_name, "node element(s)")
+    _warn_half_declared(incomplete, fault, "node element(s)", "bus")
+    _warn_dc_excluded(rows, fault, "bus_name", "bus")
 
     violations = [
         f"{r['bus_name']}/{r['element']}" for r in rows if r["within_limit"] is False
@@ -1007,7 +1251,7 @@ def check_node_limits(
         logger.warning(
             "Thermal limit exceeded on %d node element(s) for fault '%s' "
             "(t_k=%.3g s, kappa=%.3f): %s",
-            len(violations), fault_name, sc.t_k, sc.kappa, violations,
+            len(violations), fault, sc.t_k, sc.kappa, violations,
         )
 
     return pl.DataFrame(rows, schema=_NODE_SCHEMA)

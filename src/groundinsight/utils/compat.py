@@ -1,0 +1,274 @@
+# utils/compat.py
+
+"""
+Keyword aliases for renamed public parameters.
+
+Every concept of the public API has one parameter name. The fault is
+``fault``; an EPR limit is ``u_limit``, a fault duration ``t_k_s``, the
+IEC 60909 AC heat factor ``n_factor`` and a frequency ``frequency`` -- the
+names of the model fields (``Fault.t_k_s``, ``Fault.n_factor``). A user who
+learned one call can guess the next one; mixed names would make every call a
+lookup.
+
+Renaming a public parameter breaks every call site that passes it by keyword,
+so the old names keep working for a while. :func:`renamed_parameters` maps an
+old keyword onto the new one and says so with a :class:`DeprecationWarning`
+that names both spellings and the removal policy
+(:data:`DEPRECATION_POLICY`). Positional calls never warn -- the position did
+not change.
+
+A decorator rather than ``**kwargs`` in each signature, because
+
+* the signature stays the real one: :func:`inspect.signature`, IDEs, type
+  checkers and the API reference show only the new names;
+* the alias handling, including the refusal of a value for both spellings,
+  exists exactly once instead of once per function;
+* the mapping stays inspectable through ``__deprecated_parameters__``, which
+  is what the test that pins the rename inventory walks.
+"""
+
+import functools
+import inspect
+import logging
+import sys
+import warnings
+from typing import Any, Callable, Dict, TypeVar
+
+logger = logging.getLogger(__name__)
+
+__all__ = ["DEPRECATION_POLICY", "renamed_parameters", "warn_stacklevel"]
+
+F = TypeVar("F", bound=Callable[..., Any])
+
+#: The removal policy quoted in every alias warning. It is the project's
+#: deprecation policy (see the head of ``CHANGELOG.md``): calendar versions
+#: carry no compatibility promise of their own, so the promise is stated here.
+DEPRECATION_POLICY = (
+    "The old name keeps working, with this warning, for at least two releases "
+    "and six months after the release that deprecated it; it can be removed "
+    "after that."
+)
+
+_POSITIONAL_KINDS = (
+    inspect.Parameter.POSITIONAL_ONLY,
+    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+)
+
+
+def warn_stacklevel(stacklevel: int) -> int:
+    """
+    The ``stacklevel`` for a :func:`warnings.warn` call, alias wrappers not counted.
+
+    :func:`renamed_parameters` puts one frame of this module between a caller
+    and the decorated function. A warning that the function raises with a
+    ``stacklevel`` aimed at its caller would stop at that frame -- and a
+    ``DeprecationWarning`` attributed to the package instead of ``__main__``
+    is hidden by Python's default filters. Call this function from the frame
+    that calls :func:`warnings.warn` and pass the level that would be right
+    without any wrapper; the result counts the wrapper frames in between as
+    well. (``warnings.warn(skip_file_prefixes=...)`` does the same on Python
+    3.14, but Python 3.12 never matches a prefix that is a complete file
+    name, so the count is done here.)
+
+    Parameters
+    ----------
+    stacklevel : int
+        The level as for :func:`warnings.warn`, counted from the calling
+        frame (``1``), with the wrapper frames of this module left out.
+
+    Returns
+    -------
+    int
+        The level to pass to :func:`warnings.warn` from the calling frame.
+
+    Examples
+    --------
+    A warning meant for the caller of a function with a renamed parameter:
+
+    >>> import warnings
+    >>> @renamed_parameters(old_name="name")
+    ... def api(name=None):
+    ...     warnings.warn("for the caller", UserWarning, stacklevel=warn_stacklevel(2))
+    >>> with warnings.catch_warnings(record=True) as caught:
+    ...     warnings.simplefilter("always")
+    ...     api()
+    >>> caught[0].filename.startswith("<doctest")  # not this module
+    True
+    """
+    frame = sys._getframe(1)
+    level = 1
+    remaining = int(stacklevel) - 1
+    while remaining > 0 and frame.f_back is not None:
+        frame = frame.f_back
+        level += 1
+        if frame.f_code.co_filename == __file__:
+            continue  # a wrapper frame of renamed_parameters: not counted
+        remaining -= 1
+    return level
+
+
+def _display_name(func: Callable[..., Any]) -> str:
+    """
+    The name a user calls ``func`` by, for the warning text.
+
+    Parameters
+    ----------
+    func : callable
+        The decorated function or method.
+
+    Returns
+    -------
+    str
+        ``func.__qualname__``, with a trailing ``.__init__`` dropped so a
+        constructor reads as ``TransientStudy`` rather than
+        ``TransientStudy.__init__``.
+    """
+    name = func.__qualname__
+    if name.endswith(".__init__"):
+        name = name[: -len(".__init__")]
+    return name
+
+
+def renamed_parameters(**renames: str) -> Callable[[F], F]:
+    """
+    Accept the old keyword names of renamed parameters, with a warning.
+
+    Parameters
+    ----------
+    **renames : str
+        ``old_name="new_name"`` pairs. ``new_name`` must be a parameter of the
+        decorated function and ``old_name`` must not be.
+
+    Returns
+    -------
+    callable
+        A decorator. The function it returns behaves exactly like the
+        decorated one, except that a keyword argument under an old name is
+        passed on under its new name after a :class:`DeprecationWarning`. It
+        carries the mapping as ``__deprecated_parameters__``.
+
+    Raises
+    ------
+    TypeError
+        At decoration time, if ``renames`` is empty, if a new name is not a
+        parameter of the decorated function or if an old name still is one.
+        At call time, if a value is passed under the new name -- by keyword or
+        by position -- *and* under its old name, which is ambiguous in the
+        same way as passing one argument twice.
+
+    Notes
+    -----
+    The warning is raised with ``stacklevel=2``, so it points at the caller's
+    line. :class:`DeprecationWarning` is shown by default for code run as
+    ``__main__`` (scripts, notebook cells) and under ``pytest``; library code
+    that calls through with an old name stays quiet unless the warning
+    filters are opened.
+
+    Examples
+    --------
+    >>> import warnings
+    >>> from groundinsight.utils.compat import renamed_parameters
+    >>> @renamed_parameters(fault_name="fault")
+    ... def solve_one(network, fault):
+    ...     return fault
+    >>> solve_one(None, "F1")
+    'F1'
+    >>> with warnings.catch_warnings(record=True) as caught:
+    ...     warnings.simplefilter("always")
+    ...     solve_one(None, fault_name="F1")
+    'F1'
+    >>> caught[0].category.__name__
+    'DeprecationWarning'
+    >>> solve_one.__deprecated_parameters__
+    {'fault_name': 'fault'}
+    """
+    if not renames:
+        raise TypeError("renamed_parameters() needs at least one old='new' pair.")
+
+    def decorate(func: F) -> F:
+        """
+        Wrap ``func`` so that its old keyword names keep working.
+
+        Parameters
+        ----------
+        func : callable
+            The function whose parameters were renamed.
+
+        Returns
+        -------
+        callable
+            The wrapper described in :func:`renamed_parameters`.
+
+        Raises
+        ------
+        TypeError
+            If a new name is not a parameter of ``func`` or an old name still
+            is one.
+        """
+        parameters = inspect.signature(func).parameters
+        display = _display_name(func)
+        for old, new in renames.items():
+            if new not in parameters:
+                raise TypeError(
+                    f"{display}() has no parameter {new!r}; cannot declare "
+                    f"{old!r} as its deprecated alias."
+                )
+            if old in parameters:
+                raise TypeError(
+                    f"{display}() still has a parameter {old!r}; an alias "
+                    "cannot shadow a real parameter."
+                )
+        # Where each new name sits when passed positionally, so that
+        # ``f(net, "F", fault_name="G")`` is caught as a double value.
+        positions: Dict[str, int] = {
+            name: index
+            for index, (name, parameter) in enumerate(parameters.items())
+            if parameter.kind in _POSITIONAL_KINDS
+        }
+
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            """
+            Call ``func`` with every old keyword passed under its new name.
+
+            ``functools.wraps`` replaces this docstring with ``func``'s at
+            runtime; it documents the wrapper for the reader of this module.
+
+            Parameters
+            ----------
+            *args, **kwargs
+                The arguments of ``func``.
+
+            Returns
+            -------
+            object
+                What ``func`` returns.
+
+            Raises
+            ------
+            TypeError
+                If a value is passed under a new name and under its old name.
+            """
+            for old, new in renames.items():
+                if old not in kwargs:
+                    continue
+                value = kwargs.pop(old)
+                position = positions.get(new)
+                if new in kwargs or (position is not None and len(args) > position):
+                    raise TypeError(
+                        f"{display}() got a value for {new!r} and for its "
+                        f"deprecated alias {old!r}; pass only {new!r}."
+                    )
+                warnings.warn(
+                    f"{display}(): the keyword {old!r} is deprecated, use "
+                    f"{new!r} instead. {DEPRECATION_POLICY}",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                kwargs[new] = value
+            return func(*args, **kwargs)
+
+        wrapper.__deprecated_parameters__ = dict(renames)
+        return wrapper  # type: ignore[return-value]
+
+    return decorate

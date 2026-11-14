@@ -10,15 +10,18 @@ calculations and updates.
 """
 
 import logging
+import warnings
 
+from .diagnostics import ModelAssumptionWarning, collecting, emit, unique
 from .models.core_models import Network, Bus, BusType, Branch, BranchType, Fault, Source
+from .utils.compat import renamed_parameters, warn_stacklevel
 from typing import Optional, List, Dict
 
 
 logger = logging.getLogger(__name__)
 
 
-def create_network(name: str, frequencies: List, description: str = None) -> Network:
+def create_network(name: str, frequencies: List, description: Optional[str] = None) -> Network:
     """
     Create a new network with the given name and description.
 
@@ -55,7 +58,7 @@ def create_bus(
     name: str,
     type: BusType,
     specific_earth_resistance: Optional[float] = 100,
-    description: str = None,
+    description: Optional[str] = None,
     network: Optional[Network] = None,
 ) -> Bus:
     """
@@ -124,7 +127,7 @@ def create_branch(
     to_bus: str,
     length: float,
     specific_earth_resistance: Optional[float] = 100,
-    description: str = None,
+    description: Optional[str] = None,
     network: Optional[Network] = None,
     parallel_coefficient: Optional[float] = 1.0,
 ) -> Branch:
@@ -146,7 +149,7 @@ def create_branch(
     to_bus : str
         The name of the terminating bus.
     length : float
-        The length of the branch (km).
+        The length of the branch in km; finite and strictly positive.
     specific_earth_resistance : float, optional
         The specific earth resistance for the branch (Ohm * m). Defaults
         to ``100``.
@@ -158,6 +161,11 @@ def create_branch(
     parallel_coefficient : float, optional
         Per-branch share of the source-to-fault phase current; used by
         the path-based mutual-coupling injection. Defaults to ``1.0``.
+        **Only read in the legacy phase-current mode**
+        ``run_fault(..., phase_current_mode="paths")``. The default mode
+        ``"auto"`` solves a reduced phase-conductor network from
+        ``BranchType.phase_impedance_formula``, where the split follows from
+        the phase impedances and this value is ignored.
 
     Returns
     -------
@@ -168,7 +176,9 @@ def create_branch(
     ------
     ValueError
         If the specified ``from_bus`` or ``to_bus`` does not exist in the
-        provided network.
+        provided network, if ``length`` is not a finite positive number of
+        km, or if the impedances cannot be derived from ``type``. The
+        network is unchanged in every case.
 
     Examples
     --------
@@ -217,9 +227,9 @@ def create_branch(
 def create_fault(
     name: str,
     bus: str,
-    scalings: Dict,
+    scalings: Optional[Dict] = None,
     active: bool = False,
-    description: str = None,
+    description: Optional[str] = None,
     network: Optional[Network] = None,
     t_k_s: Optional[float] = None,
     n_factor: float = 1.0,
@@ -237,8 +247,13 @@ def create_fault(
         The name of the fault.
     bus : str
         The name of the bus where the fault occurs.
-    scalings : dict of float to float
-        Scaling factors applied to the source currents at each frequency.
+    scalings : dict of float to float, optional
+        Factor applied to the source currents, per frequency. ``None`` (the
+        default) or ``{}`` means 1.0 at every frequency. A frequency missing
+        from a non-empty mapping is scaled with 1.0 as well -- full
+        contribution, not zero -- and ``run_fault`` announces the incomplete
+        mapping once per run (``InputWarning`` ``SCALINGS_INCOMPLETE``). Give
+        ``0.0`` to exclude a frequency from this fault.
     active : bool, optional
         Whether to activate the fault immediately upon creation. Defaults
         to ``False``.
@@ -265,13 +280,19 @@ def create_fault(
     ------
     ValueError
         If the specified bus does not exist in the provided network, if
-        ``t_k_s`` is not a positive duration, or if ``n_factor`` lies
-        outside ``(0, 1]``.
+        ``t_k_s`` is not a positive duration, if ``n_factor`` lies
+        outside ``(0, 1]``, or if ``active=True`` is passed without a
+        network. The network is unchanged in every case.
 
     Examples
     --------
     >>> import groundinsight as gi
+    >>> bus_type = gi.BusType(
+    ...     name="StandardBus", system_type="Grounded", voltage_level=110,
+    ...     impedance_formula="1 + j * f / 50",
+    ... )
     >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60])
+    >>> _ = gi.create_bus(name="Bus1", type=bus_type, network=network)
     >>> fault = gi.create_fault(
     ...     name="Fault1", bus="Bus1",
     ...     scalings={50: 1.0, 60: 0.8},
@@ -280,16 +301,21 @@ def create_fault(
     >>> fault.name
     'Fault1'
     """
-    if network:
-        if bus not in network.buses:
-            raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
+    if active and network is None:
+        raise ValueError(
+            f"create_fault(name='{name}', active=True) needs a network: a "
+            "fault can only be the active one *in* a network. Pass "
+            "network=..., or leave active=False and call "
+            "network.set_active_fault(...) once the fault has been added."
+        )
+    if network and bus not in network.buses:
+        raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
 
     fault = Fault(
         name=name,
         description=description,
         bus=bus,
         scalings=scalings,
-        active=False,
         t_k_s=t_k_s,
         n_factor=n_factor,
     )
@@ -303,10 +329,11 @@ def create_fault(
     return fault
 
 
+@renamed_parameters(fault_name="fault")
 def set_active_fault(
-    network: Network, fault_name: str, keep_results: bool = False
+    network: Network, fault: str, keep_results: bool = False
 ) -> None:
-    """Activate ``fault_name`` on ``network`` and deactivate the others.
+    """Activate ``fault`` on ``network`` and deactivate the others.
 
     Thin wrapper around :meth:`Network.set_active_fault` so the
     ``keep_results=`` keyword is reachable from the public top-level
@@ -318,11 +345,12 @@ def set_active_fault(
     ----------
     network : Network
         The network to operate on.
-    fault_name : str
-        The name of the fault to activate.
+    fault : str
+        The name of the fault to activate. The former keyword
+        ``fault_name`` is accepted as a deprecated alias.
     keep_results : bool, default ``False``
         Forwarded to :meth:`Network.set_active_fault`. If ``True``,
-        any previously cached :class:`Result` for ``fault_name`` is
+        any previously cached :class:`Result` for ``fault`` is
         preserved so a notebook can re-plot the existing solve
         without recomputing it.
 
@@ -338,17 +366,22 @@ def set_active_fault(
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> gi.set_active_fault(net, "F1", keep_results=True)  # doctest: +SKIP
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> _ = gi.create_fault(name="near", bus="bus2", scalings={50.0: 1.0}, network=net)
+    >>> gi.set_active_fault(net, "near")
+    >>> net.active_fault, net.faults["near"].active, net.faults["fault"].active
+    ('near', True, False)
     """
-    network.set_active_fault(fault_name, keep_results=keep_results)
+    network.set_active_fault(fault, keep_results=keep_results)
 
 
 def create_source(
     name: str,
     bus: str,
     values: Dict,
-    description: str = None,
+    description: Optional[str] = None,
     network: Optional[Network] = None,
     i_k_a: Optional[float] = None,
     r_to_x: Optional[float] = None,
@@ -396,7 +429,12 @@ def create_source(
     Examples
     --------
     >>> import groundinsight as gi
+    >>> bus_type = gi.BusType(
+    ...     name="StandardBus", system_type="Grounded", voltage_level=110,
+    ...     impedance_formula="1 + j * f / 50",
+    ... )
     >>> network = gi.create_network(name="TestNetwork", frequencies=[50, 60])
+    >>> _ = gi.create_bus(name="Bus1", type=bus_type, network=network)
     >>> source = gi.create_source(
     ...     name="Source1", bus="Bus1",
     ...     values={50: 10 + 5j, 60: 15 + 7j},
@@ -405,9 +443,8 @@ def create_source(
     >>> source.name
     'Source1'
     """
-    if network:
-        if bus not in network.buses:
-            raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
+    if network and bus not in network.buses:
+        raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
 
     source = Source(
         name=name,
@@ -428,7 +465,7 @@ def create_voltage_source(
     bus: str,
     voltage: Dict,
     source_impedance: Dict,
-    description: str = None,
+    description: Optional[str] = None,
     network: Optional[Network] = None,
 ) -> Source:
     """
@@ -474,17 +511,18 @@ def create_voltage_source(
     Examples
     --------
     >>> import groundinsight as gi
-    >>> network = gi.create_network(name="TestNetwork", frequencies=[50])
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
     >>> source = gi.create_voltage_source(
-    ...     name="VSrc1", bus="Bus1",
-    ...     voltage={50: 20000.0 + 0.0j},
-    ...     source_impedance={50: 0.5 + 0.1j},
-    ...     network=network,
-    ... )  # doctest: +SKIP
+    ...     name="grid", bus="bus1",
+    ...     voltage={50: 11547.0}, source_impedance={50: 0.5 + 2.0j},
+    ...     network=net,
+    ... )
+    >>> source.source_type, sorted(net.sources)
+    ('voltage', ['grid', 'src'])
     """
-    if network:
-        if bus not in network.buses:
-            raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
+    if network and bus not in network.buses:
+        raise ValueError(f"bus '{bus}' is not in the network '{network.name}'")
 
     source = Source(
         name=name,
@@ -535,8 +573,47 @@ def create_paths(network: Network):
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> gi.create_paths(network=network)  # doctest: +SKIP
+    Paths are what ``phase_current_mode="paths"`` reads:
+
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> gi.create_paths(net)
+    >>> [path.name for path in net.paths.values()]
+    ['path_1']
+    """
+    _assert_network_is_excited(network)
+    network.define_paths()
+
+
+def _assert_network_is_excited(network: Network) -> None:
+    """
+    Reject a network that has no source or no fault at all.
+
+    Every downstream step succeeds on an unexcited system and reports 0 V
+    at every bus -- a plausible-looking result rather than an error
+    message. The check lives in its own helper because both
+    :func:`create_paths` and :func:`run_fault` need it: ``run_fault`` does
+    not enumerate paths in the default ``phase_current_mode="auto"``, so it
+    cannot rely on the guard of ``create_paths``.
+
+    Parameters
+    ----------
+    network : Network
+        The network to check.
+
+    Raises
+    ------
+    ValueError
+        If the network defines no sources or no faults.
+
+    Notes
+    -----
+    The check is on *all* faults, not on ``active_fault``. Finding no path
+    between an existing source and an existing fault is a different matter
+    and stays permitted -- that is exactly what an outage scenario which
+    islands the fault bus produces, and the all-zero result is then the
+    correct answer.
     """
     if not network.sources:
         raise ValueError(
@@ -550,7 +627,6 @@ def create_paths(network: Network):
             "path exists and the calculation would return 0 V at every bus. "
             "Add a fault with gi.create_fault(...)."
         )
-    network.define_paths()
 
 
 def build_electrical_network(network: Network, auto_phase_currents: bool = False):
@@ -579,16 +655,35 @@ def build_electrical_network(network: Network, auto_phase_currents: bool = False
     ------
     ImportError
         If the :class:`ElectricalNetwork` class cannot be imported.
+    ValueError
+        If a source that reaches the active fault has a value at none of the
+        network frequencies. The checks of the input that
+        :func:`run_fault` makes run here, while the vectors are assembled.
+
+    Warns
+    -----
+    InputWarning
+        ``SOURCE_FREQUENCY_GAP`` for a source that misses some network
+        frequencies, ``SCALINGS_INCOMPLETE`` for an incomplete
+        ``Fault.scalings``.
+    ModelAssumptionWarning
+        ``THEVENIN_COUPLING`` for a Thevenin source that drives coupled
+        branches.
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> gi.build_electrical_network(network)  # doctest: +SKIP
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> net.set_active_fault("fault")
+    >>> gi.build_electrical_network(net)
+    >>> net.electrical_network.bus_indices
+    {'bus1': 0, 'bus2': 1, 'bus3': 2}
     """
     from groundinsight.electrical_network import ElectricalNetwork
 
     network.electrical_network = ElectricalNetwork(
-        network, auto_phase_currents=auto_phase_currents
+        network, auto_phase_currents=auto_phase_currents, input_checks=True
     )
 
 
@@ -627,13 +722,21 @@ def _resolve_phase_current_mode(
             f"pre-0.6 behaviour driven by Branch.parallel_coefficient."
         )
     if auto_parallel_coefficients is not None:
-        logger.warning(
-            "run_fault(auto_parallel_coefficients=%s) is deprecated; pass "
-            "phase_current_mode=%r instead. The old argument still wins when "
-            "given, so this call is unaffected.",
-            auto_parallel_coefficients,
-            "auto" if auto_parallel_coefficients else "paths",
+        replacement = "auto" if auto_parallel_coefficients else "paths"
+        message = (
+            f"run_fault(auto_parallel_coefficients={auto_parallel_coefficients}) "
+            f"is deprecated; pass phase_current_mode={replacement!r} instead. "
+            "The old argument still wins when given, so this call is "
+            "unaffected."
         )
+        # Both channels on purpose. The logger line is what a user with
+        # ``gi.set_log_level("WARNING")`` sees; the DeprecationWarning is what
+        # ``pytest -W error::DeprecationWarning``, ``python -W error`` and
+        # every linting/CI setup that watches for removals see -- and the
+        # library default is a NullHandler, so the log line alone reaches
+        # nobody who has not configured logging.
+        warnings.warn(message, DeprecationWarning, stacklevel=warn_stacklevel(3))
+        logger.warning("%s", message)
         return bool(auto_parallel_coefficients)
     return phase_current_mode == "auto"
 
@@ -644,9 +747,9 @@ def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
 
     The check is scoped to the **active fault** and to a **single source**: only
     when one source reaches the active fault over two or more paths does the
-    path-based scheme multiply the source current instead of splitting it. The
-    earlier version counted paths across all faults, which raised a false alarm
-    on a strictly radial network that merely carried two fault definitions.
+    path-based scheme multiply the source current instead of splitting it.
+    Counting paths across all faults would raise a false alarm on a strictly
+    radial network that merely carries two fault definitions.
 
     Parameters
     ----------
@@ -655,6 +758,15 @@ def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
     parallel_coefficients : bool
         ``True`` when the automatic phase-network solve is active, in which case
         nothing is warned about.
+
+    Warns
+    -----
+    ModelAssumptionWarning
+        Code ``PARALLEL_COEFFICIENT_DEFAULT``, ``elements`` the sources that
+        reach the active fault over more than one path. Collected into
+        ``Result.diagnostics`` by :func:`run_fault`; a warning rather than a
+        log line, because the library's default ``NullHandler`` would swallow
+        a log line.
 
     Examples
     --------
@@ -687,21 +799,27 @@ def _warning_parallel_coeffcient(network: Network, parallel_coefficients: bool):
     if not default_coefficients:
         return
 
-    logger.warning(
-        "Source(s) %s reach fault '%s' over more than one path while "
+    emit(
+        ModelAssumptionWarning,
+        f"Source(s) {', '.join(repr(s) for s in sorted(parallel_sources))} "
+        f"reach fault '{active_fault}' over more than one path while "
         "parallel_coefficient is still 1.0 or None. In phase_current_mode="
         "'paths' every one of those paths carries the FULL source current, so "
-        "the current is multiplied instead of split -- a symmetric ring "
-        "collapses to EPR = 0, r = 0 and Z_G = None. Use the default "
-        "phase_current_mode='auto', or set parallel_coefficient per branch.",
-        ", ".join(f"'{s}'" for s in sorted(parallel_sources)),
-        active_fault,
+        "the current is multiplied instead of split -- in a symmetric ring of "
+        "two routes the coupled injections add up to (1 - 2k) I instead of "
+        "(1 - k) I, which collapses the EPR to 0 for k = Z_m/Z_s = 0.5. Use "
+        "the default phase_current_mode='auto', or set parallel_coefficient "
+        "per branch.",
+        code="PARALLEL_COEFFICIENT_DEFAULT",
+        elements=[("source", s) for s in sorted(parallel_sources)],
+        stacklevel=3,
     )
 
 
+@renamed_parameters(fault_name="fault")
 def run_fault(
     network: Network,
-    fault_name: str,
+    fault: str,
     auto_parallel_coefficients: Optional[bool] = None,
     *,
     phase_current_mode: str = "auto",
@@ -712,15 +830,17 @@ def run_fault(
     Sets the named fault as the active fault, builds the electrical
     network, solves the per-frequency nodal system, computes branch
     currents, reduction factors and grounding impedance. The results are
-    stored on ``network.results[fault_name]``.
+    stored on ``network.results[fault]``. :func:`groundinsight.solve` runs the
+    same pipeline without writing anything into ``network``.
 
     Parameters
     ----------
     network : Network
         The network instance on which the fault calculations are to be
         performed.
-    fault_name : str
-        The name of the fault to activate and run calculations for.
+    fault : str
+        The name of the fault to activate and run calculations for. The
+        former keyword ``fault_name`` is accepted as a deprecated alias.
     auto_parallel_coefficients : bool, optional
         Deprecated alias for ``phase_current_mode``. ``True`` maps to
         ``"auto"``, ``False`` to ``"paths"``. When given it wins over
@@ -735,66 +855,141 @@ def run_fault(
         source current correctly over rings, meshes and parallel
         branches, and it ignores ``Branch.parallel_coefficient``.
 
-        ``"paths"`` is the pre-0.6 behaviour: every branch on any
-        enumerated source-to-fault path receives the *full* source
-        current scaled by its ``parallel_coefficient``. In a meshed
-        network that multiplies the current instead of splitting it --
-        with the default coefficient of 1.0 a symmetric ring collapses to
-        ``EPR = 0``. Kept for reproducing older studies and for networks
-        where the split is known from measurement and set by hand.
+        ``"paths"``: every branch on any enumerated source-to-fault path
+        receives the *full* source current scaled by its
+        ``parallel_coefficient``. In a meshed network that multiplies the
+        current instead of splitting it: in a symmetric ring of two routes,
+        at the default coefficient of 1.0, the coupled injections add up to
+        ``(1 - 2k) I`` instead of ``(1 - k) I`` (``k = Z_m / Z_s``). That
+        collapses the EPR to 0 for ``k = 0.5`` and, where ``|1 - 2k| = 1``,
+        reports it as if the shields did not couple at all. Kept for
+        reproducing studies made with this scheme and for networks where the
+        split is known from measurement and set by hand.
+
+    Returns
+    -------
+    Result
+        The result of the run -- the same object that is stored as
+        ``network.results[fault]``. Its ``diagnostics`` list holds every
+        package warning raised during the run, with code and element
+        references (see :mod:`groundinsight.diagnostics`).
 
     Raises
     ------
     ValueError
-        If the specified fault does not exist in the network, or if
+        If the specified fault does not exist in the network, if the
+        network defines no sources or no faults at all, or if
         ``phase_current_mode`` is not one of the two accepted values.
     RuntimeError
         If there is an error during the network calculations.
 
+    Warns
+    -----
+    ModelAssumptionWarning
+        Among others (every package warning of the run is collected into
+        ``Result.diagnostics``): ``PARALLEL_COEFFICIENT_DEFAULT`` when
+        ``phase_current_mode="paths"`` meets a source that reaches the fault
+        over several paths with default parallel coefficients, and
+        ``EARTH_GROUP_SPREAD`` when the electrode currents are spread in angle
+        so that ``I_E`` and ``value_current`` describe the dominant direction
+        only.
+
+    Notes
+    -----
+    ``"auto"`` does **not** enumerate the source-to-fault paths. It only
+    needs to know which sources reach the fault, which
+    :meth:`~groundinsight.models.core_models.Network.sources_reaching`
+    answers with a breadth-first search over the active sub-graph. The
+    enumeration is exponential in the number of independent loops -- a
+    6x6 grid has 1 262 816 simple paths, about a minute of enumeration per
+    ``run_fault`` while the solver itself needs milliseconds -- so it runs
+    only in ``"paths"`` mode or when the user asks for it with
+    :func:`create_paths`. ``network.paths`` is therefore normally empty
+    after a default ``run_fault``; a path set that no longer matches the
+    active topology is dropped so no later reader picks it up.
+
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> gi.run_fault(network, fault_name="Fault1")  # doctest: +SKIP
+    >>> import polars as pl
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> net = build_minimal()
+    >>> result = gi.run_fault(net, "fault")
+    >>> result is net.results["fault"]
+    True
+    >>> epr = net.res_buses("fault").filter(pl.col("is_rms"))
+    >>> [(row["bus_name"], round(row["EPR_V"], 2)) for row in epr.iter_rows(named=True)]
+    [('bus1', 18.03), ('bus2', 0.0), ('bus3', 18.03)]
     """
     auto_phase_currents = _resolve_phase_current_mode(
         phase_current_mode, auto_parallel_coefficients
     )
 
     # Set the active fault
-    network.set_active_fault(fault_name)
+    network.set_active_fault(fault)
 
     # (Re)build paths when they are missing or the active topology changed
     # since they were last built (e.g. a manual Bus.active / Branch.active
     # flip or an in-place rewiring). Without this check run_fault would
     # silently reuse stale paths while the Y-matrix is rebuilt from the
     # current active flags, yielding a wrong EPR.
-    if network._needs_path_rebuild():
-        network.invalidate_paths()
-        create_paths(network)
+    #
+    # Only the legacy ``phase_current_mode="paths"`` actually needs the
+    # enumerated paths -- there they carry the phase current per branch.
+    # ``"auto"`` (the default) solves a reduced phase-conductor network and
+    # only needs to know *which* sources reach the fault, which
+    # ``Network.sources_reaching`` answers with a breadth-first search. The
+    # enumeration is exponential in the number of loops (1.26 million paths
+    # and roughly a minute on a 6x6 grid, against milliseconds in the
+    # solver), so it is not triggered in the default mode. Stale
+    # paths are still dropped so that no later reader -- persistence, the
+    # transient state-space solver, the short-circuit aggregation -- picks
+    # up a path set that no longer matches the topology. Users who want the
+    # paths as data keep asking for them with ``gi.create_paths(network)``.
+    _assert_network_is_excited(network)
+    # Every package warning raised from here on belongs to this run. The
+    # sink is per thread/task (see groundinsight.diagnostics), so concurrent
+    # runs keep their messages apart, and it records warnings the caller has
+    # filtered out as well -- the result carries them either way.
+    with collecting() as sink:
+        if not auto_phase_currents:
+            if network.needs_path_rebuild():
+                network.invalidate_paths()
+                create_paths(network)
+        elif network.paths and network.needs_path_rebuild():
+            network.invalidate_paths()
 
-    # Warn only in the legacy mode, and only when the network around this fault
-    # actually has parallel routes -- see _warning_parallel_coeffcient.
-    if not auto_phase_currents:
-        _warning_parallel_coeffcient(network, auto_phase_currents)
+        # Warn only in the legacy mode, and only when the network around this
+        # fault actually has parallel routes -- see _warning_parallel_coeffcient.
+        if not auto_phase_currents:
+            _warning_parallel_coeffcient(network, auto_phase_currents)
 
-    # Build the electrical network from the physical network. auto_phase_currents
-    # switches the phase-current determination from the path-based scheme
-    # (parallel_coefficient per branch) to the phase-network solve.
-    build_electrical_network(network, auto_phase_currents=auto_phase_currents)
+        # Build the electrical network from the physical network.
+        # auto_phase_currents switches the phase-current determination from
+        # the path-based scheme (parallel_coefficient per branch) to the
+        # phase-network solve.
+        build_electrical_network(network, auto_phase_currents=auto_phase_currents)
 
-    # Solve the network
-    network.electrical_network.solve_network()
+        # Solve the network
+        network.electrical_network.solve_network()
 
-    # Compute branch currents
-    network.electrical_network.compute_branch_currents()
+        # Compute branch currents
+        network.electrical_network.compute_branch_currents()
 
-    # Compute reduction factors
-    network.electrical_network.compute_reduction_factors()
+        # Compute reduction factors
+        network.electrical_network.compute_reduction_factors()
 
-    # Compute grounding impedance
-    network.electrical_network.compute_grounding_impedance()
+        # Compute grounding impedance
+        network.electrical_network.compute_grounding_impedance()
 
-    # Results are stored in net.results within the ElectricalNetwork methods
+    # Results are stored in net.results within the ElectricalNetwork methods;
+    # the diagnostics of the run are attached to that same object.
+    result = network.results[fault]
+    result.diagnostics = unique(sink)
+    # Stamp the inputs the result was computed from; Network.stale_results
+    # compares the stamp with the network's inputs at any later time (GUI3).
+    result.input_digest = network.input_digest(fault)
+    return result
 
 
 def create_network_assistant(
@@ -805,7 +1000,7 @@ def create_network_assistant(
     branch_type: BranchType,
     branch_length: List,
     specific_earth_resistance: float,
-    description: str = None,
+    description: Optional[str] = None,
 ) -> Network:
     """
     Create a linear network with a uniform bus and branch type.
@@ -852,20 +1047,25 @@ def create_network_assistant(
     -----
     A line of ``n`` buses has ``n - 1`` branches, so ``branch_length``
     has one entry *fewer* than ``number_buses``. Passing ``n`` lengths --
-    ``[1.0] * 30`` for ``number_buses=30``, read as "a 30 km line" -- used
-    to be accepted silently: the surplus entry was dropped and the
-    returned network was one span shorter than the one asked for, with no
-    warning anywhere. Too few entries raised a bare ``IndexError`` from
-    inside the loop.
+    ``[1.0] * 30`` for ``number_buses=30``, read as "a 30 km line" -- is
+    refused rather than truncated: dropping the surplus entry would return a
+    network one span shorter than the one asked for, with no warning
+    anywhere. Too few entries are refused the same way instead of failing
+    with a bare ``IndexError`` from inside the loop.
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> network = gi.create_network_assistant(  # doctest: +SKIP
-    ...     name="Linear30", frequencies=[50, 250], number_buses=30,
-    ...     bus_type=bus_type, branch_type=branch_type,
-    ...     branch_length=[1.0] * 29, specific_earth_resistance=100.0,
-    ... )
+    >>> import groundinsight as gi
+    >>> station = gi.BusType(name="station", system_type="Substation",
+    ...                      voltage_level=20.0, impedance_formula="rho * 0.01")
+    >>> cable = gi.BranchType(name="cable", grounding_conductor=True,
+    ...                       self_impedance_formula="(0.25 + j * f * 0.012) * l",
+    ...                       mutual_impedance_formula="j * f * 0.012 * l")
+    >>> net = gi.create_network_assistant(
+    ...     name="Linear5", frequencies=[50.0], number_buses=5, bus_type=station,
+    ...     branch_type=cable, branch_length=[1.0] * 4, specific_earth_resistance=100.0)
+    >>> list(net.buses), list(net.branches)
+    (['bus1', 'bus2', 'bus3', 'bus4', 'bus5'], ['branch1', 'branch2', 'branch3', 'branch4'])
     """
     if isinstance(number_buses, bool) or not isinstance(number_buses, int):
         raise ValueError(
@@ -895,7 +1095,7 @@ def create_network_assistant(
     for i in range(number_buses):
         # create a bus with the name "bus"+i+1
         bus_name = f"bus{i+1}"
-        bus = create_bus(bus_name, bus_type, specific_earth_resistance, network=net)
+        create_bus(bus_name, bus_type, specific_earth_resistance, network=net)
         if i > 0:
             # create a branch with the name "branch"+i which connectes the buses from idx i-1 and i
             branch_name = f"branch{i}"

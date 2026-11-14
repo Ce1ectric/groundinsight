@@ -32,6 +32,11 @@ from groundinsight.simulation.outage import (
     outage_context,
     run_outage_study,
 )
+from tests._warning_policy import acknowledge
+
+#: The ring or parallel-route network of these tests splits its phase current
+#: by the proxy (PHASE_PROXY); the tests are about something else.
+RING = acknowledge("PHASE_PROXY")
 
 
 # ---------------------------------------------------------------------------
@@ -145,13 +150,16 @@ def test_default_solve_unchanged_versus_pre_change_baseline():
     consistency: EPR>0 at the fault bus, EPR>0 at the source bus, and the
     intermediate bus sits in between."""
     net = _build_line()
-    gi.run_fault(net, fault_name="F1", auto_parallel_coefficients=True)
+    gi.run_fault(net, fault="F1", phase_current_mode="auto")
     e1 = _epr_at(net, "bus1")
     e2 = _epr_at(net, "bus2")
     e3 = _epr_at(net, "bus3")
     assert e1 > 0 and e2 > 0 and e3 > 0
-    # Fault bus is the most stressed node in this topology
-    assert e3 == max(e1, e2, e3)
+    # Fault bus is the most stressed node in this topology -- jointly with the
+    # source bus, which carries the same EPR physically. The two differ in the
+    # last bit depending on the solver's rounding (audit pass 19, P13), so the
+    # comparison is relative, not bit-exact.
+    assert e3 == pytest.approx(max(e1, e2, e3), rel=1e-12)
 
 
 # ---------------------------------------------------------------------------
@@ -168,13 +176,13 @@ def test_inactive_branch_acts_as_open_circuit_in_a_ring():
     net.branches["b13"].active = False
     # Drop pre-existing path cache so define_paths runs again with the new topology
     net.paths = {}
-    gi.run_fault(net, fault_name="F1", auto_parallel_coefficients=True)
+    gi.run_fault(net, fault="F1", phase_current_mode="auto")
 
     df = net.res_branches(fault="F1")
     rms_b13 = (
         df.filter(
             (pl.col("branch_name") == "b13")
-            & (pl.col("frequency_Hz").cast(pl.Utf8) == "RMS")
+            & pl.col("is_rms")
         )["I_branch_A"][0]
     )
     assert rms_b13 == pytest.approx(0.0, abs=1e-12)
@@ -188,7 +196,7 @@ def test_inactive_bus_removes_node_and_paths():
     net = _build_line()
     net.buses["bus2"].active = False
     net.paths = {}
-    gi.run_fault(net, fault_name="F1", auto_parallel_coefficients=True)
+    gi.run_fault(net, fault="F1", phase_current_mode="auto")
 
     # bus2 is removed from the result -- only bus1 and bus3 remain
     df = net.res_buses(fault="F1")
@@ -239,14 +247,19 @@ def test_outage_context_restores_active_flags_on_exit():
 
 def test_outage_context_raises_on_unknown_names():
     net = _build_line()
-    with pytest.raises(ValueError, match="unknown buses"):
-        with outage_context(net, Outage(name="x", disabled_buses=["does_not_exist"])):
-            pass
-    with pytest.raises(ValueError, match="unknown branches"):
-        with outage_context(net, Outage(name="x", disabled_branches=["nope"])):
-            pass
+    with (
+        pytest.raises(ValueError, match="unknown buses"),
+        outage_context(net, Outage(name="x", disabled_buses=["does_not_exist"])),
+    ):
+        pass
+    with (
+        pytest.raises(ValueError, match="unknown branches"),
+        outage_context(net, Outage(name="x", disabled_branches=["nope"])),
+    ):
+        pass
 
 
+@RING
 def test_run_outage_study_collects_base_and_scenarios():
     """A two-scenario study (base + branch outage + bus outage) must produce
     one bus / branch DataFrame per label."""
@@ -258,7 +271,7 @@ def test_run_outage_study_collects_base_and_scenarios():
             Outage(name="b13_open", disabled_branches=["b13"]),
             Outage(name="bus2_isolated", disabled_buses=["bus2"]),
         ],
-        auto_parallel_coefficients=True,
+        phase_current_mode="auto",
     )
 
     assert isinstance(study, OutageStudyResult)
@@ -283,6 +296,7 @@ def test_run_outage_study_rejects_label_collisions():
         )
 
 
+@RING
 def test_compare_buses_produces_long_format_with_deltas():
     """The comparison helper must emit the expected columns and at least
     one non-zero delta for the disabled-branch scenario at the fault bus."""
@@ -291,7 +305,7 @@ def test_compare_buses_produces_long_format_with_deltas():
         net,
         fault="F1",
         scenarios=[Outage(name="b13_open", disabled_branches=["b13"])],
-        auto_parallel_coefficients=True,
+        phase_current_mode="auto",
     )
 
     df = study.compare_buses()
@@ -320,6 +334,7 @@ def test_compare_buses_produces_long_format_with_deltas():
     assert not math.isclose(deltas[0], 0.0, abs_tol=1e-9)
 
 
+@RING
 def test_compare_branches_against_custom_reference():
     """Picking a non-base reference must rename the delta columns accordingly
     and yield zero on the reference scenario."""
@@ -329,7 +344,7 @@ def test_compare_branches_against_custom_reference():
         fault="F1",
         scenarios=[Outage(name="b13_open", disabled_branches=["b13"])],
         include_base=True,
-        auto_parallel_coefficients=True,
+        phase_current_mode="auto",
     )
 
     df = study.compare_branches(against="b13_open")

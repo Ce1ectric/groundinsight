@@ -1,3 +1,4 @@
+# tests/test_logging.py
 """
 Tests for the logging migration.
 
@@ -14,9 +15,8 @@ formatted output to keep them robust against minor wording changes.
 
 import logging
 
-import pytest
-
 import groundinsight as gi
+from groundinsight.database.store import default_database
 from groundinsight.models.core_models import (
     BusType,
     BranchType,
@@ -24,6 +24,11 @@ from groundinsight.models.core_models import (
     Source,
     ComplexNumber,
 )
+from tests._warning_policy import acknowledge
+
+#: The ring in the paths mode: the test checks that the parallel-coefficient
+#: warning also reaches the log.
+PATHS_RING = acknowledge("PARALLEL_COEFFICIENT_DEFAULT", "PHASE_PROXY")
 
 
 # --- package-level configuration --------------------------------------------
@@ -179,10 +184,15 @@ def test_overwrite_fault_and_source_emit_warning(caplog):
 # --- network_operations: parallel-coefficient warning -----------------------
 
 
-def test_parallel_coefficient_warning_is_logged(caplog):
+@PATHS_RING
+def test_parallel_coefficient_warning_is_logged():
     """
-    The parallel-coefficient guidance message is a WARNING on the
-    ``groundinsight.network_operations`` logger.
+    The parallel-coefficient guidance message reaches the caller.
+
+    It was a WARNING on the ``groundinsight.network_operations`` logger, which
+    the library's default ``NullHandler`` swallows; since audit pass 19 (GUI4)
+    it is a ``ModelAssumptionWarning`` with the code
+    ``PARALLEL_COEFFICIENT_DEFAULT``, stored in ``Result.diagnostics``.
 
     Since the phase-current default became ``phase_current_mode="auto"`` the
     warning is scoped to the legacy path-based mode: ``auto`` splits the ring
@@ -241,25 +251,22 @@ def test_parallel_coefficient_warning_is_logged(caplog):
         network=net,
     )
 
-    def _parallel_warnings():
+    def _parallel_warnings(result):
         return [
-            r
-            for r in caplog.records
-            if r.levelno == logging.WARNING
-            and "parallel_coefficient" in r.getMessage()
+            d
+            for d in result.diagnostics
+            if d.code == "PARALLEL_COEFFICIENT_DEFAULT"
+            and "parallel_coefficient" in d.message
         ]
 
-    with caplog.at_level(logging.WARNING, logger="groundinsight.network_operations"):
-        gi.run_fault(net, fault_name="F1", phase_current_mode="paths")
-    assert _parallel_warnings(), (
-        "Expected a WARNING about parallel_coefficient for a ring solved in "
+    result = gi.run_fault(net, fault="F1", phase_current_mode="paths")
+    assert _parallel_warnings(result), (
+        "Expected a warning about parallel_coefficient for a ring solved in "
         "the legacy path-based mode."
     )
 
-    caplog.clear()
-    with caplog.at_level(logging.WARNING, logger="groundinsight.network_operations"):
-        gi.run_fault(net, fault_name="F1")
-    assert not _parallel_warnings(), (
+    result = gi.run_fault(net, fault="F1")
+    assert not _parallel_warnings(result), (
         "The default phase_current_mode='auto' splits the ring from the "
         "topology, so there is nothing to warn about."
     )
@@ -277,7 +284,7 @@ def test_db_session_already_started_emits_warning(tmp_path, caplog):
     # Defensive: another test in the suite may have left a session
     # behind. The audit-pass-4 contract makes the cross-test contamination
     # explicit by raising RuntimeError otherwise, so close pre-emptively.
-    if gi.engine is not None:
+    if default_database() is not None:
         gi.close_dbsession()
 
     db_path = tmp_path / "log_test.db"
@@ -303,7 +310,7 @@ def test_db_session_already_started_emits_warning(tmp_path, caplog):
 
 def test_no_db_session_to_close_emits_warning(caplog):
     # Make sure no session is active before the test.
-    if gi.engine is not None:
+    if default_database() is not None:
         gi.close_dbsession()
 
     with caplog.at_level(logging.WARNING, logger="groundinsight"):

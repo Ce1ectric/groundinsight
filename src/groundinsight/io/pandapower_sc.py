@@ -1,6 +1,6 @@
 # io/pandapower_sc.py
 
-"""
+r"""
 IEC 60909 short-circuit characteristics from a pandapower ``calc_sc`` run.
 
 This module is the bridge between the *fault-current* world (pandapower's
@@ -39,7 +39,7 @@ layer; both are pinned by ``tests/test_shortcircuit_60909.py``.
 
    .. math::
 
-       m = \\frac{e^{4 f T_k \\ln(\\kappa-1)} - 1}{2 f T_k \\ln(\\kappa-1)}
+       m = \frac{e^{4 f T_k \ln(\kappa-1)} - 1}{2 f T_k \ln(\kappa-1)}
 
    as ``kappa -> 2`` is ``m -> 2`` (a non-decaying DC component carries the
    *maximum* additional heat, not none). Copying ``ith_ka`` would therefore
@@ -64,7 +64,7 @@ governs the DC decay is
 
 .. math::
 
-    \\frac{R}{X} = \\frac{2 R_1 + R_0}{2 X_1 + X_0}
+    \frac{R}{X} = \frac{2 R_1 + R_0}{2 X_1 + X_0}
 
 and **not** the positive-sequence ratio ``R_1/X_1``. That this is the loop
 pandapower itself uses is verified numerically (``I_k1'' = sqrt(3)*c*U_n /
@@ -92,14 +92,16 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
 import polars as pl
 
 from ..analysis.shortcircuit import (
-    _sources_feeding,
     iec60909_m,
     kappa_from_r_to_x,
     peak_short_circuit_current,
+    sources_feeding,
     thermal_equivalent_current,
 )
+from ..diagnostics import InputWarning, emit
 from ..models.core_models import ComplexNumber, Network
-from .pandapower_import import _bus_index_to_name, _require_pandapower
+from ..utils.compat import renamed_parameters
+from .pandapower_import import bus_index_to_name, require_pandapower
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -199,8 +201,9 @@ def _finite(value: Any) -> Optional[float]:
 
 def _tk_s_from_options(options: Dict[str, Any]) -> Optional[float]:
     """
-    Return the clearing time of a ``calc_sc`` run, or ``None`` if the run
-    never asked for one.
+    Return the clearing time of a ``calc_sc`` run, or ``None`` if it had none.
+
+    ``None`` means the run never asked for one.
 
     ``calc_sc`` has the signature default ``tk_s=1.0`` and copies it into
     ``net._options`` unconditionally, so a solved net *always* reports a
@@ -256,8 +259,8 @@ def _adopt_fault_value(
     express "the short-circuit run says nothing about this", and the value
     already on the fault (typically the project's real clearing time)
     survives. When a value *is* replaced by a different one, the change is
-    announced with a ``logger.warning`` naming both, so that a protection
-    setting can never be swapped out silently.
+    announced with an ``InputWarning`` ``SC_VALUE_REPLACED`` naming both, so
+    that a protection setting can never be swapped out silently.
 
     Parameters
     ----------
@@ -268,11 +271,17 @@ def _adopt_fault_value(
     new_value : float, optional
         The value to adopt, or ``None`` to keep the current one.
     fault_name : str
-        Name of the fault, for the log message.
+        Name of the fault, for the message.
 
     Returns
     -------
     None
+
+    Warns
+    -----
+    InputWarning
+        Code ``SC_VALUE_REPLACED`` (elements: the fault) when a different
+        stored value is replaced.
     """
     if new_value is None:
         return
@@ -281,10 +290,15 @@ def _adopt_fault_value(
     if old_value is not None and not math.isclose(
         float(old_value), new_value, rel_tol=1e-12, abs_tol=0.0
     ):
-        logger.warning(
-            "Fault '%s': %s replaced by the short-circuit result, %r -> %r. "
-            "Pass %s=... explicitly if the previous value was the intended one.",
-            fault_name, attribute, float(old_value), new_value, attribute,
+        emit(
+            InputWarning,
+            f"Fault '{fault_name}': {attribute} replaced by the short-circuit "
+            f"result, {float(old_value)!r} -> {new_value!r}. Pass "
+            f"{attribute}=... explicitly if the previous value was the intended "
+            f"one.",
+            code="SC_VALUE_REPLACED",
+            elements=[("fault", fault_name)],
+            stacklevel=3,
         )
     setattr(fault, attribute, new_value)
 
@@ -345,27 +359,38 @@ def _kappa_for_row(
     or C), which is more accurate than the closed form whenever the fault
     is fed through several branches. It is therefore preferred, and only
     the missing case falls back to ``1.02 + 0.98 * exp(-3 * R/X)``.
+
+    Warns
+    -----
+    InputWarning
+        Code ``SC_KAPPA_OUT_OF_RANGE`` (elements: the bus) when pandapower's
+        ``ip``/``ikss`` imply a ``kappa`` outside ``(1, 2]`` and the closed
+        form is used instead.
     """
     if ip_ka is not None and i_k_a not in (None, 0.0):
         kappa = (ip_ka * 1000.0) / (math.sqrt(2.0) * i_k_a)
         if 1.0 < kappa <= 2.0 + 1e-9:
             return min(kappa, 2.0), "pandapower"
-        logger.warning(
-            "pandapower ip/ikss at bus '%s' implies kappa=%.4f outside (1, 2]; "
-            "falling back to the IEC closed form.",
-            bus_label, kappa,
+        emit(
+            InputWarning,
+            f"pandapower ip/ikss at bus '{bus_label}' implies kappa={kappa:.4f} "
+            f"outside (1, 2]; falling back to the IEC closed form.",
+            code="SC_KAPPA_OUT_OF_RANGE",
+            elements=[("bus", bus_label)],
+            stacklevel=3,
         )
     if r_to_x is None:
         return None, "unavailable"
     return kappa_from_r_to_x(r_to_x), "iec_closed_form"
 
 
+@renamed_parameters(f="frequency")
 def read_shortcircuit_results(
     net,
     *,
     t_k_s: Optional[float] = None,
     n_factor: float = 1.0,
-    f: float = 50.0,
+    frequency: float = 50.0,
     buses: Optional[Sequence[int]] = None,
 ) -> pl.DataFrame:
     """
@@ -401,8 +426,9 @@ def read_shortcircuit_results(
         IEC 60909-0 AC heat factor ``n``. ``1.0`` is the
         far-from-generator case. pandapower does not model ``n``, so this
         argument is the only source of a non-neutral value.
-    f : float, default 50.0
+    frequency : float, default 50.0
         System frequency in Hz used in the ``m`` factor.
+        The former keyword ``f`` is accepted as a deprecated alias.
     buses : sequence of int, optional
         Restrict the output to these pandapower bus indices. Defaults to
         every bus in ``res_bus_sc``.
@@ -424,6 +450,13 @@ def read_shortcircuit_results(
         If ``net`` carries no short-circuit results, or if ``buses``
         references indices absent from them.
 
+    Warns
+    -----
+    InputWarning
+        ``SC_KAPPA_OUT_OF_RANGE`` (a bus whose ``ip``/``ikss`` imply a
+        ``kappa`` outside ``(1, 2]``; the closed form is used) and
+        ``SC_KAPPA_MISSING`` (buses for which no ``kappa`` can be derived).
+
     Notes
     -----
     ``kappa_origin`` documents where each peak factor came from:
@@ -438,7 +471,7 @@ def read_shortcircuit_results(
     >>> sc.calc_sc(net, fault="1ph", case="max", tk_s=0.5)  # doctest: +SKIP
     >>> gi.read_shortcircuit_results(net).select("bus_name", "i_k_a", "kappa")  # doctest: +SKIP
     """
-    _require_pandapower()
+    require_pandapower()
 
     res = getattr(net, "res_bus_sc", None)
     if res is None or len(res) == 0:
@@ -466,7 +499,7 @@ def read_shortcircuit_results(
     # zero-sequence impedance is treated the same way.
     earth_fault = fault_type in _EARTH_FAULT_TYPES or "rk0_ohm" in res.columns
 
-    index_to_name = _bus_index_to_name(net)
+    index_to_name = bus_index_to_name(net)
 
     if buses is not None:
         wanted = [int(b) for b in buses]
@@ -504,7 +537,7 @@ def read_shortcircuit_results(
             if i_k_a is not None:
                 i_p_a = peak_short_circuit_current(i_k_a, kappa)
             if t_k_s is not None:
-                m = iec60909_m(kappa, f, t_k_s)
+                m = iec60909_m(kappa, frequency, t_k_s)
                 if i_k_a is not None:
                     i_th_a = thermal_equivalent_current(i_k_a, m, n_factor)
 
@@ -533,20 +566,25 @@ def read_shortcircuit_results(
 
     unavailable = [r["bus_name"] for r in rows if r["kappa_origin"] == "unavailable"]
     if unavailable:
-        logger.warning(
-            "No kappa could be derived for %d bus(es) (%s): neither ip_ka nor a "
-            "usable R/X is available. For fault='1ph' make sure the zero-sequence "
-            "data (x0x_max, r0x0_max, vk0_percent, r0_ohm_per_km, ...) is complete.",
-            len(unavailable), unavailable,
+        emit(
+            InputWarning,
+            f"No kappa could be derived for {len(unavailable)} bus(es) "
+            f"({unavailable}): neither ip_ka nor a usable R/X is available. For "
+            f"fault='1ph' make sure the zero-sequence data (x0x_max, r0x0_max, "
+            f"vk0_percent, r0_ohm_per_km, ...) is complete.",
+            code="SC_KAPPA_MISSING",
+            elements=[("bus", name) for name in unavailable],
+            stacklevel=2,
         )
 
     return pl.DataFrame(rows, schema=_SC_SCHEMA)
 
 
+@renamed_parameters(fault_name="fault")
 def apply_shortcircuit_characteristics(
     network: Network,
     sc_results,
-    fault_name: str,
+    fault: str,
     *,
     pp_bus: Optional[int] = None,
     bus_name: Optional[str] = None,
@@ -580,8 +618,10 @@ def apply_shortcircuit_characteristics(
         Either a solved pandapower net (passed through
         :func:`read_shortcircuit_results`) or a frame previously returned
         by it.
-    fault_name : str
+    fault : str
         Name of the :class:`Fault` in ``network`` the results belong to.
+        The former keyword ``fault_name`` is accepted as a deprecated
+        alias.
     pp_bus : int, optional
         pandapower bus index to read the characteristics from. Defaults to
         the row whose ``bus_name`` equals the fault's bus, which is the
@@ -627,6 +667,15 @@ def apply_shortcircuit_characteristics(
         are given, if no matching row is found in ``sc_results``, or if
         no source is eligible for the update.
 
+    Warns
+    -----
+    InputWarning
+        ``SC_ROW_AMBIGUOUS`` (several short-circuit rows match; the first one
+        is used), ``SC_SPLIT_EQUAL`` (the sources inject nothing at the
+        frequency, so ``I_k''`` is split equally), ``SC_VOLTAGE_SOURCE_SKIPPED``
+        (a voltage source keeps its values) and ``SC_VALUE_REPLACED`` (a
+        different ``t_k_s`` or ``n_factor`` on the fault was replaced).
+
     Notes
     -----
     Only the *linear* quantities are distributed. ``i_p`` and ``I_th`` are
@@ -645,7 +694,7 @@ def apply_shortcircuit_characteristics(
     instead of resetting it to a pandapower placeholder — a shortened
     ``T_k`` raises the admissible current by ``1/sqrt(t_k)`` and would make
     an undersized conductor pass. Whenever a value *is* replaced by a
-    different one, a ``logger.warning`` names both.
+    different one, an ``InputWarning`` ``SC_VALUE_REPLACED`` names both.
 
     Examples
     --------
@@ -655,10 +704,10 @@ def apply_shortcircuit_characteristics(
     if pp_bus is not None and bus_name is not None:
         raise ValueError("Provide at most one of 'pp_bus' or 'bus_name'.")
 
-    fault = network.faults.get(fault_name)
-    if fault is None:
+    fault_obj = network.faults.get(fault)
+    if fault_obj is None:
         raise ValueError(
-            f"Fault {fault_name!r} is not in network {network.name!r}. "
+            f"Fault {fault!r} is not in network {network.name!r}. "
             f"Available: {sorted(network.faults)}."
         )
 
@@ -671,7 +720,7 @@ def apply_shortcircuit_characteristics(
         raise ValueError("The short-circuit result frame is empty.")
 
     # --- pick the row describing the fault location --------------------
-    target = bus_name if bus_name is not None else fault.bus
+    target = bus_name if bus_name is not None else fault_obj.bus
     if pp_bus is not None:
         matches = frame.filter(pl.col("pp_bus_index") == int(pp_bus))
         selector = f"pp_bus={pp_bus}"
@@ -685,9 +734,13 @@ def apply_shortcircuit_characteristics(
             "if the groundinsight bus names differ from the pandapower ones."
         )
     if matches.height > 1:
-        logger.warning(
-            "%d short-circuit rows match %s; using the first one.",
-            matches.height, selector,
+        emit(
+            InputWarning,
+            f"{matches.height} short-circuit rows match {selector}; using the "
+            f"first one.",
+            code="SC_ROW_AMBIGUOUS",
+            elements=[("fault", fault), ("bus", target)],
+            stacklevel=2,
         )
     row = matches.to_dicts()[0]
 
@@ -707,10 +760,7 @@ def apply_shortcircuit_characteristics(
     # neutral default (pandapower does not model ``n``, so a 1.0 in the
     # frame is the argument default of read_shortcircuit_results and says
     # nothing about this fault).
-    if t_k_s is not None:
-        t_k = float(t_k_s)
-    else:
-        t_k = row.get("t_k_s")
+    t_k = float(t_k_s) if t_k_s is not None else row.get("t_k_s")
     if n_factor is not None:
         n_val = float(n_factor)
     else:
@@ -720,11 +770,11 @@ def apply_shortcircuit_characteristics(
             if frame_n is not None and frame_n != _NEUTRAL_N_FACTOR
             else None
         )
-    _adopt_fault_value(fault, "t_k_s", t_k, fault_name)
-    _adopt_fault_value(fault, "n_factor", n_val, fault_name)
+    _adopt_fault_value(fault_obj, "t_k_s", t_k, fault)
+    _adopt_fault_value(fault_obj, "n_factor", n_val, fault)
     # Report what is in effect afterwards, not what was offered.
-    effective_t_k = fault.t_k_s
-    effective_n = fault.n_factor
+    effective_t_k = fault_obj.t_k_s
+    effective_n = fault_obj.n_factor
 
     if frequency is None:
         frequency = next((float(x) for x in network.frequencies if x > 0), 50.0)
@@ -739,10 +789,10 @@ def apply_shortcircuit_characteristics(
                 f"Unknown source(s) {unknown} in network {network.name!r}."
             )
     else:
-        names = _sources_feeding(network, fault_name)
+        names = sources_feeding(network, fault)
     if not names:
         raise ValueError(
-            f"No sources are eligible for fault {fault_name!r}. Build the paths "
+            f"No sources are eligible for fault {fault!r}. Build the paths "
             "(run_fault / build_paths) or pass sources=[...] explicitly."
         )
 
@@ -763,10 +813,14 @@ def apply_shortcircuit_characteristics(
     else:
         shares = {name: 1.0 / len(names) for name in names}
         if len(names) > 1:
-            logger.warning(
-                "Sources %s inject nothing at f=%.4g Hz; splitting I_k'' equally. "
-                "Set the relative infeed shares first if the split is not uniform.",
-                names, frequency,
+            emit(
+                InputWarning,
+                f"Sources {names} inject nothing at f={frequency:.4g} Hz; "
+                f"splitting I_k'' equally. Set the relative infeed shares first "
+                f"if the split is not uniform.",
+                code="SC_SPLIT_EQUAL",
+                elements=[("source", name) for name in names] + [("fault", fault)],
+                stacklevel=2,
             )
 
     rows: List[Dict[str, Any]] = []
@@ -786,15 +840,19 @@ def apply_shortcircuit_characteristics(
             src.values = values
             updated = True
         elif set_source_values:
-            logger.warning(
-                "Source '%s' is a voltage source; its injection was not "
-                "overwritten (set_source_values only applies to current sources).",
-                name,
+            emit(
+                InputWarning,
+                f"Source '{name}' is a voltage source; its injection was not "
+                f"overwritten (set_source_values only applies to current "
+                f"sources).",
+                code="SC_VOLTAGE_SOURCE_SKIPPED",
+                elements=[("source", name)],
+                stacklevel=2,
             )
 
         rows.append(
             {
-                "fault_name": fault_name,
+                "fault_name": fault,
                 "source_name": name,
                 "bus": src.bus,
                 "frequency": frequency,
@@ -814,7 +872,7 @@ def apply_shortcircuit_characteristics(
     logger.info(
         "Applied IEC 60909 characteristics of bus '%s' to fault '%s': "
         "I_k''=%.1f A, kappa=%s (%s), T_k=%s s over %d source(s).",
-        row.get("bus_name"), fault_name, i_k_total,
+        row.get("bus_name"), fault, i_k_total,
         "n/a" if kappa is None else f"{kappa:.4f}", kappa_origin,
         effective_t_k, len(names),
     )

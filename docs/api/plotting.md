@@ -11,17 +11,26 @@ quantities that are routinely inspected:
 
 - **Earth potential rise (EPR)** — the magnitude of
   $\underline{u}(f)$ per bus, both per frequency and as the
-  RMS $\sqrt{\sum_f |u(f)|^2}$ across all frequencies. The
-  RMS view is the touch-voltage proxy under EN 50522.
-- **Branch currents** — the per-frequency phasor of the
-  current flowing through each grounding-conductor branch,
-  signed in the branch traversal direction. This is the
-  shield-current pattern that determines reduction factor
-  and EMC effects.
-- **Bus currents** — the *injected* current per bus, i.e.
-  the residual that returns through the local earth path
-  $1/Z_E$. The sum over all buses equals the fault current
-  scaled by $r$.
+  RMS $\sqrt{\sum_f |u(f)|^2}$ across all frequencies. The RMS
+  value at the fault bus is the earthing voltage $U_E$ that
+  EN 50522 compares with the permissible touch voltage; it is an
+  upper bound of the touch voltage, not the touch voltage itself
+  (see [Compare results with EN 50522 limits](../howto/en50522-check.md)).
+- **Branch currents** — the current of the grounding conductor
+  (screen, earth wire) of each branch, `I_branch_A`, counted
+  positive from `from_bus` to `to_bus` for the physical fault
+  (see [Signs and phase angles](../reference/conventions.md#signs-and-phase-angles)).
+  This is the shield-current pattern behind the reduction factor
+  and the EMC effects.
+- **Bus currents** — the **electrode current** of each bus,
+  `I_bus_A`: what the bus's own electrode $Z_B$ passes into the
+  soil. The electrode currents of all buses sum to zero — the
+  fault current enters the soil at some stations and leaves it at
+  others — so their sum says nothing about the reduction factor.
+  The current of the earthing conductor at a source or fault bus,
+  `I_inj_A`, is a different quantity; size an earthing conductor
+  with `I_inj_A`, an electrode with `I_bus_A`
+  ([Thermal limits](../howto/thermal.md)).
 
 For the time-domain transient solver
 ([`groundinsight.simulation.transient`](transient.md)) the same
@@ -31,6 +40,7 @@ a `ResultTransient` instead.
 ## Example
 
 ```python
+# fragment: assumes a network `net` solved for the fault "fault1" and a transient result `result_t`
 import groundinsight as gi
 
 # Assume `net` has been solved via gi.run_fault(...).
@@ -63,6 +73,7 @@ contains; asking for one that was never computed raises a
 `KeyError` naming both the requested and the available values:
 
 ```python
+# fragment: the network and its solve are elided
 net = gi.create_network(name="net", frequencies=[50.0])
 ...
 gi.plot_bus_voltages(result=result, frequencies=[250.0])
@@ -91,6 +102,7 @@ it is not, and matplotlib warns after the twentieth figure. Pass
 returning:
 
 ```python
+# fragment: the solve per rho is elided
 for rho in (50.0, 100.0, 500.0, 1000.0):
     ...
     fig = gi.plot_bus_voltages(result=result, title=f"rho = {rho}",
@@ -113,6 +125,7 @@ than a new one. This is what makes two scenarios comparable side
 by side:
 
 ```python
+# fragment: assumes two results `base` and `outage`
 import matplotlib.pyplot as plt
 
 fig, axes = plt.subplots(1, 2, figsize=(16, 5), sharey=True)
@@ -133,6 +146,16 @@ replaced by the default: matplotlib accepts `figsize=(0, 0)` when
 the figure is created and only fails much later, when it is drawn
 or saved, so the traceback would point at `savefig` instead of at
 the call responsible.
+
+## Import cost
+
+`matplotlib.pyplot` is imported on the first call of a plotting helper, not
+by `import groundinsight`. The package import is about a third faster
+(median 1.33 s → 0.83 s measured on the development container), and a
+program that never plots — a GUI that draws with its own charts, a server, a
+batch job — never loads pyplot's global state (backend selection, figure
+registry). Nothing changes for code that plots: the first helper call
+imports pyplot, every later one finds it loaded.
 
 ## API reference
 

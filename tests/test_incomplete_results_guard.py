@@ -37,6 +37,11 @@ import pytest
 
 import groundinsight as gi
 from groundinsight.electrical_network import ElectricalNetwork
+from tests._warning_policy import acknowledge
+
+#: The ring or parallel-route network of these tests splits its phase current
+#: by the proxy (PHASE_PROXY); the tests are about something else.
+RING = acknowledge("PHASE_PROXY")
 
 
 # ---------------------------------------------------------------------------
@@ -122,9 +127,11 @@ def test_branch_check_raises_instead_of_silently_passing(caplog):
     net = _overstressed_net()
     ElectricalNetwork(net).solve_network()
 
-    with caplog.at_level(logging.WARNING, logger="groundinsight"):
-        with pytest.raises(ValueError, match="Incomplete results"):
-            gi.check_conductor_limits(net, "F")
+    with (
+        caplog.at_level(logging.WARNING, logger="groundinsight"),
+        pytest.raises(ValueError, match="Incomplete results"),
+    ):
+        gi.check_conductor_limits(net, "F")
 
     # and it must not have been reported as a clean run on the way out
     assert "Thermal limit exceeded" not in caplog.text
@@ -153,6 +160,7 @@ def test_node_check_raises_when_a_bus_result_is_missing():
         gi.check_node_limits(net, "F")
 
 
+@RING
 def test_branch_added_after_run_fault_is_not_silently_skipped():
     """Staleness, not corruption: the same silent-skip in everyday use."""
     net = _overstressed_net()

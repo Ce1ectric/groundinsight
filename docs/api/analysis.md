@@ -12,11 +12,16 @@ and earth electrodes.
 A fully built `Network` solves a forward problem: given the bus
 grounding impedances $Z_{\text{B},i}(\rho_E, f)$, find the EPR at the
 fault bus. The natural inverse question — *"how poor can the soil
-get before the EPR exceeds a touch-voltage limit $u_{\max}$?"* — is
+get before the EPR at the fault bus exceeds a limit $u_{\max}$?"* — is
 recurring in safety-engineering workflows: it sets the worst-case
-specific earth resistance the network can tolerate while still
-satisfying the relevant standard (e.g. EN 50522) at the assumed
-fault current.
+specific earth resistance the network can tolerate at the assumed
+fault current. $u_{\max}$ limits the earth potential rise $U_E$, not the
+touch voltage. $U_E$ is an upper bound of the touch voltage, so with
+$u_{\max}$ set to the permissible touch voltage $U_{Tp}$ of EN 50522 the
+search returns the soil resistivity up to which the touch voltage is
+covered without being determined; beyond it the touch voltages have to be
+determined — see
+[Compare results with EN 50522 limits](../howto/en50522-check.md).
 
 `find_max_rho_scaling` solves that problem by **log-bisection over
 a uniform scaling factor $c$** of $\rho_E$ on a user-supplied list of
@@ -41,6 +46,7 @@ block, so the network is left untouched even if the bisection fails.
 ## Example
 
 ```python
+# fragment: assumes a network `net` with the fault "fault1" and the buses named below
 import groundinsight as gi
 
 # Assume `net` is a built network with at least one fault and one
@@ -48,9 +54,9 @@ import groundinsight as gi
 # scaled jointly — typically all buses sharing a soil environment.
 result = gi.find_max_rho_scaling(
     network=net,
-    fault_name="fault1",
+    fault="fault1",
     bus_names=["bus_substation", "bus_fault"],
-    u_max=200.0,            # touch-voltage limit in volts (RMS)
+    u_limit=200.0,          # limit of the RMS EPR at the fault bus, in volts
     c_bounds=(0.1, 100.0),  # search bracket on the scaling factor
     tol_rel=1e-3,
     max_iter=40,
@@ -86,8 +92,9 @@ that is what `status` reports.
 | `"bracket_within_tol_on_entry"` | `True` | The supplied bracket was already narrower than `tol_rel`, so no step was needed. Same guarantee as above. |
 | `"bracket_fully_admissible"` | `False` | Every factor in the bracket satisfied the limit, so `c_max` is the *upper* bound — a lower bound on the true maximum, since nothing above it was evaluated. `c_bracket` is `(c_hi, inf)`, so `math.isfinite(result["c_bracket"][1])` tests for this case. Widen `c_bounds`. |
 | `"max_iter_reached"` | `False` | The step cap was hit before the bracket closed. `c_max` is admissible but can be far below the true threshold — on a saturating test network, a cap of 3 instead of 60 came out 81 % low. Raise `max_iter`, or narrow `c_bounds`. |
+| `"non_monotone"` | `False` | `find_max_rho_scaling` only: the pre-scan over `monotonicity_grid` points found the EPR not rising monotonically with $c$, so there is more than one threshold. `c_max` is the largest factor the scan measured as admissible, refined within its grid interval — a lower bound on the true maximum, as fine as the grid. Raise `monotonicity_grid`, or narrow `c_bounds`. |
 
-`iterations` on its own does **not** identify a case: two of the four
+`iterations` on its own does **not** identify a case: two of the
 rows above can produce `iterations == 0`, and their `c_max` comes from
 opposite ends of the bracket. Branch on `converged` or `status`, never
 on the step count.
@@ -98,7 +105,7 @@ bracket is open upwards.
 
 The arguments are validated strictly, because a limit search that
 returns a number nobody can tell apart from an answer is worse than
-one that raises. `u_max` and `tol_rel` must be finite and strictly
+one that raises. `u_limit` and `tol_rel` must be finite and strictly
 positive — NaN passes a plain `<= 0` check and then makes every later
 comparison `False` — `c_bounds` must be finite, and `max_iter` must be
 an `int` of at least 1.
@@ -111,7 +118,8 @@ diagnostic keys with the same meaning.
 ## Conductor thermal limits (IEC 60949 / IEC 60909-0)
 
 The inverse-rho routines answer a *person-safety* question (does the
-EPR stay below a touch-voltage limit). `check_conductor_limits`
+EPR, an upper bound of the touch voltage, stay below a limit).
+`check_conductor_limits`
 answers the complementary *equipment-integrity* question: does the
 grounding conductor survive the fault thermally? It compares the
 thermally equivalent short-time current
@@ -154,6 +162,7 @@ transient solver remains the exact fallback, because it integrates
 the actual waveforms instead of applying a standard factor.
 
 ```python
+# fragment: assumes a solved network `net` with the source "src" and the fault "F"
 import groundinsight as gi
 
 # The characteristics can be set by hand ...
@@ -170,7 +179,7 @@ gi.check_conductor_limits(net, "F").select(
 )
 ```
 
-Explicit `t_k`, `kappa` / `r_to_x` and `n` arguments override whatever
+Explicit `t_k_s`, `kappa` / `r_to_x` and `n_factor` arguments override whatever
 is stored on the model, so sensitivity studies stay possible.
 
 ## Node thermal limits — earthing conductor vs earth electrode
@@ -207,6 +216,8 @@ the material and the cross-section for that element. The two elements are
 independent — declaring one does not imply the other.
 
 ```python
+import groundinsight as gi
+
 bt = gi.BusType(
     name="tower",
     system_type="Tower",
@@ -234,8 +245,9 @@ carry — and a value above 1 is rejected at the model level, because that
 would not be a split but an error.
 
 ```python
+# fragment: assumes a network `net` whose bus types carry the thermal data above, with the fault "F"
 gi.run_fault(net, "F")
-gi.check_node_limits(net, "F", t_k=0.5, r_to_x=0.1).select(
+gi.check_node_limits(net, "F", t_k_s=0.5, r_to_x=0.1).select(
     "bus_name", "element", "I_rms_A", "current_split",
     "I_th_A", "I_admissible_A", "utilization", "within_limit",
 )
@@ -258,12 +270,27 @@ missing and names EN 50522 Table 2 as the source to consult.
 
 !!! warning "Steel default"
 
-    The `IEC60949_MATERIALS["Steel"]` default of 400 °C is *higher* — i.e.
-    more permissive, the unsafe direction for a limit check — than the
-    300 °C the National Grid table gives for bare buried steel. It is left
-    unchanged because moving a default silently would move every existing
-    study. Pass `theta_final_C` explicitly until the value has been checked
-    against EN 50522 Table 2.
+    The default final temperature `theta_final_default_C` of
+    `IEC60949_MATERIALS` is 300 °C for every material, the value EN 50522
+    Table 2 gives for a bare or galvanised earthing conductor or earth
+    electrode. Up to 0.4.0 `Steel` defaulted to 400 °C — more permissive,
+    the unsafe direction for a limit check. A study that relied on the old
+    default gets a smaller $k$ and a smaller admissible current now; pass
+    `theta_final_C=400.0` explicitly to reproduce it.
+
+The three catalogues, as the code holds them:
+
+::: groundinsight.analysis.thermal.IEC60949_MATERIALS
+    options:
+      heading_level: 4
+
+::: groundinsight.analysis.thermal.FINAL_TEMPERATURES
+    options:
+      heading_level: 4
+
+::: groundinsight.analysis.thermal.CABLE_INSULATION_LIMITS
+    options:
+      heading_level: 4
 
 !!! note "Results computed before this feature"
 

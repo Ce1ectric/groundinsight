@@ -23,20 +23,46 @@ sources correctly the algorithm has to:
    bus/branch graph,
 2. preserve the **traversal direction** along each branch — the
    sign of the impressed Norton current depends on it,
-3. take into account the optional `parallel_coefficient` on each
-   branch so that mesh and ring topologies receive the correct
-   per-path current share.
+3. record the branch chain, which the **legacy** phase-current mode
+   `run_fault(..., phase_current_mode="paths")` then weights with the
+   optional `parallel_coefficient` on each branch.
 
-The DFS enumeration is exhaustive (NP-hard in the worst case)
-but the typical grounding networks are sparse enough — handfuls
-to a few dozen meshed branches — that it terminates quickly. For
-very dense topologies the result is cached on the `Network`
-object (`net.paths`) so that repeated `run_fault` calls do not
-re-traverse.
+!!! note "`parallel_coefficient` only applies to `phase_current_mode="paths"`"
+    Since 0.6.0 the default mode is `"auto"`, which solves a reduced
+    phase-conductor network from `BranchType.phase_impedance_formula`
+    instead of splitting a prescribed current over enumerated paths.
+    In that mode `parallel_coefficient` is not read at all — the split
+    follows from the phase-conductor impedances. Set it only when you
+    deliberately run the older `"paths"` mode.
+
+The DFS enumeration is exhaustive, and its cost is **exponential
+in the number of independent loops** — not in the number of buses.
+A radial network of 500 buses has two paths and enumerates in
+milliseconds; a 5×5 grid of 25 buses already has 8 512 simple
+paths, and a 6×6 grid 1 262 816, which takes about a minute.
+Treat the enumeration as affordable only for radial and lightly
+meshed topologies.
+
+Since the first release after 0.6.0 the default
+`phase_current_mode="auto"` therefore does **not** enumerate at all. It only needs to know which sources
+reach the fault, and `Network.sources_reaching(fault)`
+answers that with a breadth-first search in `O(V + E)`. The
+enumeration runs for the legacy `phase_current_mode="paths"`, for
+the transient state-space solver, and whenever you ask for it with
+`gi.create_paths(network)`. `net.paths` is consequently empty
+after a default `run_fault`.
+
+`PathFinder.find_paths` refuses to enumerate more than
+`network.pathfinder_settings.max_paths` paths (default `100_000`)
+and raises a `ValueError` that names the bus pair instead of
+running for hours. Raise it for one network with
+`network.pathfinder_settings = gi.PathfinderSettings(max_paths=...)`
+if you genuinely need the full set on a meshed network.
 
 ## Example
 
 ```python
+# fragment: assumes a network `net` with the fault "f1" and the buses named below
 import groundinsight as gi
 from groundinsight.pathfinder import PathFinder
 
@@ -44,8 +70,8 @@ from groundinsight.pathfinder import PathFinder
 # for the create_* calls.
 net.set_active_fault("f1")
 
-# `create_paths` is called automatically by run_fault. To inspect
-# the enumerated paths manually:
+# `create_paths` is NOT called by run_fault in the default
+# phase_current_mode="auto". To enumerate the paths explicitly:
 gi.create_paths(network=net)
 for p in net.paths.values():
     print(p.source, "->", p.fault,
@@ -57,78 +83,88 @@ all_paths = pf.find_paths(source_bus_name="bus_substation",
                           fault_bus_name="bus_fault")
 ```
 
-## Module-level caches
+## Settings and memo per network
 
-`PathFinder` memoises two pieces of work at module scope:
+The path search keeps its settings and its memo **per network**
+(since audit pass 19). Up to then both were module globals: a limit
+set for one network applied to every network of the process —
+also to one another thread was solving at that moment — and three
+module-level dictionaries, shared by all networks and mutated without
+a lock, kept the branches of networks long gone alive.
 
-- `pathfinder._GRAPH_CACHE` — the adjacency list built in
-  `_build_graph`. Repeated `PathFinder(network)` constructions on
-  the same logical topology (the inner loop of
-  `analysis.inverse_rho_f.evaluate_max_epr_under_k`) pay the DFS
-  cost only on the first call.
-- `pathfinder._FIND_PATHS_CACHE` — the `(source, fault) → List[Path]`
-  results returned by `find_paths`. `find_paths` returns *copies*
-  of the cached `Path` instances so downstream callers (most
-  prominently `network_operations.define_paths`) can safely mutate
-  `Path.name` / `Path.source` / `Path.fault` without leaking the
-  mutation into the cache.
+**Settings.** `gi.PathfinderSettings` holds the two knobs:
 
-Both caches key on the full topology fingerprint:
+| Field | Default | Meaning |
+|---|---|---|
+| `max_paths` | `100_000` | most simple paths one `(source bus, fault bus)` enumeration may produce |
+| `cache_size` | `256` | entries per table of the network's memo (LRU) |
+
+```python
+# fragment: assumes a network `net` with the fault "F"
+import groundinsight as gi
+
+net.pathfinder_settings = gi.PathfinderSettings(max_paths=1_000_000)
+gi.run_fault(net, "F", phase_current_mode="paths")   # this network only
+net.pathfinder_settings = None                        # back to the defaults
+```
+
+The settings are runtime configuration: they are not saved to a
+project file or a database, but `copy.deepcopy`, `model_copy` and
+`pickle` keep them. `PathFinder(network, settings=...)` overrides them
+for one search.
+
+**Memo.** `network.path_cache()` returns the network's
+`PathfinderCache`: the adjacency graph built in `_build_graph`, the
+`(source, fault) → List[Path]` results of `find_paths` and the
+`reaches` answers, each table an LRU of `cache_size` entries keyed on
+the active-topology fingerprint
 
 ```text
 (id(network), network.name,
  len(network.buses), len(network.branches),
- frozenset(active_buses), frozenset(active_branches))
+ frozenset(active_buses), frozenset(active_branches),
+ frozenset((branch, from_bus, to_bus) for every active branch))
 ```
 
-The structural part (`name`, `len(buses)`, `len(branches)`) is a
-defence-in-depth guard against the CPython id-recycling failure
-mode: once a `Network` is garbage-collected, Python may legitimately
-reuse its `id`; the structural component prevents a false cache hit
-on the new, topologically different network.
+Repeated `PathFinder(network)` constructions on the same topology (the
+inner loop of `analysis.inverse_rho_f.evaluate_max_epr_under_k`, an
+outage study returning to its base case) pay the work only once.
+`find_paths` returns *copies* of the cached `Path` instances, so callers
+such as `define_paths` can set `Path.name` / `source` / `fault` without
+touching the memo. Every operation holds the memo's lock. The memo dies
+with its network, a copy or an unpickled network starts with an empty
+one, and two networks never compare unequal because of what they have
+cached.
 
 !!! warning "Mutating a `Network` in place"
 
     Flipping `Bus.active` / `Branch.active` after `define_paths()`
-    has already been called leaves the *previously cached* topology
-    in `network.paths` and in the module-level caches. Use
-    [`Network.invalidate_paths()`](core_models.md) — it drops the
-    caller's own cache entries while preserving the cache for
-    other networks live in the same process.
+    has already been called leaves the *previously enumerated* paths
+    in `network.paths`. `run_fault` notices it and rebuilds them; for
+    your own reads call
+    [`Network.invalidate_paths()`](core_models.md), which also clears
+    the network's memo — and only that network's.
 
-`clear_pathfinder_cache()` accepts an optional `network` argument
-to support the same scoping at the function level:
+`clear_pathfinder_cache(network)` clears one network's memo;
+`clear_pathfinder_cache()` without an argument clears the memo of every
+network alive in the process (test fixtures, recovery paths).
 
-```python
-from groundinsight.pathfinder import clear_pathfinder_cache
+### Deprecated: the module-level switches
 
-# Scoped: only clear this network's entries.
-clear_pathfinder_cache(net_a)
+`set_pathfinder_max_paths` / `get_pathfinder_max_paths` and
+`gi.set_pathfinder_cache_size` / `gi.get_pathfinder_cache_size` still
+work and raise a `DeprecationWarning`. They change the process-wide
+defaults — `pathfinder.default_pathfinder_settings()`, the settings of
+every network without settings of its own — and
+`set_pathfinder_cache_size` trims the memo of those networks at once.
+They will be removed no earlier than two releases and six months after
+the release that deprecated them.
 
-# Unscoped (test fixtures, recovery paths): drop everything.
-clear_pathfinder_cache()
-```
-
-## Cache size and LRU eviction (added in 0.5.0)
-
-Both module-level caches are `OrderedDict` instances with an LRU
-eviction policy. The default cap is `256` entries per cache, applied
-globally across all `Network` instances. A long-running dashboard or
-a 100-scenario outage sweep therefore no longer accumulates one cache
-entry per visited topology indefinitely.
-
-```python
-import groundinsight as gi
-
-# Inspect or change the cap. Returns the previous value.
-previous = gi.set_pathfinder_cache_size(64)
-print(gi.get_pathfinder_cache_size())  # -> 64
-```
-
-The cap is read on every insertion, so a `set_pathfinder_cache_size`
-call also evicts already-cached entries in LRU order until the new
-cap is satisfied. Tests that want to pin the eviction policy to a
-small value typically reset the cap from a pytest fixture.
+| Before | Now |
+|---|---|
+| `pathfinder.set_pathfinder_max_paths(n)` | `net.pathfinder_settings = gi.PathfinderSettings(max_paths=n)` |
+| `gi.set_pathfinder_cache_size(n)` | `net.pathfinder_settings = gi.PathfinderSettings(cache_size=n)` |
+| `pathfinder.get_pathfinder_max_paths()` | `net.pathfinder_settings.max_paths` |
 
 !!! note "When `outage_context` exits"
 

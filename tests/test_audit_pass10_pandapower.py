@@ -27,20 +27,25 @@ C. ``length_km`` of ``0.0`` or ``NaN`` silently became ``length = 1.0``.
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Optional
 
 import polars as pl
 import pytest
 
 import groundinsight as gi
+from groundinsight.diagnostics import collecting
 from groundinsight.io.defaults import ImportDefaults
 from groundinsight.io.pandapower_import import _PREVIEW_SCHEMA
 from groundinsight.models.core_models import BranchType, BusType
+from tests._warning_policy import acknowledge
 
-
-IMPORT_LOGGER = "groundinsight.io.pandapower_import"
-SC_LOGGER = "groundinsight.io.pandapower_sc"
+#: The tests feed the importer rows and results it has to report -- unusable
+#: lengths, transformers, a bus type of another level, a replaced t_k_s or
+#: n_factor -- and assert the outcome and the structured record.
+pytestmark = acknowledge(
+    "IMPORT_ELEMENT_NOT_IMPORTED", "IMPORT_LENGTH_DEFAULT",
+    "IMPORT_LINE_SKIPPED", "IMPORT_VOLTAGE_LEVEL_MISMATCH", "SC_VALUE_REPLACED"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -323,25 +328,26 @@ def test_placeholder_tk_s_is_not_reported_as_a_clearing_time(
     assert frame["i_th_a"].to_list() == [None] * frame.height
 
 
-def test_requested_tk_s_is_adopted_with_a_warning(pp_module, sc_module, caplog):
-    """A genuine ``ith=True, tk_s=0.4`` run wins — loudly."""
+def test_requested_tk_s_is_adopted_with_a_warning(pp_module, sc_module):
+    """A genuine ``ith=True, tk_s=0.4`` run wins — loudly (since audit pass 19
+    an ``InputWarning`` ``SC_VALUE_REPLACED`` rather than a log line)."""
     pp_net = _sc_pp_net(pp_module)
     sc_module.calc_sc(
         pp_net, fault="1ph", case="max", ip=True, ith=True, tk_s=0.4
     )
 
     net = _sc_gi_net(t_k_s=3.0, n_factor=0.85)
-    with caplog.at_level(logging.WARNING, logger=SC_LOGGER):
+    with collecting() as records:
         gi.apply_shortcircuit_characteristics(net, pp_net, "F")
 
     assert net.faults["F"].t_k_s == pytest.approx(0.4)
 
-    messages = [rec.getMessage() for rec in caplog.records]
+    messages = [rec.message for rec in records if rec.code == "SC_VALUE_REPLACED"]
     hits = [m for m in messages if "t_k_s" in m and "3.0" in m and "0.4" in m]
     assert hits, f"no warning naming both values, got: {messages}"
 
 
-def test_explicit_tk_s_argument_still_wins(pp_module, sc_module, caplog):
+def test_explicit_tk_s_argument_still_wins(pp_module, sc_module):
     """An explicit ``t_k_s=`` / ``n_factor=`` overrides both other sources."""
     pp_net = _sc_pp_net(pp_module)
     sc_module.calc_sc(
@@ -349,7 +355,7 @@ def test_explicit_tk_s_argument_still_wins(pp_module, sc_module, caplog):
     )
 
     net = _sc_gi_net(t_k_s=3.0, n_factor=0.85)
-    with caplog.at_level(logging.WARNING, logger=SC_LOGGER):
+    with collecting() as records:
         report = gi.apply_shortcircuit_characteristics(
             net, pp_net, "F", t_k_s=0.2, n_factor=0.9
         )
@@ -359,13 +365,11 @@ def test_explicit_tk_s_argument_still_wins(pp_module, sc_module, caplog):
     assert report["t_k_s"].to_list() == [pytest.approx(0.2)]
     assert report["n_factor"].to_list() == [pytest.approx(0.9)]
 
-    messages = [rec.getMessage() for rec in caplog.records]
+    messages = [rec.message for rec in records if rec.code == "SC_VALUE_REPLACED"]
     assert any("n_factor" in m and "0.85" in m and "0.9" in m for m in messages)
 
 
-def test_n_factor_survives_a_thermal_run_without_warning_noise(
-    pp_module, sc_module, caplog
-):
+def test_n_factor_survives_a_thermal_run_without_warning_noise(pp_module, sc_module):
     """``n_factor`` is not a pandapower quantity and must never be clobbered.
 
     ``read_shortcircuit_results`` only echoes its own ``n_factor`` argument
@@ -379,14 +383,13 @@ def test_n_factor_survives_a_thermal_run_without_warning_noise(
     )
 
     net = _sc_gi_net(t_k_s=0.4, n_factor=0.85)
-    with caplog.at_level(logging.WARNING, logger=SC_LOGGER):
+    with collecting() as records:
         gi.apply_shortcircuit_characteristics(net, pp_net, "F")
 
     assert net.faults["F"].t_k_s == pytest.approx(0.4)
     assert net.faults["F"].n_factor == pytest.approx(0.85)
 
-    messages = [rec.getMessage() for rec in caplog.records]
-    assert not [m for m in messages if "replaced by the short-circuit" in m]
+    assert not [rec for rec in records if rec.code == "SC_VALUE_REPLACED"]
 
 
 # ---------------------------------------------------------------------------
@@ -454,7 +457,7 @@ def test_preview_reports_unusable_lengths_without_raising(
     assert line["length_km"].to_list() == [pytest.approx(length_km)]
 
 
-def test_missing_length_warns_before_falling_back(pp_module, caplog):
+def test_missing_length_warns_before_falling_back(pp_module):
     """A ``NaN`` length still imports, but only with a loud warning.
 
     It used to be substituted by 1.0 km without a trace, which silently
@@ -462,19 +465,19 @@ def test_missing_length_warns_before_falling_back(pp_module, caplog):
     """
     net = _two_bus_net(pp_module, float("nan"))
 
-    with caplog.at_level(logging.WARNING, logger=IMPORT_LOGGER):
+    with collecting() as records:
         imported = gi.from_pandapower(
             net, defaults=_defaults_20kV(), voltage_level_kV=20.0
         )
 
     assert imported.branches["jumper"].length == pytest.approx(1.0)
 
-    messages = [rec.getMessage() for rec in caplog.records]
+    messages = [rec.message for rec in records if rec.code == "IMPORT_LENGTH_DEFAULT"]
     hits = [m for m in messages if "length_km" in m and "jumper" in m]
     assert hits, f"no fallback warning emitted, got: {messages}"
 
 
-def test_preview_agrees_with_the_commit_on_the_fallback(pp_module, caplog):
+def test_preview_agrees_with_the_commit_on_the_fallback(pp_module):
     """For a kept line the preview shows the length the import will use.
 
     Preview and commit must never disagree, so the ``NaN`` fallback appears
@@ -482,7 +485,7 @@ def test_preview_agrees_with_the_commit_on_the_fallback(pp_module, caplog):
     """
     net = _two_bus_net(pp_module, float("nan"))
 
-    with caplog.at_level(logging.WARNING, logger=IMPORT_LOGGER):
+    with collecting() as records:
         frame = gi.preview_pandapower_import(net, voltage_level_kV=20.0)
 
     line = frame.filter(pl.col("kind") == "line")
@@ -495,4 +498,7 @@ def test_preview_agrees_with_the_commit_on_the_fallback(pp_module, caplog):
     assert imported.branches["jumper"].length == pytest.approx(
         line["length_km"][0]
     )
-    assert any("length_km" in rec.getMessage() for rec in caplog.records)
+    assert any(
+        rec.code == "IMPORT_LENGTH_DEFAULT" and "length_km" in rec.message
+        for rec in records
+    )

@@ -13,8 +13,9 @@ fault, which is exactly what one wants to find out before a study rests on it.
 
 The closed forms are derived in the docstring of each case rather than quoted,
 so they can be checked line by line against whichever text you cite. They are
-the standard results of the German grounding literature (Oeding/Oswald, and the
-TU Graz and Kücherler treatments); attaching the exact clause and equation
+the standard results of the German grounding literature (Oeding/Oswald, the
+TU Graz treatments and B. Küchler's dissertation, TU Dresden 2024,
+urn:nbn:de:bsz:14-qucosa2-901763); attaching the exact clause and equation
 numbers of your editions is yours to do — this module does not claim a citation
 it cannot verify.
 
@@ -27,8 +28,14 @@ The cases
     The same line with real electrodes: ``r = |(Z_s - Z_m)/(Z_s + Z_E)|``. The
     first case is its ``Z_E -> 0`` limit, which is why the two must converge.
 ``en50522_chain``
-    ``U_E = 3*I_0 * Z_E * r`` -- the norm's own identity, checked as a closed
-    loop through three independently computed quantities.
+    The earth-return current ``I_E`` of a six-station chain, re-derived from a
+    nodal system assembled here from the model's own impedances. The case
+    does not check ``U_E = 3*I_0 * Z_E * r`` with all factors read out of one
+    result: with ``Z_E`` the driving-point impedance at the fault bus that
+    relation is a physical statement (pinned on a long chain by the test
+    suite), but for the group pair ``u_earthing_group`` /
+    ``z_earthing_group`` it is closed by construction, and a case built on it
+    would agree to 1e-16 whatever the model did.
 ``ladder_input_impedance``
     A chain of bonded stations is a ladder network, and a long one presents
     ``Z_in = -Z'/2 + sqrt(Z'^2/4 + Z_e*Z')`` at its end.
@@ -68,7 +75,7 @@ class ReferenceCase:
     """
     One closed-form case and the model run that has to match it.
 
-    Attributes
+    Parameters
     ----------
     name : str
         Short identifier, used as the row key.
@@ -80,6 +87,24 @@ class ReferenceCase:
         was not met -- the second is the more common finding.
     tolerance : float
         Relative deviation still counted as agreement.
+    run : callable
+        ``run() -> (closed_form, model)``: builds the case's network, solves
+        it and returns both numbers.
+
+    Attributes
+    ----------
+    name, quantity, conditions, tolerance
+        The constructor arguments of the same name.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> case = gi.REFERENCE_CASES[0]
+    >>> isinstance(case, gi.ReferenceCase)
+    True
+    >>> row = case.evaluate()
+    >>> row["case"] == case.name, row["agrees"]
+    (True, True)
     """
 
     __slots__ = ("name", "quantity", "conditions", "tolerance", "_run")
@@ -99,7 +124,16 @@ class ReferenceCase:
         self._run = run
 
     def evaluate(self) -> Dict[str, object]:
-        """Run the case and return its row."""
+        """
+        Run the case and return its row.
+
+        Returns
+        -------
+        dict
+            The row of :func:`run_reference_cases`: ``case``, ``quantity``,
+            ``conditions``, ``closed_form``, ``model``, ``rel_deviation``,
+            ``tolerance`` and ``agrees``.
+        """
         closed_form, model = self._run()
         reference = abs(closed_form)
         deviation = (
@@ -173,9 +207,29 @@ def _chain(
     return net, names
 
 
-def _driving_point(net, bus_name: str, freq: float = _FREQ) -> complex:
-    """Source-free driving-point impedance, assembled independently of the
-    solver so the comparison is not a solver checking itself."""
+def _assemble_from_model(net, freq: float = _FREQ):
+    """
+    Nodal matrix assembled from the **model's own** stored impedances.
+
+    Independent of the solver -- it shares no code with it -- but not
+    independent of the model: every value comes from ``bus.impedance`` and
+    ``branch.self_impedance``, which is what gives a case built on it the
+    power to notice when those values are wrong. A matrix built from the
+    constants the case happens to have in scope notices nothing: it is then a
+    second copy of the closed form, and the two agree whatever the model does.
+
+    Parameters
+    ----------
+    net : Network
+        The reference network.
+    freq : float, optional
+        Frequency to read the impedances at. Defaults to 50 Hz.
+
+    Returns
+    -------
+    tuple
+        ``(Y, index, names)`` with ``index`` mapping bus name to row.
+    """
     names = sorted(net.buses)
     index = {n: i for i, n in enumerate(names)}
     Y = np.zeros((len(names), len(names)), dtype=complex)
@@ -188,6 +242,16 @@ def _driving_point(net, bus_name: str, freq: float = _FREQ) -> complex:
         Y[j, j] += y
         Y[i, j] -= y
         Y[j, i] -= y
+    return Y, index, names
+
+
+def _driving_point(net, bus_name: str, freq: float = _FREQ) -> complex:
+    """
+    Source-free driving-point impedance, assembled independently of the solver.
+
+    The comparison would otherwise be a solver checking itself.
+    """
+    Y, index, names = _assemble_from_model(net, freq)
     injection = np.zeros(len(names), dtype=complex)
     injection[index[bus_name]] = 1.0
     return complex(np.linalg.solve(Y, injection)[index[bus_name]])
@@ -225,10 +289,9 @@ def _line_finite_earthing() -> Tuple[float, float]:
     """
     z_self, z_mutual = complex(0.1, 0.2), complex(0.05, 0.1)
     z_electrode = complex(10.0, 0.0)
-    net, _ = _chain(3, z_electrode, z_self, z_mutual)
-    # Two sections between the two earthed ends, and the middle station is a
-    # third electrode in parallel with the loop -- so the closed form is taken
-    # over the two end electrodes and the middle one is left out of the network.
+    # Two sections between the two earthed ends would put a third electrode in
+    # parallel with the loop, and the closed form is taken over the two end
+    # electrodes -- so the case runs on the two-bus line.
     net2, _ = _chain(2, z_electrode, z_self, z_mutual)
     z_loop = z_self * 1.0  # one section of 1 km
     closed_form = abs((z_loop - z_mutual) / (z_loop + 2 * z_electrode))
@@ -238,19 +301,54 @@ def _line_finite_earthing() -> Tuple[float, float]:
 
 def _en50522_chain() -> Tuple[float, float]:
     """
-    ``U_E = 3*I_0 * Z_E * r``.
+    ``I_E = sum of the electrode currents that feed the soil``.
 
-    The norm's own identity. Nothing is asserted about the values -- ``U_E``,
-    ``Z_E`` and ``r`` are read out of the result and multiplied back together,
-    so the case fails if any one of the three drifts from the others.
+    The earth-return current of a six-station chain, computed twice. The model
+    value is ``ResultReductionFactor.i_earth``; the reference is the same sum
+    taken from a nodal system assembled here from ``bus.impedance`` and
+    ``branch.self_impedance`` and solved against the injection vector of the
+    solved fault -- so the matrix, the solve, the electrode currents and the
+    group sum are all done a second way.
+
+    What this case does *not* do: check ``U_E = 3*I_0 * Z_E * r`` with all
+    three factors read out of one result. For the group pair that identity is
+    closed by construction -- ``z_earthing_group`` is
+    ``u_earthing_group / I_E`` and ``r`` is ``|I_E| / |I_F|``, so the product
+    reduces to ``u_earthing_group`` algebraically -- and such a case would
+    agree to machine precision whatever the model did; multiplying every
+    electrode current by three would make the reported deviation *smaller*.
+    A tautology that reports 1e-16 is worse than no case at all, because the
+    row it writes says "agrees".
+
+    The mutual injection vector is taken from the solved fault rather than
+    rebuilt: ``line_ideal_bonding`` and ``line_finite_earthing`` are the cases
+    that test the coupling model, and rebuilding it here would only be a second
+    copy of the same assumption.
     """
-    net, _ = _chain(6, complex(10.0, 0.0), complex(0.1, 0.2), complex(0.05, 0.1),
-                    fault_index=3)
+    import groundinsight as gi  # noqa: F401 -- keeps the public API in the path
+
+    net, names = _chain(
+        6, complex(10.0, 0.0), complex(0.1, 0.2), complex(0.05, 0.1),
+        fault_index=3,
+    )
     factor = net.results["EF"].reduction_factor
-    u_e = abs(complex(factor.u_earthing[_FREQ]))
-    z_e = abs(complex(factor.z_earthing[_FREQ]))
-    r = factor.value_current[_FREQ]
-    return u_e, 1000.0 * z_e * r
+    model = abs(complex(factor.i_earth[_FREQ]))
+
+    electrical = net.electrical_network
+    Y, index, bus_names = _assemble_from_model(net)
+    injection = np.zeros(len(bus_names), dtype=complex)
+    for name in bus_names:
+        injection[index[name]] = complex(
+            electrical.i_vectors[_FREQ][electrical.bus_indices[name]]
+        )
+    u = np.linalg.solve(Y, injection)
+    reference = abs(
+        sum(
+            complex(u[index[name]]) / complex(net.buses[name].impedance[_FREQ])
+            for name in factor.earth_buses[_FREQ]
+        )
+    )
+    return reference, model
 
 
 def _ladder_input_impedance() -> Tuple[float, float]:
@@ -282,6 +380,13 @@ def _ladder_potential_decay() -> Tuple[float, float]:
     roots ``e^(±gamma)``, and the decaying one is what a semi-infinite chain
     keeps. This is the quantity that says how many stations a fault reaches
     before its potential has died away.
+
+    The nodal matrix is assembled from ``bus.impedance`` and
+    ``branch.self_impedance``, i.e. from what the *model* evaluated out of the
+    two type formulas, not from the two local constants below: built from
+    those, the case would be blind to the model entirely -- an electrode
+    impedance a hundred times too large would leave both sides of the
+    comparison untouched.
     """
     z_series, z_electrode = complex(0.1, 0.2), complex(10.0, 0.0)
     gamma = cmath.acosh(1.0 + z_series / (2.0 * z_electrode))
@@ -289,18 +394,7 @@ def _ladder_potential_decay() -> Tuple[float, float]:
     closed_form = abs(cmath.exp(-n * gamma))
 
     net, names = _chain(80, z_electrode, z_series, complex(0.0, 0.0), solve=False)
-    sorted_names = sorted(net.buses)
-    index = {name: i for i, name in enumerate(sorted_names)}
-    Y = np.zeros((len(sorted_names),) * 2, dtype=complex)
-    for name in sorted_names:
-        Y[index[name], index[name]] += 1.0 / z_electrode
-    for branch in net.branches.values():
-        y = 1.0 / z_series
-        i, j = index[branch.from_bus], index[branch.to_bus]
-        Y[i, i] += y
-        Y[j, j] += y
-        Y[i, j] -= y
-        Y[j, i] -= y
+    Y, index, sorted_names = _assemble_from_model(net)
     injection = np.zeros(len(sorted_names), dtype=complex)
     injection[index["B0"]] = 1.0
     u = np.linalg.solve(Y, injection)
@@ -353,9 +447,10 @@ REFERENCE_CASES: List[ReferenceCase] = [
     ),
     ReferenceCase(
         "en50522_chain",
-        "earthing voltage U_E [V]",
-        "U_E, Z_E and r read back from one solved fault",
-        1e-12,
+        "earth-return current I_E [A]",
+        "six-station chain, I_E re-derived from an independently assembled "
+        "nodal system",
+        1e-9,
         _en50522_chain,
     ),
     ReferenceCase(
@@ -402,8 +497,10 @@ def run_reference_cases(
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> gi.run_reference_cases()  # doctest: +SKIP
+    >>> import groundinsight as gi
+    >>> table = gi.run_reference_cases()
+    >>> table.height == len(gi.REFERENCE_CASES), table["agrees"].all()
+    (True, True)
     """
     rows = [case.evaluate() for case in (cases or REFERENCE_CASES)]
     frame = pl.DataFrame(rows)

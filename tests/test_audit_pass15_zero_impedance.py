@@ -67,6 +67,7 @@ already reports with a better message than this guard could produce.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import warnings
@@ -81,9 +82,17 @@ from groundinsight.simulation import waveforms
 from groundinsight.simulation.transient import TransientStudy
 from groundinsight.utils.impedance_calculator import (
     DCLimitWarning,
-    _render_frequencies,
+    render_frequencies,
     check_passive_impedance,
 )
+from tests._warning_policy import acknowledge
+
+#: A purely reactive impedance meets the 0 Hz bin on purpose.
+DC_REACTANCE = acknowledge("DC_LIMIT")
+
+#: An ideal electrode at the fault leaves no earth-return group, which is the
+#: case under test.
+NO_EARTH_GROUP = acknowledge("EARTH_GROUP_UNDEFINED")
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +152,7 @@ def _epr(net):
     return {
         row["bus_name"]: float(row["EPR_V"])
         for row in net.res_buses().to_dicts()
-        if row["frequency_Hz"] == "50"
+        if row["frequency_Hz"] == 50.0
     }
 
 
@@ -201,7 +210,7 @@ def _transient_net(name, bus_formula="rho*0 + 10.0 + I*f*0",
 
 def _solve_transient(net):
     """Run the FFT solver on a 20 ms window; the bin spacing is 50 Hz."""
-    study = TransientStudy(net, fault_name="F1")
+    study = TransientStudy(net, fault="F1")
     study.set_source_waveform("src", waveforms.step(amplitude=100.0, t_on=0.0))
     return study.solve(t_end=0.02, dt=1e-3, solver="fft")
 
@@ -299,6 +308,7 @@ def test_the_sequence_towards_zero_converges_to_the_ideal_electrode():
     assert errors[6] / errors[3] == pytest.approx(1e-3, rel=0.1)
 
 
+@NO_EARTH_GROUP
 def test_the_answer_at_zero_used_to_be_the_answer_at_infinity():
     """Why the endpoint had to be rejected rather than kept.
 
@@ -339,7 +349,7 @@ def test_the_remedy_quoted_in_the_message_is_accurate():
 )
 def test_every_further_decade_buys_another_digit(exponent, digits):
     """The second half of the same promise, in the docstring and in
-    ``docs/concepts.md``: the convergence is first order, so the accuracy is
+    ``docs/explanation/formulas.md``: the convergence is first order, so the accuracy is
     a straight line in the exponent with no floor before double precision
     runs out. Measured relative errors: 9.09e-5, 9.09e-8, 9.09e-11,
     9.10e-14."""
@@ -398,13 +408,11 @@ def test_probing_the_overflow_emits_no_runtime_warning():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         for magnitude in (5e-324, 1e-320, 1e-310, 1e-300):
-            try:
+            with contextlib.suppress(ValueError):
                 check_passive_impedance(
                     {50.0: ComplexNumber(real=magnitude, imag=0.0)},
                     element="bus 'X'",
                 )
-            except ValueError:
-                pass
 
 
 # ---------------------------------------------------------------------------
@@ -553,10 +561,10 @@ def test_a_network_restored_from_json_is_validated(tmp_path):
     path = tmp_path / "p15.json"
     gi.save_network_to_json(net, str(path))
 
-    raw = json.loads(path.read_text())
+    raw = json.loads(path.read_text(encoding="utf-8"))
     for key in raw["buses"]["B"]["impedance"]:
         raw["buses"]["B"]["impedance"][key] = {"real": 0.0, "imag": 0.0}
-    path.write_text(json.dumps(raw))
+    path.write_text(json.dumps(raw), encoding="utf-8")
 
     restored = gi.load_network_from_json(str(path))
     assert restored.buses["B"].impedance[50.0].real == 0.0
@@ -713,6 +721,7 @@ def test_a_dc_short_circuit_is_sized_from_the_smallest_other_impedance():
     assert "bus 'bus1'" in str(record[0].message)
 
 
+@DC_REACTANCE
 def test_a_purely_reactive_impedance_may_be_zero_at_dc():
     """An ideal inductance is a short circuit at 0 Hz. The FFT grid always
     contains a 0 Hz bin, so applying the steady-state rule unchanged would
@@ -756,7 +765,7 @@ def test_the_frequency_list_is_truncated_instead_of_flooding_the_message():
     """A transient study evaluates the same formula at several thousand FFT
     bins. An unbounded list would bury the sentence that explains the
     problem."""
-    rendered = _render_frequencies([float(i) for i in range(2048)])
+    rendered = render_frequencies([float(i) for i in range(2048)])
     assert rendered.startswith("0 Hz, 1 Hz, 2 Hz, 3 Hz, 4 Hz")
     assert "2048 frequencies in total" in rendered
     assert "2047 Hz" not in rendered

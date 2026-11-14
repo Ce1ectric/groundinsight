@@ -1,3 +1,4 @@
+# tests/test_decomposition.py
 """
 Splitting the network at the fault location, and the current-based reduction
 factor that goes with it.
@@ -16,6 +17,7 @@ argued:
 from __future__ import annotations
 
 import logging
+from itertools import pairwise
 
 import numpy as np
 import polars as pl
@@ -23,6 +25,11 @@ import pytest
 
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType, ComplexNumber
+from tests._warning_policy import acknowledge
+
+#: The ring or parallel-route network of these tests splits its phase current
+#: by the proxy (PHASE_PROXY); the tests are about something else.
+RING = acknowledge("PHASE_PROXY")
 
 
 FREQ = [50.0]
@@ -93,6 +100,7 @@ def _independent_driving_point(net, bus_name, freq=50.0):
 # --- the parallel identity ---------------------------------------------------
 
 
+@RING
 @pytest.mark.parametrize("ring", [False, True], ids=["chain", "ring"])
 def test_the_parallel_decomposition_closes(ring):
     """``1/Z_local + sum(1/Z_side)`` is the driving-point admittance, exactly."""
@@ -107,6 +115,7 @@ def test_the_parallel_decomposition_closes(ring):
     )
 
 
+@RING
 @pytest.mark.parametrize("ring", [False, True], ids=["chain", "ring"])
 def test_the_driving_point_matches_a_hand_assembled_system(ring):
     """The module's own value is checked against a system assembled from
@@ -118,6 +127,7 @@ def test_the_driving_point_matches_a_hand_assembled_system(ring):
     )
 
 
+@RING
 def test_a_ring_reports_overlapping_directions_instead_of_empty_ones():
     """
     Removing one branch of a ring separates nothing.
@@ -194,7 +204,7 @@ def test_r_epr_is_blind_to_the_fault_bus_while_r_current_is_not():
     # Strictly decreasing: a better electrode at the faulted station takes a
     # larger share of the current straight into the local soil, so more of the
     # fault current returns through earth.
-    assert all(a > b for a, b in zip(r_current, r_current[1:]))
+    assert all(a > b for a, b in pairwise(r_current))
     assert r_current[0] / r_current[-1] > 1.5
     # I_E is a sum over every bus that feeds the soil, so it stays finite even
     # when the faulted station has no electrode at all -- the neighbours carry
@@ -215,7 +225,7 @@ def test_the_side_impedances_are_a_property_of_the_network_alone():
         if reference is None:
             reference = values
         else:
-            for got, expected in zip(values, reference):
+            for got, expected in zip(values, reference, strict=True):
                 assert got == pytest.approx(expected, rel=1e-12)
 
 
@@ -322,6 +332,7 @@ def test_the_result_survives_a_json_round_trip():
     )
 
 
+@RING
 def test_the_overlap_notice_is_logged_once(caplog):
     net = _network(ring=True)
     with caplog.at_level(logging.INFO, logger="groundinsight"):

@@ -23,10 +23,21 @@ Analytical reference (see module docstring of ``electrical_network.py``):
 
 import cmath
 import math
+from itertools import pairwise
+
 import pytest
 
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType
+from tests._warning_policy import acknowledge
+
+#: The ring cases split their phase current by the proxy; the tests check the
+#: reduction factor against closed forms.
+pytestmark = acknowledge("PHASE_PROXY")
+
+#: The 20-bus ring spreads its electrode currents in angle at the far
+#: stations.
+SPREAD = acknowledge("EARTH_GROUP_SPREAD")
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +172,7 @@ def test_reduction_factor_line_without_shield():
     gi.create_source(name="src", bus="bus1", values={50: 100.0}, network=net)
     gi.create_fault(name="fault", bus="bus2", scalings={50: 1.0}, network=net)
 
-    gi.run_fault(net, fault_name="fault")
+    gi.run_fault(net, fault="fault")
 
     r = _reduction_factor(net, "fault")
     assert r == pytest.approx(1.0, abs=1e-6)
@@ -192,7 +203,7 @@ def test_reduction_factor_single_ms_cable():
     gi.create_source(name="src", bus="bus1", values={50: 100.0}, network=net)
     gi.create_fault(name="fault", bus="bus2", scalings={50: 1.0}, network=net)
 
-    gi.run_fault(net, fault_name="fault")
+    gi.run_fault(net, fault="fault")
 
     r = _reduction_factor(net, "fault")
     assert r == pytest.approx(R_REF, rel=1e-6)
@@ -228,7 +239,7 @@ def test_reduction_factor_mixed_line_with_interruption():
     gi.create_source(name="src", bus="bus1", values={50: 100.0}, network=net)
     gi.create_fault(name="fault", bus="bus4", scalings={50: 1.0}, network=net)
 
-    gi.run_fault(net, fault_name="fault")
+    gi.run_fault(net, fault="fault")
 
     r = _reduction_factor(net, "fault")
     assert R_REF < r < 1.0
@@ -269,8 +280,8 @@ def test_reduction_factor_independent_of_bus_insertion_order():
     net_natural = _build_line("Natural", ["bus1", "bus2", "bus3"])
     net_reversed = _build_line("Reversed", ["bus3", "bus1", "bus2"])
 
-    gi.run_fault(net_natural, fault_name="fault")
-    gi.run_fault(net_reversed, fault_name="fault")
+    gi.run_fault(net_natural, fault="fault")
+    gi.run_fault(net_reversed, fault="fault")
 
     r_nat = _reduction_factor(net_natural, "fault")
     r_rev = _reduction_factor(net_reversed, "fault")
@@ -282,7 +293,7 @@ def test_reduction_factor_independent_of_bus_insertion_order():
 # Ring topology: this is the case Christian found broken. With a symmetric
 # ring and a user-set parallel_coefficient=0.5 the reduction factor must
 # collapse back to the analytical r = |1 - Z_m/Z_s|. The automatic variant
-# (auto_parallel_coefficients=True) must reach the same answer without the
+# (phase_current_mode="auto") must reach the same answer without the
 # user having to set the coefficient.
 # ---------------------------------------------------------------------------
 
@@ -344,7 +355,7 @@ def test_ring_with_parallel_coefficient_half():
     the analytical reduction factor. This is the case where the legacy
     implementation produced implausible results."""
     net = _build_symmetric_ring("RingManualCoeff")
-    gi.run_fault(net, fault_name="fault")
+    gi.run_fault(net, fault="fault")
 
     r = _reduction_factor(net, "fault")
     assert r == pytest.approx(R_REF, rel=1e-6)
@@ -360,7 +371,7 @@ def test_ring_auto_phase_currents():
     for branch in net.branches.values():
         branch.parallel_coefficient = 1.0
 
-    gi.run_fault(net, fault_name="fault", auto_parallel_coefficients=True)
+    gi.run_fault(net, fault="fault", phase_current_mode="auto")
 
     r = _reduction_factor(net, "fault")
     assert r == pytest.approx(R_REF, rel=1e-3)
@@ -372,8 +383,8 @@ def test_ring_variants_agree():
     net_a = _build_symmetric_ring("RingVariantA")
     net_b = _build_symmetric_ring("RingVariantB")
 
-    gi.run_fault(net_a, fault_name="fault", auto_parallel_coefficients=False)
-    gi.run_fault(net_b, fault_name="fault", auto_parallel_coefficients=True)
+    gi.run_fault(net_a, fault="fault", phase_current_mode="paths")
+    gi.run_fault(net_b, fault="fault", phase_current_mode="auto")
 
     r_a = _reduction_factor(net_a, "fault")
     r_b = _reduction_factor(net_b, "fault")
@@ -418,7 +429,7 @@ def test_reduction_factor_sweep_single_cable_converges_to_zero():
     gi.create_source(name="src", bus="bus1", values=values, network=net)
     gi.create_fault(name="fault", bus="bus2", scalings=scalings, network=net)
 
-    gi.run_fault(net, fault_name="fault")
+    gi.run_fault(net, fault="fault")
 
     rf = net.results["fault"].reduction_factor.value
     rs = [rf[float(f)] for f in _SWEEP_FREQS]
@@ -427,11 +438,11 @@ def test_reduction_factor_sweep_single_cable_converges_to_zero():
     assert rs[0] == pytest.approx(R_REF, rel=1e-6)
 
     # Monotonically decreasing across the entire sweep.
-    for prev, curr in zip(rs, rs[1:]):
+    for prev, curr in pairwise(rs):
         assert curr < prev, f"r is not monotonically decreasing: {rs}"
 
     # Each value matches the closed-form expression r = R / sqrt(R^2+(wL)^2).
-    for f, r in zip(_SWEEP_FREQS, rs):
+    for f, r in zip(_SWEEP_FREQS, rs, strict=True):
         assert r == pytest.approx(_r_analytical_single_cable(f), rel=1e-3)
 
     # By 5 kHz the reduction factor is well below 5 % -- clear convergence
@@ -439,6 +450,7 @@ def test_reduction_factor_sweep_single_cable_converges_to_zero():
     assert rs[-1] < 0.05
 
 
+@SPREAD
 def test_reduction_factor_sweep_20_bus_ring_converges_to_zero():
     """20-bus symmetric ring with the fault opposite the source: same
     closed-form reduction factor as a single cable, hence the same
@@ -468,7 +480,7 @@ def test_reduction_factor_sweep_20_bus_ring_converges_to_zero():
         scalings=scalings, network=net,
     )
 
-    gi.run_fault(net, fault_name="fault", auto_parallel_coefficients=True)
+    gi.run_fault(net, fault="fault", phase_current_mode="auto")
 
     rf = net.results["fault"].reduction_factor.value
     rs = [rf[float(f)] for f in _SWEEP_FREQS]
@@ -478,7 +490,7 @@ def test_reduction_factor_sweep_20_bus_ring_converges_to_zero():
     assert rs[0] == pytest.approx(R_REF, rel=1e-3)
 
     # Monotonically decreasing across the entire sweep.
-    for prev, curr in zip(rs, rs[1:]):
+    for prev, curr in pairwise(rs):
         assert curr < prev, f"r on ring is not monotonically decreasing: {rs}"
 
     # Strict convergence towards 0 at high frequency.
@@ -611,7 +623,7 @@ def test_homogeneous_ring_matches_ladder_formula(z_l, z_q):
         z_l=z_l,
         z_q=z_q,
     )
-    gi.run_fault(net, fault_name="fault")
+    gi.run_fault(net, fault="fault")
 
     z_meas = _raw_input_impedance_magnitude(net)
     z_theory = abs(_ladder_input_impedance(z_l, z_q))
@@ -638,7 +650,7 @@ def test_homogeneous_ring_mutual_coupling_strictly_reduces_z():
         "HomRingNoMutual", n=200, z_l=z_l, z_q=z_q,
         z_m=complex(0.0, 0.0),
     )
-    gi.run_fault(net_no_m, fault_name="fault")
+    gi.run_fault(net_no_m, fault="fault")
     z0 = _raw_input_impedance_magnitude(net_no_m)
 
     # Without mutual coupling the closed-form ladder formula must hold.
@@ -653,7 +665,7 @@ def test_homogeneous_ring_mutual_coupling_strictly_reduces_z():
             f"HomRingM{z_m_imag}", n=200, z_l=z_l, z_q=z_q,
             z_m=complex(0.0, z_m_imag),
         )
-        gi.run_fault(net_m, fault_name="fault")
+        gi.run_fault(net_m, fault="fault")
         z = _raw_input_impedance_magnitude(net_m)
         assert z < prev, (
             f"|u_EPR/I| did not decrease at Z_m=j{z_m_imag}: {z} >= {prev}"

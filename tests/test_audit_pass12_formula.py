@@ -61,6 +61,11 @@ from groundinsight.utils.impedance_calculator import (
     compute_impedance,
     compute_real_value,
 )
+from tests._warning_policy import acknowledge
+
+#: A voltage source drives the coupled branches; the test is about its
+#: infinite internal impedance.
+THEVENIN = acknowledge("THEVENIN_COUPLING")
 
 
 # ---------------------------------------------------------------------------
@@ -124,11 +129,11 @@ def _open_type(name="open_end"):
                       voltage_level=110.0, impedance_formula="nan")
 
 
-def _epr(net, freq="50"):
+def _epr(net, freq=50.0):
     return {
         row["bus_name"]: row["EPR_V"]
         for row in net.res_buses().to_dicts()
-        if row["frequency_Hz"] == freq
+        if row["frequency_Hz"] == float(freq)
     }
 
 
@@ -137,7 +142,7 @@ def _rms(frame, key_column, value_column):
     return {
         row[key_column]: row[value_column]
         for row in frame.to_dicts()
-        if row["frequency_Hz"] == "RMS"
+        if row["is_rms"]
     }
 
 
@@ -451,7 +456,7 @@ def test_cutoff_formula_solves_below_the_cutoff():
         "p12_cutoff", types, self_formula=CUTOFF_FORMULA, frequencies=(50.0,)
     )
     gi.run_fault(net, "F")
-    epr = _epr(net, "50")
+    epr = _epr(net, 50.0)
     assert epr
     assert all(math.isfinite(value) for value in epr.values())
     assert max(epr.values()) > 0.0
@@ -633,7 +638,7 @@ def test_open_end_branch_carries_no_shield_current():
 
 
 def test_open_end_branch_in_the_automatic_phase_current_mode():
-    """``auto_parallel_coefficients=True`` builds a second, phase-side
+    """``phase_current_mode="auto"`` builds a second, phase-side
     admittance matrix from the same impedances -- with its own reciprocal, and
     therefore its own copy of the defect."""
     types = {name: _grounded_type() for name in ("A", "B", "C")}
@@ -643,7 +648,7 @@ def test_open_end_branch_in_the_automatic_phase_current_mode():
         self_impedance_formula="nan", mutual_impedance_formula="nan",
     )
     net.branches["A-B"].calculate_impedance(net.frequencies)
-    gi.run_fault(net, "F", auto_parallel_coefficients=True)
+    gi.run_fault(net, "F", phase_current_mode="auto")
 
     epr = _epr(net)
     assert all(math.isfinite(value) for value in epr.values())
@@ -652,6 +657,7 @@ def test_open_end_branch_in_the_automatic_phase_current_mode():
     assert currents["A-B"] == 0.0
 
 
+@THEVENIN
 def test_voltage_source_with_an_infinite_internal_impedance_is_switched_out():
     """A Thevenin source with an infinite internal impedance is an infeed that
     is out of service. ``Z_src = 0`` has always meant "no source" here; the

@@ -39,11 +39,16 @@ import polars as pl
 import pytest
 
 import groundinsight as gi
+from groundinsight.diagnostics import collecting
 from groundinsight.models.core_models import (
     ComplexNumber,
     ResultGroundingImpedance,
     ResultReductionFactor,
 )
+from tests._warning_policy import acknowledge
+
+#: Half-declared thermal data is the subject of these tests.
+HALF_DECLARED = acknowledge("THERMAL_DATA_INCOMPLETE")
 
 
 # ---------------------------------------------------------------------------
@@ -166,12 +171,12 @@ def test_thermal_fields_do_not_change_the_electrical_result():
     bare = _chain(_bare_bus_type(), _bare_branch_type(), name="bare")
     full = _chain(_full_bus_type(), _full_branch_type(), name="full")
 
-    for rb_bare, rb_full in zip(bare.results["F"].buses, full.results["F"].buses):
+    for rb_bare, rb_full in zip(bare.results["F"].buses, full.results["F"].buses, strict=True):
         assert rb_bare.name == rb_full.name
         assert rb_bare.uepr == rb_full.uepr
         assert rb_bare.ia == rb_full.ia
         assert rb_bare.i_inj == rb_full.i_inj
-    for br_bare, br_full in zip(bare.results["F"].branches, full.results["F"].branches):
+    for br_bare, br_full in zip(bare.results["F"].branches, full.results["F"].branches, strict=True):
         assert br_bare.name == br_full.name
         assert br_bare.i_s == br_full.i_s
 
@@ -226,7 +231,7 @@ def test_an_unassessable_frame_keeps_its_dtypes():
     """
     net = _chain(_bare_bus_type(), _bare_branch_type())
     for df in (gi.check_conductor_limits(net, "F"), gi.check_node_limits(net, "F")):
-        schema = dict(zip(df.columns, df.dtypes))
+        schema = dict(zip(df.columns, df.dtypes, strict=True))
         assert schema["within_limit"] == pl.Boolean
         assert schema["utilization"] == pl.Float64
         assert schema["I_admissible_A"] == pl.Float64
@@ -313,9 +318,14 @@ def test_elements_argument_can_restrict_the_frame():
 # cross-section means the user began describing the conductor and believes it
 # is being assessed. Such a row carries ``within_limit = None``, which is
 # visually indistinguishable from a pass, so it must be announced.
+#
+# Since audit pass 19 (GUI4) the announcement is an InputWarning with the code
+# THERMAL_DATA_INCOMPLETE instead of a log line, so it is read from the
+# collected diagnostics.
 # ---------------------------------------------------------------------------
 
 
+@HALF_DECLARED
 @pytest.mark.parametrize(
     "kwargs, missing",
     [
@@ -323,27 +333,26 @@ def test_elements_argument_can_restrict_the_frame():
         ({"cross_section_mm2": 50.0}, "conductor_material"),
     ],
 )
-def test_a_half_declared_branch_is_not_assessed_but_is_announced(
-    caplog, kwargs, missing
-):
+def test_a_half_declared_branch_is_not_assessed_but_is_announced(kwargs, missing):
     net = _chain(_bare_bus_type(), _bare_branch_type())
     net.branches["A-B"].type = gi.BranchType(name="half", **kwargs, **_BRANCH_KW)
     gi.run_fault(net, "F")
 
-    with caplog.at_level("WARNING", logger="groundinsight"):
+    with collecting() as records:
         df = gi.check_conductor_limits(net, "F")
 
     row = df.filter(pl.col("branch_name") == "A-B").to_dicts()[0]
     assert row["within_limit"] is None, "half data must never produce a verdict"
     assert row["I_th_A"] > 0.0, "the current is still reported"
 
-    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    warnings = [r.message for r in records if r.code == "THERMAL_DATA_INCOMPLETE"]
     assert len(warnings) == 1
     assert "A-B" in warnings[0]
     assert missing in warnings[0], "the message names the field that is missing"
     assert "not assessed" in warnings[0].lower()
 
 
+@HALF_DECLARED
 @pytest.mark.parametrize(
     "kwargs, missing",
     [
@@ -354,13 +363,13 @@ def test_a_half_declared_branch_is_not_assessed_but_is_announced(
     ],
 )
 def test_a_half_declared_node_element_is_not_assessed_but_is_announced(
-    caplog, kwargs, missing
+    kwargs, missing
 ):
     net = _chain(_bare_bus_type(), _bare_branch_type())
     net.buses["B"].type = gi.BusType(name="half", **kwargs, **_BUS_KW)
     gi.run_fault(net, "F")
 
-    with caplog.at_level("WARNING", logger="groundinsight"):
+    with collecting() as records:
         df = gi.check_node_limits(net, "F")
 
     element = "earthing_conductor" if "earthing" in missing else "electrode"
@@ -369,22 +378,23 @@ def test_a_half_declared_node_element_is_not_assessed_but_is_announced(
     ).to_dicts()[0]
     assert row["within_limit"] is None
 
-    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    warnings = [r.message for r in records if r.code == "THERMAL_DATA_INCOMPLETE"]
     assert len(warnings) == 1
     assert f"B/{element}" in warnings[0]
     assert missing in warnings[0]
 
 
-def test_the_half_declared_warning_does_not_fire_on_complete_data(caplog):
+def test_the_half_declared_warning_does_not_fire_on_complete_data():
     """The warning must stay specific, or it becomes noise that gets filtered out."""
     net = _chain(_full_bus_type(), _full_branch_type())
-    with caplog.at_level("WARNING", logger="groundinsight"):
+    with collecting() as records:
         gi.check_conductor_limits(net, "F")
         gi.check_node_limits(net, "F")
-    assert "half of their thermal data" not in caplog.text
+    assert not [r for r in records if r.code == "THERMAL_DATA_INCOMPLETE"]
 
 
-def test_the_half_declared_warning_lists_every_offender_once(caplog):
+@HALF_DECLARED
+def test_the_half_declared_warning_lists_every_offender_once():
     """Two broken branches produce one warning naming both, not two warnings."""
     net = _chain(_bare_bus_type(), _bare_branch_type())
     for branch in ("A-B", "B-C"):
@@ -393,15 +403,16 @@ def test_the_half_declared_warning_lists_every_offender_once(caplog):
         )
     gi.run_fault(net, "F")
 
-    with caplog.at_level("WARNING", logger="groundinsight"):
+    with collecting() as records:
         gi.check_conductor_limits(net, "F")
 
-    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    warnings = [r.message for r in records if r.code == "THERMAL_DATA_INCOMPLETE"]
     assert len(warnings) == 1
     assert "A-B" in warnings[0] and "B-C" in warnings[0]
     assert warnings[0].startswith("2 branch(es)")
 
 
+@HALF_DECLARED
 def test_a_half_declared_element_does_not_disturb_its_neighbours(caplog):
     """The complete elements around a broken one are still assessed normally."""
     net = _chain(_full_bus_type(), _bare_branch_type())
@@ -437,13 +448,15 @@ def test_the_check_requires_a_fault_duration_and_says_so():
     with pytest.raises(ValueError) as excinfo:
         gi.check_node_limits(net, "F")
     message = str(excinfo.value)
-    assert "t_k=" in message and "t_k_s" in message
+    # The keyword is ``t_k_s`` since audit pass 19 (USE8), the same name as
+    # the ``Fault`` field; ``t_k`` is its deprecated alias.
+    assert "t_k_s=" in message and "Fault.t_k_s" in message
 
 
 def test_the_check_requires_dc_information_and_says_so():
     net = _chain(_bare_bus_type(), _bare_branch_type(), sc_metadata=False)
     with pytest.raises(ValueError) as excinfo:
-        gi.check_node_limits(net, "F", t_k=0.5)
+        gi.check_node_limits(net, "F", t_k_s=0.5)
     message = str(excinfo.value)
     assert "kappa" in message and "r_to_x" in message
 
@@ -451,8 +464,8 @@ def test_the_check_requires_dc_information_and_says_so():
 def test_the_excitation_may_come_from_arguments_alone():
     """A network with no stored 60909 data is still fully assessable ad hoc."""
     net = _chain(_full_bus_type(), _full_branch_type(), sc_metadata=False)
-    branch = gi.check_conductor_limits(net, "F", t_k=0.5, r_to_x=0.1)
-    node = gi.check_node_limits(net, "F", t_k=0.5, r_to_x=0.1)
+    branch = gi.check_conductor_limits(net, "F", t_k_s=0.5, r_to_x=0.1)
+    node = gi.check_node_limits(net, "F", t_k_s=0.5, r_to_x=0.1)
     assert all(v is not None for v in branch["within_limit"].to_list())
     assert all(v is not None for v in node["within_limit"].to_list())
     assert branch["kappa"][0] == pytest.approx(node["kappa"][0])

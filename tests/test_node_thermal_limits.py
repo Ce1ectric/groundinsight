@@ -350,7 +350,7 @@ def test_final_temperature_rejects_physically_impossible_pairings():
 
 def test_check_node_limits_applies_the_iec_formulas():
     net = _chain()
-    df = gi.check_node_limits(net, "F", t_k=1.0, kappa=1.8, n=1.0, f=50.0)
+    df = gi.check_node_limits(net, "F", t_k_s=1.0, kappa=1.8, n_factor=1.0, frequency=50.0)
     by = {rb.name: rb for rb in net.results["F"].buses}
     rows = {(r["bus_name"], r["element"]): r for r in df.to_dicts()}
 
@@ -381,7 +381,7 @@ def test_check_node_limits_applies_the_iec_formulas():
 def test_check_node_limits_separates_earthing_conductor_from_electrode():
     """The feature exists because these two differ by an order of magnitude."""
     net = _chain()
-    df = gi.check_node_limits(net, "F", t_k=1.0, kappa=1.8)
+    df = gi.check_node_limits(net, "F", t_k_s=1.0, kappa=1.8)
     rows = {(r["bus_name"], r["element"]): r for r in df.to_dicts()}
     ec = rows[("b3", "earthing_conductor")]["I_th_A"]
     el = rows[("b3", "electrode")]["I_th_A"]
@@ -390,7 +390,7 @@ def test_check_node_limits_separates_earthing_conductor_from_electrode():
 
 def test_check_node_limits_reports_every_bus_and_element():
     net = _chain()
-    df = gi.check_node_limits(net, "F", t_k=1.0, kappa=1.8)
+    df = gi.check_node_limits(net, "F", t_k_s=1.0, kappa=1.8)
     assert df.height == 6  # 3 buses x 2 elements
     assert set(df["element"].to_list()) == {"earthing_conductor", "electrode"}
     assert set(df["bus_name"].to_list()) == {"b1", "b2", "b3"}
@@ -399,7 +399,7 @@ def test_check_node_limits_reports_every_bus_and_element():
 def test_check_node_limits_element_selection():
     net = _chain()
     df = gi.check_node_limits(
-        net, "F", t_k=1.0, kappa=1.8, elements=("electrode",)
+        net, "F", t_k_s=1.0, kappa=1.8, elements=("electrode",)
     )
     assert df.height == 3
     assert set(df["element"].to_list()) == {"electrode"}
@@ -408,15 +408,15 @@ def test_check_node_limits_element_selection():
 def test_check_node_limits_rejects_unknown_element():
     net = _chain()
     with pytest.raises(ValueError):
-        gi.check_node_limits(net, "F", t_k=1.0, kappa=1.8, elements=("shield",))
+        gi.check_node_limits(net, "F", t_k_s=1.0, kappa=1.8, elements=("shield",))
 
 
 def test_check_node_limits_current_split_scales_the_stress():
     full = _chain(_bus_type(electrode_current_split=1.0), name="full")
     half = _chain(_bus_type(electrode_current_split=0.5), name="half")
-    df_full = gi.check_node_limits(full, "F", t_k=1.0, kappa=1.8,
+    df_full = gi.check_node_limits(full, "F", t_k_s=1.0, kappa=1.8,
                                    elements=("electrode",))
-    df_half = gi.check_node_limits(half, "F", t_k=1.0, kappa=1.8,
+    df_half = gi.check_node_limits(half, "F", t_k_s=1.0, kappa=1.8,
                                    elements=("electrode",))
     a = df_full.filter(df_full["bus_name"] == "b3")["I_th_A"][0]
     b = df_half.filter(df_half["bus_name"] == "b3")["I_th_A"][0]
@@ -427,7 +427,7 @@ def test_check_node_limits_undeclared_element_is_reported_but_not_judged():
     bare = gi.BusType(name="bare", system_type="Tower", voltage_level=20.0,
                       impedance_formula="rho * 0.1")
     net = _chain(bare, name="bare_chain")
-    df = gi.check_node_limits(net, "F", t_k=1.0, kappa=1.8)
+    df = gi.check_node_limits(net, "F", t_k_s=1.0, kappa=1.8)
     assert all(v is None for v in df["within_limit"].to_list())
     assert all(v is None for v in df["material"].to_list())
     # The currents are still reported so the user can size by hand.
@@ -442,7 +442,7 @@ def test_check_node_limits_flags_an_undersized_electrode():
         _bus_type(electrode_cross_section_mm2=0.05, electrode_current_split=1.0),
         name="small",
     )
-    df = gi.check_node_limits(small, "F", t_k=1.0, kappa=1.8,
+    df = gi.check_node_limits(small, "F", t_k_s=1.0, kappa=1.8,
                               elements=("electrode",))
     row = df.filter(df["bus_name"] == "b3").to_dicts()[0]
     assert row["within_limit"] is False
@@ -451,27 +451,27 @@ def test_check_node_limits_flags_an_undersized_electrode():
 
 def test_check_node_limits_accepts_r_to_x_instead_of_kappa():
     net = _chain()
-    df = gi.check_node_limits(net, "F", t_k=1.0, r_to_x=0.1)
+    df = gi.check_node_limits(net, "F", t_k_s=1.0, r_to_x=0.1)
     assert df["kappa"][0] == pytest.approx(kappa_from_r_to_x(0.1))
 
 
 def test_check_node_limits_input_validation():
     net = _chain()
     with pytest.raises(ValueError):
-        gi.check_node_limits(net, "F", t_k=0.0, kappa=1.8)       # bad t_k
+        gi.check_node_limits(net, "F", t_k_s=0.0, kappa=1.8)       # bad t_k
     with pytest.raises(ValueError):
-        gi.check_node_limits(net, "F", t_k=1.0)                  # no DC info
+        gi.check_node_limits(net, "F", t_k_s=1.0)                  # no DC info
     with pytest.raises(ValueError):
-        gi.check_node_limits(net, "F", t_k=1.0, kappa=1.8, r_to_x=0.1)  # both
+        gi.check_node_limits(net, "F", t_k_s=1.0, kappa=1.8, r_to_x=0.1)  # both
     with pytest.raises(ValueError):
-        gi.check_node_limits(net, "nope", t_k=1.0, kappa=1.8)    # no results
+        gi.check_node_limits(net, "nope", t_k_s=1.0, kappa=1.8)    # no results
 
 
 def test_check_node_limits_matches_the_branch_check_excitation():
     """Both checks must derive m, n and sqrt(m+n) from the same resolver."""
     net = _chain()
-    node = gi.check_node_limits(net, "F", t_k=0.5, r_to_x=0.1)
-    branch = gi.check_conductor_limits(net, "F", t_k=0.5, r_to_x=0.1)
+    node = gi.check_node_limits(net, "F", t_k_s=0.5, r_to_x=0.1)
+    branch = gi.check_conductor_limits(net, "F", t_k_s=0.5, r_to_x=0.1)
     assert node["kappa"][0] == pytest.approx(branch["kappa"][0])
     assert node["m"][0] == pytest.approx(branch["m"][0])
     assert node["I_th_factor"][0] == pytest.approx(branch["I_th_factor"][0])

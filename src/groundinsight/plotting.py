@@ -25,16 +25,52 @@ drawn and *who owns* the resulting figure:
     parameter sweep needs in order not to accumulate figures until
     matplotlib warns at twenty.
 
-Omitting both reproduces the historical behaviour exactly: a new figure of
-the helper's default size, registered with ``pyplot`` and left open.
+Omitting both gives a new figure of the helper's default size, registered
+with ``pyplot`` and left open.
+
+``matplotlib.pyplot`` is imported on the first call of a helper, not when the
+package is imported. A module-level import would cost every
+``import groundinsight`` about a third of its time (0.36 s of 1.1 s) and
+put pyplot's global state -- backend selection, the figure registry -- into
+every process, including a multi-threaded GUI or server that never draws with
+matplotlib. The annotations below name ``plt.Axes`` / ``plt.Figure`` as
+strings; ``plt`` exists for type checkers only, so
+``typing.get_type_hints`` on a helper needs ``matplotlib.pyplot`` imported
+first.
 """
 
-import matplotlib.pyplot as plt
-from typing import Iterable, List, Dict, Optional, Sequence, Tuple, TYPE_CHECKING
-from .models.core_models import Result, ComplexNumber
+import logging
+from contextlib import contextmanager
+
+from typing import Iterable, List, Optional, Sequence, Tuple, TYPE_CHECKING
+from .models.core_models import Result
 
 if TYPE_CHECKING:
+    import matplotlib.pyplot as plt
+
     from .simulation.transient import ResultTransient
+
+logger = logging.getLogger(__name__)
+
+
+def _pyplot():
+    """
+    Import ``matplotlib.pyplot`` on first use.
+
+    Returns
+    -------
+    module
+        ``matplotlib.pyplot``. After the first call this is a dictionary
+        lookup in ``sys.modules``.
+
+    Notes
+    -----
+    Every runtime use of pyplot in this module goes through here, so that
+    ``import groundinsight`` stays free of it; see the module docstring.
+    """
+    import matplotlib.pyplot as plt
+
+    return plt
 
 
 #: Default figure size of the bar-plot helpers.
@@ -120,7 +156,7 @@ def _prepare_axes(
                     "size here and only fails later, when the figure is "
                     "drawn or saved."
                 )
-        fig, ax = plt.subplots(figsize=figsize)
+        fig, ax = _pyplot().subplots(figsize=figsize)
         return fig, ax, True
 
     if figsize is not None:
@@ -196,12 +232,76 @@ def _finalise(
     if owns_figure:
         fig.tight_layout()
     if show:
-        plt.show()
+        _pyplot().show()
     if close:
         # Ordered after ``show`` on purpose: closing first would leave
         # nothing to display.
-        plt.close(fig)
+        _pyplot().close(fig)
     return fig
+
+
+@contextmanager
+def _owned_figure(fig: "plt.Figure", owns_figure: bool):
+    """
+    Close a figure this module created if the drawing below fails.
+
+    Everything between :func:`_prepare_axes` and :func:`_finalise` can raise
+    -- ``ax.set_yscale("logarithmic")`` is the easy one, a mismatched bar
+    length the other -- and until now the figure created a few lines earlier
+    stayed registered with ``pyplot`` when it did. In a loop over scenarios
+    that is a leak the caller cannot even see: the exception names the scale,
+    not the sixty open figures behind it, and matplotlib eventually warns
+    about "more than 20 figures" from a line that has nothing to do with it.
+
+    A caller-supplied ``ax`` is never touched: its figure belongs to the
+    caller and may hold other panels.
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+        The figure being drawn into.
+    owns_figure : bool
+        ``True`` when this module created ``fig``.
+    """
+    try:
+        yield
+    except BaseException:
+        if owns_figure:
+            _pyplot().close(fig)
+        raise
+
+
+def _warn_about_log_scale_zeros(yscale: str, values: Sequence[float], what: str) -> None:
+    """
+    Point out bars that a logarithmic axis silently drops.
+
+    ``log(0)`` has no place on the axis, so matplotlib leaves the bar out
+    entirely -- and a *missing* bar reads as "no data for this bus", not as
+    "exactly zero volts here", which in a grounding study is the one result
+    worth seeing: an islanded station, a de-energised feeder, a bus behind an
+    open branch. The plot is still produced; the reader is told why the gap
+    is there.
+
+    Parameters
+    ----------
+    yscale : str
+        The requested scale.
+    values : sequence of float
+        The values about to be drawn.
+    what : str
+        Noun for the log message, e.g. ``"bus"``.
+    """
+    if yscale == "linear":
+        return
+    zeros = sum(1 for v in values if v is not None and v == 0.0)
+    if zeros:
+        logger.warning(
+            "%d %s value(s) are exactly 0 and cannot be shown on a '%s' "
+            "y-axis; those bars are missing from the plot rather than "
+            "sitting at the bottom of it. Use yscale='linear' if the zeros "
+            "matter -- in a grounding study they usually do.",
+            zeros, what, yscale,
+        )
 
 
 def _check_frequencies(
@@ -393,14 +493,19 @@ def plot_bus_voltages(
         fig, ax, owns_figure = _prepare_axes(
             ax, figsize, close, _DEFAULT_BAR_FIGSIZE
         )
-        bar_width = 0.8 / len(frequencies)
-        indices = range(len(bus_names))
-        for i, (freq, uepr_values) in enumerate(uepr_data.items()):
-            positions = [x + i * bar_width for x in indices]
-            ax.bar(positions, uepr_values, width=bar_width, label=f"{freq} Hz")
+        drawn = [v for values in uepr_data.values() for v in values]
+        with _owned_figure(fig, owns_figure):
+            _warn_about_log_scale_zeros(yscale, drawn, "bus EPR")
+            bar_width = 0.8 / len(frequencies)
+            indices = range(len(bus_names))
+            for i, (freq, uepr_values) in enumerate(uepr_data.items()):
+                positions = [x + i * bar_width for x in indices]
+                ax.bar(positions, uepr_values, width=bar_width, label=f"{freq} Hz")
 
-        ax.set_xticks([x + bar_width * (len(frequencies) - 1) / 2 for x in indices])
-        ax.set_xticklabels(bus_names, rotation=45, ha="right")
+            ax.set_xticks(
+                [x + bar_width * (len(frequencies) - 1) / 2 for x in indices]
+            )
+            ax.set_xticklabels(bus_names, rotation=45, ha="right")
     else:
         # Plot RMS values of UEPR
         uepr_rms_values = [
@@ -409,16 +514,19 @@ def plot_bus_voltages(
         fig, ax, owns_figure = _prepare_axes(
             ax, figsize, close, _DEFAULT_BAR_FIGSIZE
         )
-        ax.bar(bus_names, uepr_rms_values, label="RMS")
+        with _owned_figure(fig, owns_figure):
+            _warn_about_log_scale_zeros(yscale, uepr_rms_values, "bus EPR")
+            ax.bar(bus_names, uepr_rms_values, label="RMS")
 
     # Configure plot
-    ax.set_yscale(yscale)
-    ax.set_xlabel("Bus Name")
-    ax.set_ylabel("UEPR (V)")
-    ax.set_title(title)
-    _rotate_xticklabels(ax)
-    ax.legend(title="Frequency")
-    ax.grid(True, axis="y")
+    with _owned_figure(fig, owns_figure):
+        ax.set_yscale(yscale)
+        ax.set_xlabel("Bus Name")
+        ax.set_ylabel("UEPR (V)")
+        ax.set_title(title)
+        _rotate_xticklabels(ax)
+        ax.legend(title="Frequency")
+        ax.grid(True, axis="y")
 
     return _finalise(fig, owns_figure, show, close)
 
@@ -520,23 +628,29 @@ def plot_branch_currents(
         fig, ax, owns_figure = _prepare_axes(
             ax, figsize, close, _DEFAULT_BAR_FIGSIZE
         )
-        bar_width = 0.8 / len(
-            frequencies
-        )  # Adjust bar width based on the number of frequencies
-        indices = range(len(branch_names))
-        for i, (freq, current_values) in enumerate(current_data.items()):
-            positions = [x + i * bar_width for x in indices]
-            ax.bar(positions, current_values, width=bar_width, label=f"{freq} Hz")
-        ax.set_yscale(yscale)
-        ax.set_xlabel("Branch Name")
-        ax.set_ylabel("Current (A)")
-        ax.set_title(title)
-        ax.set_xticks(
-            [x + bar_width * (len(frequencies) - 1) / 2 for x in indices]
-        )
-        ax.set_xticklabels(branch_names, rotation=45, ha="right")
-        ax.legend(title="Frequency")
-        ax.grid(True, axis="y")
+        with _owned_figure(fig, owns_figure):
+            _warn_about_log_scale_zeros(
+                yscale,
+                [v for values in current_data.values() for v in values],
+                "branch current",
+            )
+            bar_width = 0.8 / len(
+                frequencies
+            )  # Adjust bar width based on the number of frequencies
+            indices = range(len(branch_names))
+            for i, (freq, current_values) in enumerate(current_data.items()):
+                positions = [x + i * bar_width for x in indices]
+                ax.bar(positions, current_values, width=bar_width, label=f"{freq} Hz")
+            ax.set_yscale(yscale)
+            ax.set_xlabel("Branch Name")
+            ax.set_ylabel("Current (A)")
+            ax.set_title(title)
+            ax.set_xticks(
+                [x + bar_width * (len(frequencies) - 1) / 2 for x in indices]
+            )
+            ax.set_xticklabels(branch_names, rotation=45, ha="right")
+            ax.legend(title="Frequency")
+            ax.grid(True, axis="y")
 
     else:
         # Plot RMS values of branch currents
@@ -552,14 +666,18 @@ def plot_branch_currents(
         fig, ax, owns_figure = _prepare_axes(
             ax, figsize, close, _DEFAULT_BAR_FIGSIZE
         )
-        ax.bar(branch_names, current_rms_values, label="RMS")
-        ax.set_yscale(yscale)
-        ax.set_xlabel("Branch Name")
-        ax.set_ylabel("Current RMS (A)")
-        ax.set_title(title)
-        _rotate_xticklabels(ax)
-        ax.legend()
-        ax.grid(True, axis="y")
+        with _owned_figure(fig, owns_figure):
+            _warn_about_log_scale_zeros(
+                yscale, current_rms_values, "branch current"
+            )
+            ax.bar(branch_names, current_rms_values, label="RMS")
+            ax.set_yscale(yscale)
+            ax.set_xlabel("Branch Name")
+            ax.set_ylabel("Current RMS (A)")
+            ax.set_title(title)
+            _rotate_xticklabels(ax)
+            ax.legend()
+            ax.grid(True, axis="y")
 
     return _finalise(fig, owns_figure, show, close)
 
@@ -661,23 +779,29 @@ def plot_bus_currents(
         fig, ax, owns_figure = _prepare_axes(
             ax, figsize, close, _DEFAULT_BAR_FIGSIZE
         )
-        bar_width = 0.8 / len(
-            frequencies
-        )  # Adjust bar width based on the number of frequencies
-        indices = range(len(bus_names))
-        for i, (freq, current_values) in enumerate(current_data.items()):
-            positions = [x + i * bar_width for x in indices]
-            ax.bar(positions, current_values, width=bar_width, label=f"{freq} Hz")
-        ax.set_yscale(yscale)
-        ax.set_xlabel("Bus Name")
-        ax.set_ylabel("Current (A)")
-        ax.set_title(title)
-        ax.set_xticks(
-            [x + bar_width * (len(frequencies) - 1) / 2 for x in indices]
-        )
-        ax.set_xticklabels(bus_names, rotation=45, ha="right")
-        ax.legend(title="Frequency")
-        ax.grid(True, axis="y")
+        with _owned_figure(fig, owns_figure):
+            _warn_about_log_scale_zeros(
+                yscale,
+                [v for values in current_data.values() for v in values],
+                "bus current",
+            )
+            bar_width = 0.8 / len(
+                frequencies
+            )  # Adjust bar width based on the number of frequencies
+            indices = range(len(bus_names))
+            for i, (freq, current_values) in enumerate(current_data.items()):
+                positions = [x + i * bar_width for x in indices]
+                ax.bar(positions, current_values, width=bar_width, label=f"{freq} Hz")
+            ax.set_yscale(yscale)
+            ax.set_xlabel("Bus Name")
+            ax.set_ylabel("Current (A)")
+            ax.set_title(title)
+            ax.set_xticks(
+                [x + bar_width * (len(frequencies) - 1) / 2 for x in indices]
+            )
+            ax.set_xticklabels(bus_names, rotation=45, ha="right")
+            ax.legend(title="Frequency")
+            ax.grid(True, axis="y")
 
     else:
         # Plot RMS values of bus currents
@@ -693,14 +817,16 @@ def plot_bus_currents(
         fig, ax, owns_figure = _prepare_axes(
             ax, figsize, close, _DEFAULT_BAR_FIGSIZE
         )
-        ax.bar(bus_names, current_rms_values, label="RMS")
-        ax.set_yscale(yscale)
-        ax.set_xlabel("Bus Name")
-        ax.set_ylabel("Current RMS (A)")
-        ax.set_title(title)
-        _rotate_xticklabels(ax)
-        ax.legend()
-        ax.grid(True, axis="y")
+        with _owned_figure(fig, owns_figure):
+            _warn_about_log_scale_zeros(yscale, current_rms_values, "bus current")
+            ax.bar(bus_names, current_rms_values, label="RMS")
+            ax.set_yscale(yscale)
+            ax.set_xlabel("Bus Name")
+            ax.set_ylabel("Current RMS (A)")
+            ax.set_title(title)
+            _rotate_xticklabels(ax)
+            ax.legend()
+            ax.grid(True, axis="y")
 
     return _finalise(fig, owns_figure, show, close)
 
@@ -838,6 +964,13 @@ def plot_branch_current_transient(
     Without ``ax`` and without ``close`` the returned figure is registered
     with ``pyplot`` and stays open until the caller closes it; pass
     ``close=True`` when plotting in a loop.
+
+    Examples
+    --------
+    ``result`` comes from :meth:`TransientStudy.solve`:
+
+    >>> import groundinsight as gi
+    >>> fig = gi.plot_branch_current_transient(result, branches=["L1"])  # doctest: +SKIP
     """
     available = list(result.i_branch_t.keys())
     selection = branches or available

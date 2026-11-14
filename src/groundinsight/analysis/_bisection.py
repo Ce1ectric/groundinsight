@@ -18,7 +18,7 @@ Every check here exists because the unguarded value produced a
 for a limit calculation, because nothing downstream can tell it apart
 from an answer:
 
-``limit`` (``u_max`` / ``u_limit``) as NaN
+``limit`` (``u_limit``) as NaN
     ``nan <= 0`` is ``False``, so a plain positivity guard lets NaN
     through. Afterwards every comparison against the limit is also
     ``False``: the search neither raises at the lower bound nor accepts
@@ -52,6 +52,7 @@ non-finite ``c_bounds``
 """
 
 import math
+from itertools import pairwise
 from typing import Any, Dict, Tuple
 
 
@@ -74,10 +75,18 @@ STATUS_MAX_ITER_REACHED = "max_iter_reached"
 #: met -- this is a converged result that happens to have run zero steps.
 STATUS_BRACKET_WITHIN_TOL_ON_ENTRY = "bracket_within_tol_on_entry"
 
+#: The pre-scan found ``EPR(c)`` not to be monotone over the bracket, so a
+#: bisection cannot bracket "the" threshold: there is more than one. ``c_max``
+#: is the largest factor the scan *measured* as admissible, refined upwards
+#: within its grid interval -- an honest lower bound on the true maximum, and
+#: the grid resolution is the only thing standing behind it.
+STATUS_NON_MONOTONE = "non_monotone"
+
 #: Statuses for which ``c_max`` is the answer to within ``tol_rel``.
-#: ``STATUS_BRACKET_FULLY_ADMISSIBLE`` and ``STATUS_MAX_ITER_REACHED`` are
-#: deliberately absent: in both the true threshold is outside the closed
-#: interval the search actually proved anything about.
+#: ``STATUS_BRACKET_FULLY_ADMISSIBLE``, ``STATUS_MAX_ITER_REACHED`` and
+#: ``STATUS_NON_MONOTONE`` are deliberately absent: in all three the true
+#: threshold is outside the closed interval the search actually proved
+#: anything about.
 CONVERGED_STATUSES = frozenset(
     {STATUS_CONVERGED, STATUS_BRACKET_WITHIN_TOL_ON_ENTRY}
 )
@@ -89,7 +98,7 @@ def validate_limit(value: float, name: str) -> None:
     Parameters
     ----------
     value : float
-        The limit to check (``u_max`` or ``u_limit``), in volts.
+        The limit to check (``u_limit``), in volts.
     name : str
         Parameter name, echoed in the message so the caller sees which
         argument tripped the check.
@@ -221,6 +230,106 @@ def classify(iterations: int, c_lo: float, c_hi: float, tol_rel: float) -> str:
     if iterations == 0:
         return STATUS_BRACKET_WITHIN_TOL_ON_ENTRY
     return STATUS_CONVERGED
+
+
+def validate_grid_points(n_grid: int) -> None:
+    """Reject a pre-scan resolution that cannot decide monotonicity.
+
+    Raises
+    ------
+    ValueError
+        If ``n_grid`` is a bool, not an ``int``, or is 1 or 2. Zero
+        disables the scan and is allowed; three points are the fewest that
+        can show a turn.
+    """
+    if isinstance(n_grid, bool) or not isinstance(n_grid, int):
+        raise ValueError(
+            f"monotonicity_grid must be an int, got {n_grid!r} of type "
+            f"{type(n_grid).__name__}."
+        )
+    if n_grid < 0 or n_grid in (1, 2):
+        raise ValueError(
+            f"monotonicity_grid must be 0 (no scan) or at least 3, got "
+            f"{n_grid!r}. One or two points cannot show a turn in EPR(c), so "
+            "such a scan would cost run_fault calls and report monotonicity "
+            "unconditionally -- worse than not scanning, because the result "
+            "would carry a claim nothing checked."
+        )
+
+
+def log_grid(c_lo: float, c_hi: float, n_grid: int) -> Tuple[float, ...]:
+    """``n_grid`` points from ``c_lo`` to ``c_hi``, spaced geometrically.
+
+    The bisection steps on the geometric mean, so the scan that precedes it
+    is spaced the same way: every interval of the grid is then one bracket
+    the bisection could have produced, and the two describe the same axis.
+    """
+    if n_grid < 3:
+        return (c_lo, c_hi)
+    ratio = c_hi / c_lo
+    return tuple(
+        c_lo * ratio ** (i / (n_grid - 1)) for i in range(n_grid)
+    )
+
+
+def planned_steps(c_lo: float, c_hi: float, tol_rel: float, max_iter: int) -> int:
+    """Number of log-bisection steps that close ``[c_lo, c_hi]`` to ``tol_rel``.
+
+    Every step replaces one end by the geometric mean, so the ratio
+    ``c_hi / c_lo`` becomes its square root *whichever* end moves: the step
+    count is fixed by the bracket and the tolerance, not by where the
+    threshold lies. That is what lets a search announce its total up front
+    for a progress report.
+
+    Parameters
+    ----------
+    c_lo, c_hi : float
+        The bracket the bisection starts from, ``0 < c_lo < c_hi``.
+    tol_rel : float
+        Relative width ``(c_hi - c_lo) / c_lo`` at which the search stops.
+    max_iter : int
+        Step cap of the search.
+
+    Returns
+    -------
+    int
+        ``min(max_iter, k)`` for the smallest ``k`` with
+        ``(c_hi/c_lo)**(2**-k) - 1 <= tol_rel``. Floating-point rounding of
+        the actual brackets can differ from this by one step at a boundary
+        case; a progress report has to tolerate that.
+    """
+    ratio = c_hi / c_lo
+    steps = 0
+    while steps < max_iter and ratio - 1.0 > tol_rel:
+        ratio = math.sqrt(ratio)
+        steps += 1
+    return steps
+
+
+def is_monotone(values: Tuple[float, ...], rel_tol: float = 1e-6) -> bool:
+    """
+    ``True`` when ``values`` never falls by more than ``rel_tol`` relatively.
+
+    The tolerance is there so solver noise -- the last digits of a value that
+    came out of an LU decomposition -- does not get reported as a turn in the
+    physics. A real turn is percent-sized: the rho sweep with a fixed reactance
+    dips by 8 % in the review's case, five orders of magnitude above this.
+
+    Parameters
+    ----------
+    values : tuple of float
+        EPR values in order of increasing ``c``.
+    rel_tol : float, optional
+        Relative fall tolerated between neighbours. Defaults to ``1e-6``.
+
+    Returns
+    -------
+    bool
+    """
+    for previous, current in pairwise(values):
+        if current < previous * (1.0 - rel_tol):
+            return False
+    return True
 
 
 def report(status: str, c_lo: float, c_hi: float) -> Dict[str, Any]:

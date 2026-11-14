@@ -138,7 +138,7 @@ def net():
 
 
 def _search(network, **kwargs):
-    kwargs.setdefault("u_max", U_MAX)
+    kwargs.setdefault("u_limit", U_MAX)
     kwargs.setdefault("c_bounds", WIDE_BRACKET)
     return find_max_rho_scaling(network, "flt", ["b0", "b1"], **kwargs)
 
@@ -147,7 +147,7 @@ def _search(network, **kwargs):
 def converged_result():
     """One honest run, reused by the tests that only need its numbers."""
     return find_max_rho_scaling(
-        _build_net(), "flt", ["b0", "b1"], u_max=U_MAX,
+        _build_net(), "flt", ["b0", "b1"], u_limit=U_MAX,
         c_bounds=WIDE_BRACKET,
     )
 
@@ -179,7 +179,7 @@ def test_fully_admissible_bracket_is_not_converged(net):
     """The one case that *was* documented -- but it was documented as an
     ordinary return, and a caller reading ``iterations`` alone could not
     see that nothing above ``c_hi`` had been looked at."""
-    res = _search(net, u_max=200.0)
+    res = _search(net, u_limit=200.0)
     assert res["status"] == STATUS_BRACKET_FULLY_ADMISSIBLE
     assert res["converged"] is False
     assert res["iterations"] == 0
@@ -189,7 +189,7 @@ def test_fully_admissible_bracket_is_not_converged(net):
 def test_fully_admissible_reports_an_open_upper_bracket(net):
     """``(c_hi, inf)`` makes "widen c_bounds" machine-readable: the caller
     tests ``math.isfinite(c_bracket[1])`` instead of parsing a log line."""
-    res = _search(net, u_max=200.0)
+    res = _search(net, u_limit=200.0)
     lo, hi = res["c_bracket"]
     assert lo == WIDE_BRACKET[1]
     assert math.isinf(hi)
@@ -213,7 +213,7 @@ def test_bracket_already_within_tolerance_is_converged(converged_result):
 def test_zero_iterations_no_longer_identifies_a_case(converged_result):
     """The finding itself, as an assertion: two runs, both with
     ``iterations == 0``, that mean opposite things."""
-    admissible = _search(_build_net(), u_max=200.0)
+    admissible = _search(_build_net(), u_limit=200.0)
     within_tol = _search(
         _build_net(), c_bounds=converged_result["c_bracket"], tol_rel=1e-2,
     )
@@ -239,8 +239,16 @@ def test_max_iter_exhaustion_is_reported(net):
 def test_truncated_c_max_is_wrong_but_still_admissible(converged_result):
     """The truncated answer is *conservative*, not arbitrary: it is a
     factor whose EPR was measured and found admissible. It is simply far
-    below the true maximum, and only ``converged`` says so."""
-    truncated = _search(_build_net(), max_iter=3)
+    below the true maximum, and only ``converged`` says so.
+
+    The pre-scan added in pass 18 is switched off here on purpose. It narrows
+    the starting bracket to one grid interval, so three steps then leave 14 %
+    rather than 81 % -- a genuine improvement, and precisely what would stop
+    this test from demonstrating anything. The point being pinned is that a
+    *truncated bisection* can be badly wrong, not that the default settings
+    make it so.
+    """
+    truncated = _search(_build_net(), max_iter=3, monotonicity_grid=0)
     assert truncated["c_max"] < converged_result["c_max"]
     assert truncated["u_epr_rms_at_c_max"] <= U_MAX
     rel_err = abs(truncated["c_max"] - converged_result["c_max"])
@@ -276,11 +284,12 @@ def test_max_iter_one_is_allowed(net):
     "kwargs, match",
     [
         # F5: the NaN limit passed `value <= 0` and poisoned every later
-        # comparison.
-        ({"u_max": float("nan")}, "u_max must be a finite positive number"),
-        ({"u_max": float("inf")}, "u_max must be a finite positive number"),
-        ({"u_max": 0.0}, "u_max must be a finite positive number"),
-        ({"u_max": -1.0}, "u_max must be a finite positive number"),
+        # comparison. (The limit is ``u_limit`` since audit pass 19, USE8;
+        # the deprecated alias ``u_max`` is tested in test_audit_pass19_api.)
+        ({"u_limit": float("nan")}, "u_limit must be a finite positive number"),
+        ({"u_limit": float("inf")}, "u_limit must be a finite positive number"),
+        ({"u_limit": 0.0}, "u_limit must be a finite positive number"),
+        ({"u_limit": -1.0}, "u_limit must be a finite positive number"),
         # F3: a tolerance the exit test can never act on.
         ({"tol_rel": 0.0}, "tol_rel must be a finite positive number"),
         ({"tol_rel": -1.0}, "tol_rel must be a finite positive number"),
@@ -320,7 +329,7 @@ def test_validation_happens_before_the_network_is_touched(net):
     """A rejected call must not leave a scaled rho behind."""
     before = {b.name: b.specific_earth_resistance for b in net.buses.values()}
     with pytest.raises(ValueError):
-        _search(net, u_max=float("nan"))
+        _search(net, u_limit=float("nan"))
     after = {b.name: b.specific_earth_resistance for b in net.buses.values()}
     assert before == after
 

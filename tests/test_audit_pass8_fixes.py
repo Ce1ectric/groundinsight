@@ -30,7 +30,6 @@ A3. Impedance/RLC formula strings flowed straight into ``sympy.sympify``
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import numpy as np
@@ -86,7 +85,7 @@ def _line_network(faults, sources):
 
 def _rms_epr(net, fault, bus):
     df = net.res_buses(fault)
-    row = df.filter((df["bus_name"] == bus) & (df["frequency_Hz"] == "RMS"))
+    row = df.filter((df["bus_name"] == bus) & df["is_rms"])
     return row["EPR_V"][0]
 
 
@@ -134,6 +133,9 @@ def test_distinct_paths_still_deduplicated_within_pair():
     paths of the reachable topology (no spurious duplication)."""
     net = _line_network([("F1", "b3")], [("src", "b1")])
     gi.run_fault(net, "F1")
+    # Audit pass 18 (K2): the default phase_current_mode="auto" no longer
+    # enumerates the paths, so ask for them explicitly.
+    gi.create_paths(net)
     # exactly one simple path b1 -> b2 -> b3
     assert len(net.paths) == 1
 
@@ -236,7 +238,7 @@ def test_malicious_formula_rejected_on_json_load(tmp_path: Path):
             }
         },
     }
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         gi.Network.model_validate_json(json.dumps(payload))
     assert not canary.exists()
 

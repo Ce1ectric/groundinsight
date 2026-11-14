@@ -18,6 +18,7 @@ takes the edges from the caller, who can cite them.
 
 from __future__ import annotations
 
+from itertools import pairwise
 from typing import Optional, Sequence
 
 import polars as pl
@@ -57,8 +58,9 @@ def summarize(
     -------
     pl.DataFrame
         One row per group: the grouping columns, then ``n``, ``n_null``,
-        ``mean``, ``std``, ``min``, the quantiles, and ``max``. Sorted by the
-        grouping columns so repeated runs produce identical output.
+        ``n_nan``, ``mean``, ``std``, ``min``, the quantiles, and ``max``.
+        Sorted by the grouping columns so repeated runs produce identical
+        output.
 
     Raises
     ------
@@ -66,9 +68,26 @@ def summarize(
         If a named column is missing, if the value column is not numeric, or if
         a quantile lies outside ``[0, 1]``.
 
+    Notes
+    -----
+    **Read ``n_nan`` before the statistics.** Polars counts a NaN as a
+    *value*, not as a null: it lands in ``n``, not in ``n_null``, it
+    propagates through ``mean``, ``std`` and every quantile, and ``min`` /
+    ``max`` skip it -- so a single NaN leaves a summary in which the extremes
+    look sound and the mean is NaN, with nothing in the row saying why. That
+    is a realistic input here rather than a hypothetical: a sweep point that
+    failed under ``on_error="record"`` writes NaN into the value column.
+    ``n_nan`` is the column that says how many, and it is ``0`` for an integer
+    column, which cannot carry one.
+
     Examples
     --------
-    >>> summarize(study.buses(), "EPR_V", by=["bus_name"])  # doctest: +SKIP
+    >>> import polars as pl
+    >>> from groundinsight.analysis import summarize
+    >>> frame = pl.DataFrame({"bus_name": ["A", "A", "B"], "EPR_V": [10.0, 30.0, 5.0]})
+    >>> summary = summarize(frame, "EPR_V", by=["bus_name"])
+    >>> summary.select("bus_name", "n", "mean", "max").rows()
+    [('A', 2, 20.0, 30.0), ('B', 1, 5.0, 5.0)]
     """
     missing = [c for c in [value, *(by or [])] if c not in frame.columns]
     if missing:
@@ -79,17 +98,24 @@ def summarize(
     if not frame.schema[value].is_numeric():
         raise ValueError(
             f"Column '{value}' has dtype {frame.schema[value]}, which cannot be "
-            f"summarised numerically. Note that res_buses() reports "
-            f"'frequency_Hz' as a string because it carries the 'RMS' marker "
-            f"row -- filter or cast it before grouping on it."
+            f"summarised numerically. Cast it, or group on it with `by=` "
+            f"instead of summarising it."
         )
     bad = [q for q in quantiles if not 0.0 <= q <= 1.0]
     if bad:
         raise ValueError(f"Quantile(s) {bad} lie outside [0, 1].")
 
+    # ``is_nan`` is only defined on the float dtypes; an integer column cannot
+    # carry a NaN, so the count is a constant zero there rather than an error.
+    n_nan = (
+        pl.col(value).is_nan().sum().alias("n_nan")
+        if frame.schema[value].is_float()
+        else pl.lit(0, dtype=pl.UInt32).alias("n_nan")
+    )
     aggregations = [
         pl.col(value).count().alias("n"),
         pl.col(value).null_count().alias("n_null"),
+        n_nan,
         pl.col(value).mean().alias("mean"),
         pl.col(value).std().alias("std"),
         pl.col(value).min().alias("min"),
@@ -146,8 +172,13 @@ def classify(
     Returns
     -------
     pl.DataFrame
-        The input with one column added. Rows whose value is null get a null
-        class rather than being forced into the lowest band.
+        The input with one column added. Rows whose value is null **or NaN**
+        get a null class rather than being forced into a band. Banded, a NaN
+        would land in the *highest* class, because every ``NaN <= edge`` is
+        false and the chain would fall through to the ``otherwise`` branch --
+        a failed sweep point would be reported as the worst case rather than
+        as unassessed, and a study reading the top band as its violations
+        would count it.
 
     Raises
     ------
@@ -157,8 +188,11 @@ def classify(
 
     Examples
     --------
-    >>> classify(study.buses(), "EPR_V", [80.0, 150.0],  # doctest: +SKIP
-    ...          labels=["ok", "check", "exceeded"])
+    >>> import polars as pl
+    >>> from groundinsight.analysis import classify
+    >>> frame = pl.DataFrame({"EPR_V": [12.0, 80.0, 450.0]})
+    >>> classify(frame, "EPR_V", [75.0, 300.0])["class"].to_list()
+    ['<= 75', '75 - 300', '> 300']
     """
     if value not in frame.columns:
         raise ValueError(
@@ -175,7 +209,7 @@ def classify(
             "classify needs at least one edge; with none there is only one "
             "class and nothing to decide."
         )
-    if any(b <= a for a, b in zip(edges, edges[1:])):
+    if any(b <= a for a, b in pairwise(edges)):
         raise ValueError(
             f"Edges must be strictly increasing, got {edges}. Overlapping or "
             f"repeated edges would make the class assignment ambiguous."
@@ -183,7 +217,7 @@ def classify(
 
     if labels is None:
         labels = [f"<= {edges[0]:g}"]
-        labels += [f"{a:g} - {b:g}" for a, b in zip(edges, edges[1:])]
+        labels += [f"{a:g} - {b:g}" for a, b in pairwise(edges)]
         labels.append(f"> {edges[-1]:g}")
     labels = list(labels)
     if len(labels) != len(edges) + 1:
@@ -192,8 +226,12 @@ def classify(
             f"{len(labels)} label(s) were given."
         )
 
-    expression = pl.when(pl.col(value).is_null()).then(None)
-    for edge, label in zip(edges, labels):
+    unassessable = pl.col(value).is_null()
+    if frame.schema[value].is_float():
+        unassessable = unassessable | pl.col(value).is_nan()
+    expression = pl.when(unassessable).then(None)
+    # One label per edge; the last label is the class above every edge.
+    for edge, label in zip(edges, labels[:-1], strict=True):
         expression = expression.when(pl.col(value) <= edge).then(pl.lit(label))
     expression = expression.otherwise(pl.lit(labels[-1]))
     return frame.with_columns(expression.alias(name))

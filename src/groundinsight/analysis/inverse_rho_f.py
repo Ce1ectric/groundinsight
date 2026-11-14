@@ -1,6 +1,6 @@
 # analysis/inverse_rho_f.py
 
-"""
+r"""
 Inverse determination of the standard rho-f bus model parameters.
 
 The bus grounding impedance is parameterised in the canonical linear
@@ -8,8 +8,8 @@ rho-f form
 
 .. math::
 
-    Z(\\rho, f) = k_1 \\, \\rho + (k_2 + j k_3) \\, f + (k_4 + j k_5)
-                  \\, \\rho \\, f
+    Z(\rho, f) = k_1 \, \rho + (k_2 + j k_3) \, f + (k_4 + j k_5)
+                  \, \rho \, f
 
 with five real parameters ``k = (k1, k2, k3, k4, k5)`` -- a common
 form fitted to measured rho-f impedance points. This module solves
@@ -30,6 +30,13 @@ This module ships the foundation layer plus a 1-D scaling variant:
   RMS EPR observed across the sweep is returned together with the
   per-bus values. The original network state (bus impedances, faults,
   ``active_fault``) is restored in a ``finally`` block.
+
+  In the search, only the first trial factor runs these sweeps in full.
+  Each fault location keeps a study session (P4,
+  :mod:`groundinsight.analysis._session`) and every later trial is
+  re-solved on it -- with one factorisation per frequency shared by all
+  fault locations unless a voltage source closes a loop to the fault bus.
+  The EPRs are bit for bit those of the full sweeps.
 * :func:`find_max_rho_f_scaling` -- log-bisects the largest scaling
   factor ``c`` such that ``k = c * k_ref`` keeps the swept maximum EPR
   at or below ``u_limit``. The reference vector ``k_ref`` is typically
@@ -37,23 +44,28 @@ This module ships the foundation layer plus a 1-D scaling variant:
   points; this function answers *"how much head-room does the network
   have around this characteristic?"*.
 
-A full Pareto front in :math:`\\mathbb{R}^5` is *not* part of this
+A full Pareto front in :math:`\mathbb{R}^5` is *not* part of this
 layer and will land as ``find_max_rho_f_pareto_front`` in a follow-up
 release on top of the same helper.
 """
 
 import logging
 import math
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
+import numpy as np
 import polars as pl
 
+from .._state import NetworkState
 from ..models.core_models import ComplexNumber, Fault, Network
 from ..network_operations import run_fault
+from ..progress import StudyHooks
+from ._session import BusImpedanceSession
 from ._bisection import (
     STATUS_BRACKET_FULLY_ADMISSIBLE,
     STATUS_MAX_ITER_REACHED,
     classify,
+    planned_steps,
     report,
     validate_c_bounds,
     validate_limit,
@@ -113,8 +125,9 @@ def evaluate_max_epr_under_k(
     Parameters
     ----------
     network : Network
-        The simulation network. Sources, branches, paths and the buses to
-        be swept must already be configured.
+        The simulation network. Sources, branches and the buses to be swept
+        must already be configured; paths are not needed (see
+        :func:`~groundinsight.analysis.inverse_rho.find_max_rho_scaling`).
     bus_names : list of str
         Buses whose impedance is rewritten and which are swept as fault
         locations one by one. Must be non-empty and refer to buses in
@@ -141,6 +154,70 @@ def evaluate_max_epr_under_k(
     ValueError
         If ``bus_names`` is empty, ``k`` does not have length 5, or any
         name is not in the network.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> eprs = gi.evaluate_max_epr_under_k(build_minimal(), ["bus3"],
+    ...                                    (0.01, 0.0, 0.0, 0.0, 0.0))
+    >>> {bus: round(epr, 2) for bus, epr in eprs.items()}
+    {'bus3': 18.03}
+    """
+    return _evaluate_max_epr_under_k(
+        network,
+        bus_names,
+        k,
+        fault_scalings=fault_scalings,
+        run_fault_kwargs=run_fault_kwargs,
+    )
+
+
+def _evaluate_max_epr_under_k(
+    network: Network,
+    bus_names: List[str],
+    k: KVector,
+    *,
+    fault_scalings: Optional[Dict[float, float]] = None,
+    run_fault_kwargs: Optional[Dict[str, Any]] = None,
+    hooks: Optional[StudyHooks] = None,
+    label: str = "",
+    sessions: Optional[Dict[str, Optional[BusImpedanceSession]]] = None,
+    solve_buses: Optional[List[str]] = None,
+) -> Dict[str, float]:
+    """
+    Implementation of :func:`evaluate_max_epr_under_k`, with study hooks.
+
+    Parameters
+    ----------
+    network, bus_names, k, fault_scalings, run_fault_kwargs
+        As in :func:`evaluate_max_epr_under_k`.
+    hooks : StudyHooks, optional
+        Progress and cancellation of the calling search: one unit per bus
+        solve, checked before and reported after each.
+    label : str, optional
+        Prefix of the unit labels, e.g. the trial factor of the search.
+    sessions : dict, optional
+        Filled with a :class:`~groundinsight.analysis._session.BusImpedanceSession`
+        per solved bus (``None`` where none qualifies), taken right after
+        that bus's ``run_fault`` -- the search re-solves its later trials on
+        them (P4).
+    solve_buses : list of str, optional
+        Solve only these of ``bus_names`` (all by default). Every bus of
+        ``bus_names`` still carries the k-form impedance -- this is the
+        system of the full sweep, solved for fewer fault locations.
+
+    Returns
+    -------
+    dict of str to float
+        As :func:`evaluate_max_epr_under_k`.
+
+    Raises
+    ------
+    ValueError, LookupError
+        As :func:`evaluate_max_epr_under_k`.
+    StudyCancelled
+        If ``hooks`` says so; the network is restored first.
     """
     if not bus_names:
         raise ValueError("bus_names must not be empty.")
@@ -153,6 +230,12 @@ def evaluate_max_epr_under_k(
     rfk: Dict[str, Any] = dict(run_fault_kwargs) if run_fault_kwargs else {}
     if fault_scalings is None:
         fault_scalings = {float(f): 1.0 for f in network.frequencies}
+
+    # Recorded before the first edit below (the path set is cleared in place
+    # further down) and restored last in ``finally``, so the network-level
+    # state is exactly the entry state -- order of results and faults, path
+    # set, private state -- also on cancellation (GUI5).
+    state = NetworkState(network)
 
     # Snapshot current bus impedances so the network can be restored.
     impedance_backup: Dict[str, Dict[float, ComplexNumber]] = {
@@ -167,6 +250,12 @@ def evaluate_max_epr_under_k(
 
     temp_faults_created: List[str] = []
     active_fault_backup = network.active_fault
+    # Same reasoning as in ``inverse_rho``: every ``run_fault`` in the sweep
+    # replaces ``network.electrical_network``, and nothing recomputes it once
+    # the sweep is over. Leaving the last trial's matrices behind next to the
+    # restored impedances makes every later ``bus_response`` / ``analyze_cuts``
+    # read a system that does not describe this network any more.
+    electrical_backup = network.electrical_network
     # Snapshot results of any *pre-existing* fault we are about to reuse so we
     # can restore them (run_fault overwrites results[fault] with the k-form EPR).
     reused_fault_names = set(existing_faults_by_bus.values())
@@ -206,8 +295,9 @@ def evaluate_max_epr_under_k(
         # Pre-create any temporary faults the sweep needs *before* the
         # first ``run_fault`` so ``define_paths`` enumerates paths for
         # all swept (source, fault) combinations in a single pass.
+        solved_buses = bus_names if solve_buses is None else solve_buses
         sweep_fault_names: List[str] = []
-        for b in bus_names:
+        for b in solved_buses:
             if b in existing_faults_by_bus:
                 sweep_fault_names.append(existing_faults_by_bus[b])
             else:
@@ -220,8 +310,12 @@ def evaluate_max_epr_under_k(
 
         # Sweep: each fault once. The first call populates ``network.paths``
         # for every (source, fault) pair; subsequent calls reuse the cache.
-        for b, fname in zip(bus_names, sweep_fault_names):
-            run_fault(network, fault_name=fname, **rfk)
+        for b, fname in zip(solved_buses, sweep_fault_names, strict=True):
+            if hooks is not None:
+                hooks.checkpoint()
+            run_fault(network, fault=fname, **rfk)
+            if sessions is not None:
+                sessions[b] = BusImpedanceSession.attach(network, fname)
             try:
                 result_bus = next(
                     rb for rb in network.results[fname].buses if rb.name == b
@@ -241,6 +335,8 @@ def evaluate_max_epr_under_k(
                     "make sure every swept bus appears in that list."
                 ) from exc
             epr_per_bus[b] = float(result_bus.uepr)
+            if hooks is not None:
+                hooks.advance(f"{label}bus {b}")
     finally:
         # Restore bus impedances regardless of success/failure.
         for b in bus_names:
@@ -274,13 +370,17 @@ def evaluate_max_epr_under_k(
         if active_fault_backup is None:
             network.active_fault = None
             for _flt in network.faults.values():
-                _flt._set_active(False)
+                _flt.mark_active(False)
         elif active_fault_backup in network.faults:
             network.set_active_fault(active_fault_backup, keep_results=True)
         else:  # pragma: no cover -- backup fault vanished
             network.active_fault = None
             for _flt in network.faults.values():
-                _flt._set_active(False)
+                _flt.mark_active(False)
+        # Restore the assembled system last, so it agrees with the impedances,
+        # results and active fault put back above.
+        network.electrical_network = electrical_backup
+        state.restore()
 
     return epr_per_bus
 
@@ -296,6 +396,8 @@ def find_max_rho_f_scaling(
     max_iter: int = 60,
     fault_scalings: Optional[Dict[float, float]] = None,
     run_fault_kwargs: Optional[Dict[str, Any]] = None,
+    progress: Optional[Callable[[int, int, str], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, Any]:
     """Find the largest scaling factor ``c`` of a reference k-vector.
 
@@ -334,6 +436,15 @@ def find_max_rho_f_scaling(
         See :func:`evaluate_max_epr_under_k`.
     run_fault_kwargs : dict, optional
         Forwarded to :func:`run_fault`.
+    progress : callable, optional
+        ``progress(done, total, label)``, called after every bus solve of
+        every trial factor (label ``"c = <factor>, bus <name>"``). ``total``
+        is ``len(bus_names)`` times the trial factors the bracket and
+        tolerance require; see :mod:`groundinsight.progress`.
+    should_cancel : callable, optional
+        Asked before every bus solve; a true answer raises
+        :class:`~groundinsight.progress.StudyCancelled`, also in the middle
+        of a bus sweep.
 
     Returns
     -------
@@ -372,14 +483,35 @@ def find_max_rho_f_scaling(
         ``c_bounds`` are checked for finiteness as well as range -- or if
         ``c = c_bounds[0]`` already violates the EPR limit, or if the
         model returns a non-finite EPR at some trial factor.
+    TypeError
+        If ``progress`` or ``should_cancel`` is not callable.
+    StudyCancelled
+        If ``should_cancel()`` returned true; the network is as found.
+
+    Notes
+    -----
+    **The monotonicity assumption.** The bisection finds *the* crossing of
+    ``max EPR(c)`` with ``u_limit`` and therefore presumes there is only one.
+    Unlike :func:`~groundinsight.analysis.find_max_rho_scaling`, this search
+    scales all five ``k`` and with them every term of the impedance, so at a
+    single bus the whole impedance scales with ``c`` and monotonicity follows.
+    In a coupled multi-bus network it does **not** follow: the swept maximum
+    is a maximum over buses, each of which sees the others through the
+    shields, and a chain resonance can in principle make it turn. That case
+    has not been constructed, so treat it as unproven rather than as excluded
+    -- if ``c_max`` looks implausible, sweep ``c`` explicitly with
+    :func:`evaluate_max_epr_under_k` and look at the curve. The rho-only
+    search has a pre-scan for exactly this (``monotonicity_grid``); here the
+    same scan would cost a full bus sweep per point and is left to the caller.
 
     Examples
     --------
-    >>> import groundinsight as gi  # doctest: +SKIP
-    >>> res = gi.find_max_rho_f_scaling(  # doctest: +SKIP
-    ...     network=net, bus_names=["b0", "b1"], u_limit=200.0,
-    ...     k_ref=(0.01, 0.0, 0.0, 0.0, 0.0),
-    ... )
+    >>> import groundinsight as gi
+    >>> from groundinsight.api.examples import build_minimal
+    >>> report = gi.find_max_rho_f_scaling(build_minimal(), ["bus3"], u_limit=10.0,
+    ...                                    k_ref=(0.01, 0.0, 0.0, 0.0, 0.0))
+    >>> report["status"], report["max_epr_rms_at_c_max"] <= 10.0
+    ('converged', True)
     """
     validate_limit(u_limit, "u_limit")
     validate_tol_rel(tol_rel)
@@ -391,16 +523,86 @@ def find_max_rho_f_scaling(
     if all(x == 0 for x in k_ref):
         raise ValueError("k_ref must not be the zero vector.")
     c_lo_init, c_hi_init = validate_c_bounds(c_bounds)
+    # Both bracket ends, then the halvings that close the bracket: a fixed
+    # count (see planned_steps), times one solve per swept bus.
+    hooks = StudyHooks(
+        "find_max_rho_f_scaling",
+        len(bus_names) * (2 + planned_steps(c_lo_init, c_hi_init, tol_rel, max_iter)),
+        progress,
+        should_cancel,
+    )
 
     last_epr_per_bus: Dict[str, Dict[str, float]] = {"value": {}}
+    # A trial factor changes the grounding impedances of the swept buses and
+    # nothing else; every fault location keeps its injection vectors and its
+    # stamp pattern from the first full sweep. Later trials are re-solved on
+    # those (P4, see analysis._session) -- bit for bit the EPRs a full sweep
+    # computes. A bus whose session cannot answer a trial is solved in full.
+    sessions: Dict[str, Optional[BusImpedanceSession]] = {}
+    # Per swept bus: does its session share the nodal matrix of the first
+    # one? Decided once per set of sessions.
+    sharing: Dict[str, bool] = {}
+
+    def _session_eprs(k: KVector, label: str) -> Optional[Dict[str, float]]:
+        """The EPR per swept bus from the sessions, or ``None`` for a full sweep."""
+        if not sessions or any(sessions.get(b) is None for b in bus_names):
+            return None
+        frequencies = [float(f) for f in network.frequencies]
+        impedances: Dict[str, np.ndarray] = {}
+        for b in bus_names:
+            rho = float(network.buses[b].specific_earth_resistance)
+            impedances[b] = np.array(
+                [complex(z.real, z.imag)
+                 for z in (_z_rho_f(k, rho, f) for f in frequencies)],
+                dtype=complex,
+            )
+        # Fault locations without a voltage-source loop share their nodal
+        # matrix, so one factorisation per trial serves all of them.
+        anchor = sessions[bus_names[0]]
+        if not sharing:
+            sharing.update(
+                {b: sessions[b].same_matrix_as(anchor) for b in bus_names}
+            )
+        shared: Dict[int, Optional[list]] = {}
+
+        def factors_for(b: str) -> Optional[list]:
+            if not sharing[b]:
+                return None
+            if 0 not in shared:
+                shared[0] = anchor.factorise(impedances)
+            return shared[0]
+
+        eprs: Dict[str, float] = {}
+        for b in bus_names:
+            hooks.checkpoint()
+            epr = sessions[b].epr_rms(impedances, factors_for(b))
+            if epr is None:
+                epr = _evaluate_max_epr_under_k(
+                    network, bus_names, k=k,
+                    fault_scalings=fault_scalings,
+                    run_fault_kwargs=run_fault_kwargs,
+                    solve_buses=[b],
+                )[b]
+            eprs[b] = epr
+            hooks.advance(f"{label}bus {b}")
+        return eprs
 
     def _max_epr_at(c: float) -> float:
-        eprs = evaluate_max_epr_under_k(
-            network, bus_names,
-            k=tuple(c * x for x in k_ref),
-            fault_scalings=fault_scalings,
-            run_fault_kwargs=run_fault_kwargs,
-        )
+        k = tuple(c * x for x in k_ref)
+        label = f"c = {c:.6g}, "
+        eprs = _session_eprs(k, label)
+        if eprs is None:
+            sessions.clear()
+            sharing.clear()
+            eprs = _evaluate_max_epr_under_k(
+                network, bus_names,
+                k=k,
+                fault_scalings=fault_scalings,
+                run_fault_kwargs=run_fault_kwargs,
+                hooks=hooks,
+                label=label,
+                sessions=sessions,
+            )
         last_epr_per_bus["value"] = eprs
         epr = max(eprs.values()) if eprs else 0.0
         if not math.isfinite(epr):
@@ -462,15 +664,15 @@ def find_max_rho_f_scaling(
                 max_iter, c_lo, c_hi, (c_hi - c_lo) / c_lo, tol_rel, c_lo,
             )
 
-    # Defensive consistency check: the maximum of the per-bus EPRs at
-    # c_max must equal the reported ``max_epr_rms_at_c_max``. A drift
-    # here would mean the snapshot and the headline figure refer to
-    # different iterations — historically a bug surface (the
-    # ``eprs_lo_snapshot`` shadow variable was added in 0.4.0 to plug
-    # exactly this gap). Re-evaluate once at ``c_max`` to lock the
-    # invariant in place; the cost is one extra ``run_fault`` per sweep.
-    epr_at = _max_epr_at(c_max)
-    epr_per_bus_at = dict(last_epr_per_bus["value"])
+    # The invariant: the maximum of the per-bus EPRs at c_max is the reported
+    # ``max_epr_rms_at_c_max``. It holds without evaluating ``c_max`` once
+    # more -- a full bus sweep, ``N`` run_fault calls -- because
+    # ``eprs_lo_snapshot`` is the per-bus dict of exactly the evaluation that
+    # set ``epr_lo``, at exactly this ``c``. Taking the headline figure *from*
+    # the snapshot rather than beside it makes the two agree by construction
+    # instead of by repetition, at (iter + 2)*N run_fault calls instead of
+    # (iter + 3)*N.
+    epr_at = max(epr_per_bus_at.values()) if epr_per_bus_at else epr_at
 
     return {
         "c_max": c_max,
@@ -503,50 +705,48 @@ def select_rho_f_from_catalog(
 
     Parameters
     ----------
-    network
+    network : Network
         The simulation network. Sources, branches and the buses
         to be swept must already be configured.
-    bus_names
+    bus_names : list of str
         Buses whose impedance is parameterised by every
         candidate ``k`` and which are swept as fault locations.
-    u_limit
+    u_limit : float
         Upper bound on the RMS EPR (in volts) at any swept bus.
         Must be strictly positive.
-    candidates
+    candidates : dict of str to tuple of float
         Mapping ``{name: (k1, k2, k3, k4, k5)}`` of the
         candidate rho-f characteristics. Names must be unique
         (Python dict guarantees that), tuples must each have length
         5. May be empty -- the result is then an empty DataFrame
         with the documented schema.
-    fault_scalings
+    fault_scalings : dict of float to float, optional
         Frequency-resolved scalings for any fault that
         has to be created on the fly. See
         :func:`evaluate_max_epr_under_k`.
-    run_fault_kwargs
+    run_fault_kwargs : dict, optional
         Forwarded to :func:`run_fault`.
-    sort_by
+    sort_by : {"max_epr_asc", "max_epr_desc", "name"}, optional
         How to sort the result rows.
 
         - ``"max_epr_asc"`` (default): admissible candidates first,
-        tightest-EPR-margin candidates at the top.
+          tightest-EPR-margin candidates at the top.
         - ``"max_epr_desc"``: largest EPR first; useful to inspect
-        the worst-case candidates.
+          the worst-case candidates.
         - ``"name"``: lexicographic by candidate name.
 
     Returns
     -------
-    A Polars DataFrame with one row per candidate and the columns
+    pl.DataFrame
+        One row per candidate, with the columns
 
-    - ``"name"`` (str)
-    - ``"k1", "k2", "k3", "k4", "k5"`` (float)
-    - ``"max_epr_rms_V"`` (float)
-        maximum RMS EPR across the bus
-        sweep, in volts.
-    - ``"admissible"`` (bool)
-        ``True`` iff
-        ``max_epr_rms_V <= u_limit``.
-    - one ``"epr_<bus>_V"`` column per swept bus, holding the RMS
-        EPR at that bus when it is the active fault, in volts.
+        - ``"name"`` (str);
+        - ``"k1"`` ... ``"k5"`` (float);
+        - ``"max_epr_rms_V"`` (float): the maximum RMS EPR across the bus
+          sweep, in volts;
+        - ``"admissible"`` (bool): ``True`` iff ``max_epr_rms_V <= u_limit``;
+        - one ``"epr_<bus>_V"`` column per swept bus: the RMS EPR at that
+          bus when it is the active fault, in volts.
 
     Raises
     ------

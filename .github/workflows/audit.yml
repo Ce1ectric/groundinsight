@@ -1,0 +1,46 @@
+name: Dependency audit
+
+# Audits every version pinned in poetry.lock against the PyPI advisory
+# database (audit pass 19, SEC2). The lock is audited rather than an
+# installed environment because it is the union of everything any job or
+# platform installs; see scripts/audit_dependencies.py for the details and
+# .github/pip-audit-ignore.txt for the (empty) ignore list.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Advisories are published against versions that are already locked, so
+  # the audit also runs when nothing in the repository changed.
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+# Least privilege (SEC4): the audit only reads the repository. Every action
+# is pinned to a full commit SHA with the release as a comment (SEC3).
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    name: Audit poetry.lock with pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Install pip-audit
+        run: python -m pip install --requirement .github/audit/requirements.txt
+
+      # Fails on any known advisory. Fix by upgrading the package (poetry
+      # lock --regenerate, or a constraint change in pyproject.toml); an
+      # entry in .github/pip-audit-ignore.txt needs a reason and an end date.
+      - name: Audit every locked package
+        run: python scripts/audit_dependencies.py

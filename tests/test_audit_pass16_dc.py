@@ -68,7 +68,7 @@ import numpy as np
 import pytest
 
 import groundinsight as gi
-from groundinsight.models.core_models import ComplexNumber
+from groundinsight.models.core_models import ComplexNumber, Source
 from groundinsight.simulation import waveforms
 from groundinsight.simulation.transient import TransientStudy
 from groundinsight.utils.impedance_calculator import (
@@ -80,6 +80,14 @@ from groundinsight.utils.impedance_calculator import (
     dc_substitute_impedance,
     is_short_circuit,
 )
+from tests._warning_policy import acknowledge
+
+#: The transient comparisons only read the 0 Hz bin; the window is not meant
+#: to cover the ring-down.
+SHORT_WINDOW = acknowledge("TRANSIENT_RINGING")
+
+#: A DC study with a voltage source on coupled branches, on purpose.
+THEVENIN = acknowledge("THEVENIN_COUPLING")
 
 
 # ---------------------------------------------------------------------------
@@ -137,11 +145,10 @@ def _dc_network(
 
 def _epr_at(net, freq):
     """Earth potential rise per bus at one frequency, as floats."""
-    key = str(int(freq)) if float(freq).is_integer() else str(freq)
     return {
         row["bus_name"]: float(row["EPR_V"])
         for row in net.res_buses().to_dicts()
-        if row["frequency_Hz"] == key
+        if row["frequency_Hz"] == float(freq)
     }
 
 
@@ -214,7 +221,7 @@ def _chain_open_reference():
 
 def _transient_dc(net, buses=("A", "B", "C"), branches=("A-B", "B-C")):
     """Mean of u(t) and i(t) over a full FFT window, i.e. the 0 Hz bin."""
-    study = TransientStudy(net, fault_name="F")
+    study = TransientStudy(net, fault="F")
     study.set_source_waveform("s", waveforms.step(amplitude=I_DC, t_on=0.0))
     study.set_observation(buses=list(buses), branches=list(branches))
     res = study.solve(t_end=0.04, dt=1e-4, solver="fft")
@@ -399,12 +406,13 @@ def test_a_stationary_dc_bond_matches_the_merged_network():
     phases = {
         row["bus_name"]: float(row["EPR_degree"])
         for row in net.res_buses().to_dicts()
-        if row["frequency_Hz"] == "0"
+        if row["frequency_Hz"] == 0.0
     }
     assert phases["A"] == pytest.approx(0.0, abs=1e-6)
     assert abs(phases["C"]) == pytest.approx(180.0, abs=1e-6)
 
 
+@SHORT_WINDOW
 def test_the_transient_dc_bin_matches_the_merged_network():
     """The FFT grid always contains 0 Hz, so this is not an exotic case: it is
     every transient run of every network with a purely inductive element."""
@@ -416,6 +424,7 @@ def test_the_transient_dc_bin_matches_the_merged_network():
         assert epr[bus] == pytest.approx(ref[bus], rel=1e-6)
 
 
+@SHORT_WINDOW
 def test_the_substitution_beats_the_open_circuit_of_v050_by_orders():
     """The regression this pass exists for. Skipping the element modelled the
     short as an open circuit: bus A was cut off from the network entirely, its
@@ -435,6 +444,7 @@ def test_the_substitution_beats_the_open_circuit_of_v050_by_orders():
     assert old["B"] < 0 < ref["B"]
 
 
+@SHORT_WINDOW
 def test_an_explicit_small_resistance_converges_to_the_same_answer():
     """The substitution is not a special rule but the limit of an ordinary
     model: replacing the inductive bond by a shrinking real resistance walks
@@ -449,6 +459,7 @@ def test_an_explicit_small_resistance_converges_to_the_same_answer():
     assert errors[-1] < 1e-4
 
 
+@SHORT_WINDOW
 def test_a_capacitance_still_reads_as_an_open_circuit_at_dc():
     """The substitution must not touch a true pole. A capacitive bond carries
     no DC, so the DC bin is the network *without* that branch -- which is
@@ -495,19 +506,32 @@ def test_a_pure_dc_study_runs_end_to_end_with_carson_conductors():
     assert branches
     assert all(
         math.isfinite(float(row["I_branch_A"])) for row in branches
-        if row["frequency_Hz"] == "0"
+        if row["frequency_Hz"] == 0.0
     )
 
 
+@THEVENIN
 def test_a_dc_study_with_a_voltage_source_survives_the_thevenin_loop():
     """The Thevenin loop closure inverts the source impedance, which is a
     separate site from the three in the matrix build and is only reached by a
     ``source_type='voltage'`` source."""
     net = _dc_network("p16_dc_voltage")
-    src = net.sources["s"]
-    src.source_type = "voltage"
-    src.source_impedance = {0.0: ComplexNumber(real=0.5, imag=0.0)}
-    src.values = {0.0: 1000.0 + 0.0j}
+    # Audit pass 18 (M4): ``Source`` validates on assignment now, so the
+    # source is rebuilt in one consistent step instead of being walked through
+    # the intermediate states ``source_type='voltage'`` with no ``voltage`` and
+    # then ``values`` set alongside it -- a combination ``_validate_source_mode``
+    # rejects at construction and which left ``_norton_current`` returning
+    # ``None``, so the Thevenin branch this test is named after was never
+    # actually taken. It is now.
+    previous = net.sources["s"]
+    net.sources["s"] = Source(
+        name=previous.name,
+        bus=previous.bus,
+        source_type="voltage",
+        voltage={0.0: ComplexNumber(real=1000.0, imag=0.0)},
+        source_impedance={0.0: ComplexNumber(real=0.5, imag=0.0)},
+        r_to_x=previous.r_to_x,
+    )
     gi.run_fault(net, "F")
     epr = _epr_at(net, 0.0)
     assert all(math.isfinite(v) for v in epr.values())

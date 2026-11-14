@@ -1,3 +1,4 @@
+# tests/test_sweep_and_statistics.py
 """
 Parameter sweeps over one fault, and the statistics that need their output.
 
@@ -13,6 +14,8 @@ otherwise one bad parameter combination silently poisons every later point.
 """
 
 from __future__ import annotations
+
+from itertools import pairwise
 
 import polars as pl
 import pytest
@@ -85,11 +88,11 @@ def test_the_rho_f_characteristic_actually_reaches_the_solver():
     study = gi.run_sweep(net, fault="F", points=_k_points(net))
     frame = (
         study.buses()
-        .filter((pl.col("bus_name") == "F") & (pl.col("frequency_Hz") == "RMS"))
+        .filter((pl.col("bus_name") == "F") & pl.col("is_rms"))
         .sort("k1")
     )
     eprs = frame["EPR_V"].to_list()
-    assert all(a < b for a, b in zip(eprs, eprs[1:]))
+    assert all(a < b for a, b in pairwise(eprs))
     # k1 = 0.01 -> 1 Ohm, k1 = 0.10 -> 10 Ohm at rho = 100: a tenfold electrode
     # is damped by the parallel network to a threefold potential rise.
     assert eprs[-1] / eprs[0] > 3.0
@@ -170,7 +173,7 @@ def test_soil_resistivity_can_be_swept_through_the_bus_type_formula():
     study = gi.run_sweep(net, fault="F", points=points)
     frame = (
         study.buses()
-        .filter((pl.col("bus_name") == "F") & (pl.col("frequency_Hz") == "RMS"))
+        .filter((pl.col("bus_name") == "F") & pl.col("is_rms"))
         .sort("rho")
     )
     assert frame["EPR_V"][0] < frame["EPR_V"][1]
@@ -215,7 +218,7 @@ def test_both_reduction_factors_travel_in_the_impedance_frame():
     # Blind to the fault bus by construction ...
     assert r_epr == pytest.approx([r_epr[0]] * len(r_epr), rel=1e-9)
     # ... while the current-based one is strictly ordered by the electrode.
-    assert all(a > b for a, b in zip(r_current, r_current[1:]))
+    assert all(a > b for a, b in pairwise(r_current))
 
 
 # --- statistics --------------------------------------------------------------
@@ -224,10 +227,14 @@ def test_both_reduction_factors_travel_in_the_impedance_frame():
 def test_summarize_reports_count_spread_quantiles_and_extremes():
     net = _network()
     study = gi.run_sweep(net, fault="F", points=_k_points(net))
-    frame = study.buses().filter(pl.col("frequency_Hz") == "RMS")
+    frame = study.buses().filter(pl.col("is_rms"))
     summary = gi.summarize(frame, "EPR_V", by=["bus_name"])
+    # ``n_nan`` joined the schema in pass 18: polars counts a NaN as a value,
+    # so it lands in ``n`` and not in ``n_null`` while poisoning mean and the
+    # quantiles -- the column is what makes that visible in the row itself.
     assert set(summary.columns) == {
-        "bus_name", "n", "n_null", "mean", "std", "min", "p05", "p50", "p95", "max"
+        "bus_name", "n", "n_null", "n_nan", "mean", "std", "min",
+        "p05", "p50", "p95", "max",
     }
     assert summary.height == len(BUSES)
     assert summary["bus_name"].to_list() == sorted(BUSES)
@@ -244,13 +251,28 @@ def test_summarize_without_grouping_reduces_to_one_row():
     assert summary["max"][0] == pytest.approx(4.0)
 
 
-def test_summarize_explains_the_string_frequency_column():
-    """``res_buses`` types ``frequency_Hz`` as a string because of the RMS marker
-    row -- the error says so rather than just refusing."""
+def test_summarize_accepts_the_numeric_frequency_column():
+    """Audit pass 18 (M7): ``frequency_Hz`` is numeric, so it can be summarised.
+
+    Up to 0.6.0 the column was a string -- it carried the literal ``"RMS"``
+    marker -- and ``summarize`` refused it with a message explaining why. The
+    marker lives in ``is_rms`` now, and the RMS row carries ``null``, which
+    ``summarize`` reports as ``n_null`` instead of poisoning the statistics.
+    """
     net = _network()
     study = gi.run_sweep(net, fault="F", points=_k_points(net))
-    with pytest.raises(ValueError, match="RMS"):
-        gi.summarize(study.buses(), "frequency_Hz")
+    frame = study.buses()
+    assert frame.schema["frequency_Hz"] == pl.Float64
+    summary = gi.summarize(frame, "frequency_Hz")
+    assert summary["n_null"][0] > 0
+    assert summary["max"][0] == pytest.approx(max(net.frequencies))
+
+
+def test_summarize_still_refuses_a_genuinely_non_numeric_column():
+    net = _network()
+    study = gi.run_sweep(net, fault="F", points=_k_points(net))
+    with pytest.raises(ValueError, match="cannot be summarised numerically"):
+        gi.summarize(study.buses(), "bus_name")
 
 
 def test_summarize_names_a_missing_column():
@@ -299,7 +321,7 @@ def test_sweep_then_classify_then_summarize_composes():
     net = _network()
     study = gi.run_sweep(net, fault="F", points=_k_points(net))
     frame = study.buses().filter(
-        (pl.col("bus_name") == "F") & (pl.col("frequency_Hz") == "RMS")
+        (pl.col("bus_name") == "F") & pl.col("is_rms")
     )
     banded = gi.classify(frame, "EPR_V", [20.0, 60.0], labels=["low", "mid", "high"])
     counts = gi.summarize(banded, "EPR_V", by=["class"])
