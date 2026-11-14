@@ -18,9 +18,12 @@ CI job.
 
 from __future__ import annotations
 
+import datetime
 import importlib
+import importlib.util
 import inspect
 import re
+import sys
 import tomllib
 import warnings
 from pathlib import Path
@@ -770,30 +773,172 @@ CHANGELOG_ORDER = (
 )
 
 
-def _unreleased_sections() -> List[str]:
+#: What ``scripts/release.py`` writes into the version section of a release cut
+#: with ``--allow-empty-changelog``: a section without ``###`` headings.
+_HOUSEKEEPING_NOTE = "_Housekeeping release; no user-visible changes._"
+
+
+def _pending_changelog_sections(text: str) -> Tuple[str, List[str]]:
     """
-    The ``###`` headings of the ``[Unreleased]`` section of CHANGELOG.md.
+    The ``###`` headings of the newest changelog section that has entries.
+
+    During regular work that is ``[Unreleased]``. Right after a release the
+    release script has left only a stub there (one of its
+    ``_EMPTY_UNRELEASED_MARKERS``), and the section it has just written is the
+    one to check -- the release commit is tested before it is published.
+
+    Parameters
+    ----------
+    text : str
+        Content of ``CHANGELOG.md``.
 
     Returns
     -------
-    list of str
-        In the order they appear.
+    tuple of (str, list of str)
+        Title of the section and its ``###`` headings in the order they
+        appear; the list is empty for a housekeeping release.
     """
-    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    block = re.search(r"^## \[Unreleased\][^\n]*\n(.*?)(?=^## )", text, re.S | re.M)
-    assert block, "CHANGELOG.md has no [Unreleased] section"
-    return re.findall(r"^### (.+?)\s*$", block.group(1), re.M)
+    blocks = re.findall(r"^## \[([^\]]+)\][^\n]*\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+    assert blocks and blocks[0][0] == "Unreleased", "CHANGELOG.md does not open with an [Unreleased] section"
+    empty_markers = _release_module()._EMPTY_UNRELEASED_MARKERS
+    for title, body in blocks:
+        content = "\n".join(line.strip() for line in body.splitlines() if line.strip() not in ("", "---"))
+        if title == "Unreleased" and content.lower() in empty_markers:
+            continue
+        headings = re.findall(r"^### (.+?)\s*$", body, re.M)
+        assert headings or content == _HOUSEKEEPING_NOTE, f"the [{title}] section has text but no ### headings"
+        return title, headings
+    raise AssertionError("CHANGELOG.md has no version section after [Unreleased]")
+
+
+def _check_changelog_order(text: str) -> None:
+    """
+    Assert known headings only, each once, in the documented order.
+
+    Parameters
+    ----------
+    text : str
+        Content of ``CHANGELOG.md``.
+    """
+    title, sections = _pending_changelog_sections(text)
+    unknown = [s for s in sections if s not in CHANGELOG_ORDER]
+    assert not unknown, f"[{title}]: unknown sections {unknown}; known: {CHANGELOG_ORDER}"
+    assert len(sections) == len(set(sections)), f"[{title}]: a section appears twice: {sections}"
+    positions = [CHANGELOG_ORDER.index(s) for s in sections]
+    assert positions == sorted(positions), f"[{title}]: out of order: {sections}"
 
 
 def test_the_unreleased_changelog_sections_follow_keep_a_changelog():
-    """Known headings only, each once, in the documented order."""
-    sections = _unreleased_sections()
-    assert sections, "the [Unreleased] section has no ### headings"
-    unknown = [s for s in sections if s not in CHANGELOG_ORDER]
-    assert not unknown, f"unknown sections {unknown}; known: {CHANGELOG_ORDER}"
-    assert len(sections) == len(set(sections)), f"a section appears twice: {sections}"
-    positions = [CHANGELOG_ORDER.index(s) for s in sections]
-    assert positions == sorted(positions), f"out of order: {sections}"
+    """Known headings only, each once, in the documented order -- in
+    ``[Unreleased]``, or right after a release in the section just cut."""
+    _check_changelog_order((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"))
+
+
+# The check above failed on the release commit of 2026.11.0: the release
+# script leaves only a stub in [Unreleased], so the check of the tagged commit
+# stopped the publish. The changelogs below go through the release script
+# itself, so the check and the script cannot drift apart again.
+
+_RELEASE_SCRIPT = ROOT / "scripts" / "release.py"
+
+_ROLL_CHANGELOG = """# Changelog
+
+## [Unreleased]
+
+### Breaking
+
+- A rename.
+
+### Fixed
+
+- A fix.
+
+---
+
+## [2026.11.0] — 2026-11-14
+
+### Added
+
+- Old things.
+
+[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v2026.11.0...HEAD
+[2026.11.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v2026.11.0
+"""
+
+
+def _release_module() -> Any:
+    """
+    ``scripts/release.py``, loaded from its path (it is not part of the package).
+
+    Returns
+    -------
+    module
+        The release script as a module.
+    """
+    name = "groundinsight_release_script_std10"
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, _RELEASE_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        # Registered before it runs: its dataclasses look their module up.
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+def _roll(tmp_path: Path, text: str, *, allow_empty: bool = False) -> str:
+    """
+    Cut ``2026.11.1`` from ``text`` with the release script and return the result.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Directory for the temporary ``CHANGELOG.md``.
+    text : str
+        Changelog before the release.
+    allow_empty : bool, optional
+        Passed on as ``--allow-empty-changelog``.
+
+    Returns
+    -------
+    str
+        Changelog after the release.
+    """
+    (tmp_path / "CHANGELOG.md").write_text(text, encoding="utf-8")
+    _release_module()._update_changelog(
+        tmp_path, "2026.11.1", datetime.date(2026, 11, 20), allow_empty=allow_empty, dry_run=False,
+    )
+    return (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
+
+
+def test_the_changelog_check_reads_unreleased_during_regular_work():
+    assert _pending_changelog_sections(_ROLL_CHANGELOG) == ("Unreleased", ["Breaking", "Fixed"])
+    _check_changelog_order(_ROLL_CHANGELOG)
+
+
+def test_the_changelog_check_reads_the_new_section_right_after_a_release(tmp_path):
+    rolled = _roll(tmp_path, _ROLL_CHANGELOG)
+    assert _pending_changelog_sections(rolled) == ("2026.11.1", ["Breaking", "Fixed"])
+    _check_changelog_order(rolled)
+
+
+def test_the_changelog_check_accepts_a_housekeeping_release(tmp_path):
+    empty = _ROLL_CHANGELOG.split("### Breaking")[0] + "_No changes yet._\n\n---\n\n" + _ROLL_CHANGELOG.split("---\n\n", 1)[1]
+    rolled = _roll(tmp_path, empty, allow_empty=True)
+    assert _pending_changelog_sections(rolled) == ("2026.11.1", [])
+    _check_changelog_order(rolled)
+
+
+def test_the_changelog_check_rejects_text_without_headings():
+    loose = _ROLL_CHANGELOG.replace("### Breaking\n\n", "").replace("### Fixed\n\n", "")
+    with pytest.raises(AssertionError, match=r"\[Unreleased\] section has text but no ### headings"):
+        _check_changelog_order(loose)
+
+
+def test_the_changelog_check_rejects_order_and_unknown_headings():
+    with pytest.raises(AssertionError, match="out of order"):
+        _check_changelog_order(_ROLL_CHANGELOG.replace("### Breaking", "### Security"))
+    with pytest.raises(AssertionError, match="unknown sections"):
+        _check_changelog_order(_ROLL_CHANGELOG.replace("### Fixed", "### Bugfixes"))
 
 
 # ---------------------------------------------------------------------------
