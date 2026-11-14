@@ -42,6 +42,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [2026.11.0] — 2026-11-14
+
 ### Breaking
 
 Each item is detailed under its regular category below; this list is the
@@ -1997,6 +2003,8 @@ migration checklist.
   (STD1, STD2, STD3, STD5, STD7, STD10, STD11)
 - **The test suite runs on macOS and Windows.** The first CI run on those systems found assertions that measured the platform: a doctest printing a float to its last digit, a child process read as UTF-8 on Windows, platform path separators, a refined reference that needs the 80-bit extended long double of x86-64 Linux (skipped with that reason elsewhere), Poetry's lock check on Windows runners (runs on Linux and macOS), and an absolute timing bound (now relative to the solve on the same machine).
 
+---
+
 ## [0.6.0] — 2026-09-01
 
 ### Added
@@ -3024,7 +3032,8 @@ form — superseded by 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v2026.11.0...HEAD
+[2026.11.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v2026.11.0
 [0.6.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.4.0

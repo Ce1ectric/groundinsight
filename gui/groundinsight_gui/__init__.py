@@ -22,4 +22,4 @@ __all__ = ["__version__"]
 
 #: The distribution's version; the release script keeps it equal to the
 #: library's (gui/pyproject.toml).
-__version__ = "0.6.0"
+__version__ = "2026.11.0"

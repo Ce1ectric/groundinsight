@@ -301,7 +301,7 @@ __all__ = [
 # in one step; the three must never drift, because the release script compares
 # them and aborts on disagreement. Do not bump it by hand -- the [Unreleased]
 # section in CHANGELOG.md is where work for the next cut accumulates.
-__version__ = "0.6.0"
+__version__ = "2026.11.0"
 
 
 def __getattr__(name: str):
