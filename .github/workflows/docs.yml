@@ -12,6 +12,16 @@ on:
 permissions:
   contents: read
 
+# One deploy at a time. A merge and the release commit right after it start
+# two runs within seconds; the second one built on the gh-pages tip it had
+# checked out, the first one moved that tip, and the second push was rejected
+# as a non-fast-forward update by the repository ruleset. Queued, the second
+# run checks out after the first has pushed. A pending run is replaced by a
+# newer one, so the site always ends at the latest commit of main.
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     name: Build and deploy MkDocs site
@@ -53,5 +63,8 @@ jobs:
       # --strict (audit pass 19, STD11): the pull-request job in ci.yml
       # builds strictly, but this push to main is what gets published, and
       # without the flag it would publish a site with broken references.
+      # No --force: the repository ruleset rejects non-fast-forward updates
+      # on every branch, gh-pages included, so the deploy has to build on the
+      # current tip, which the concurrency group above guarantees.
       - name: Deploy to GitHub Pages
-        run: poetry run mkdocs gh-deploy --strict --force --clean --verbose
+        run: poetry run mkdocs gh-deploy --strict --clean --verbose

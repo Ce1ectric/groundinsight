@@ -727,6 +727,36 @@ def test_strict_deploy_agrees_with_yaml():
     assert len(commands) == 1 and "--strict" in commands[0].split()
 
 
+# The merge of a pull request and the release commit right after it start two
+# deploys within seconds. The second one built on the gh-pages tip it had
+# checked out, the first one moved that tip, and the push of the second was a
+# non-fast-forward update -- which the repository ruleset rejects on every
+# branch, --force or not (release of 2026.11.1). Deploys therefore queue, and
+# the command does not ask for a force push the ruleset will never grant.
+
+
+def test_docs_deploys_queue_instead_of_racing():
+    concurrency = _yaml("docs.yml").get("concurrency")
+    assert isinstance(concurrency, dict), "docs.yml has no top-level concurrency group"
+    assert concurrency.get("group"), concurrency
+    assert concurrency.get("cancel-in-progress") is False, concurrency
+
+
+def test_docs_deploy_queue_agrees_with_text():
+    """Second method: the raw text, at top level and not inside a job."""
+    text = _text("docs.yml")
+    block = re.search(r"^concurrency:\n((?:[ \t]+.*\n)+)", text, re.MULTILINE)
+    assert block, "no top-level 'concurrency:' block"
+    assert re.search(r"^\s+cancel-in-progress:\s*false\s*$", block.group(1), re.MULTILINE)
+
+
+def test_docs_deploy_does_not_ask_for_a_force_push():
+    steps = _yaml("docs.yml")["jobs"]["build-and-deploy"]["steps"]
+    commands = [step["run"] for step in steps if "gh-deploy" in step.get("run", "")]
+    assert len(commands) == 1
+    assert not {"--force", "-f"} & set(commands[0].split()), commands[0]
+
+
 # ---------------------------------------------------------------------------
 # CI strict mode -- a missing test dependency fails instead of skipping
 # ---------------------------------------------------------------------------
