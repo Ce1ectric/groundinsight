@@ -46,7 +46,7 @@ import threading
 import time
 import tracemalloc
 import warnings
-from typing import Dict, List
+from typing import Any, Callable, Dict, List
 
 import numpy as np
 import pytest
@@ -1217,10 +1217,108 @@ def test_bus_response_and_analyze_cuts_build_no_dense_square_matrix(
 # ---------------------------------------------------------------------------
 
 
-def _cpu_seconds(func) -> float:
+#: Limit for one fault solve of the large networks below, in CPU seconds. The
+#: sparse kernel needs 0.5-1.5 s on a developer machine; the macOS runner of
+#: the release commit of 2026.11.1 took 3.4 s once, against a limit of 3 s.
+#: The dense kernel it replaced needs 20 s and more on the same networks, so
+#: 5 s leaves room for a slow runner and still catches a return to it -- which
+#: the structural guard tests above catch independently of any clock.
+SOLVE_LIMIT_S = 5.0
+
+
+def _cpu_seconds(func: Callable[[], Any]) -> float:
+    """
+    CPU seconds of ``func()``.
+
+    A full garbage collection runs first, so the garbage that earlier tests
+    left behind is not collected inside the timed call.
+
+    Parameters
+    ----------
+    func : callable
+        The call to time.
+
+    Returns
+    -------
+    float
+        Process CPU time of the call.
+    """
+    gc.collect()
     start = time.process_time()
     func()
     return time.process_time() - start
+
+
+def _timed(
+    build: Callable[[], Any],
+    run: Callable[[Any], Any],
+    limit: float,
+    *,
+    first: Any = None,
+    timer: Callable[[Callable[[], Any]], float] = _cpu_seconds,
+) -> float:
+    """
+    Seconds of ``run(subject)``, measured a second time when over ``limit``.
+
+    Shared CI runners stall a process now and then, and a single stall must
+    not fail an acceptance test whose regression is an order of magnitude
+    slower. The second attempt runs on a freshly built subject, so warm
+    caches of the first attempt cannot help it, and the faster attempt
+    counts. A kernel that is really slow fails both.
+
+    Parameters
+    ----------
+    build : callable
+        Builds a subject; not timed.
+    run : callable
+        Takes a subject; timed.
+    limit : float
+        Seconds below which the first attempt is accepted.
+    first : object, optional
+        Subject of the first attempt when it is already built (a fixture).
+    timer : callable, optional
+        Measures a call; replaced in the tests of this helper.
+
+    Returns
+    -------
+    float
+        Seconds of the faster attempt.
+    """
+    best = math.inf
+    for attempt in range(2):
+        subject = first if attempt == 0 and first is not None else build()
+        best = min(best, timer(lambda subject=subject: run(subject)))
+        if best < limit:
+            break
+    return best
+
+
+def test_a_timing_over_the_limit_is_repeated_once_on_a_fresh_subject():
+    built: List[int] = []
+    measured = iter([4.0, 1.0])
+
+    def build() -> int:
+        built.append(len(built))
+        return built[-1]
+
+    seen: List[int] = []
+    seconds = _timed(build, seen.append, 2.0, timer=lambda call: (call(), next(measured))[1])
+    assert seconds == 1.0
+    assert seen == [0, 1]
+
+
+def test_a_timing_below_the_limit_is_not_repeated_and_uses_the_given_subject():
+    seen: List[str] = []
+    seconds = _timed(
+        lambda: "fresh", seen.append, 2.0, first="fixture", timer=lambda call: (call(), 0.5)[1],
+    )
+    assert seconds == 0.5
+    assert seen == ["fixture"]
+
+
+def test_a_slow_kernel_fails_both_attempts():
+    measured = iter([4.0, 3.0])
+    assert _timed(lambda: None, lambda subject: None, 2.0, timer=lambda call: next(measured)) == 3.0
 
 
 @pytest.fixture(scope="module")
@@ -1232,8 +1330,10 @@ def ring4000():
 def test_ring_4000_at_seven_frequencies_runs_in_seconds(ring4000):
     """P1/P2: the dense kernel needs 20-28 s here (extrapolated from 1000 to
     2500 buses / measured in the audit); see below for the memory."""
-    seconds = _cpu_seconds(lambda: gi.run_fault(ring4000, "F"))
-    assert seconds < 3.0, f"{seconds:.2f} s"
+    seconds = _timed(
+        lambda: ring(4000, F=7), lambda net: gi.run_fault(net, "F"), SOLVE_LIMIT_S, first=ring4000,
+    )
+    assert seconds < SOLVE_LIMIT_S, f"{seconds:.2f} s"
 
 
 @pytest.mark.slow
@@ -1249,24 +1349,23 @@ def test_ring_4000_at_seven_frequencies_stays_below_400_mb(ring4000):
 def test_radial_4000_with_three_sources_runs_in_seconds():
     """P1: 143-200 s with the dense kernel, which repeated the phase solve
     per source (audit / extrapolated from 1000 and 2000 buses)."""
-    net = radial(4000, F=7, n_sources=3)
-    seconds = _cpu_seconds(lambda: gi.run_fault(net, "F"))
-    assert seconds < 3.0, f"{seconds:.2f} s"
+    seconds = _timed(
+        lambda: radial(4000, F=7, n_sources=3), lambda net: gi.run_fault(net, "F"), SOLVE_LIMIT_S,
+    )
+    assert seconds < SOLVE_LIMIT_S, f"{seconds:.2f} s"
 
 
 @pytest.mark.slow
 def test_mesh_50x50_with_four_sources_runs_in_seconds():
     """P1/P2: 20-27 s with the dense kernel (extrapolated / audit)."""
-    net = mesh(50, F=7, n_sources=4)
-    seconds = _cpu_seconds(lambda: gi.run_fault(net, "F"))
-    assert seconds < 3.0, f"{seconds:.2f} s"
+    seconds = _timed(
+        lambda: mesh(50, F=7, n_sources=4), lambda net: gi.run_fault(net, "F"), SOLVE_LIMIT_S,
+    )
+    assert seconds < SOLVE_LIMIT_S, f"{seconds:.2f} s"
 
 
-@pytest.mark.slow
-def test_bus_response_and_cuts_on_large_rings_run_in_fractions_of_a_second():
-    """P7: 5.6 s (bus_response, with its dense earthing columns) and 2.8 s
-    (analyze_cuts) on a 2000-bus ring with the dense solves, measured
-    interleaved against the base implementation."""
+def _solved_ring_2000_with_cuts():
+    """A solved 2000-bus ring and the two cuts next to its fault bus."""
     net = ring(2000, F=7)
     gi.run_fault(net, "F")
     fault_bus = net.faults["F"].bus
@@ -1275,7 +1374,28 @@ def test_bus_response_and_cuts_on_large_rings_run_in_fractions_of_a_second():
     )
     cuts = [gi.Cut(name="left", branches=[incident[0]]),
             gi.Cut(name="right", branches=[incident[1]])]
-    t_cuts = _cpu_seconds(lambda: gi.analyze_cuts(net, fault="F", cuts=cuts))
-    t_resp = _cpu_seconds(lambda: gi.bus_response(net, fault="F", bus="B100"))
+    return net, cuts
+
+
+@pytest.mark.slow
+def test_bus_response_and_cuts_on_large_rings_run_in_fractions_of_a_second():
+    """P7: 5.6 s (bus_response, with its dense earthing columns) and 2.8 s
+    (analyze_cuts) on a 2000-bus ring with the dense solves, measured
+    interleaved against the base implementation. The sparse versions need
+    0.03-0.06 s; single calls up to 0.5 s were seen when a collection or a
+    stall of the machine fell into them."""
+    subject = _solved_ring_2000_with_cuts()
+    t_cuts = _timed(
+        _solved_ring_2000_with_cuts,
+        lambda s: gi.analyze_cuts(s[0], fault="F", cuts=s[1]),
+        0.5,
+        first=subject,
+    )
+    t_resp = _timed(
+        _solved_ring_2000_with_cuts,
+        lambda s: gi.bus_response(s[0], fault="F", bus="B100"),
+        1.0,
+        first=subject,
+    )
     assert t_cuts < 0.5, f"analyze_cuts {t_cuts:.2f} s"
     assert t_resp < 1.0, f"bus_response {t_resp:.2f} s"
