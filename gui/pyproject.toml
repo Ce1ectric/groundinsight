@@ -38,7 +38,7 @@ classifiers = [
 native = ["nicegui[native]>=4.0,<4.1"]
 # What the CI's GUI job installs to run gui/tests (the same range as the
 # library's dev group).
-test = ["pytest>=8.3.2,<10.0.0"]
+test = ["pytest>=9.2.0,<10.0.0"]
 
 [project.scripts]
 groundinsight-gui = "groundinsight_gui.__main__:main"
