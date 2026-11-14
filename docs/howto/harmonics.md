@@ -67,7 +67,8 @@ write `frequency_Hz` as text. All columns:
 [Result tables](../reference/results.md).
 
 For the comparison with the permissible touch voltage of EN 50522, use the
-total RMS of `U_E` against the 50 Hz curve — a conservative choice, see
+total RMS of `U_E` against the 50 Hz curve. That is conservative for the body
+current, not shown for the touch voltage; see
 [Compare results with EN 50522 limits](en50522-check.md#harmonics-and-dc).
 
 **Check it by hand.** For one line between two stations the earth current

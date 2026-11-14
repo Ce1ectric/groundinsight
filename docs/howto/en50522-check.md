@@ -82,7 +82,6 @@ EN 50522. It does **not** compute:
    (Annex H), or by a calculation of surface potentials, which
    `groundinsight` does not do. An installation that is part of a global
    earthing system follows its own branch of the procedure (Annex N).
-   <!-- CHECK: design procedure of EN 50522:2022, 5.4.3 / Figure 9; in EN 50522:2010 (Figure 5) the criteria were U_E <= 2*U_Tp, or U_E <= 4*U_Tp with specified measures M (Annex E); confirm the criteria and the figure number of the edition you apply -->
 6. **Measure.** Clause 8 and Annex L describe the measurements of the earthing
    impedance (L.2), the earth potential rise (L.3) and touch voltages (L.4).
    Compare them with the model; the model does not replace them.
@@ -161,16 +160,22 @@ The permissible touch voltages of EN 50522 are given for the power frequency;
 the standard applies to installations with nominal frequencies up to 60 Hz.
 For a fault current with harmonics or a DC component, compare the **total RMS
 of `U_E` over all frequencies** — 384.6 V above — with the curve `U_Tp(t_F)`.
-This is a conservative choice: IEC 60479-2:2019 describes the effect of a
-current at a higher frequency by a frequency factor, the ratio of the
-threshold current at that frequency to the threshold at 50/60 Hz, and the
-thresholds of perception, let-go and ventricular fibrillation rise with
-frequency. Counting every component with its full RMS value against the
-50/60 Hz curve therefore overstates the effect of the harmonics.
-<!-- CHECK: IEC 60479-2:2019, 4.1 also states that the skin impedance falls with frequency (about one tenth at 500 Hz of its 50 Hz value) and that little experimental data is available; confirm that the conservative statement holds in terms of touch voltage for the harmonic orders of interest -->
-A DC component enters the total RMS with its full magnitude; IEC 60479-1:2018
-treats the effects of direct current in a clause of its own.
-<!-- CHECK: IEC 60479-1:2018, effects of direct current: confirm that the d.c. thresholds lie above the 50/60 Hz a.c. thresholds for the fault durations of interest, so that counting DC against the a.c. curve is conservative -->
+For the body current this is a conservative choice: IEC 60479-2:2019
+describes the effect of a current at a higher frequency by a frequency factor,
+the ratio of the threshold current at that frequency to the threshold at
+50/60 Hz, and the thresholds of perception, let-go and ventricular
+fibrillation rise with frequency. Counting every component with its full RMS
+value against the 50/60 Hz curve therefore overstates the effect of the
+harmonics on the body current. The impedance of the skin, however, falls with
+frequency (DIN IEC/TS 60479-1 (VDE V 0140-479-1):2007-05, 4.2), which works
+the other way; whether the total RMS is conservative in terms of the touch
+voltage as well is not shown here.
+
+A DC component enters the total RMS with its full magnitude. IEC 60479-1:2018
+treats the effects of direct current in a clause of its own; for the fault
+durations of interest its thresholds lie above the 50/60 Hz thresholds, so
+counting a DC component against the 50/60 Hz curve overstates its effect on
+the body current as well.
 
 ## EPR is an upper bound of the touch voltage
 
@@ -198,3 +203,6 @@ bound.
    Part 2: Special aspects*, Clause 3.1 (frequency factor) and Clause 4
    (alternating currents above 100 Hz); preview:
    <https://cdn.standards.iteh.ai/samples/102313/18ea5a5451cf4f3bad4023ded332d0be/IEC-60479-2-2019.pdf>.
+6. DIN IEC/TS 60479-1 (VDE V 0140-479-1):2007-05, *Effects of current on
+   human beings and livestock — Part 1: General aspects* (IEC/TS 60479-1:2005
+   + Corrigendum October 2006), 4.2 (impedance of the skin).

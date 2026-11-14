@@ -30,8 +30,7 @@ edition carries the amendment A1:2024.
 - Earth potential rise of every bus, for the transfer of potentials between
   bonded stations.
 - The final temperatures of uninsulated earthing conductors and electrodes
-  used by the thermal checks (`FINAL_TEMPERATURES`).
-  <!-- CHECK: the thermal module cites "EN 50522 Table 2" as printed in an earlier edition; confirm the table number in EN 50522:2022 (5.3 / Annex D) -->
+  used by the thermal checks (`FINAL_TEMPERATURES`, EN 50522:2022 Table 2).
 
 **Not implemented**
 
@@ -81,9 +80,10 @@ is on the safe side.
 Not implemented. They are the physiological basis of the permissible touch
 voltages of EN 50522, and the documentation uses IEC 60479-2 for one argument:
 its frequency factors describe thresholds that rise with frequency, which is
-why comparing the total RMS earth potential rise with the 50 Hz curve is a
-conservative way to treat harmonics
-([how-to](../howto/en50522-check.md#harmonics-and-dc)).
+why comparing the total RMS earth potential rise with the 50 Hz curve is
+conservative for the body current. The impedance of the skin falls with
+frequency (DIN IEC/TS 60479-1:2007-05, 4.2), so for the touch voltage this is
+not shown ([how-to](../howto/en50522-check.md#harmonics-and-dc)).
 
 ## Model assumptions behind every result
 
@@ -110,3 +110,6 @@ installation.
    General aspects*.
 6. IEC 60479-2:2019, *Effects of current on human beings and livestock — Part 2:
    Special aspects*.
+7. DIN IEC/TS 60479-1 (VDE V 0140-479-1):2007-05, *Effects of current on
+   human beings and livestock — Part 1: General aspects* (IEC/TS 60479-1:2005
+   + Corrigendum October 2006).

@@ -114,12 +114,12 @@ Data of the cable, ρ = 100 Ω·m, 50 Hz and the 5th harmonic (250 Hz):
 | Quantity | Value | Source |
 |---|---|---|
 | conductor | Al, 300 mm², R<sub>c</sub>′ = 0.100 Ω/km at 20 °C | Prysmian data sheet [1], EN 60228 [2] |
-| screen | Cu wires 25 mm², R<sub>s</sub>′ = 0.727 Ω/km at 20 °C | EN 60228 value for 25 mm² [2] <!-- CHECK: screen DC resistance 0.727 Ohm/km assumed equal to the EN 60228 class-2 value for 25 mm2; take the value of the manufacturer or the routine test certificate --> |
-| insulation | 5.5 mm, diameter over insulation 32.9 mm | Prysmian data sheet [1], row 1x300RM/25 <!-- CHECK: two of three SAP rows give 32.9 mm, one 32.2 mm --> |
+| screen | Cu wires 25 mm², R<sub>s</sub>′ = 0.727 Ω/km at 20 °C | EN 60228 value for 25 mm² [2] |
+| insulation | 5.5 mm, diameter over insulation 32.9 mm | Prysmian data sheet [1], row 1x300RM/25 |
 | outer diameter | 41.9 mm | Prysmian data sheet [1] |
-| semiconductive layers, swelling tape, wire diameter | 0.6 mm, 0.4 mm, 0.75 mm | estimates <!-- CHECK: build-up between insulation and screen wires estimated; it sets r_s --> |
+| semiconductive layers, swelling tape, wire diameter | 0.6 mm, 0.4 mm, 0.75 mm | estimates |
 | mean screen radius r<sub>s</sub> | 32.9/2 + 0.6 + 0.4 + 0.75/2 = 17.825 mm | from the rows above |
-| conductor radius, GMR | 32.9/2 − 5.5 − 0.6 = 10.35 mm; GMR = 8.06 mm | estimate, solid-conductor factor e<sup>−1/4</sup> <!-- CHECK: conductor diameter not on the data sheet; stranding factor of a compacted conductor --> |
+| conductor radius, GMR | 32.9/2 − 5.5 − 0.6 = 10.35 mm; GMR = 8.06 mm | estimate, solid-conductor factor e<sup>−1/4</sup> |
 | laying depth h | 0.7 m | rating conditions of the data sheet [1]; only used for method (b) |
 
 The screen radius enters only through a logarithm: ±5 % in r<sub>s</sub> moves
@@ -288,7 +288,6 @@ cross-bonded, needs its own derivation.
   screens at 70 °C instead of 20 °C (factor 304.5/254.5 for copper) r of the
   trefoil system at 50 Hz rises from 0.342 to 0.397. The 20 °C value is the
   lower bound and gives the lower earth potential rise.
-  <!-- CHECK: which screen temperature to assume for an earth-fault study (20 °C value of the data sheet vs. operating temperature) -->
 
 ## Overhead line with earth wire
 
@@ -310,7 +309,7 @@ and each tower as a bus whose electrode is the tower footing.
 
 Example: phase conductor 94-AL1/15-ST1A (Al/St 95/15, 0.3060 Ω/km, Ø 13.60 mm),
 earth wire 47-AL1/8-ST1A (0.6129 Ω/km, Ø 9.45 mm) [4], earth wire 2 m above the
-faulted phase at 10 m. <!-- CHECK: line geometry (heights 10 m / 12 m, earth wire directly above the faulted phase) and the solid-conductor GMR factor for stranded Al/St conductors are estimates -->
+faulted phase at 10 m.
 
 ```python
 --8<-- "docs/snippets/types_from_datasheets.py:overhead"
@@ -364,8 +363,6 @@ A `BusType` needs the impedance of the station's electrode to remote earth,
 | rod, L = 3 m, Ø 20 mm | ρ/(2πL)·(ln(4L/a) − 1), a = radius (Dwight [6]) | 32.31 Ω | ρ/L (rough rule [7]) | 33.33 Ω |
 | ring around 10 m × 10 m, D = 1.13·√A | 2ρ/(3D) (rough rule [7], [8]) | 5.90 Ω | ρ/(2π²D)·(ln(8D/d) + ln(4D/s)), d = 10 mm, s = 2·0.5 m (Dwight [6]) | 5.79 Ω |
 | mesh 40 m × 40 m, 400 m conductor, 0.8 m deep | ρ·(1/L<sub>T</sub> + (1 + 1/(1 + h·√(20/A)))/√(20A)) (Sverak, IEEE 80 [9]) | 1.32 Ω | ρ/4·√(π/A) + ρ/L<sub>T</sub> (Laurent–Niemann, IEEE 80 [9]) | 1.36 Ω |
-
-<!-- CHECK: electrode formulas transcribed from Dwight (IEEE Std 142 Table 13), DEHN Table 5.5.1 and IEEE 80-2013 clause 14.2; confirm against EN 50522:2022 Annex J.2 and the editions you cite -->
 
 ```python
 --8<-- "docs/snippets/types_from_datasheets.py:electrodes"

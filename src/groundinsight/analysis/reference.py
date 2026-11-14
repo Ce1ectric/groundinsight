@@ -13,8 +13,9 @@ fault, which is exactly what one wants to find out before a study rests on it.
 
 The closed forms are derived in the docstring of each case rather than quoted,
 so they can be checked line by line against whichever text you cite. They are
-the standard results of the German grounding literature (Oeding/Oswald, and the
-TU Graz and Kücherler treatments); attaching the exact clause and equation
+the standard results of the German grounding literature (Oeding/Oswald, the
+TU Graz treatments and B. Küchler's dissertation, TU Dresden 2024,
+urn:nbn:de:bsz:14-qucosa2-901763); attaching the exact clause and equation
 numbers of your editions is yours to do — this module does not claim a citation
 it cannot verify.
 

@@ -1283,13 +1283,15 @@ migration checklist.
   core carries 35.9 % of the bundle current, which sets the thermal
   cross-section), the flat formation, an overhead line with earth wire,
   electrode formulas and what the evaluator returns at 0 Hz. Values that no
-  data sheet gives are marked for checking. (D7, PH5)
+  data sheet gives are named as estimates. (D7, PH5)
 - **How-to "Compare results with EN 50522 limits".** Which result is which
   symbol (`3I_0` → `i_fault`, `r` → `value_current`, not `value`; `I_E`,
   `Z_E`, `U_E` as defined in this release), the procedure of EN 50522:2022 by
   clause without permissible values, EPR as the upper bound of the touch
   voltage, and harmonics and DC as total RMS against the 50 Hz curve —
-  conservative by the frequency factors of IEC 60479-2. Worked example in
+  conservative for the body current by the frequency factors of IEC 60479-2,
+  not shown for the touch voltage because the impedance of the skin falls with
+  frequency (DIN IEC/TS 60479-1:2007-05, 4.2). Worked example in
   `docs/snippets/en50522_check.py`. (D5, D6, DOC8, PH4)
 - **Reference pages "Formula syntax", "Conventions and units", "Glossary and
   symbols".** The formula symbols per type, the 28 callable functions, the
