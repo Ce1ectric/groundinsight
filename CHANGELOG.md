@@ -1165,7 +1165,9 @@ migration checklist.
   2.14.3, polars 1.16.0 → 1.44.2, sqlalchemy 2.0.36 → 2.1.8, matplotlib
   3.10.9 → 3.11.2, pandapower 3.1.2 → 3.5.6, pytest 8.3.4 → 9.2.0,
   mkdocstrings 0.26.2 → 1.0.8. Installed from the lock, the suite passes on
-  3.12, 3.13 and 3.14 (REL2, SEC2).
+  3.12, 3.13 and 3.14 (REL2, SEC2). tornado 6.6 → 6.6.1 (development and
+  documentation groups only) for CVE-2026-126347, published after the
+  refresh and the first finding of the new audit job.
 - **Dependency audit in CI (`.github/workflows/audit.yml`).** On pushes and
   pull requests to `main`, weekly and on demand,
   `scripts/audit_dependencies.py` checks every version pinned in
