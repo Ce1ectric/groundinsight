@@ -11,7 +11,7 @@ authors:
   - family-names: Ehlert
     given-names: Christian
     email: christian.ehlert@mailbox.org
-version: "2026.11.0"
+version: "2026.11.1"
 date-released: "2026-11-14"
 license: MIT
 repository-code: "https://github.com/Ce1ectric/groundinsight"

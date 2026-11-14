@@ -15,14 +15,14 @@
 #     cd gui && python -m pytest
 [project]
 name = "groundinsight-gui"
-version = "2026.11.0"
+version = "2026.11.1"
 description = "Desktop and browser front end for groundinsight (NiceGUI)"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Christian Ehlert", email = "christian.ehlert@mailbox.org" }]
 requires-python = ">=3.12"
 dependencies = [
-    "groundinsight==2026.11.0",
+    "groundinsight==2026.11.1",
     # 4.0 changed run.cpu_bound, the process start method and the DOM ids;
     # a minor release is an upgrade made on purpose, with the GUI tests.
     "nicegui>=4.0,<4.1",

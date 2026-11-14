@@ -42,6 +42,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [2026.11.1] — 2026-11-14
+
 2026.11.0 was tagged but never published: the test gate of the release
 workflow stopped it before the build. This release carries its content
 unchanged; the notes are in the 2026.11.0 section below.
@@ -3048,7 +3054,8 @@ form — superseded by 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v2026.11.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundinsight/compare/v2026.11.1...HEAD
+[2026.11.1]: https://github.com/Ce1ectric/groundinsight/releases/tag/v2026.11.1
 [2026.11.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v2026.11.0
 [0.6.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Ce1ectric/groundinsight/releases/tag/v0.5.0
