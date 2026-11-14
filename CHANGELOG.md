@@ -42,11 +42,27 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+2026.11.0 was tagged but never published: the test gate of the release
+workflow stopped it before the build. This release carries its content
+unchanged; the notes are in the 2026.11.0 section below.
+
+### Internal
+
+- **The changelog check passes on a release commit
+  (`tests/test_audit_pass19_standards.py`).** The check asked for `###`
+  headings under `[Unreleased]`, but right after a release the release script
+  leaves only the `_No changes yet._` stub there, so the test gate of the
+  release workflow stopped the publish of 2026.11.0. The check now reads
+  `[Unreleased]` during regular work and the section just cut on a release
+  commit. Its tests roll changelogs with `scripts/release.py` itself, so check
+  and script cannot drift apart again.
 
 ---
 
 ## [2026.11.0] — 2026-11-14
+
+_Tagged, but not published on PyPI; the same content was released as the
+next version._
 
 ### Breaking
 
