@@ -1,0 +1,3817 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Simulation of grounding systems in electrical power grids.">
+      
+      
+      
+        <link rel="canonical" href="https://ce1ectric.github.io/groundinsight/reference/warnings/">
+      
+      
+        <link rel="prev" href="../formula-syntax/">
+      
+      
+        <link rel="next" href="../glossary/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Warnings and diagnostics - groundinsight</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#warnings-and-diagnostics" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="groundinsight" class="md-header__button md-logo" aria-label="groundinsight" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            groundinsight
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Warnings and diagnostics
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Ce1ectric/groundinsight" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundinsight
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../howto/types-from-datasheets/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  How-to guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../explanation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Understanding the model
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../examples/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../results/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../project/changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Project
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="groundinsight" class="md-nav__button md-logo" aria-label="groundinsight" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    groundinsight
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Ce1ectric/groundinsight" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundinsight
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../getting-started/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/first-calculation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first fault calculation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/ring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    From a line to a ring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/types-from-datasheets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bus and branch types from data sheets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/harmonics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Harmonics, fault scalings and DC
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/en50522-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compare results with EN 50522 limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/sweeps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter sweeps and statistics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/outage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outage and what-if studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/inverse-rho/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admissible soil resistivity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/pandapower/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Import from pandapower
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/thermal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Thermal limits of earthing conductors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Save, load and migrate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Large and meshed networks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics, logging and warnings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/service-layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Service layer and command line
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Understanding the model
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Understanding the model
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/theory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model and assumptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/formulas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Impedance formulas and where they come from
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/phase-currents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase currents in rings and meshes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/reduction-factors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reduction factors and earthing impedance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Splitting the network, location response
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/dc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Direct current (f = 0)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/verification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verification and validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/standards/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Standards and scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../examples/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/minimal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Minimal example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/mv_ring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    20 kV MV ring — stationary fault analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/mv_ring_transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    20 kV MV ring — transient analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/pandapower_import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    — pandapower import walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/fault_sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault sweep — earthing impedance and reduction factors per bus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/fault_decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decomposing a fault: cuts, both reduction factors and a location without its electrode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/cuts_and_rho_f_sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Which electrode does the faulted station need?
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/bus_response_extremes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Characterising a location without knowing its electrode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/mesh_phase_currents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase currents in rings, meshes and parallel cables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/dc_studies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Direct-current studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/thermal_limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Thermal limits of earthing conductors (IEC 60949 / IEC 60909-0)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../results/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Result tables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../conventions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conventions and units
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../formula-syntax/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Formula syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Warnings and diagnostics
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Warnings and diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-a-diagnostic-reaches-you" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How a diagnostic reaches you
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#warning-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Warning classes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#codes-raised-during-a-solve" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Codes raised during a solve
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#codes-raised-outside-a-solve" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Codes raised outside a solve
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#codes-of-the-pre-flight-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Codes of the pre-flight check
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary and symbols
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../api/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6_6" id="__nav_6_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/toplevel/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Top-level package
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/network_operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/service/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Service functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/core_models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/electrical_network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Electrical network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pathfinder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pathfinder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/plotting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plotting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O — network importers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/outage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outage studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter sweeps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault-location decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/response/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Location response
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference cases
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/statistics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Statistics and classification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/citation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/license/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    License
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit-log/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-a-diagnostic-reaches-you" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How a diagnostic reaches you
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#warning-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Warning classes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#codes-raised-during-a-solve" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Codes raised during a solve
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#codes-raised-outside-a-solve" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Codes raised outside a solve
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#codes-of-the-pre-flight-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Codes of the pre-flight check
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+  
+  
+                  
+
+
+  
+  
+
+
+<h1 id="warnings-and-diagnostics">Warnings and diagnostics<a class="headerlink" href="#warnings-and-diagnostics" title="Permanent link">&para;</a></h1>
+<p><code>groundinsight</code> reports a condition that changes how a result must be read —
+a heuristic phase-current split, a frequency the input does not cover, a
+reactance that has no meaning at 0 Hz — as a <strong>warning with a stable code</strong>,
+not as a log line. This page lists every code the package can produce: the
+warning class it is raised with, its severity, the elements it names, when it
+is raised and what to do about it. A test compares the page with the source
+code in both directions, so a code cannot be added without a row here.</p>
+<h2 id="how-a-diagnostic-reaches-you">How a diagnostic reaches you<a class="headerlink" href="#how-a-diagnostic-reaches-you" title="Permanent link">&para;</a></h2>
+<p>Every package warning is an instance of a subclass of
+<code>gi.GroundinsightWarning</code> (itself a <code>UserWarning</code>) and carries three fields
+next to its message:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>code</code></td>
+<td>stable upper-case identifier; programs branch on it, never on the message text</td>
+</tr>
+<tr>
+<td><code>severity</code></td>
+<td><code>info</code>, <code>warning</code> or <code>error</code> (only the pre-flight check produces <code>error</code>)</td>
+</tr>
+<tr>
+<td><code>elements</code></td>
+<td>the network elements concerned, as <code>(kind, name)</code> pairs, e.g. <code>("branch", "K2")</code>; kinds are <code>bus</code>, <code>branch</code>, <code>source</code>, <code>fault</code>, <code>bus_type</code>, <code>branch_type</code>, <code>network</code> and <code>switch</code> (a pandapower switch, by its import label)</td>
+</tr>
+</tbody>
+</table>
+<p>Where you find them:</p>
+<ul>
+<li><strong>During a solve.</strong> <code>gi.run_fault</code> and <code>gi.solve</code> collect every package
+  warning of the run into <code>Result.diagnostics</code>, a list of <code>gi.Diagnostic</code>
+  records with <code>code</code>, <code>severity</code>, <code>category</code>, <code>message</code> and <code>elements</code>. The
+  record is made even when the warning is filtered out or shown only once, so
+  the result always carries its full set; <code>Network.res_fault</code> counts them in
+  <code>n_diagnostics</code>.</li>
+<li><strong>Around any other call</strong> (importing, creating elements, a thermal check,
+  a transient study), collect them yourself with
+  <code>groundinsight.diagnostics.collecting()</code>:
+  <code>with collecting() as records: ...</code>. The collection is per thread and per
+  asyncio task, so two runs in parallel never see each other's records.</li>
+<li><strong>Before a solve.</strong> <code>gi.check_network(net)</code> returns the problems of a
+  network as <code>gi.Diagnostic</code> records without raising; its codes are listed
+  <a href="#codes-of-the-pre-flight-check">below</a>.</li>
+<li><strong>In a front end.</strong> The service layer <code>groundinsight.api</code> passes the
+  records on unchanged as <code>DiagnosticDTO</code> (code, severity, category,
+  elements, message).</li>
+</ul>
+<p>A worked example of all four: <a href="../../howto/diagnostics/">Diagnostics, logging and warnings</a>.</p>
+<p>As Python warnings they also follow the usual machinery: <code>warnings.simplefilter("error", gi.ModelAssumptionWarning)</code>
+turns a category into an exception (useful in CI),
+<code>python -W error::groundinsight.DCLimitWarning</code> does the same from the command
+line, and <code>logging.captureWarnings(True)</code> routes them into logging. Renamed
+parameters and deprecated attributes raise Python's own <code>DeprecationWarning</code>,
+which has no code.</p>
+<h2 id="warning-classes">Warning classes<a class="headerlink" href="#warning-classes" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Category</th>
+<th>Severity</th>
+<th>Elements</th>
+<th>Raised when</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GROUNDINSIGHT</code></td>
+<td><code>GroundinsightWarning</code></td>
+<td>warning</td>
+<td>–</td>
+<td>Default code of the base class (a <code>UserWarning</code>); every package warning is an instance of it. The package raises its subclasses with their own codes.</td>
+<td>Filter or catch <code>gi.GroundinsightWarning</code> to handle all package warnings at once.</td>
+</tr>
+<tr>
+<td><code>MODEL_ASSUMPTION</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>warning</td>
+<td>–</td>
+<td>Default code of the class for results that rest on a modelling assumption or heuristic; the package raises it with the specific codes below.</td>
+<td>Read the specific code.</td>
+</tr>
+<tr>
+<td><code>INPUT</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>–</td>
+<td>Default code of the class for input that is incomplete or inconsistent but can be solved; the package raises it with the specific codes below.</td>
+<td>Read the specific code.</td>
+</tr>
+<tr>
+<td><code>FREQUENCY_ORDER</code></td>
+<td><code>NetworkFrequencyOrderWarning</code></td>
+<td>warning</td>
+<td>–</td>
+<td><code>Network.frequencies</code> is not strictly increasing. The order is kept, but the FFT transient solver maps spectral bins by position.</td>
+<td>Sort the list, unless the order is intended.</td>
+</tr>
+<tr>
+<td><code>DC_LIMIT</code></td>
+<td><code>DCLimitWarning</code></td>
+<td>warning</td>
+<td>–</td>
+<td>An impedance formula is evaluated at 0 Hz and the limit needs a decision: it has a <strong>pole</strong> (modelled as an open circuit — right for a series capacitance), it <strong>converges only slowly</strong> (the value reached is an approximation of the limit, e.g. <code>sqrt(f)</code> or <code>log(f)</code> terms), it carries a <strong>finite reactance</strong> (the 0 Hz bin takes the real part and drops the reactance), or it is <strong>zero</strong> (an ideal short: modelled with a stand-in of √ε times the smallest other impedance of the network). Only the 0 Hz bin is affected.</td>
+<td>Write reactances as <code>j*2*pi*f*L</code> so they vanish at DC; state a known DC value as a term without <code>f</code>; give an ideal bond a small resistance or merge its two buses. See <a href="../formula-syntax/#direct-current-f-0">Formula syntax: direct current</a>.</td>
+</tr>
+<tr>
+<td><code>TRANSIENT_MODEL</code></td>
+<td><code>TransientModelWarning</code></td>
+<td>warning</td>
+<td>coupled branches (FFT coupling case)</td>
+<td>The transient model is narrower than the input: the <strong>FFT solver ignores mutual coupling</strong> (the EPR comes out higher, i.e. conservative), the <strong>FFT window ends while the response still rings</strong> (the tail wraps around), the active fault carries <strong>scalings other than 1</strong> (both solvers use the waveform as the literal injection), or a branch has <strong>|M_mutual| &gt; L_self</strong> (almost always a unit slip).</td>
+<td>Use <code>solver="state_space"</code> for coupled networks; lengthen <code>t_end</code> or pass <code>zero_pad=True</code>; scale the waveform itself; check the units of the RLC formulas.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="codes-raised-during-a-solve">Codes raised during a solve<a class="headerlink" href="#codes-raised-during-a-solve" title="Permanent link">&para;</a></h2>
+<p>These are raised by <code>gi.run_fault</code> and <code>gi.solve</code> and stored in
+<code>Result.diagnostics</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Category</th>
+<th>Severity</th>
+<th>Elements</th>
+<th>Raised when</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PHASE_PROXY</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>warning</td>
+<td>the branches of the mesh, the fault</td>
+<td>The phase network is meshed (a ring, parallel cables) and branches of the mesh have no <code>phase_impedance_formula</code>, so the phase current is split with proxy impedances (the screen self impedance, or the length). Broken screens are named.</td>
+<td>Declare <code>phase_impedance_formula</code> on the branch types — the reduced phase impedance, see <a href="../../howto/types-from-datasheets/#phase-impedance-for-rings-and-meshes">Phase impedance for rings and meshes</a>.</td>
+</tr>
+<tr>
+<td><code>THEVENIN_COUPLING</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>warning</td>
+<td>the voltage sources</td>
+<td>A Thévenin (voltage) source away from the fault bus reaches the fault while a coupled branch has a mutual impedance. The coupling is driven by the source's Norton current instead of its loop current; in the reference cases the EPR came out 6–38 % too low, i.e. unconservative.</td>
+<td>Model the infeed as a current source with the fault current of a short-circuit calculation, or treat the EPR as a lower bound.</td>
+</tr>
+<tr>
+<td><code>SCALINGS_INCOMPLETE</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the fault</td>
+<td><code>Fault.scalings</code> is a non-empty mapping that misses network frequencies; those are scaled with 1.0 (full contribution). Once per run. Also reported by <code>gi.check_network</code>.</td>
+<td>Give every network frequency a scaling; <code>0.0</code> excludes a frequency. Leaving <code>scalings</code> out means 1.0 everywhere, without a warning.</td>
+</tr>
+<tr>
+<td><code>SOURCE_FREQUENCY_GAP</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the source</td>
+<td>A source that reaches the fault has no value at some network frequencies and contributes 0 A there. Once per source and run. Also reported by <code>gi.check_network</code>.</td>
+<td>Complete <code>Source.values</code>, or accept the gap deliberately. A source with a value at <em>no</em> network frequency is an error (<code>ValueError</code>).</td>
+</tr>
+<tr>
+<td><code>SOURCE_WITHOUT_PHASE_PATH</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>warning</td>
+<td>the source, the fault</td>
+<td>A source reaches the fault through the earthing network but has no phase-conductor connection to the fault bus. Its current is still injected, as if it returned entirely through soil and screens (reduction factor 1 for its share, no coupling).</td>
+<td>Check the topology and the <code>active</code> flags; a phase path needs branches that carry a phase conductor.</td>
+</tr>
+<tr>
+<td><code>EARTH_GROUP_UNDEFINED</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>warning</td>
+<td>the fault, the fault bus</td>
+<td>No electrode carries more than numerical noise (1e-9 of the fault current), so there is no earth-return current: <code>i_earth</code> and <code>value_current</code> are <code>None</code>.</td>
+<td>Usually a fault on the bus of the only source, or a network without electrodes; check the excitation.</td>
+</tr>
+<tr>
+<td><code>FAULT_AT_FEEDING_BUS</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>info</td>
+<td>the fault, the fault bus</td>
+<td>The fault sits on the bus of every source that feeds it: the fault current closes through that station's own earthing back to the source, nothing is injected into the earthing network, EPR and earth-return current are zero, and both reduction factors are <code>None</code>. <code>U_E</code> is 0 V; <code>Z_E</code> is still the driving-point impedance. Recorded in <code>Result.diagnostics</code> only (<code>groundinsight.diagnostics.note</code>), never raised as a Python warning.</td>
+<td>Nothing to fix for the station itself; to study what the surrounding network sees, place the fault at another bus or add the other infeeds.</td>
+</tr>
+<tr>
+<td><code>EARTH_GROUP_SPREAD</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>warning</td>
+<td>the fault, the fault bus</td>
+<td>The electrode currents are spread in angle, so the split into the group that feeds the soil and the group that returns the current is less sharp than usual; <code>I_E</code> and <code>value_current</code> describe the dominant direction.</td>
+<td>Read <code>r_current</code> with care; compare with the EPR itself.</td>
+</tr>
+<tr>
+<td><code>REDUCTION_FACTOR_UNDEFINED</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>warning</td>
+<td>the fault, the fault bus</td>
+<td>The EPR of the fault bus without coupling is zero to numerical precision (or the solve without coupling fails), so the EPR-based factor <code>value</code> has no reference and is <code>None</code> at that frequency.</td>
+<td>Expected for a fault without a path to earth at that frequency; the EN 50522 factor <code>value_current</code> is unaffected.</td>
+</tr>
+<tr>
+<td><code>EARTHING_IMPEDANCE_UNDEFINED</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>warning</td>
+<td>the fault, the fault bus, the buses of its earthing group</td>
+<td>No bus connected to the fault bus through screens has an electrode, or the fault bus reaches the earthing network only through a Thévenin loop: <code>z_earthing</code> and <code>Z_G</code> are <code>None</code>.</td>
+<td>Give the earthing group an electrode; a Thévenin loop is not an earthing impedance.</td>
+</tr>
+<tr>
+<td><code>PARALLEL_COEFFICIENT_DEFAULT</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>warning</td>
+<td>the sources</td>
+<td>Legacy mode <code>phase_current_mode="paths"</code>: a source reaches the fault over several paths whose <code>parallel_coefficient</code> is left at the default, so each path carries the full current.</td>
+<td>Use the default mode <code>"auto"</code>, or set the coefficients.</td>
+</tr>
+</tbody>
+</table>
+<p><code>DC_LIMIT</code> and <code>FREQUENCY_ORDER</code> can appear in <code>Result.diagnostics</code> as well, when an
+impedance is evaluated during the run; see <a href="#warning-classes">Warning classes</a>.</p>
+<h2 id="codes-raised-outside-a-solve">Codes raised outside a solve<a class="headerlink" href="#codes-raised-outside-a-solve" title="Permanent link">&para;</a></h2>
+<p>These are raised by the function named in the row; collect them with
+<code>collecting()</code> around the call.</p>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Category</th>
+<th>Severity</th>
+<th>Elements</th>
+<th>Raised when</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SOURCE_FREQUENCY_OUTSIDE_NETWORK</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the source</td>
+<td><code>create_source</code>, <code>create_voltage_source</code> or <code>Network.add_source</code> get values at frequencies the network does not solve; they are ignored. Also reported by <code>gi.check_network</code>.</td>
+<td>Add the frequency to <code>Network.frequencies</code>, or drop the value.</td>
+</tr>
+<tr>
+<td><code>THERMAL_DATA_INCOMPLETE</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the branches or buses, the fault</td>
+<td><code>check_conductor_limits</code> / <code>check_node_limits</code>: a type declares half of its thermal data (a material without a cross-section, or the reverse), so <code>within_limit</code> is null for it.</td>
+<td>Declare both, or neither.</td>
+</tr>
+<tr>
+<td><code>THERMAL_DC_EXCLUDED</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>warning</td>
+<td>the branches or buses, the fault</td>
+<td>The 0 Hz component is left out of the adiabatic check, because <code>m</code> already carries the DC content of an alternating fault current. A genuine direct current during T_k adds about I_dc² to I_th²; the message quotes the increase.</td>
+<td>If a direct current really flows during the fault (DC railway, rectifier), check with the increased I_th.</td>
+</tr>
+<tr>
+<td><code>SC_KAPPA_MIXED</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>warning</td>
+<td>the sources, the fault</td>
+<td><code>resolve_fault_sc_characteristics</code>: the sources feeding the fault have different R/X; the non-linear IEC 60909 factors are applied once, with the aggregated κ.</td>
+<td>Use the transient solver for an exact result with mixed R/X.</td>
+</tr>
+<tr>
+<td><code>SC_DATA_INCOMPLETE</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the sources, the fault</td>
+<td><code>resolve_fault_sc_characteristics</code>: sources that carry part of the current have no IEC 60909 data; κ is that of the others.</td>
+<td>Set <code>i_k_a</code>, <code>r_to_x</code> or <code>kappa</code> on every source.</td>
+</tr>
+<tr>
+<td><code>SC_KAPPA_MISSING</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the buses</td>
+<td><code>read_shortcircuit_results</code>: neither <code>ip_ka</code> nor a usable R/X is available for a bus.</td>
+<td>Complete the zero-sequence data in pandapower (<code>x0x_max</code>, <code>r0x0_max</code>, <code>r0_ohm_per_km</code>, …).</td>
+</tr>
+<tr>
+<td><code>SC_KAPPA_OUT_OF_RANGE</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the bus</td>
+<td><code>read_shortcircuit_results</code>: pandapower's <code>ip_ka</code>/<code>ikss_ka</code> imply a κ outside (1, 2].</td>
+<td>Check the pandapower case.</td>
+</tr>
+<tr>
+<td><code>SC_ROW_AMBIGUOUS</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the fault, the bus</td>
+<td><code>apply_shortcircuit_characteristics</code>: several rows match the fault bus; the first is used.</td>
+<td>Pass <code>pp_bus=</code> or <code>bus_name=</code>.</td>
+</tr>
+<tr>
+<td><code>SC_SPLIT_EQUAL</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the sources, the fault</td>
+<td><code>apply_shortcircuit_characteristics</code>: the sources inject nothing at the frequency, so I_k'' is split equally.</td>
+<td>Set the relative infeed shares first.</td>
+</tr>
+<tr>
+<td><code>SC_VALUE_REPLACED</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the fault</td>
+<td><code>apply_shortcircuit_characteristics</code> replaced a different <code>t_k_s</code> or <code>n_factor</code> of the fault with the value of the short-circuit case.</td>
+<td>Pass the value explicitly if the previous one was intended.</td>
+</tr>
+<tr>
+<td><code>SC_VOLTAGE_SOURCE_SKIPPED</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the source</td>
+<td><code>apply_shortcircuit_characteristics</code>: a voltage source keeps its values.</td>
+<td>Model the infeed as a current source if its share should be written.</td>
+</tr>
+<tr>
+<td><code>IMPORT_BUS_SKIPPED</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the bus</td>
+<td><code>from_pandapower</code> / <code>preview_pandapower_import</code>: a bus has no usable <code>vn_kv</code>.</td>
+<td>Fix <code>vn_kv</code> in pandapower.</td>
+</tr>
+<tr>
+<td><code>IMPORT_LINE_SKIPPED</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the branch</td>
+<td>A line is a self-loop, or its length cannot be imported.</td>
+<td>Fix the line in pandapower.</td>
+</tr>
+<tr>
+<td><code>IMPORT_LENGTH_DEFAULT</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the branch</td>
+<td>A line has no usable <code>length_km</code> and gets the fallback of 1 km.</td>
+<td>Set <code>length_km</code>; every impedance of the branch scales with it.</td>
+</tr>
+<tr>
+<td><code>IMPORT_SWITCH_NOT_IMPORTED</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the buses the switches would bond</td>
+<td>Closed bus-to-bus switches were not imported because <code>ImportDefaults.switch_branch_type</code> is not set; a bus behind such a switch is isolated and reads 0 V.</td>
+<td>Set <code>switch_branch_type</code>.</td>
+</tr>
+<tr>
+<td><code>IMPORT_LINE_SWITCH_OPEN</code></td>
+<td><code>InputWarning</code></td>
+<td>info</td>
+<td>the branch, the switches</td>
+<td><code>from_pandapower</code>: a line has an open line switch (<code>et="l"</code>) and is imported with an open phase conductor (<code>phase_impedance_formula = "nan"</code>); it carries no fault current, its screen stays connected at both ends.</td>
+<td>Nothing, if the screen is bonded at both stations; set the branch inactive if it is interrupted as well.</td>
+</tr>
+<tr>
+<td><code>IMPORT_ELEMENT_NOT_IMPORTED</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>–</td>
+<td>Transformers and impedance elements are not modelled and were left out.</td>
+<td>Check the preview; model the connection by hand if it matters.</td>
+</tr>
+<tr>
+<td><code>IMPORT_VOLTAGE_LEVEL_MISMATCH</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the bus type</td>
+<td>The default bus type declares another voltage level than <code>voltage_level_kV</code>.</td>
+<td>Use a bus type written for the imported level.</td>
+</tr>
+<tr>
+<td><code>IMPORT_EMPTY</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the network</td>
+<td>The import produced no bus or no branch — usually a wrong <code>voltage_level_kV</code>.</td>
+<td>Check <code>voltage_level_kV</code> against <code>net.bus.vn_kv</code>.</td>
+</tr>
+<tr>
+<td><code>TRANSIENT_SOURCE_NOT_CONNECTED</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the sources</td>
+<td><code>TransientStudy.solve(solver="fft")</code>: a source with a waveform has no galvanic connection to the fault bus and injects nothing.</td>
+<td>Check the topology.</td>
+</tr>
+<tr>
+<td><code>TRANSIENT_BRANCH_SKIPPED</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the branches</td>
+<td>State-space solver: branches without <code>R_self</code>/<code>L_self</code> are left out.</td>
+<td>Declare <code>R_self_formula</code> and <code>L_self_formula</code> on the branch types.</td>
+</tr>
+<tr>
+<td><code>TRANSIENT_COUPLING_SKIPPED</code></td>
+<td><code>TransientModelWarning</code></td>
+<td>warning</td>
+<td>the voltage sources</td>
+<td>State-space solver: the coupling is modelled for current sources only.</td>
+<td>Use current sources for coupled studies.</td>
+</tr>
+<tr>
+<td><code>TRANSIENT_RESISTIVE_COUPLING_IGNORED</code></td>
+<td><code>TransientModelWarning</code></td>
+<td>warning</td>
+<td>the branches</td>
+<td>State-space solver: <code>R_mutual</code>/<code>M_mutual</code> on branches without <code>L_self</code> are ignored.</td>
+<td>Give those branches an inductance.</td>
+</tr>
+<tr>
+<td><code>TRANSIENT_PHASE_SPLIT</code></td>
+<td><code>ModelAssumptionWarning</code></td>
+<td>warning</td>
+<td>the coupled branches</td>
+<td>State-space solver on a meshed network: the phase split is taken at <code>f_eval</code> and depends on frequency here, so a DC offset and harmonics are split as at <code>f_eval</code> (below 1 % of the peak on a mixed cable/line ring).</td>
+<td>Accept, or compare with <code>run_fault</code> at the frequencies of interest.</td>
+</tr>
+<tr>
+<td><code>PROJECT_FILE_LEGACY_ENCODING</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the network</td>
+<td><code>load_network_from_json</code> read a file that is not UTF-8 (written by 0.6.0 or earlier on a non-UTF-8 system) with the platform encoding.</td>
+<td>Save it again; the new file is UTF-8.</td>
+</tr>
+<tr>
+<td><code>LEGACY_EARTHING_DEFINITION</code></td>
+<td><code>InputWarning</code></td>
+<td>info</td>
+<td>the fault</td>
+<td>A result stored before <code>U_E</code> and <code>Z_E</code> were redefined at the fault bus is loaded: its old values moved to <code>u_earthing_group</code> / <code>z_earthing_group</code>, and <code>U_E</code>, <code>Z_E</code> and <code>Z_G</code> stay empty. A record in <code>Result.diagnostics</code>, not a Python warning.</td>
+<td>Run the fault again.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="codes-of-the-pre-flight-check">Codes of the pre-flight check<a class="headerlink" href="#codes-of-the-pre-flight-check" title="Permanent link">&para;</a></h2>
+<p><code>gi.check_network(net, fault=None)</code> returns these as records of category
+<code>InputWarning</code> (the three codes it shares with the solve — <code>SCALINGS_INCOMPLETE</code>,
+<code>SOURCE_FREQUENCY_GAP</code>, <code>SOURCE_FREQUENCY_OUTSIDE_NETWORK</code> — are listed above).
+An <code>error</code> means that <code>run_fault</code> would raise or would return an answer that
+does not describe the network; a <code>warning</code> that the network solves but part of
+the input has no effect.</p>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Category</th>
+<th>Severity</th>
+<th>Elements</th>
+<th>Raised when</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NOT_A_NETWORK</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>–</td>
+<td>The argument is not a <code>Network</code>.</td>
+<td>Pass a network.</td>
+</tr>
+<tr>
+<td><code>CHECK_FAILED</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the network</td>
+<td>A check raised on an unforeseen malformation; the other checks still ran.</td>
+<td>Read the message; it names the check.</td>
+</tr>
+<tr>
+<td><code>ELEMENT_INVALID</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the entry</td>
+<td>An entry of <code>buses</code>, <code>branches</code>, <code>sources</code> or <code>faults</code> is not an element of the expected type.</td>
+<td>Rebuild the entry through the API.</td>
+</tr>
+<tr>
+<td><code>FREQUENCIES_INVALID</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the network</td>
+<td>Empty frequency list, duplicates, non-finite or negative values (an in-place edit bypasses the validator).</td>
+<td>Assign a valid list to <code>Network.frequencies</code>.</td>
+</tr>
+<tr>
+<td><code>NO_ACTIVE_BUS</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the network</td>
+<td>No bus is active.</td>
+<td>Activate the buses.</td>
+</tr>
+<tr>
+<td><code>NO_SOURCE</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the network</td>
+<td>The network has no source.</td>
+<td>Add a source.</td>
+</tr>
+<tr>
+<td><code>NO_FAULT</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the network</td>
+<td>The network has no fault.</td>
+<td>Add a fault.</td>
+</tr>
+<tr>
+<td><code>FAULT_UNKNOWN</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the fault</td>
+<td>The <code>fault=</code> argument names no fault of the network.</td>
+<td>Check the name.</td>
+</tr>
+<tr>
+<td><code>BRANCH_UNKNOWN_BUS</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the branch</td>
+<td>A branch end names a bus that does not exist; the solver would drop the branch.</td>
+<td>Fix the reference.</td>
+</tr>
+<tr>
+<td><code>SOURCE_UNKNOWN_BUS</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the source</td>
+<td>A source names a bus that does not exist; the solver would ignore it.</td>
+<td>Fix the reference.</td>
+</tr>
+<tr>
+<td><code>FAULT_UNKNOWN_BUS</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the fault</td>
+<td>A fault names a bus that does not exist.</td>
+<td>Fix the reference.</td>
+</tr>
+<tr>
+<td><code>FAULT_BUS_INACTIVE</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the fault, the bus</td>
+<td>A fault sits on an inactive bus.</td>
+<td>Activate the bus or move the fault.</td>
+</tr>
+<tr>
+<td><code>SOURCE_BUS_INACTIVE</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the source, the bus</td>
+<td>A source sits on an inactive bus and injects nothing.</td>
+<td>Activate the bus if the source should feed.</td>
+</tr>
+<tr>
+<td><code>IMPEDANCE_MISSING</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the element</td>
+<td>An element of the nodal system has no impedance at a network frequency.</td>
+<td>Re-derive it (assign the type again) or complete the dictionary.</td>
+</tr>
+<tr>
+<td><code>FORMULA_ERROR</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the element</td>
+<td>No stored impedance, and the type formula cannot be evaluated.</td>
+<td>Fix the formula; see <a href="../formula-syntax/">Formula syntax</a>.</td>
+</tr>
+<tr>
+<td><code>IMPEDANCE_NOT_PASSIVE</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the element</td>
+<td>An impedance that is inverted is zero, too small to invert or has a negative real part.</td>
+<td>Check the formula at the lowest ρ, frequency and length of the model.</td>
+</tr>
+<tr>
+<td><code>IMPEDANCE_NOT_FINITE</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the element</td>
+<td>An impedance is NaN at a network frequency.</td>
+<td>Fix the formula or the stored value.</td>
+</tr>
+<tr>
+<td><code>SOURCE_FREQUENCY_NONE</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the source</td>
+<td>A source has a value at none of the network frequencies (<code>run_fault</code> raises a <code>ValueError</code>).</td>
+<td>Give it values at the network frequencies.</td>
+</tr>
+<tr>
+<td><code>SOURCE_VALUE_NOT_FINITE</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the source</td>
+<td>A source value is NaN or infinite at a network frequency.</td>
+<td>Fix the value.</td>
+</tr>
+<tr>
+<td><code>FAULT_NOT_REACHED</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the fault</td>
+<td>No source reaches the fault over active elements; every potential is 0 V.</td>
+<td>Correct for an outage that islands the fault bus; otherwise check the topology.</td>
+</tr>
+<tr>
+<td><code>ISOLATED_BUS</code></td>
+<td><code>InputWarning</code></td>
+<td>warning</td>
+<td>the bus</td>
+<td>An active bus has no active branch to another active bus.</td>
+<td>Connect it or deactivate it.</td>
+</tr>
+<tr>
+<td><code>FLOATING_ISLAND</code></td>
+<td><code>InputWarning</code></td>
+<td>error</td>
+<td>the buses of the island</td>
+<td>Buses joined by grounding conductors have no electrode and therefore no reference to earth; their potential is undefined and <code>run_fault</code> refuses the network.</td>
+<td>Give one bus of the group an electrode.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
+<p>Conditions that leave no meaningful answer raise instead of warning:</p>
+<ul>
+<li><code>ValueError</code> — invalid input or a violated model rule: an unknown element
+  name, a formula the guard refuses, a non-passive impedance, a source without
+  a value at any network frequency, a group of buses without a path to earth
+  ("Singular admittance matrix … no path to reference earth"), a project file
+  with a newer <code>schema_version</code> than the running release supports.</li>
+<li><code>RuntimeError</code> — a state that does not allow the call: no started database
+  session for the module-level helpers, a database written by an older
+  release opened with <code>migrate=False</code>, <code>res_fault</code> for a fault without stored
+  result. <code>gi.StudyCancelled</code>, raised when a study's <code>should_cancel()</code>
+  answers true, is a <code>RuntimeError</code> too.</li>
+<li><code>TypeError</code> — a value of the wrong type for a model field, or a callback
+  that is not callable.</li>
+<li><code>ImportError</code> — a function of the optional <code>pandapower</code> extra without
+  pandapower installed; the message names the extra.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024&ndash;2026 Christian Ehlert
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Ce1ectric/groundinsight" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "content.code.annotate", "toc.follow", "search.highlight", "search.share"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

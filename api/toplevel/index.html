@@ -1,0 +1,4250 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Simulation of grounding systems in electrical power grids.">
+      
+      
+      
+        <link rel="canonical" href="https://ce1ectric.github.io/groundinsight/api/toplevel/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../network_operations/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Top-level package - groundinsight</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#top-level-package" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="groundinsight" class="md-header__button md-logo" aria-label="groundinsight" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            groundinsight
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Top-level package
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Ce1ectric/groundinsight" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundinsight
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../howto/types-from-datasheets/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  How-to guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../explanation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Understanding the model
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../examples/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../reference/results/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../project/changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Project
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="groundinsight" class="md-nav__button md-logo" aria-label="groundinsight" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    groundinsight
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Ce1ectric/groundinsight" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundinsight
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../getting-started/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/first-calculation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first fault calculation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/ring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    From a line to a ring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/types-from-datasheets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bus and branch types from data sheets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/harmonics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Harmonics, fault scalings and DC
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/en50522-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compare results with EN 50522 limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/sweeps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter sweeps and statistics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/outage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outage and what-if studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/inverse-rho/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admissible soil resistivity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/pandapower/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Import from pandapower
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/thermal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Thermal limits of earthing conductors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Save, load and migrate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Large and meshed networks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics, logging and warnings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/service-layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Service layer and command line
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Understanding the model
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Understanding the model
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/theory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model and assumptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/formulas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Impedance formulas and where they come from
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/phase-currents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase currents in rings and meshes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/reduction-factors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reduction factors and earthing impedance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Splitting the network, location response
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/dc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Direct current (f = 0)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/verification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verification and validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/standards/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Standards and scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../examples/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/minimal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Minimal example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/mv_ring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    20 kV MV ring — stationary fault analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/mv_ring_transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    20 kV MV ring — transient analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/pandapower_import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    — pandapower import walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/fault_sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault sweep — earthing impedance and reduction factors per bus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/fault_decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decomposing a fault: cuts, both reduction factors and a location without its electrode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/cuts_and_rho_f_sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Which electrode does the faulted station need?
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/bus_response_extremes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Characterising a location without knowing its electrode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/mesh_phase_currents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase currents in rings, meshes and parallel cables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/dc_studies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Direct-current studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/thermal_limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Thermal limits of earthing conductors (IEC 60949 / IEC 60909-0)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/results/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Result tables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/conventions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conventions and units
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/formula-syntax/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Formula syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/warnings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Warnings and diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary and symbols
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_6" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6_6" id="__nav_6_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Top-level package
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Top-level package
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#groundinsight" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        groundinsight
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#groundinsightapi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        groundinsight.api
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rendered-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rendered here
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Rendered here">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#groundinsight.NetworkFrequencyOrderWarning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NetworkFrequencyOrderWarning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundinsight.TransientModelWarning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TransientModelWarning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundinsight.DCLimitWarning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DCLimitWarning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundinsight.set_log_level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        set_log_level
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundinsight.show_versions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        show_versions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../network_operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../service/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Service functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core_models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../electrical_network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Electrical network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pathfinder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pathfinder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plotting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plotting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O — network importers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../outage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outage studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter sweeps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault-location decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../response/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Location response
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference cases
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../statistics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Statistics and classification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/citation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/license/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    License
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit-log/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#groundinsight" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        groundinsight
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#groundinsightapi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        groundinsight.api
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rendered-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rendered here
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Rendered here">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#groundinsight.NetworkFrequencyOrderWarning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NetworkFrequencyOrderWarning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundinsight.TransientModelWarning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TransientModelWarning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundinsight.DCLimitWarning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DCLimitWarning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundinsight.set_log_level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        set_log_level
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundinsight.show_versions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        show_versions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+  
+  
+                  
+
+
+  
+  
+
+
+<h1 id="top-level-package">Top-level package<a class="headerlink" href="#top-level-package" title="Permanent link">&para;</a></h1>
+<p><code>import groundinsight as gi</code> is all everyday work needs: the package re-exports
+every public function, class and constant at the top level. This page lists
+each of them — the names of <code>groundinsight.__all__</code> and those of the service
+layer <code>groundinsight.api</code> — with the API page that documents it, and renders
+the few that have no page of their own <a href="#rendered-here">below</a>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">groundinsight</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gi</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">net</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">create_network</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"example"</span><span class="p">,</span> <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">])</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">gi</span><span class="o">.</span><span class="n">__all__</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">100</span><span class="p">,</span> <span class="n">gi</span><span class="o">.</span><span class="n">__version__</span> <span class="o">==</span> <span class="n">gi</span><span class="o">.</span><span class="n">show_versions</span><span class="p">()[</span><span class="s2">"groundinsight"</span><span class="p">])</span>  <span class="c1"># True True</span>
+</code></pre></div>
+<p><code>from groundinsight import *</code> imports exactly these names. Everything else —
+module internals, the ORM classes of the database, the helpers named in the
+<a href="../#internal-api">internal API</a> — can change in any release; the names
+below follow the deprecation policy (a renamed or removed name keeps working
+with a <code>DeprecationWarning</code> for at least two releases and six months).</p>
+<h2 id="groundinsight"><code>groundinsight</code><a class="headerlink" href="#groundinsight" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Names</th>
+<th>Page</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Build and solve</td>
+<td><code>create_network</code>, <code>create_bus</code>, <code>create_branch</code>, <code>create_source</code>, <code>create_voltage_source</code>, <code>create_fault</code>, <code>create_network_assistant</code>, <code>set_active_fault</code>, <code>run_fault</code>, <code>build_electrical_network</code>, <code>create_paths</code></td>
+<td><a href="../network_operations/">Network operations</a></td>
+</tr>
+<tr>
+<td>Solve without side effects, check, diagnostics</td>
+<td><code>solve</code>, <code>check_network</code>, <code>Diagnostic</code>, <code>GroundinsightWarning</code>, <code>ModelAssumptionWarning</code>, <code>InputWarning</code>, <code>StudyCancelled</code></td>
+<td><a href="../service/">Service functions</a></td>
+</tr>
+<tr>
+<td>Model classes</td>
+<td><code>Network</code>, <code>Bus</code>, <code>BusType</code>, <code>Branch</code>, <code>BranchType</code>, <code>Source</code>, <code>Fault</code>, <code>Path</code>, <code>Result</code>, <code>ResultBus</code>, <code>ResultBranch</code>, <code>ComplexNumber</code>, <code>RES_FAULT_SCHEMA</code></td>
+<td><a href="../core_models/">Core models</a></td>
+</tr>
+<tr>
+<td>Rho searches, short-circuit and thermal checks</td>
+<td><code>find_max_rho_scaling</code>, <code>find_max_rho_f_scaling</code>, <code>evaluate_max_epr_under_k</code>, <code>select_rho_f_from_catalog</code>, <code>check_conductor_limits</code>, <code>check_node_limits</code>, <code>resolve_fault_sc_characteristics</code>, <code>FaultShortCircuitData</code>, <code>admissible_short_circuit_current</code>, <code>final_temperature</code>, <code>iec60909_m</code>, <code>iec60949_k</code>, <code>kappa_from_r_to_x</code>, <code>peak_short_circuit_current</code>, <code>thermal_equivalent_current</code>, <code>FINAL_TEMPERATURES</code>, <code>CABLE_INSULATION_LIMITS</code>, <code>IEC60949_MATERIALS</code></td>
+<td><a href="../analysis/">Analysis</a></td>
+</tr>
+<tr>
+<td>Decomposition at the fault</td>
+<td><code>Cut</code>, <code>CutAnalysis</code>, <code>analyze_cuts</code></td>
+<td><a href="../decomposition/">Decomposition</a></td>
+</tr>
+<tr>
+<td>Location response</td>
+<td><code>BusResponse</code>, <code>bus_response</code></td>
+<td><a href="../response/">Location response</a></td>
+</tr>
+<tr>
+<td>Reference cases</td>
+<td><code>ReferenceCase</code>, <code>REFERENCE_CASES</code>, <code>run_reference_cases</code></td>
+<td><a href="../reference/">Reference cases</a></td>
+</tr>
+<tr>
+<td>Parameter sweeps</td>
+<td><code>SweepPoint</code>, <code>SweepResult</code>, <code>rho_f_points</code>, <code>run_sweep</code></td>
+<td><a href="../sweep/">Parameter sweeps</a></td>
+</tr>
+<tr>
+<td>Statistics</td>
+<td><code>summarize</code>, <code>classify</code></td>
+<td><a href="../statistics/">Statistics</a></td>
+</tr>
+<tr>
+<td>Outage studies</td>
+<td><code>Outage</code>, <code>OutageStudyResult</code>, <code>outage_context</code>, <code>run_outage_study</code></td>
+<td><a href="../outage/">Outage studies</a></td>
+</tr>
+<tr>
+<td>Transient studies</td>
+<td><code>TransientStudy</code>, <code>ResultTransient</code>, <code>waveforms</code></td>
+<td><a href="../transient/">Transient simulations</a></td>
+</tr>
+<tr>
+<td>Plots</td>
+<td><code>plot_bus_voltages</code>, <code>plot_branch_currents</code>, <code>plot_bus_currents</code>, <code>plot_epr_transient</code>, <code>plot_branch_current_transient</code></td>
+<td><a href="../plotting/">Plotting</a></td>
+</tr>
+<tr>
+<td>Importers, tables, project files</td>
+<td><code>ImportDefaults</code>, <code>from_pandapower</code>, <code>preview_pandapower_import</code>, <code>read_shortcircuit_results</code>, <code>apply_shortcircuit_characteristics</code>, <code>network_from_tables</code>, <code>save_network_to_json</code>, <code>load_network_from_json</code></td>
+<td><a href="../io/">I/O</a></td>
+</tr>
+<tr>
+<td>Database</td>
+<td><code>Database</code>, <code>start_dbsession</code>, <code>close_dbsession</code>, <code>save_bustype_to_db</code>, <code>load_bustypes_from_db</code>, <code>save_branchtype_to_db</code>, <code>load_branchtypes_from_db</code>, <code>save_network_to_db</code>, <code>load_network_from_db</code>, <code>needs_migration</code>, <code>migrate_database</code>, <code>MigrationReport</code></td>
+<td><a href="../database/">Database</a></td>
+</tr>
+<tr>
+<td>Path search</td>
+<td><code>PathfinderSettings</code>, <code>clear_pathfinder_cache</code>, <code>get_pathfinder_cache_size</code>, <code>set_pathfinder_cache_size</code></td>
+<td><a href="../pathfinder/">Pathfinder</a></td>
+</tr>
+<tr>
+<td>Logging, versions, warning classes</td>
+<td><code>set_log_level</code>, <code>show_versions</code>, <code>NetworkFrequencyOrderWarning</code>, <code>TransientModelWarning</code>, <code>DCLimitWarning</code></td>
+<td><a href="#rendered-here">below</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="groundinsightapi"><code>groundinsight.api</code><a class="headerlink" href="#groundinsightapi" title="Permanent link">&para;</a></h2>
+<p>The service layer for front ends is a namespace of its own and is not
+re-exported at the top level: <code>from groundinsight.api import ProjectSession</code>.
+How to use it: <a href="../../howto/service-layer/">Service layer and command line</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Names</th>
+<th>Page</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sessions and stores</td>
+<td><code>ProjectSession</code>, <code>ProjectError</code>, <code>ProjectStore</code>, <code>MemoryStore</code>, <code>DatabaseStore</code>, <code>EXAMPLES</code></td>
+<td><a href="../service/#groundinsightapi">Service functions</a></td>
+</tr>
+<tr>
+<td>Commands</td>
+<td><code>Command</code>, <code>CommandError</code>, <code>COMMAND_OPS</code>, <code>parse_command</code>, <code>AddBus</code>, <code>UpdateBus</code>, <code>RemoveBus</code>, <code>AddBranch</code>, <code>UpdateBranch</code>, <code>RemoveBranch</code>, <code>AddSource</code>, <code>UpdateSource</code>, <code>RemoveSource</code>, <code>AddFault</code>, <code>UpdateFault</code>, <code>RemoveFault</code>, <code>AddBusType</code>, <code>UpdateBusType</code>, <code>RemoveBusType</code>, <code>AddBranchType</code>, <code>UpdateBranchType</code>, <code>RemoveBranchType</code>, <code>SetFrequencies</code></td>
+<td><a href="../service/#groundinsightapi">Service functions</a></td>
+</tr>
+<tr>
+<td>Jobs</td>
+<td><code>JobRunner</code>, <code>JobHandle</code>, <code>JobCancelled</code>, <code>JobTimeout</code>, <code>JobFailed</code>, <code>snapshot_network</code>, <code>parse_job_request</code></td>
+<td><a href="../service/#groundinsightapi">Service functions</a></td>
+</tr>
+<tr>
+<td>DTOs and schemas</td>
+<td><code>DTO_SCHEMA_VERSION</code>, <code>json_schemas</code>, <code>finite_or_none</code>, <code>ElementRefDTO</code>, <code>DiagnosticDTO</code>, <code>CheckReportDTO</code>, <code>ColumnDTO</code>, <code>TableDTO</code>, <code>NetworkTablesDTO</code>, <code>SessionLimitsDTO</code>, <code>NetworkSummaryDTO</code>, <code>CommandResultDTO</code>, <code>KeyFigureRowDTO</code>, <code>KeyFiguresDTO</code>, <code>FaultResultDTO</code>, <code>FaultResultsDTO</code>, <code>StudyResultDTO</code>, <code>ProgressDTO</code>, <code>JobErrorDTO</code>, <code>JobStatusDTO</code>, <code>ComplexDTO</code>, <code>SolveRequestDTO</code>, <code>SolveAllRequestDTO</code>, <code>SweepPointDTO</code>, <code>SweepRequestDTO</code>, <code>OutageScenarioDTO</code>, <code>OutageStudyRequestDTO</code>, <code>MaxRhoRequestDTO</code></td>
+<td><a href="../service/#groundinsightapi">Service functions</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="rendered-here">Rendered here<a class="headerlink" href="#rendered-here" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+
+    <div class="doc doc-contents first">
+
+        <p>groundinsight package initialisation.</p>
+<p>Re-exports the public API surface of <code>groundinsight</code>: the SQLite
+store (<code>Database</code> and the module-level session helpers), the JSON project
+file, the top-level network factory functions
+(<code>create_network</code>, <code>create_bus</code>, <code>create_branch</code>,
+<code>create_source</code>, <code>create_fault</code>), the fault solver
+(<code>run_fault</code>), the outage / what-if and inverse-rho analysis
+helpers, the transient study workflow and the matplotlib plotting
+helpers. All symbols re-exported here are available as
+<code>groundinsight.&lt;name&gt;</code> and are listed in :data:<code>__all__</code>.</p>
+<p>This module holds no implementation: imports, <code>__all__</code>, <code>__version__</code>
+and the PEP 562 <code>__getattr__</code> that resolves deprecated names, so importing
+the package binds names and nothing else. Everything else lives in a module
+of its own -- the logging
+default and :func:<code>set_log_level</code> in <code>_logging</code>, :func:<code>show_versions</code> in
+<code>_versions</code>, the persistence in <code>database.store</code> and <code>io.project_file</code>.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="groundinsight.NetworkFrequencyOrderWarning" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">NetworkFrequencyOrderWarning</span>
+
+
+<a href="#groundinsight.NetworkFrequencyOrderWarning" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">NetworkFrequencyOrderWarning</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">code</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">elements</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ElementRef</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">severity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"warning"</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="GroundinsightWarning (groundinsight.diagnostics.GroundinsightWarning)" href="../service/#groundinsight.diagnostics.GroundinsightWarning">GroundinsightWarning</a></code></p>
+
+
+
+        <p>Warning category for non-strictly-monotone <code>Network.frequencies</code>.</p>
+<p>Emitted by :class:<code>Network</code> when <code>frequencies</code> is supplied in a
+non-strictly-increasing order. The FFT transient solver
+(:mod:<code>groundinsight.simulation.transient</code>) uses the order of
+<code>Network.frequencies</code> to map spectral bins to the impedance
+dictionary; a descending or shuffled list produces a transient with
+the spectral bins reversed and is almost always a user error.</p>
+<p>Mirrors :class:<code>groundfield.solver.engine.EngineFrequencyOrderWarning</code>
+so users get consistent diagnostics across the three packages of the
+earthing-platform stack.</p>
+
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <p>Suppress with <code>warnings.simplefilter('ignore',
+NetworkFrequencyOrderWarning)</code>; surface only once per Python
+process by combining it with <code>simplefilter('once', ...)</code>.</p>
+</details>
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">groundinsight</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gi</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">(</span><span class="n">record</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">as</span> <span class="n">caught</span><span class="p">:</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="gp">... </span>    <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">"always"</span><span class="p">)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="gp">... </span>    <span class="n">net</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">create_network</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"n"</span><span class="p">,</span> <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">250.0</span><span class="p">,</span> <span class="mf">50.0</span><span class="p">])</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">w</span><span class="o">.</span><span class="n">category</span><span class="o">.</span><span class="vm">__name__</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">caught</span><span class="p">]</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="go">['NetworkFrequencyOrderWarning']</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+                  <details class="mkdocstrings-source">
+                    <summary>Source code in <code>src/groundinsight/diagnostics.py</code></summary>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-136">136</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-137">137</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-138">138</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-139">139</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-140">140</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-141">141</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-142">142</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-143">143</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-144">144</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-145">145</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-146">146</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-147">147</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-148">148</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-149">149</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-150">150</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-151">151</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-152">152</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-153">153</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-154">154</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-155">155</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-156">156</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-157">157</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-158">158</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-159">159</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-160">160</a></span>
+<span class="normal"><a href="#groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-161">161</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-136" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-136"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-137" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-137"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-138" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-138"></a>    <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-139" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-139"></a>    <span class="n">code</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-140" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-140"></a>    <span class="n">elements</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ElementRef</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-141" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-141"></a>    <span class="n">severity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"warning"</span><span class="p">,</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-142" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-142"></a><span class="p">):</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-143" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-143"></a>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-144" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-144"></a>    <span class="k">if</span> <span class="n">severity</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SEVERITIES</span><span class="p">:</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-145" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-145"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-146" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-146"></a>            <span class="sa">f</span><span class="s2">"severity must be one of </span><span class="si">{</span><span class="n">_SEVERITIES</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">severity</span><span class="si">!r}</span><span class="s2">"</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-147" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-147"></a>        <span class="p">)</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-148" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-148"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">code</span> <span class="o">=</span> <span class="n">code</span> <span class="k">if</span> <span class="n">code</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_code</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-149" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-149"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">elements</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">((</span><span class="nb">str</span><span class="p">(</span><span class="n">kind</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">))</span> <span class="k">for</span> <span class="n">kind</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">elements</span><span class="p">)</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-150" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-150"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">severity</span> <span class="o">=</span> <span class="n">severity</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-151" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-151"></a>    <span class="n">sink</span> <span class="o">=</span> <span class="n">_SINK</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-152" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-152"></a>    <span class="k">if</span> <span class="n">sink</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-153" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-153"></a>        <span class="n">sink</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-154" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-154"></a>            <span class="n">Diagnostic</span><span class="p">(</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-155" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-155"></a>                <span class="n">code</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">code</span><span class="p">,</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-156" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-156"></a>                <span class="n">severity</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">severity</span><span class="p">,</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-157" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-157"></a>                <span class="n">category</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-158" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-158"></a>                <span class="n">message</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-159" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-159"></a>                <span class="n">elements</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">),</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-160" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-160"></a>            <span class="p">)</span>
+<a id="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-161" name="groundinsight.NetworkFrequencyOrderWarning--source--__codelineno-0-161"></a>        <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+                  </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="groundinsight.TransientModelWarning" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TransientModelWarning</span>
+
+
+<a href="#groundinsight.TransientModelWarning" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">TransientModelWarning</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">code</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">elements</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ElementRef</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">severity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"warning"</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="GroundinsightWarning (groundinsight.diagnostics.GroundinsightWarning)" href="../service/#groundinsight.diagnostics.GroundinsightWarning">GroundinsightWarning</a></code></p>
+
+
+
+        <p>Warning category for a transient run whose model is narrower than its input.</p>
+<p>Emitted by :mod:<code>groundinsight.simulation.transient</code> when the network
+carries something a solver path cannot represent, and the result is
+therefore quantitatively different from what the same network yields
+elsewhere. It is deliberately <em>not</em> an error: the remaining physics is
+still solved correctly and the answer is often the one the user wants,
+but the difference has to be visible rather than inferred from a
+documentation chapter.</p>
+<p>Current cases:</p>
+<ul>
+<li>the FFT solver meeting a branch with mutual coupling, which it does
+  not evaluate (the stationary solver and the state-space solver do),</li>
+<li>either transient solver meeting an active fault with per-frequency
+  <code>scalings</code> other than 1, which is a frequency-domain concept the
+  time-domain source waveform replaces,</li>
+<li>a mutual inductance larger than the branch's own <code>L_self</code>, which is
+  not physically realisable for two coupled conductors and is almost
+  always a mH/H unit slip,</li>
+<li>the state-space solver meeting a voltage source that reaches the fault,
+  whose coupling it does not model (code <code>TRANSIENT_COUPLING_SKIPPED</code>),
+  or a purely resistive branch carrying mutual data
+  (<code>TRANSIENT_RESISTIVE_COUPLING_IGNORED</code>).</li>
+</ul>
+
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <p>Suppress with <code>warnings.simplefilter('ignore', TransientModelWarning)</code>;
+turn into an error with <code>simplefilter('error', TransientModelWarning)</code>.</p>
+</details>
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">groundinsight</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gi</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="gp">&gt;&gt;&gt; </span><span class="nb">issubclass</span><span class="p">(</span><span class="n">gi</span><span class="o">.</span><span class="n">TransientModelWarning</span><span class="p">,</span> <span class="n">gi</span><span class="o">.</span><span class="n">GroundinsightWarning</span><span class="p">)</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="go">True</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+                  <details class="mkdocstrings-source">
+                    <summary>Source code in <code>src/groundinsight/diagnostics.py</code></summary>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-136">136</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-137">137</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-138">138</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-139">139</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-140">140</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-141">141</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-142">142</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-143">143</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-144">144</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-145">145</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-146">146</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-147">147</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-148">148</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-149">149</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-150">150</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-151">151</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-152">152</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-153">153</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-154">154</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-155">155</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-156">156</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-157">157</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-158">158</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-159">159</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-160">160</a></span>
+<span class="normal"><a href="#groundinsight.TransientModelWarning--source--__codelineno-0-161">161</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="groundinsight.TransientModelWarning--source--__codelineno-0-136" name="groundinsight.TransientModelWarning--source--__codelineno-0-136"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-137" name="groundinsight.TransientModelWarning--source--__codelineno-0-137"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-138" name="groundinsight.TransientModelWarning--source--__codelineno-0-138"></a>    <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-139" name="groundinsight.TransientModelWarning--source--__codelineno-0-139"></a>    <span class="n">code</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-140" name="groundinsight.TransientModelWarning--source--__codelineno-0-140"></a>    <span class="n">elements</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ElementRef</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-141" name="groundinsight.TransientModelWarning--source--__codelineno-0-141"></a>    <span class="n">severity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"warning"</span><span class="p">,</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-142" name="groundinsight.TransientModelWarning--source--__codelineno-0-142"></a><span class="p">):</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-143" name="groundinsight.TransientModelWarning--source--__codelineno-0-143"></a>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-144" name="groundinsight.TransientModelWarning--source--__codelineno-0-144"></a>    <span class="k">if</span> <span class="n">severity</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SEVERITIES</span><span class="p">:</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-145" name="groundinsight.TransientModelWarning--source--__codelineno-0-145"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-146" name="groundinsight.TransientModelWarning--source--__codelineno-0-146"></a>            <span class="sa">f</span><span class="s2">"severity must be one of </span><span class="si">{</span><span class="n">_SEVERITIES</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">severity</span><span class="si">!r}</span><span class="s2">"</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-147" name="groundinsight.TransientModelWarning--source--__codelineno-0-147"></a>        <span class="p">)</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-148" name="groundinsight.TransientModelWarning--source--__codelineno-0-148"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">code</span> <span class="o">=</span> <span class="n">code</span> <span class="k">if</span> <span class="n">code</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_code</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-149" name="groundinsight.TransientModelWarning--source--__codelineno-0-149"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">elements</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">((</span><span class="nb">str</span><span class="p">(</span><span class="n">kind</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">))</span> <span class="k">for</span> <span class="n">kind</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">elements</span><span class="p">)</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-150" name="groundinsight.TransientModelWarning--source--__codelineno-0-150"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">severity</span> <span class="o">=</span> <span class="n">severity</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-151" name="groundinsight.TransientModelWarning--source--__codelineno-0-151"></a>    <span class="n">sink</span> <span class="o">=</span> <span class="n">_SINK</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-152" name="groundinsight.TransientModelWarning--source--__codelineno-0-152"></a>    <span class="k">if</span> <span class="n">sink</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-153" name="groundinsight.TransientModelWarning--source--__codelineno-0-153"></a>        <span class="n">sink</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-154" name="groundinsight.TransientModelWarning--source--__codelineno-0-154"></a>            <span class="n">Diagnostic</span><span class="p">(</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-155" name="groundinsight.TransientModelWarning--source--__codelineno-0-155"></a>                <span class="n">code</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">code</span><span class="p">,</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-156" name="groundinsight.TransientModelWarning--source--__codelineno-0-156"></a>                <span class="n">severity</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">severity</span><span class="p">,</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-157" name="groundinsight.TransientModelWarning--source--__codelineno-0-157"></a>                <span class="n">category</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-158" name="groundinsight.TransientModelWarning--source--__codelineno-0-158"></a>                <span class="n">message</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-159" name="groundinsight.TransientModelWarning--source--__codelineno-0-159"></a>                <span class="n">elements</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">),</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-160" name="groundinsight.TransientModelWarning--source--__codelineno-0-160"></a>            <span class="p">)</span>
+<a id="groundinsight.TransientModelWarning--source--__codelineno-0-161" name="groundinsight.TransientModelWarning--source--__codelineno-0-161"></a>        <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+                  </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="groundinsight.DCLimitWarning" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">DCLimitWarning</span>
+
+
+<a href="#groundinsight.DCLimitWarning" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">DCLimitWarning</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">code</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">elements</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ElementRef</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">severity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"warning"</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="GroundinsightWarning (groundinsight.diagnostics.GroundinsightWarning)" href="../service/#groundinsight.diagnostics.GroundinsightWarning">GroundinsightWarning</a></code></p>
+
+
+
+        <p>Something about a formula at 0 Hz needed a decision rather than a value.</p>
+<p>Raised in four situations, all of them at <code>f = 0</code> only:</p>
+<ul>
+<li>the imaginary part at DC is dropped and is not small enough to be
+  numerical dust -- a reactance cannot survive at DC, so the value is a
+  modelling statement that the real-part fallback silently overrides;</li>
+<li>the limit is not well resolved, i.e. the last decade of the approach
+  sequence still moved the real part appreciably and the step did not
+  shrink at least five-fold from the decade before -- how <code>sqrt(f)</code> or
+  <code>log(f)</code> behave near DC;</li>
+<li>the approach sequence diverges and the element is treated as an open
+  circuit;</li>
+<li>an impedance is zero (or too small to invert) at DC and is replaced by
+  the small finite substitute of :func:<code>dc_substitute_impedance</code>.</li>
+</ul>
+<p>It is a warning and not an error on purpose: in every one of the four
+cases there is a defensible value to continue with, and a DC study that
+stops on the first unusual formula is of no use. Promote it with
+<code>warnings.simplefilter("error", DCLimitWarning)</code> to make a study strict.</p>
+<p>A real part of minus infinity -- <code>log(f)</code> at 0 Hz -- is deliberately not
+a fifth case: it is the limit of a negative resistance, there is no
+defensible value to continue with, and :func:<code>check_passive_impedance</code>
+refuses it like any negative real part.</p>
+
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">groundinsight</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gi</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="gp">&gt;&gt;&gt; </span><span class="nb">issubclass</span><span class="p">(</span><span class="n">gi</span><span class="o">.</span><span class="n">DCLimitWarning</span><span class="p">,</span> <span class="n">gi</span><span class="o">.</span><span class="n">GroundinsightWarning</span><span class="p">)</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="go">True</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+                  <details class="mkdocstrings-source">
+                    <summary>Source code in <code>src/groundinsight/diagnostics.py</code></summary>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-136">136</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-137">137</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-138">138</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-139">139</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-140">140</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-141">141</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-142">142</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-143">143</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-144">144</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-145">145</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-146">146</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-147">147</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-148">148</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-149">149</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-150">150</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-151">151</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-152">152</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-153">153</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-154">154</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-155">155</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-156">156</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-157">157</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-158">158</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-159">159</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-160">160</a></span>
+<span class="normal"><a href="#groundinsight.DCLimitWarning--source--__codelineno-0-161">161</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="groundinsight.DCLimitWarning--source--__codelineno-0-136" name="groundinsight.DCLimitWarning--source--__codelineno-0-136"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-137" name="groundinsight.DCLimitWarning--source--__codelineno-0-137"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-138" name="groundinsight.DCLimitWarning--source--__codelineno-0-138"></a>    <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-139" name="groundinsight.DCLimitWarning--source--__codelineno-0-139"></a>    <span class="n">code</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-140" name="groundinsight.DCLimitWarning--source--__codelineno-0-140"></a>    <span class="n">elements</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ElementRef</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-141" name="groundinsight.DCLimitWarning--source--__codelineno-0-141"></a>    <span class="n">severity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"warning"</span><span class="p">,</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-142" name="groundinsight.DCLimitWarning--source--__codelineno-0-142"></a><span class="p">):</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-143" name="groundinsight.DCLimitWarning--source--__codelineno-0-143"></a>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-144" name="groundinsight.DCLimitWarning--source--__codelineno-0-144"></a>    <span class="k">if</span> <span class="n">severity</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SEVERITIES</span><span class="p">:</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-145" name="groundinsight.DCLimitWarning--source--__codelineno-0-145"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-146" name="groundinsight.DCLimitWarning--source--__codelineno-0-146"></a>            <span class="sa">f</span><span class="s2">"severity must be one of </span><span class="si">{</span><span class="n">_SEVERITIES</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">severity</span><span class="si">!r}</span><span class="s2">"</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-147" name="groundinsight.DCLimitWarning--source--__codelineno-0-147"></a>        <span class="p">)</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-148" name="groundinsight.DCLimitWarning--source--__codelineno-0-148"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">code</span> <span class="o">=</span> <span class="n">code</span> <span class="k">if</span> <span class="n">code</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_code</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-149" name="groundinsight.DCLimitWarning--source--__codelineno-0-149"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">elements</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">((</span><span class="nb">str</span><span class="p">(</span><span class="n">kind</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">))</span> <span class="k">for</span> <span class="n">kind</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">elements</span><span class="p">)</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-150" name="groundinsight.DCLimitWarning--source--__codelineno-0-150"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">severity</span> <span class="o">=</span> <span class="n">severity</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-151" name="groundinsight.DCLimitWarning--source--__codelineno-0-151"></a>    <span class="n">sink</span> <span class="o">=</span> <span class="n">_SINK</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-152" name="groundinsight.DCLimitWarning--source--__codelineno-0-152"></a>    <span class="k">if</span> <span class="n">sink</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-153" name="groundinsight.DCLimitWarning--source--__codelineno-0-153"></a>        <span class="n">sink</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-154" name="groundinsight.DCLimitWarning--source--__codelineno-0-154"></a>            <span class="n">Diagnostic</span><span class="p">(</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-155" name="groundinsight.DCLimitWarning--source--__codelineno-0-155"></a>                <span class="n">code</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">code</span><span class="p">,</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-156" name="groundinsight.DCLimitWarning--source--__codelineno-0-156"></a>                <span class="n">severity</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">severity</span><span class="p">,</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-157" name="groundinsight.DCLimitWarning--source--__codelineno-0-157"></a>                <span class="n">category</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-158" name="groundinsight.DCLimitWarning--source--__codelineno-0-158"></a>                <span class="n">message</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-159" name="groundinsight.DCLimitWarning--source--__codelineno-0-159"></a>                <span class="n">elements</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">),</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-160" name="groundinsight.DCLimitWarning--source--__codelineno-0-160"></a>            <span class="p">)</span>
+<a id="groundinsight.DCLimitWarning--source--__codelineno-0-161" name="groundinsight.DCLimitWarning--source--__codelineno-0-161"></a>        <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+                  </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="groundinsight.set_log_level" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">set_log_level</span>
+
+
+<a href="#groundinsight.set_log_level" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">set_log_level</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">level</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"INFO"</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Enable console logging for the <code>groundinsight</code> package.</p>
+<p>Convenience helper for interactive use (notebooks, scripts). Attaches a
+single :class:<code>logging.StreamHandler</code> with a simple formatter to the
+<code>groundinsight</code> package logger and sets the requested level.
+Subsequent calls only adjust the level on the <em>same</em> handler instance,
+so it is safe to call this helper repeatedly without accumulating
+duplicate console handlers — even across mixed
+<code>set_log_level("DEBUG") -&gt; set_log_level("INFO")</code> toggles, and even
+when <code>logging.basicConfig(...)</code> has been called at the root logger.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>level</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> or <span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Log level either as a numeric constant (e.g. <code>logging.INFO</code>) or
+as a string name (<code>"DEBUG"</code>, <code>"INFO"</code>, <code>"WARNING"</code>,
+<code>"ERROR"</code>, <code>"CRITICAL"</code>). Defaults to <code>"INFO"</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;INFO&#39;</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="logging.Logger">Logger</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The configured <code>groundinsight</code> package logger, for further
+adjustments by the caller if desired.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <p>If you have also called :func:<code>logging.basicConfig</code> at the root logger
+level, every record will be emitted twice: once through the package
+handler installed here and once through the root handler installed by
+<code>basicConfig</code>. To suppress the duplicate either call
+<code>logging.getLogger("groundinsight").propagate = False</code> explicitly,
+or rely solely on <code>basicConfig</code> and do not call
+:func:<code>set_log_level</code>.</p>
+</details>
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">groundinsight</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gi</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="gp">&gt;&gt;&gt; </span><span class="n">gi</span><span class="o">.</span><span class="n">set_log_level</span><span class="p">(</span><span class="s2">"INFO"</span><span class="p">)</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="go">&lt;Logger groundinsight (INFO)&gt;</span>
+</code></pre></div>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/groundinsight/_logging.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-49"> 49</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-50"> 50</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-51"> 51</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-52"> 52</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-53"> 53</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-54"> 54</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-55"> 55</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-56"> 56</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-57"> 57</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-58"> 58</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-59"> 59</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-60"> 60</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-61"> 61</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-62"> 62</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-63"> 63</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-64"> 64</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-65"> 65</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-66"> 66</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-67"> 67</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-68"> 68</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-69"> 69</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-70"> 70</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-71"> 71</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-72"> 72</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-73"> 73</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-74"> 74</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-75"> 75</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-76"> 76</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-77"> 77</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-78"> 78</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-79"> 79</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-80"> 80</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-81"> 81</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-82"> 82</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-83"> 83</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-84"> 84</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-85"> 85</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-86"> 86</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-87"> 87</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-88"> 88</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-89"> 89</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-90"> 90</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-91"> 91</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-92"> 92</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-93"> 93</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-94"> 94</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-95"> 95</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-96"> 96</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-97"> 97</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-98"> 98</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-99"> 99</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-100">100</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-101">101</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-102">102</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-103">103</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-104">104</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-105">105</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-106">106</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-107">107</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-108">108</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-109">109</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-110">110</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-111">111</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-112">112</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-113">113</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-114">114</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-115">115</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-116">116</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-117">117</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-118">118</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-119">119</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-120">120</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-121">121</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-122">122</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-123">123</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-124">124</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-125">125</a></span>
+<span class="normal"><a href="#groundinsight.set_log_level--source--__codelineno-0-126">126</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="groundinsight.set_log_level--source--__codelineno-0-49" name="groundinsight.set_log_level--source--__codelineno-0-49"></a><span class="k">def</span><span class="w"> </span><span class="nf">set_log_level</span><span class="p">(</span><span class="n">level</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"INFO"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span><span class="p">:</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-50" name="groundinsight.set_log_level--source--__codelineno-0-50"></a><span class="w">    </span><span class="sd">"""</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-51" name="groundinsight.set_log_level--source--__codelineno-0-51"></a><span class="sd">    Enable console logging for the ``groundinsight`` package.</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-52" name="groundinsight.set_log_level--source--__codelineno-0-52"></a>
+<a id="groundinsight.set_log_level--source--__codelineno-0-53" name="groundinsight.set_log_level--source--__codelineno-0-53"></a><span class="sd">    Convenience helper for interactive use (notebooks, scripts). Attaches a</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-54" name="groundinsight.set_log_level--source--__codelineno-0-54"></a><span class="sd">    single :class:`logging.StreamHandler` with a simple formatter to the</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-55" name="groundinsight.set_log_level--source--__codelineno-0-55"></a><span class="sd">    ``groundinsight`` package logger and sets the requested level.</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-56" name="groundinsight.set_log_level--source--__codelineno-0-56"></a><span class="sd">    Subsequent calls only adjust the level on the *same* handler instance,</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-57" name="groundinsight.set_log_level--source--__codelineno-0-57"></a><span class="sd">    so it is safe to call this helper repeatedly without accumulating</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-58" name="groundinsight.set_log_level--source--__codelineno-0-58"></a><span class="sd">    duplicate console handlers — even across mixed</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-59" name="groundinsight.set_log_level--source--__codelineno-0-59"></a><span class="sd">    ``set_log_level("DEBUG") -&gt; set_log_level("INFO")`` toggles, and even</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-60" name="groundinsight.set_log_level--source--__codelineno-0-60"></a><span class="sd">    when ``logging.basicConfig(...)`` has been called at the root logger.</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-61" name="groundinsight.set_log_level--source--__codelineno-0-61"></a>
+<a id="groundinsight.set_log_level--source--__codelineno-0-62" name="groundinsight.set_log_level--source--__codelineno-0-62"></a><span class="sd">    Parameters</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-63" name="groundinsight.set_log_level--source--__codelineno-0-63"></a><span class="sd">    ----------</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-64" name="groundinsight.set_log_level--source--__codelineno-0-64"></a><span class="sd">    level : int or str, optional</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-65" name="groundinsight.set_log_level--source--__codelineno-0-65"></a><span class="sd">        Log level either as a numeric constant (e.g. ``logging.INFO``) or</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-66" name="groundinsight.set_log_level--source--__codelineno-0-66"></a><span class="sd">        as a string name (``"DEBUG"``, ``"INFO"``, ``"WARNING"``,</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-67" name="groundinsight.set_log_level--source--__codelineno-0-67"></a><span class="sd">        ``"ERROR"``, ``"CRITICAL"``). Defaults to ``"INFO"``.</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-68" name="groundinsight.set_log_level--source--__codelineno-0-68"></a>
+<a id="groundinsight.set_log_level--source--__codelineno-0-69" name="groundinsight.set_log_level--source--__codelineno-0-69"></a><span class="sd">    Returns</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-70" name="groundinsight.set_log_level--source--__codelineno-0-70"></a><span class="sd">    -------</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-71" name="groundinsight.set_log_level--source--__codelineno-0-71"></a><span class="sd">    logging.Logger</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-72" name="groundinsight.set_log_level--source--__codelineno-0-72"></a><span class="sd">        The configured ``groundinsight`` package logger, for further</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-73" name="groundinsight.set_log_level--source--__codelineno-0-73"></a><span class="sd">        adjustments by the caller if desired.</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-74" name="groundinsight.set_log_level--source--__codelineno-0-74"></a>
+<a id="groundinsight.set_log_level--source--__codelineno-0-75" name="groundinsight.set_log_level--source--__codelineno-0-75"></a><span class="sd">    Notes</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-76" name="groundinsight.set_log_level--source--__codelineno-0-76"></a><span class="sd">    -----</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-77" name="groundinsight.set_log_level--source--__codelineno-0-77"></a><span class="sd">    If you have also called :func:`logging.basicConfig` at the root logger</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-78" name="groundinsight.set_log_level--source--__codelineno-0-78"></a><span class="sd">    level, every record will be emitted twice: once through the package</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-79" name="groundinsight.set_log_level--source--__codelineno-0-79"></a><span class="sd">    handler installed here and once through the root handler installed by</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-80" name="groundinsight.set_log_level--source--__codelineno-0-80"></a><span class="sd">    ``basicConfig``. To suppress the duplicate either call</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-81" name="groundinsight.set_log_level--source--__codelineno-0-81"></a><span class="sd">    ``logging.getLogger("groundinsight").propagate = False`` explicitly,</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-82" name="groundinsight.set_log_level--source--__codelineno-0-82"></a><span class="sd">    or rely solely on ``basicConfig`` and do not call</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-83" name="groundinsight.set_log_level--source--__codelineno-0-83"></a><span class="sd">    :func:`set_log_level`.</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-84" name="groundinsight.set_log_level--source--__codelineno-0-84"></a>
+<a id="groundinsight.set_log_level--source--__codelineno-0-85" name="groundinsight.set_log_level--source--__codelineno-0-85"></a><span class="sd">    Examples</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-86" name="groundinsight.set_log_level--source--__codelineno-0-86"></a><span class="sd">    --------</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-87" name="groundinsight.set_log_level--source--__codelineno-0-87"></a><span class="sd">    &gt;&gt;&gt; import groundinsight as gi</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-88" name="groundinsight.set_log_level--source--__codelineno-0-88"></a><span class="sd">    &gt;&gt;&gt; gi.set_log_level("INFO")  # doctest: +ELLIPSIS</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-89" name="groundinsight.set_log_level--source--__codelineno-0-89"></a><span class="sd">    &lt;Logger groundinsight (INFO)&gt;</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-90" name="groundinsight.set_log_level--source--__codelineno-0-90"></a><span class="sd">    """</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-91" name="groundinsight.set_log_level--source--__codelineno-0-91"></a>    <span class="n">pkg_logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">PACKAGE_LOGGER</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-92" name="groundinsight.set_log_level--source--__codelineno-0-92"></a>    <span class="n">pkg_logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">level</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-93" name="groundinsight.set_log_level--source--__codelineno-0-93"></a>
+<a id="groundinsight.set_log_level--source--__codelineno-0-94" name="groundinsight.set_log_level--source--__codelineno-0-94"></a>    <span class="c1"># Keep the marked handler of an earlier call and remove every other</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-95" name="groundinsight.set_log_level--source--__codelineno-0-95"></a>    <span class="c1"># StreamHandler of the package logger (one attached by user code, for</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-96" name="groundinsight.set_log_level--source--__codelineno-0-96"></a>    <span class="c1"># instance), so that a record is not printed twice.</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-97" name="groundinsight.set_log_level--source--__codelineno-0-97"></a>    <span class="n">marked</span> <span class="o">=</span> <span class="p">[</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-98" name="groundinsight.set_log_level--source--__codelineno-0-98"></a>        <span class="n">h</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">pkg_logger</span><span class="o">.</span><span class="n">handlers</span> <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">_GI_HANDLER_MARK</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-99" name="groundinsight.set_log_level--source--__codelineno-0-99"></a>    <span class="p">]</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-100" name="groundinsight.set_log_level--source--__codelineno-0-100"></a>    <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">pkg_logger</span><span class="o">.</span><span class="n">handlers</span><span class="p">):</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-101" name="groundinsight.set_log_level--source--__codelineno-0-101"></a>        <span class="k">if</span> <span class="p">(</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-102" name="groundinsight.set_log_level--source--__codelineno-0-102"></a>            <span class="nb">isinstance</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">logging</span><span class="o">.</span><span class="n">StreamHandler</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-103" name="groundinsight.set_log_level--source--__codelineno-0-103"></a>            <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">logging</span><span class="o">.</span><span class="n">NullHandler</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-104" name="groundinsight.set_log_level--source--__codelineno-0-104"></a>            <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">_GI_HANDLER_MARK</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-105" name="groundinsight.set_log_level--source--__codelineno-0-105"></a>        <span class="p">):</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-106" name="groundinsight.set_log_level--source--__codelineno-0-106"></a>            <span class="n">pkg_logger</span><span class="o">.</span><span class="n">removeHandler</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-107" name="groundinsight.set_log_level--source--__codelineno-0-107"></a>
+<a id="groundinsight.set_log_level--source--__codelineno-0-108" name="groundinsight.set_log_level--source--__codelineno-0-108"></a>    <span class="k">if</span> <span class="n">marked</span><span class="p">:</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-109" name="groundinsight.set_log_level--source--__codelineno-0-109"></a>        <span class="c1"># Re-use the existing marked handler — just align its level so</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-110" name="groundinsight.set_log_level--source--__codelineno-0-110"></a>        <span class="c1"># filtering happens at both the logger and the handler level.</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-111" name="groundinsight.set_log_level--source--__codelineno-0-111"></a>        <span class="n">handler</span> <span class="o">=</span> <span class="n">marked</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-112" name="groundinsight.set_log_level--source--__codelineno-0-112"></a>        <span class="c1"># Defensive: if more than one marked handler is attached, keep only</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-113" name="groundinsight.set_log_level--source--__codelineno-0-113"></a>        <span class="c1"># the first.</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-114" name="groundinsight.set_log_level--source--__codelineno-0-114"></a>        <span class="k">for</span> <span class="n">extra</span> <span class="ow">in</span> <span class="n">marked</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-115" name="groundinsight.set_log_level--source--__codelineno-0-115"></a>            <span class="n">pkg_logger</span><span class="o">.</span><span class="n">removeHandler</span><span class="p">(</span><span class="n">extra</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-116" name="groundinsight.set_log_level--source--__codelineno-0-116"></a>        <span class="n">handler</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">level</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-117" name="groundinsight.set_log_level--source--__codelineno-0-117"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-118" name="groundinsight.set_log_level--source--__codelineno-0-118"></a>        <span class="n">handler</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">StreamHandler</span><span class="p">()</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-119" name="groundinsight.set_log_level--source--__codelineno-0-119"></a>        <span class="n">handler</span><span class="o">.</span><span class="n">setFormatter</span><span class="p">(</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-120" name="groundinsight.set_log_level--source--__codelineno-0-120"></a>            <span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">(</span><span class="s2">"</span><span class="si">%(levelname)s</span><span class="s2"> [</span><span class="si">%(name)s</span><span class="s2">] </span><span class="si">%(message)s</span><span class="s2">"</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-121" name="groundinsight.set_log_level--source--__codelineno-0-121"></a>        <span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-122" name="groundinsight.set_log_level--source--__codelineno-0-122"></a>        <span class="n">handler</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">level</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-123" name="groundinsight.set_log_level--source--__codelineno-0-123"></a>        <span class="nb">setattr</span><span class="p">(</span><span class="n">handler</span><span class="p">,</span> <span class="n">_GI_HANDLER_MARK</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-124" name="groundinsight.set_log_level--source--__codelineno-0-124"></a>        <span class="n">pkg_logger</span><span class="o">.</span><span class="n">addHandler</span><span class="p">(</span><span class="n">handler</span><span class="p">)</span>
+<a id="groundinsight.set_log_level--source--__codelineno-0-125" name="groundinsight.set_log_level--source--__codelineno-0-125"></a>
+<a id="groundinsight.set_log_level--source--__codelineno-0-126" name="groundinsight.set_log_level--source--__codelineno-0-126"></a>    <span class="k">return</span> <span class="n">pkg_logger</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="groundinsight.show_versions" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">show_versions</span>
+
+
+<a href="#groundinsight.show_versions" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">show_versions</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return version information for <code>groundinsight</code> and its peers.</p>
+<p>Cross-repo convention helper introduced for the <em>seventh
+2026-05-18 review pass</em> roadmap entry "ADR-0013 — Cross-repo
+<code>show_versions</code> convention". The returned mapping always contains
+a <code>"groundinsight"</code> key with the value of :data:<code>__version__</code>;
+optional peers <code>"groundfield"</code> and <code>"groundmeas"</code> are added
+when the respective package is installed in the active
+interpreter. Python and platform information are reported under
+the <code>"python"</code> and <code>"platform"</code> keys so a bug report can
+include the full earthing-platform stack in a single call.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code>dict of str to str</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A mapping <code>{"groundinsight": &lt;__version__&gt;, "python": "3.14.6",
+"platform": "Linux-...", ...}</code>. The first value is always
+:data:<code>__version__</code>; no version literal is repeated here so the
+docstring cannot drift away from the release. The dict is freshly
+built on every call and safe to mutate.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">groundinsight</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gi</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="gp">&gt;&gt;&gt; </span><span class="n">info</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">show_versions</span><span class="p">()</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="gp">&gt;&gt;&gt; </span><span class="n">info</span><span class="p">[</span><span class="s2">"groundinsight"</span><span class="p">]</span> <span class="o">==</span> <span class="n">gi</span><span class="o">.</span><span class="n">__version__</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="go">True</span>
+</code></pre></div>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/groundinsight/_versions.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-20">20</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-21">21</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-22">22</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-23">23</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-24">24</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-25">25</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-26">26</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-27">27</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-28">28</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-29">29</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-30">30</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-31">31</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-32">32</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-33">33</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-34">34</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-35">35</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-36">36</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-37">37</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-38">38</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-39">39</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-40">40</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-41">41</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-42">42</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-43">43</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-44">44</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-45">45</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-46">46</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-47">47</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-48">48</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-49">49</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-50">50</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-51">51</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-52">52</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-53">53</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-54">54</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-55">55</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-56">56</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-57">57</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-58">58</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-59">59</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-60">60</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-61">61</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-62">62</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-63">63</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-64">64</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-65">65</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-66">66</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-67">67</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-68">68</a></span>
+<span class="normal"><a href="#groundinsight.show_versions--source--__codelineno-0-69">69</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="groundinsight.show_versions--source--__codelineno-0-20" name="groundinsight.show_versions--source--__codelineno-0-20"></a><span class="k">def</span><span class="w"> </span><span class="nf">show_versions</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-21" name="groundinsight.show_versions--source--__codelineno-0-21"></a><span class="w">    </span><span class="sd">"""Return version information for ``groundinsight`` and its peers.</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-22" name="groundinsight.show_versions--source--__codelineno-0-22"></a>
+<a id="groundinsight.show_versions--source--__codelineno-0-23" name="groundinsight.show_versions--source--__codelineno-0-23"></a><span class="sd">    Cross-repo convention helper introduced for the *seventh</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-24" name="groundinsight.show_versions--source--__codelineno-0-24"></a><span class="sd">    2026-05-18 review pass* roadmap entry "ADR-0013 — Cross-repo</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-25" name="groundinsight.show_versions--source--__codelineno-0-25"></a><span class="sd">    `show_versions` convention". The returned mapping always contains</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-26" name="groundinsight.show_versions--source--__codelineno-0-26"></a><span class="sd">    a ``"groundinsight"`` key with the value of :data:`__version__`;</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-27" name="groundinsight.show_versions--source--__codelineno-0-27"></a><span class="sd">    optional peers ``"groundfield"`` and ``"groundmeas"`` are added</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-28" name="groundinsight.show_versions--source--__codelineno-0-28"></a><span class="sd">    when the respective package is installed in the active</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-29" name="groundinsight.show_versions--source--__codelineno-0-29"></a><span class="sd">    interpreter. Python and platform information are reported under</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-30" name="groundinsight.show_versions--source--__codelineno-0-30"></a><span class="sd">    the ``"python"`` and ``"platform"`` keys so a bug report can</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-31" name="groundinsight.show_versions--source--__codelineno-0-31"></a><span class="sd">    include the full earthing-platform stack in a single call.</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-32" name="groundinsight.show_versions--source--__codelineno-0-32"></a>
+<a id="groundinsight.show_versions--source--__codelineno-0-33" name="groundinsight.show_versions--source--__codelineno-0-33"></a><span class="sd">    Returns</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-34" name="groundinsight.show_versions--source--__codelineno-0-34"></a><span class="sd">    -------</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-35" name="groundinsight.show_versions--source--__codelineno-0-35"></a><span class="sd">    dict of str to str</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-36" name="groundinsight.show_versions--source--__codelineno-0-36"></a><span class="sd">        A mapping ``{"groundinsight": &lt;__version__&gt;, "python": "3.14.6",</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-37" name="groundinsight.show_versions--source--__codelineno-0-37"></a><span class="sd">        "platform": "Linux-...", ...}``. The first value is always</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-38" name="groundinsight.show_versions--source--__codelineno-0-38"></a><span class="sd">        :data:`__version__`; no version literal is repeated here so the</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-39" name="groundinsight.show_versions--source--__codelineno-0-39"></a><span class="sd">        docstring cannot drift away from the release. The dict is freshly</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-40" name="groundinsight.show_versions--source--__codelineno-0-40"></a><span class="sd">        built on every call and safe to mutate.</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-41" name="groundinsight.show_versions--source--__codelineno-0-41"></a>
+<a id="groundinsight.show_versions--source--__codelineno-0-42" name="groundinsight.show_versions--source--__codelineno-0-42"></a><span class="sd">    Examples</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-43" name="groundinsight.show_versions--source--__codelineno-0-43"></a><span class="sd">    --------</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-44" name="groundinsight.show_versions--source--__codelineno-0-44"></a><span class="sd">    &gt;&gt;&gt; import groundinsight as gi</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-45" name="groundinsight.show_versions--source--__codelineno-0-45"></a><span class="sd">    &gt;&gt;&gt; info = gi.show_versions()</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-46" name="groundinsight.show_versions--source--__codelineno-0-46"></a><span class="sd">    &gt;&gt;&gt; info["groundinsight"] == gi.__version__</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-47" name="groundinsight.show_versions--source--__codelineno-0-47"></a><span class="sd">    True</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-48" name="groundinsight.show_versions--source--__codelineno-0-48"></a><span class="sd">    """</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-49" name="groundinsight.show_versions--source--__codelineno-0-49"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">platform</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-50" name="groundinsight.show_versions--source--__codelineno-0-50"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-51" name="groundinsight.show_versions--source--__codelineno-0-51"></a>
+<a id="groundinsight.show_versions--source--__codelineno-0-52" name="groundinsight.show_versions--source--__codelineno-0-52"></a>    <span class="c1"># The package ``__init__`` imports this module before it defines</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-53" name="groundinsight.show_versions--source--__codelineno-0-53"></a>    <span class="c1"># ``__version__``; read it at call time.</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-54" name="groundinsight.show_versions--source--__codelineno-0-54"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">__version__</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-55" name="groundinsight.show_versions--source--__codelineno-0-55"></a>
+<a id="groundinsight.show_versions--source--__codelineno-0-56" name="groundinsight.show_versions--source--__codelineno-0-56"></a>    <span class="n">info</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-57" name="groundinsight.show_versions--source--__codelineno-0-57"></a>        <span class="s2">"groundinsight"</span><span class="p">:</span> <span class="n">__version__</span><span class="p">,</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-58" name="groundinsight.show_versions--source--__codelineno-0-58"></a>        <span class="s2">"python"</span><span class="p">:</span> <span class="n">sys</span><span class="o">.</span><span class="n">version</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">0</span><span class="p">],</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-59" name="groundinsight.show_versions--source--__codelineno-0-59"></a>        <span class="s2">"platform"</span><span class="p">:</span> <span class="n">platform</span><span class="o">.</span><span class="n">platform</span><span class="p">(),</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-60" name="groundinsight.show_versions--source--__codelineno-0-60"></a>    <span class="p">}</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-61" name="groundinsight.show_versions--source--__codelineno-0-61"></a>    <span class="k">for</span> <span class="n">peer</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"groundfield"</span><span class="p">,</span> <span class="s2">"groundmeas"</span><span class="p">):</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-62" name="groundinsight.show_versions--source--__codelineno-0-62"></a>        <span class="k">try</span><span class="p">:</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-63" name="groundinsight.show_versions--source--__codelineno-0-63"></a>            <span class="n">mod</span> <span class="o">=</span> <span class="nb">__import__</span><span class="p">(</span><span class="n">peer</span><span class="p">)</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-64" name="groundinsight.show_versions--source--__codelineno-0-64"></a>        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-65" name="groundinsight.show_versions--source--__codelineno-0-65"></a>            <span class="k">continue</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-66" name="groundinsight.show_versions--source--__codelineno-0-66"></a>        <span class="n">peer_version</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">mod</span><span class="p">,</span> <span class="s2">"__version__"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-67" name="groundinsight.show_versions--source--__codelineno-0-67"></a>        <span class="k">if</span> <span class="n">peer_version</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-68" name="groundinsight.show_versions--source--__codelineno-0-68"></a>            <span class="n">info</span><span class="p">[</span><span class="n">peer</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">peer_version</span><span class="p">)</span>
+<a id="groundinsight.show_versions--source--__codelineno-0-69" name="groundinsight.show_versions--source--__codelineno-0-69"></a>    <span class="k">return</span> <span class="n">info</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024&ndash;2026 Christian Ehlert
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Ce1ectric/groundinsight" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "content.code.annotate", "toc.follow", "search.highlight", "search.share"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

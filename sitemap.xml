@@ -2,118 +2,274 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/audit-log/</loc>
-         <lastmod>2026-09-01</lastmod>
-    </url>
-    <url>
-         <loc>https://ce1ectric.github.io/groundinsight/concepts/</loc>
-         <lastmod>2026-09-01</lastmod>
-    </url>
-    <url>
-         <loc>https://ce1ectric.github.io/groundinsight/installation/</loc>
-         <lastmod>2026-09-01</lastmod>
-    </url>
-    <url>
-         <loc>https://ce1ectric.github.io/groundinsight/quickstart/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/transient/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/analysis/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/core_models/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/database/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/decomposition/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/electrical_network/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/io/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/network_operations/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/outage/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/pathfinder/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/plotting/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/reference/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/response/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/api/service/</loc>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/statistics/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/sweep/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/api/toplevel/</loc>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/api/transient/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/examples/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/examples/bus_response_extremes/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/examples/cuts_and_rho_f_sweep/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/examples/dc_studies/</loc>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/examples/fault_decomposition/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/examples/fault_sweep/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/examples/mesh_phase_currents/</loc>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/examples/minimal/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/examples/mv_ring/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/examples/mv_ring_transient/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundinsight/examples/pandapower_import/</loc>
-         <lastmod>2026-09-01</lastmod>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/examples/thermal_limits/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/explanation/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/explanation/dc/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/explanation/decomposition/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/explanation/formulas/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/explanation/phase-currents/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/explanation/reduction-factors/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/explanation/standards/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/explanation/theory/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/explanation/verification/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/getting-started/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/getting-started/first-calculation/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/getting-started/installation/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/getting-started/ring/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/diagnostics/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/en50522-check/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/harmonics/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/inverse-rho/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/outage/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/pandapower/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/performance/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/persistence/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/service-layer/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/sweeps/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/thermal/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/transient/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/howto/types-from-datasheets/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/project/changelog/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/project/citation/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/project/contributing/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/project/license/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/reference/conventions/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/reference/formula-syntax/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/reference/glossary/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/reference/results/</loc>
+         <lastmod>2026-11-14</lastmod>
+    </url>
+    <url>
+         <loc>https://ce1ectric.github.io/groundinsight/reference/warnings/</loc>
+         <lastmod>2026-11-14</lastmod>
     </url>
 </urlset>

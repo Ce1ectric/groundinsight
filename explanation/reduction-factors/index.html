@@ -1,0 +1,3571 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Simulation of grounding systems in electrical power grids.">
+      
+      
+      
+        <link rel="canonical" href="https://ce1ectric.github.io/groundinsight/explanation/reduction-factors/">
+      
+      
+        <link rel="prev" href="../phase-currents/">
+      
+      
+        <link rel="next" href="../decomposition/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Reduction factors and earthing impedance - groundinsight</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#reduction-factors-and-earthing-impedance" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="groundinsight" class="md-header__button md-logo" aria-label="groundinsight" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            groundinsight
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Reduction factors and earthing impedance
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Ce1ectric/groundinsight" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundinsight
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../howto/types-from-datasheets/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  How-to guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Understanding the model
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../examples/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/results/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../project/changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Project
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="groundinsight" class="md-nav__button md-logo" aria-label="groundinsight" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    groundinsight
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Ce1ectric/groundinsight" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundinsight
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../getting-started/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/first-calculation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first fault calculation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/ring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    From a line to a ring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/types-from-datasheets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bus and branch types from data sheets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/harmonics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Harmonics, fault scalings and DC
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/en50522-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compare results with EN 50522 limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/sweeps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter sweeps and statistics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/outage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outage and what-if studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/inverse-rho/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admissible soil resistivity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/pandapower/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Import from pandapower
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/thermal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Thermal limits of earthing conductors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Save, load and migrate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Large and meshed networks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics, logging and warnings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/service-layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Service layer and command line
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Understanding the model
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Understanding the model
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../theory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model and assumptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../formulas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Impedance formulas and where they come from
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../phase-currents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase currents in rings and meshes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reduction factors and earthing impedance
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reduction factors and earthing impedance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reduction-factor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The EPR ratio
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reduction-factor-on-a-current-basis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reduction factor on a current basis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#which-one-is-the-en-50522-reduction-factor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which one is the EN 50522 reduction factor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-two-factors-are-not-two-computations-of-one-number" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The two factors are not two computations of one number
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#frequency-dependence-of-the-reduction-factor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Frequency dependence of the reduction factor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#grounding-impedance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Grounding impedance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results-stored-with-the-earlier-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results stored with the earlier definition
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Splitting the network, location response
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Direct current (f = 0)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../verification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verification and validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../standards/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Standards and scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../examples/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/minimal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Minimal example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/mv_ring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    20 kV MV ring — stationary fault analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/mv_ring_transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    20 kV MV ring — transient analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/pandapower_import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    — pandapower import walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/fault_sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault sweep — earthing impedance and reduction factors per bus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/fault_decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decomposing a fault: cuts, both reduction factors and a location without its electrode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/cuts_and_rho_f_sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Which electrode does the faulted station need?
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/bus_response_extremes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Characterising a location without knowing its electrode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/mesh_phase_currents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase currents in rings, meshes and parallel cables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/dc_studies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Direct-current studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/thermal_limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Thermal limits of earthing conductors (IEC 60949 / IEC 60909-0)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/results/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Result tables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/conventions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conventions and units
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/formula-syntax/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Formula syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/warnings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Warnings and diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary and symbols
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../api/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6_6" id="__nav_6_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/toplevel/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Top-level package
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/network_operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/service/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Service functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/core_models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/electrical_network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Electrical network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pathfinder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pathfinder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/plotting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plotting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O — network importers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/outage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outage studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter sweeps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault-location decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/response/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Location response
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference cases
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/statistics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Statistics and classification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/citation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/license/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    License
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit-log/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reduction-factor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The EPR ratio
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reduction-factor-on-a-current-basis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reduction factor on a current basis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#which-one-is-the-en-50522-reduction-factor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which one is the EN 50522 reduction factor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-two-factors-are-not-two-computations-of-one-number" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The two factors are not two computations of one number
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#frequency-dependence-of-the-reduction-factor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Frequency dependence of the reduction factor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#grounding-impedance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Grounding impedance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results-stored-with-the-earlier-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results stored with the earlier definition
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+  
+  
+                  
+
+
+  
+  
+
+
+<h1 id="reduction-factors-and-earthing-impedance">Reduction factors and earthing impedance<a class="headerlink" href="#reduction-factors-and-earthing-impedance" title="Permanent link">&para;</a></h1>
+<p><code>groundinsight</code> reports two reduction factors for every fault and frequency,
+together with the quantities of the EN 50522 chain <span class="arithmatex">\(U_E = r \cdot 3I_0 \cdot
+Z_E\)</span> at the fault bus. This page defines each of them, shows when they agree
+and when they do not, and says which one the standard means. Where each
+number appears in the results is in the
+<a href="../../reference/glossary/#quantities-at-the-fault">glossary</a>; how they feed
+the verification of the standard is in
+<a href="../../howto/en50522-check/">Compare results with EN 50522 limits</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Field of <code>ResultReductionFactor</code></th>
+<th>Column of <code>res_all_impedances()</code></th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td><code>reduction_factor</code></td>
+<td>EPR at the fault bus with coupling over EPR without coupling</td>
+</tr>
+<tr>
+<td><code>value_current</code></td>
+<td><code>reduction_factor_current</code></td>
+<td><span class="arithmatex">\(\lvert I_E\rvert / \lvert 3I_0\rvert\)</span>, the reduction factor <code>r</code> of EN 50522</td>
+</tr>
+<tr>
+<td><code>u_earthing</code></td>
+<td>—</td>
+<td><span class="arithmatex">\(U_E\)</span>, the EPR of the fault bus</td>
+</tr>
+<tr>
+<td><code>z_earthing</code></td>
+<td><code>grounding_impedance_Ohm</code>, <code>grounding_impedance_deg</code></td>
+<td><span class="arithmatex">\(Z_E\)</span>, the driving-point impedance of the earthing network at the fault bus</td>
+</tr>
+<tr>
+<td><code>i_earth</code>, <code>earth_buses</code></td>
+<td>—</td>
+<td><span class="arithmatex">\(I_E\)</span> and the group of buses whose electrode currents it sums</td>
+</tr>
+<tr>
+<td><code>i_fault</code></td>
+<td>—</td>
+<td><span class="arithmatex">\(3I_0\)</span>, the scaled source currents that reach the fault</td>
+</tr>
+</tbody>
+</table>
+<h2 id="reduction-factor">The EPR ratio<a class="headerlink" href="#reduction-factor" title="Permanent link">&para;</a></h2>
+<p>The reduction factor <span class="arithmatex">\(r\)</span> at the fault bus is defined as</p>
+<div class="arithmatex">\[
+r(f) = \frac{|u_{\text{fault}}^{\text{(with mutual)}}(f)|}
+             {|u_{\text{fault}}^{\text{(without mutual)}}(f)|}.
+\]</div>
+<p><code>groundinsight</code> obtains the denominator by re-solving the same network with
+all mutual-coupling Norton sources removed. For a single shielded line
+directly between source and fault with identical impedances the expression
+collapses to the familiar analytical form</p>
+<div class="arithmatex">\[
+r = \left| 1 - \frac{Z_{\text{mutual}}}{Z_{\text{self}}} \right|.
+\]</div>
+<p>The same closed form applies to a fully symmetric ring with the fault
+diametrically opposite the source — the Norton injections in the two
+ring halves are then perfectly anti-parallel and superpose to the same
+expression as the single-line case. More generally it holds in any network
+whose branches all have the same ratio <span class="arithmatex">\(k = Z_m/Z_s\)</span>: the Norton injections
+then telescope along every route to <span class="arithmatex">\((1-k)\)</span> times the source injection, and
+every potential with coupling is <span class="arithmatex">\((1-k)\)</span> times the one without.</p>
+<h2 id="reduction-factor-on-a-current-basis">Reduction factor on a current basis<a class="headerlink" href="#reduction-factor-on-a-current-basis" title="Permanent link">&para;</a></h2>
+<p>The ratio above is structurally blind to the impedance <em>at</em> the fault bus. Both
+solves use the same <code>Y</code>, so changing the diagonal entry <code>Y_ff</code> is a rank-1
+update whose effect cancels in the quotient. On the six-station feeder of the
+<a href="../decomposition/#splitting-the-network-at-the-fault">decomposition example</a>,
+sweeping the electrode of the faulted station from 0.01 Ω to 100 Ω leaves
+<code>value</code> at 0.310003, while <span class="arithmatex">\(Z_E\)</span> and the potential rise both grow by a factor
+of 80 (0.0099 → 0.796 Ω, 8.3 → 668 V) and <code>value_current</code> falls from 0.278 to
+0.168. That is not a numerical artefact — the closed form in
+<a href="../decomposition/#characterising-a-location-without-its-electrode">Characterising a location</a>
+derives it.</p>
+<p><code>ResultReductionFactor.value_current</code> is the <strong>measured</strong> definition alongside
+it: the total earth-return current over the total fault current,</p>
+<div class="arithmatex">\[
+r_I(f) = \frac{|\underline{I}_E(f)|}{|\underline{I}_F(f)|}.
+\]</div>
+<p><code>I_E</code> is the sum of the electrode currents of <strong>every bus that feeds the soil</strong>
+— from the fault outwards in <em>every</em> direction, a ring or a mesh having more
+than one, up to where the potential profile turns — not the electrode current at
+the faulted station. In a cable network with
+continuous shields the stations are bonded to one another, so the current spreads
+along the shields and leaks into the soil at every one of them; the earthing
+current is distributed over the whole bonded system by construction. Measured on
+a six-station feeder, counting only the faulted station understates <code>r_I</code> by a
+factor of 1.8 to 4.7 depending on where the fault sits.</p>
+<p>Two things make the sum less obvious than it looks.</p>
+<p><strong>Summing over every bus gives exactly zero.</strong> Whatever enters the soil somewhere
+leaves it somewhere else, so Kirchhoff at the whole network forces
+<code>Σ I_a = 0</code>. A group has to be selected — and "every bus except the faulted one"
+is not that group: by the same law it collapses back to the electrode current of
+the faulted station alone.</p>
+<p><strong>The group cannot be found from the potential profile.</strong> The crossing between
+the two groups generally falls <em>between</em> two stations rather than on one, and
+when the fault sits close to the infeed the profile may never come near zero at
+all — it passes through a shallow minimum and rises again. On the verification
+feeder with the fault one station from the infeed, <code>|EPR|</code> runs 91.4, 19.6, 18.7,
+18.1, 17.7, 17.5 V: there is no crossing to find.</p>
+<p>What <em>is</em> unambiguous per bus is the <strong>direction</strong> of its electrode current, so
+the split is made in the complex plane: the group is the set of phasors in one
+half-plane, and the half-plane is the one whose sum has the largest magnitude.
+That needs no angle nominated and no tolerance tuned, and it reduces to the
+obvious answer whenever the two groups are cleanly opposed. Both groups carry the
+same sum with opposite signs, so <code>|I_E|</code> does not depend on which is called
+which; the fault bus anchors the naming.</p>
+<p><code>ResultReductionFactor</code> reports <code>i_earth</code> (the ampere value) and <code>earth_buses</code>
+(the group) next to the ratio, because the split is a modelling statement and
+should be inspectable. The separation of the two groups says how cleanly the
+phasors separated; below 0.9 the electrode currents are spread in angle and a
+single scalar earth-return current is a coarser description than it looks, and
+<code>run_fault</code> says so (<code>ModelAssumptionWarning</code>, code <code>EARTH_GROUP_SPREAD</code>).
+Where no electrode carries a noticeable share of the fault current — the fault
+current returns entirely through shields and conductors — there is no group,
+and <span class="arithmatex">\(I_E\)</span> and <code>value_current</code> are <code>None</code> (<code>EARTH_GROUP_UNDEFINED</code>).
+<code>res_all_impedances()</code> carries both factors.</p>
+<p><strong>The denominator is every source that feeds the fault.</strong> <code>i_fault</code> is the sum
+of the scaled currents of all sources that reach the fault, a source on the
+fault bus itself included. Such a source injects and withdraws its current at
+the same bus; it adds to <span class="arithmatex">\(3I_0\)</span> but not to <span class="arithmatex">\(I_E\)</span>. With 1000 A from a remote
+infeed and 500 A from a source on the fault bus, <code>value_current</code> is exactly two
+thirds of its value without the local source, while <code>i_earth</code> and <code>value</code> do
+not change. The reduction factor of a line in the sense of the standard counts
+the remote infeed only; divide <code>i_earth</code> by it where a local source is present.</p>
+<h2 id="which-one-is-the-en-50522-reduction-factor">Which one is the EN 50522 reduction factor<a class="headerlink" href="#which-one-is-the-en-50522-reduction-factor" title="Permanent link">&para;</a></h2>
+<p><code>value_current</code>, <code>r = |I_E|/|3I_0|</code>. The norm writes the earthing voltage as</p>
+<div class="arithmatex">\[
+U_E = 3 I_0 \cdot Z_E \cdot r,
+\]</div>
+<p>with two quantities that <code>groundinsight</code> reports at the <strong>fault bus</strong>
+(<code>ResultReductionFactor</code>):</p>
+<ul>
+<li><code>u_earthing</code> is <code>U_E</code>, the <strong>EPR at the fault bus</strong> — the same complex number
+  as the fault bus's <code>uepr_freq</code>;</li>
+<li><code>z_earthing</code> is <code>Z_E</code>, the <strong>driving-point impedance of the earthing network
+  at the fault bus</strong>: one ampere injected there against remote earth, every
+  electrode and shield in place, no inductive coupling, no Thevenin loop
+  closure. It is what an earthing-impedance measurement at the station sees,
+  the stations bonded through cable shields included, and it is the reported
+  grounding impedance.</li>
+</ul>
+<p>The chain is a physical statement about these, not an identity: it holds where
+the norm's assumptions hold. On a long homogeneous cable run with the fault far
+from the infeed it closes with <code>r = |1 - Z_m/Z_s|</code> (the factor <code>value</code>) on the
+ladder limit <code>Z_E = -Z'/2 + sqrt(Z'^2/4 + Z_e Z')</code> to better than <code>1e-5</code>
+(<code>tests/test_audit_pass19_physics.py</code>, 64 sections). Away from that case — a
+short feeder, the infeed close by, large electrodes — <code>|U_E|</code> and
+<code>r \cdot 3I_0 \cdot |Z_E|</code> differ, and the difference measures how far the
+installation is from the norm's lumped picture; nothing raises or warns.</p>
+<p>The long run, built and compared with the closed form
+(<a href="../../snippets/reduction_factors.py"><code>reduction_factors.py</code></a>; 64 sections of
+0.5 km, stations 2 Ω, infeed 0.2 Ω, 1 kA, illustrative per-km values):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">N_SECTIONS</span> <span class="o">=</span> <span class="mi">64</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">SECTION_KM</span> <span class="o">=</span> <span class="mf">0.5</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">Z_STATION</span> <span class="o">=</span> <span class="mf">2.0</span>          <span class="c1"># Ohm, electrode of every station</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">I_FAULT</span> <span class="o">=</span> <span class="mf">1000.0</span>         <span class="c1"># A RMS, 3I_0 at 50 Hz</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">cable</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">BranchType</span><span class="p">(</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">"cable"</span><span class="p">,</span> <span class="n">grounding_conductor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">self_impedance_formula</span><span class="o">=</span><span class="s2">"(0.29 + 0.625*j*f/50)*l"</span><span class="p">,</span>     <span class="c1"># Z_s' (illustrative)</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">mutual_impedance_formula</span><span class="o">=</span><span class="s2">"(0.049 + 0.625*j*f/50)*l"</span><span class="p">,</span>  <span class="c1"># Z_m' (illustrative)</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">)</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">station</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">BusType</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"station"</span><span class="p">,</span> <span class="n">system_type</span><span class="o">=</span><span class="s2">"Station"</span><span class="p">,</span> <span class="n">voltage_level</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>                     <span class="n">impedance_formula</span><span class="o">=</span><span class="nb">repr</span><span class="p">(</span><span class="n">Z_STATION</span><span class="p">))</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">infeed</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">BusType</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"infeed"</span><span class="p">,</span> <span class="n">system_type</span><span class="o">=</span><span class="s2">"Substation"</span><span class="p">,</span> <span class="n">voltage_level</span><span class="o">=</span><span class="mf">110.0</span><span class="p">,</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>                    <span class="n">impedance_formula</span><span class="o">=</span><span class="s2">"0.2"</span><span class="p">)</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="n">net</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">create_network</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"long_run"</span><span class="p">,</span> <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">])</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_bus</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"N0"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">infeed</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">N_SECTIONS</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="n">gi</span><span class="o">.</span><span class="n">create_bus</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"N</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">station</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N_SECTIONS</span><span class="p">):</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="n">gi</span><span class="o">.</span><span class="n">create_branch</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"L</span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">cable</span><span class="p">,</span> <span class="n">from_bus</span><span class="o">=</span><span class="sa">f</span><span class="s2">"N</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>                     <span class="n">to_bus</span><span class="o">=</span><span class="sa">f</span><span class="s2">"N</span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">length</span><span class="o">=</span><span class="n">SECTION_KM</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_source</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"infeed"</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="s2">"N0"</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="p">{</span><span class="mf">50.0</span><span class="p">:</span> <span class="n">I_FAULT</span><span class="p">},</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_fault</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"F"</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="sa">f</span><span class="s2">"N</span><span class="si">{</span><span class="n">N_SECTIONS</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="n">rf</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">run_fault</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="s2">"F"</span><span class="p">)</span><span class="o">.</span><span class="n">reduction_factor</span>
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="n">u_e</span> <span class="o">=</span> <span class="nb">complex</span><span class="p">(</span><span class="n">rf</span><span class="o">.</span><span class="n">u_earthing</span><span class="p">[</span><span class="mf">50.0</span><span class="p">])</span>        <span class="c1"># U_E: EPR of the fault bus</span>
+<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a><span class="n">z_e</span> <span class="o">=</span> <span class="nb">complex</span><span class="p">(</span><span class="n">rf</span><span class="o">.</span><span class="n">z_earthing</span><span class="p">[</span><span class="mf">50.0</span><span class="p">])</span>        <span class="c1"># Z_E: driving-point impedance there</span>
+<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a><span class="n">r_epr</span> <span class="o">=</span> <span class="n">rf</span><span class="o">.</span><span class="n">value</span><span class="p">[</span><span class="mf">50.0</span><span class="p">]</span>                    <span class="c1"># EPR ratio, |1 - Z_m/Z_s| here</span>
+<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a><span class="n">r_current</span> <span class="o">=</span> <span class="n">rf</span><span class="o">.</span><span class="n">value_current</span><span class="p">[</span><span class="mf">50.0</span><span class="p">]</span>        <span class="c1"># |I_E| / |3I_0|</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">z_series</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.29</span> <span class="o">+</span> <span class="mf">0.625</span><span class="n">j</span><span class="p">)</span> <span class="o">*</span> <span class="n">SECTION_KM</span>   <span class="c1"># Z' of one section</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">z_mutual</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.049</span> <span class="o">+</span> <span class="mf">0.625</span><span class="n">j</span><span class="p">)</span> <span class="o">*</span> <span class="n">SECTION_KM</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">k</span> <span class="o">=</span> <span class="n">z_mutual</span> <span class="o">/</span> <span class="n">z_series</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">z_inf</span> <span class="o">=</span> <span class="o">-</span><span class="n">z_series</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">cmath</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">z_series</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">/</span> <span class="mi">4</span> <span class="o">+</span> <span class="n">Z_STATION</span> <span class="o">*</span> <span class="n">z_series</span><span class="p">)</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">u_closed</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">k</span><span class="p">)</span> <span class="o">*</span> <span class="n">I_FAULT</span> <span class="o">*</span> <span class="nb">abs</span><span class="p">(</span><span class="n">z_inf</span><span class="p">)</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Quantity</th>
+<th>Model</th>
+<th>Closed form</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td>0.349781</td>
+<td><span class="arithmatex">\(\lvert 1 - k\rvert\)</span> = 0.349781</td>
+</tr>
+<tr>
+<td><code>value_current</code></td>
+<td>0.359015</td>
+<td>—</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(Z_E\)</span></td>
+<td>0.6249 + 0.3081j Ω</td>
+<td><span class="arithmatex">\(Z_\infty\)</span> = 0.6249 + 0.3081j Ω</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(\lvert U_E\rvert\)</span></td>
+<td>243.708 V</td>
+<td><span class="arithmatex">\(\lvert 1-k\rvert \cdot I \cdot \lvert Z_\infty\rvert\)</span> = 243.708 V</td>
+</tr>
+<tr>
+<td><code>value</code> · 3I<sub>0</sub> · |Z<sub>E</sub>|</td>
+<td>243.708 V</td>
+<td></td>
+</tr>
+<tr>
+<td><code>value_current</code> · 3I<sub>0</sub> · |Z<sub>E</sub>|</td>
+<td>250.142 V</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>The chain closes with the coupling factor of the cable. <code>value_current</code> lies
+2.6 % above it here: along the run the electrode currents decay and rotate
+with the complex propagation constant of the ladder, the half-plane split
+leaves out those that point backwards, and the sum of the rest exceeds
+<span class="arithmatex">\(\lvert 1-k\rvert \cdot I\)</span>.</p>
+<p>The current-weighted mean potential of the earth group and that mean divided by
+<code>I_E</code> — which release 0.6.0 reported as <code>u_earthing</code> / <code>z_earthing</code> —
+are kept as <code>u_earthing_group</code> / <code>z_earthing_group</code>. On that pair the chain
+closes to machine precision, but only because <code>z_earthing_group</code> is <em>defined</em> as
+<code>u_earthing_group / I_E</code>; it checks nothing. On the long run above they are
+138.83 V and 0.3867 Ω, 43 % and 44.5 % below the fault-bus EPR and the
+driving-point impedance, which is why they are no longer reported as <code>U_E</code> and
+<code>Z_E</code>: taken into a touch-voltage assessment they are unconservative.</p>
+<p>The fault current the factor divides by is stored as <code>i_fault</code>
+(<code>sum(scaling * I_src)</code> over the sources that reach the fault).</p>
+<p><code>value</code> uses a <em>different</em> reference: the mutual coupling removed, but the
+cable shield still in place as a metallic return path. Most of the current
+still comes back through the shield rather than through the soil, so that
+reference voltage is far below <code>Z_E \cdot 3I_0</code> (the norm's <code>r = 1</code>, the whole
+fault current through the earthing impedance). Both factors are correct
+answers; they answer different questions.</p>
+<h2 id="the-two-factors-are-not-two-computations-of-one-number">The two factors are not two computations of one number<a class="headerlink" href="#the-two-factors-are-not-two-computations-of-one-number" title="Permanent link">&para;</a></h2>
+<p>They coincide in exactly one case, and it is worth knowing which. For a route
+with shield impedance <span class="arithmatex">\(Z_s\)</span>, mutual impedance <span class="arithmatex">\(Z_m\)</span> and station electrodes
+summing to <span class="arithmatex">\(Z_E\)</span> along the earth-return path,</p>
+<div class="arithmatex">\[
+r_\text{coupling} = \frac{Z_s - Z_m}{Z_s},
+\qquad
+r_I = \frac{Z_s - Z_m}{Z_s + Z_E},
+\]</div>
+<p>so their ratio is the current divider <span class="arithmatex">\(Z_s/(Z_s + Z_E)\)</span> and nothing else. The
+first is the <strong>ideally bonded limit</strong> — the tabulated property of the cable,
+<span class="arithmatex">\(1 - Z_m/Z_s\)</span>, independent of the station earths by construction. The second is
+what the earthing system of <em>this</em> network actually passes into the soil.</p>
+<p>Verified against the closed form to machine precision over five decades of
+electrode impedance on a two-section line with <span class="arithmatex">\(Z_s = 0.2 + 0.4\mathrm{j}\ \Omega\)</span>:</p>
+<table>
+<thead>
+<tr>
+<th>electrode per station</th>
+<th><span class="arithmatex">\(r_\text{coupling}\)</span></th>
+<th><span class="arithmatex">\(r_I\)</span></th>
+<th>ratio</th>
+<th><span class="arithmatex">\(Z_s/(Z_s+Z_E)\)</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>10 Ω</td>
+<td>0.500000</td>
+<td>0.011067</td>
+<td>0.022135</td>
+<td>0.022135</td>
+</tr>
+<tr>
+<td>1 Ω</td>
+<td>0.500000</td>
+<td>0.100000</td>
+<td>0.200000</td>
+<td>0.200000</td>
+</tr>
+<tr>
+<td>0.1 Ω</td>
+<td>0.500000</td>
+<td>0.395285</td>
+<td>0.790569</td>
+<td>0.790569</td>
+</tr>
+<tr>
+<td>0.01 Ω</td>
+<td>0.500000</td>
+<td>0.489820</td>
+<td>0.979639</td>
+<td>0.979639</td>
+</tr>
+<tr>
+<td>10 µΩ</td>
+<td>0.500000</td>
+<td>0.499990</td>
+<td>0.999980</td>
+<td>0.999980</td>
+</tr>
+</tbody>
+</table>
+<p>A wide gap is therefore a statement about the network, not a defect: the
+stations are not bonded well enough for the cable's tabulated reduction factor
+to describe what the soil sees. <code>groundinsight</code> logs the divider at INFO where
+it falls below 0.5, rather than as a warning — with ordinary station electrodes
+it is the normal case, and a log that warns about the normal case stops being
+read.</p>
+<h2 id="frequency-dependence-of-the-reduction-factor">Frequency dependence of the reduction factor<a class="headerlink" href="#frequency-dependence-of-the-reduction-factor" title="Permanent link">&para;</a></h2>
+<p>For a shielded cable the impedances split into a resistive and an
+inductive part,</p>
+<div class="arithmatex">\[
+Z_{\text{self}}(f) = R + j\,\omega L,
+\qquad
+Z_{\text{mutual}}(f) = j\,\omega M,
+\qquad \omega = 2\pi f.
+\]</div>
+<p>With full coupling between the faulted phase and the grounding conductor
+(the geometric ideal <span class="arithmatex">\(M = L\)</span>) the closed form simplifies to</p>
+<div class="arithmatex">\[
+r(f) \;=\; \left| 1 - \frac{j\,\omega L}{R + j\,\omega L} \right|
+       \;=\; \frac{R}{\sqrt{R^{2} + (\omega L)^{2}}}.
+\]</div>
+<p>Two limits follow directly:</p>
+<ul>
+<li><span class="arithmatex">\(f \to 0\)</span>: <span class="arithmatex">\(\omega L \to 0\)</span>, so <span class="arithmatex">\(Z_{\text{mutual}}/Z_{\text{self}} \to 0\)</span>
+  and <span class="arithmatex">\(r \to 1\)</span>. At DC the shield carries no induced current, the entire
+  fault current flows through the local earth path and the reduction
+  factor equals 1.</li>
+<li><span class="arithmatex">\(f \to \infty\)</span>: the imaginary parts dominate, so
+  <span class="arithmatex">\(Z_{\text{mutual}}/Z_{\text{self}} \to M/L = 1\)</span> and <span class="arithmatex">\(r \to 0\)</span>. At high
+  frequency the shield short-circuits the inductive coupling, almost the
+  entire fault current returns metallically and the EPR collapses.</li>
+</ul>
+<p>In a real cable the resistive part is small compared with <span class="arithmatex">\(\omega L\)</span>
+already at power frequency, which is why MV cables typically reach
+<span class="arithmatex">\(r \approx 0.3 \ldots 0.4\)</span> at 50 Hz and the reduction factor decays
+quickly above one or two hundred Hz. This convergence is exercised
+explicitly by
+<code>tests/test_topology_and_reduction.py::test_reduction_factor_sweep_*</code>,
+which sweeps a single MV cable section and a 20-bus symmetric ring
+from 50 Hz to 5 kHz and asserts both the closed form above and the
+monotonic decay towards zero.</p>
+<h2 id="grounding-impedance">Grounding impedance<a class="headerlink" href="#grounding-impedance" title="Permanent link">&para;</a></h2>
+<p><code>ResultGroundingImpedance.value</code> is <code>Z_E</code> in the EN 50522 sense: the
+driving-point impedance of the earthing network at the fault bus, identical to
+<code>ResultReductionFactor.z_earthing</code>,</p>
+<div class="arithmatex">\[
+Z_G(f) = Z_E(f) = Z_\text{dp}(F, f) = \left(Y_E(f)^{-1}\right)_{FF},
+\]</div>
+<p>with <span class="arithmatex">\(Y_E\)</span> the nodal matrix of electrodes and shields alone — without the
+inductive coupling and without the Thevenin loop closures of voltage sources,
+which belong to the fault loop rather than to the earthing system. It is the
+impedance an earthing-impedance measurement at the station sees, the stations
+bonded to it through cable shields included; <code>gi.bus_response(...)</code> (Möbius
+form) and <code>gi.analyze_cuts(...)</code> (without voltage sources) reproduce it. Note
+that it is not the station electrodes in parallel either — the shield sections
+between them add to it.</p>
+<p><code>Z_E</code> is <code>None</code> (with a <code>ModelAssumptionWarning</code> <code>EARTHING_IMPEDANCE_UNDEFINED</code>)
+where the fault side reaches remote earth only through the loop closure of a
+voltage source: no bus connected to the fault bus through shields carries an
+electrode. That is decided from the structure of the earthing network, not
+from the solver — the matrix of such a group of buses is singular only up to
+rounding and a solve returns a meaningless 1e15 Ω. In <code>bus_response</code>, where
+the electrode at the studied bus is the fault side's only one, every ampere
+leaves through it: <code>Z_E = Z_B + BusResponse.z_fault_ideal</code>.</p>
+<p>The quotient of the earth group's mean potential by <code>I_E</code>, which release
+0.6.0 reported as the grounding impedance, is kept as
+<code>z_earthing_group</code>; on a long homogeneous run it is 44.5 % below <code>Z_E</code>. The
+definition before 0.6.0, <span class="arithmatex">\(u_{\text{EPR}}/(r \cdot I_{\text{fault}})\)</span>, mixed the
+coupling ratio into an impedance.</p>
+<p>It is exposed <strong>per frequency</strong> through <code>net.res_all_impedances()</code>, which
+has one row per (fault, frequency) and no RMS row: a grounding impedance is
+defined for a frequency, and there is no meaningful way to reduce a set of
+complex impedances at different frequencies to one scalar. The RMS rows live
+on <code>net.res_buses()</code> and <code>net.res_branches()</code>, where they aggregate
+<em>quantities</em> (<span class="arithmatex">\(\sqrt{\sum_f |x(f)|^2}\)</span>), and are marked there by the
+<code>is_rms</code> column.</p>
+<h2 id="results-stored-with-the-earlier-definition">Results stored with the earlier definition<a class="headerlink" href="#results-stored-with-the-earlier-definition" title="Permanent link">&para;</a></h2>
+<p>A result saved by a release that reported the group quantities as <span class="arithmatex">\(U_E\)</span> and
+<span class="arithmatex">\(Z_E\)</span> — in a JSON project file or a database — still loads. Its stored values
+are moved to <code>u_earthing_group</code> / <code>z_earthing_group</code>, <code>u_earthing</code>,
+<code>z_earthing</code> and the grounding impedance stay empty, and the result carries
+an <code>info</code> diagnostic, code <code>LEGACY_EARTHING_DEFINITION</code>, that says why. Run
+the fault again with <code>run_fault</code> to obtain <span class="arithmatex">\(U_E\)</span> and <span class="arithmatex">\(Z_E\)</span> in the current
+sense; nothing is recomputed silently on load.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024&ndash;2026 Christian Ehlert
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Ce1ectric/groundinsight" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "content.code.annotate", "toc.follow", "search.highlight", "search.share"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

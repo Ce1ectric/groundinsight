@@ -1,0 +1,4907 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Simulation of grounding systems in electrical power grids.">
+      
+      
+      
+        <link rel="canonical" href="https://ce1ectric.github.io/groundinsight/reference/results/">
+      
+      
+        <link rel="prev" href="../../examples/thermal_limits/">
+      
+      
+        <link rel="next" href="../conventions/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Result tables - groundinsight</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#result-tables" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="groundinsight" class="md-header__button md-logo" aria-label="groundinsight" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            groundinsight
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Result tables
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Ce1ectric/groundinsight" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundinsight
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../howto/types-from-datasheets/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  How-to guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../explanation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Understanding the model
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../examples/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../project/changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Project
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="groundinsight" class="md-nav__button md-logo" aria-label="groundinsight" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    groundinsight
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Ce1ectric/groundinsight" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundinsight
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../getting-started/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/first-calculation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first fault calculation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/ring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    From a line to a ring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/types-from-datasheets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bus and branch types from data sheets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/harmonics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Harmonics, fault scalings and DC
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/en50522-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compare results with EN 50522 limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/sweeps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter sweeps and statistics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/outage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outage and what-if studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/inverse-rho/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admissible soil resistivity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/pandapower/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Import from pandapower
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/thermal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Thermal limits of earthing conductors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Save, load and migrate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Large and meshed networks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics, logging and warnings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../howto/service-layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Service layer and command line
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Understanding the model
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Understanding the model
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/theory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model and assumptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/formulas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Impedance formulas and where they come from
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/phase-currents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase currents in rings and meshes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/reduction-factors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reduction factors and earthing impedance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Splitting the network, location response
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/dc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Direct current (f = 0)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/verification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verification and validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/standards/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Standards and scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../examples/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/minimal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Minimal example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/mv_ring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    20 kV MV ring — stationary fault analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/mv_ring_transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    20 kV MV ring — transient analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/pandapower_import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    — pandapower import walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/fault_sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault sweep — earthing impedance and reduction factors per bus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/fault_decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decomposing a fault: cuts, both reduction factors and a location without its electrode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/cuts_and_rho_f_sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Which electrode does the faulted station need?
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/bus_response_extremes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Characterising a location without knowing its electrode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/mesh_phase_currents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase currents in rings, meshes and parallel cables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/dc_studies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Direct-current studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/thermal_limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Thermal limits of earthing conductors (IEC 60949 / IEC 60909-0)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Result tables
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Result tables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#rules-that-hold-for-every-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rules that hold for every frame
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results-of-a-solve" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results of a solve
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Results of a solve">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#networkres_busesfaultnone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network.res_buses(fault=None)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#networkres_branchesfaultnone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network.res_branches(fault=None)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#networkres_all_impedances" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network.res_all_impedances()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#networkres_faultfault" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network.res_fault(fault)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#studies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Studies
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Studies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sweepresultbuses-branches-impedances-cuts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SweepResult.buses(), .branches(), .impedances(), .cuts()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#outagestudyresultcompare_buses-and-compare_branches" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OutageStudyResult.compare_buses() and .compare_branches()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cutanalysisto_polars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CutAnalysis.to_polars()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#select_rho_f_from_catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        select_rho_f_from_catalog(...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summarizeframe-value-by-and-classifyframe-value-edges" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        summarize(frame, value, by=...) and classify(frame, value, edges)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resulttransientto_polars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ResultTransient.to_polars()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_reference_cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_reference_cases()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#thermal-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Thermal checks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Thermal checks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#check_conductor_limitsnetwork-fault" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_conductor_limits(network, fault, ...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check_node_limitsnetwork-fault" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_node_limits(network, fault, ...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#importers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Importers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Importers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#preview_pandapower_importnet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        preview_pandapower_import(net, ...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#read_shortcircuit_resultsnet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        read_shortcircuit_results(net, ...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apply_shortcircuit_characteristics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        apply_shortcircuit_characteristics(...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../conventions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conventions and units
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../formula-syntax/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Formula syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../warnings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Warnings and diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary and symbols
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../api/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6_6" id="__nav_6_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/toplevel/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Top-level package
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/network_operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/service/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Service functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/core_models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/electrical_network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Electrical network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pathfinder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pathfinder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/plotting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plotting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O — network importers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/outage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outage studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/sweep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter sweeps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/decomposition/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fault-location decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/response/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Location response
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference cases
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/statistics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Statistics and classification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/transient/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transient simulations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/citation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/license/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    License
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit-log/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#rules-that-hold-for-every-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rules that hold for every frame
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results-of-a-solve" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results of a solve
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Results of a solve">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#networkres_busesfaultnone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network.res_buses(fault=None)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#networkres_branchesfaultnone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network.res_branches(fault=None)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#networkres_all_impedances" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network.res_all_impedances()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#networkres_faultfault" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network.res_fault(fault)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#studies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Studies
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Studies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sweepresultbuses-branches-impedances-cuts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SweepResult.buses(), .branches(), .impedances(), .cuts()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#outagestudyresultcompare_buses-and-compare_branches" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OutageStudyResult.compare_buses() and .compare_branches()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cutanalysisto_polars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CutAnalysis.to_polars()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#select_rho_f_from_catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        select_rho_f_from_catalog(...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summarizeframe-value-by-and-classifyframe-value-edges" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        summarize(frame, value, by=...) and classify(frame, value, edges)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resulttransientto_polars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ResultTransient.to_polars()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_reference_cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_reference_cases()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#thermal-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Thermal checks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Thermal checks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#check_conductor_limitsnetwork-fault" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_conductor_limits(network, fault, ...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check_node_limitsnetwork-fault" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_node_limits(network, fault, ...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#importers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Importers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Importers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#preview_pandapower_importnet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        preview_pandapower_import(net, ...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#read_shortcircuit_resultsnet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        read_shortcircuit_results(net, ...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apply_shortcircuit_characteristics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        apply_shortcircuit_characteristics(...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+  
+  
+                  
+
+
+  
+  
+
+
+<h1 id="result-tables">Result tables<a class="headerlink" href="#result-tables" title="Permanent link">&para;</a></h1>
+<p>Every solve stores one <code>Result</code> per fault on the network, and the package
+hands results out as <a href="https://pola.rs">Polars</a> data frames: the <code>res_*</code>
+accessors of <code>Network</code>, the study results, the thermal checks and the
+importers. This page lists every column of every frame with its type, unit
+and meaning.</p>
+<p>The column names and types in the tables below are <strong>generated from the code</strong>
+when this site is built — from the schema constants that pin the frames
+(<code>RES_BUSES_SCHEMA</code>, <code>gi.RES_FAULT_SCHEMA</code>, <code>CUT_FRAME_SCHEMA</code>, …) or, where a
+frame has no constant, from a frame built on a small network at build time.
+A test compares the constants with the frames of a real solve, so a table
+cannot describe a column the code no longer has.</p>
+<h2 id="rules-that-hold-for-every-frame">Rules that hold for every frame<a class="headerlink" href="#rules-that-hold-for-every-frame" title="Permanent link">&para;</a></h2>
+<p><strong>Units.</strong> Phasors are RMS values, currents in A, voltages in V, impedances
+in Ω, angles in degrees; the column name ends with the unit (<code>_A</code>, <code>_V</code>,
+<code>_Ohm</code>, <code>_degree</code> or <code>_deg</code>, <code>_Hz</code>, <code>_s</code>, <code>_mm2</code>). The time series of a
+transient study are instantaneous values. See
+<a href="../conventions/">Conventions and units</a>.</p>
+<p><strong>Signs.</strong> Magnitudes do not depend on a sign convention, angles do. Earth
+potentials, electrode currents and injections are reported in the earth-side
+frame (a current that enters the earthing network at the source and leaves it
+at the fault), branch currents for the physical fault, counted from
+<code>from_bus</code> to <code>to_bus</code> — see
+<a href="../conventions/#signs-and-phase-angles">Signs and phase angles</a>.</p>
+<p><strong>Frequencies and the RMS row.</strong> <code>frequency_Hz</code> is <code>Float64</code> in every frame
+of a solve. <code>res_buses</code>, <code>res_branches</code> and <code>res_fault</code> add <strong>one RMS row</strong>
+per element that combines all frequencies as <span class="arithmatex">\(\sqrt{\sum_f |X(f)|^2}\)</span>; that
+row has <code>is_rms</code> true and <code>frequency_Hz</code> null, and its angles, ratios and
+impedances are null, because they have no RMS. <code>res_all_impedances</code> and the
+decomposition frame have no RMS row. The <strong>exception</strong> are the comparison
+frames of an outage study: there <code>frequency_Hz</code> is text — <code>"50.0"</code>, or
+<code>"RMS"</code> for the RMS row — because it is the key the scenarios are joined on.
+Filter with <code>pl.col("is_rms")</code> in the frames of a solve and with
+<code>pl.col("frequency_Hz") == "RMS"</code> in a comparison frame.</p>
+<p><strong>Two reduction factors.</strong> <code>reduction_factor</code> (in <code>res_fault</code>: <code>r_epr</code>) is
+the EPR ratio with and without the inductive coupling — a property of the
+line, blind to the electrodes, and <strong>not</strong> the reduction factor of EN 50522.
+<code>reduction_factor_current</code> (in <code>res_fault</code>: <code>r_current</code>) is |I_E| / |I_F|,
+the reduction factor <em>r</em> of EN 50522. They coincide only for ideally bonded
+stations; see <a href="../conventions/#which-reduction-factor-is-which">Which reduction factor is which</a>.</p>
+<p><strong>Missing values.</strong> A quantity the result marks as undefined is <code>null</code>, never
+a number: the current-based factor at a frequency without fault current, the
+earthing impedance of a fault bus without an electrode in its earthing group
+(diagnostic <code>EARTHING_IMPEDANCE_UNDEFINED</code>, see
+<a href="../warnings/">Warnings and diagnostics</a>). The schemas are pinned, so an empty
+result is an empty frame with these columns, which can still be selected and
+filtered.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">polars</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pl</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">groundinsight</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gi</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">station</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">BusType</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"station"</span><span class="p">,</span> <span class="n">system_type</span><span class="o">=</span><span class="s2">"Station"</span><span class="p">,</span> <span class="n">voltage_level</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>                     <span class="n">impedance_formula</span><span class="o">=</span><span class="s2">"2.0"</span><span class="p">)</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">cable</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">BranchType</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"cable"</span><span class="p">,</span> <span class="n">grounding_conductor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>                      <span class="n">self_impedance_formula</span><span class="o">=</span><span class="s2">"(0.2 + j*2*pi*f*1.2e-3)*l"</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>                      <span class="n">mutual_impedance_formula</span><span class="o">=</span><span class="s2">"(j*2*pi*f*1.0e-3)*l"</span><span class="p">)</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">net</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">create_network</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"tables"</span><span class="p">,</span> <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">,</span> <span class="mf">250.0</span><span class="p">])</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"UW"</span><span class="p">,</span> <span class="s2">"S1"</span><span class="p">,</span> <span class="s2">"S2"</span><span class="p">):</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">gi</span><span class="o">.</span><span class="n">create_bus</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">station</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_branch</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"K1"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">cable</span><span class="p">,</span> <span class="n">from_bus</span><span class="o">=</span><span class="s2">"UW"</span><span class="p">,</span> <span class="n">to_bus</span><span class="o">=</span><span class="s2">"S1"</span><span class="p">,</span> <span class="n">length</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_branch</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"K2"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">cable</span><span class="p">,</span> <span class="n">from_bus</span><span class="o">=</span><span class="s2">"S1"</span><span class="p">,</span> <span class="n">to_bus</span><span class="o">=</span><span class="s2">"S2"</span><span class="p">,</span> <span class="n">length</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_source</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"infeed"</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="s2">"UW"</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="p">{</span><span class="mf">50.0</span><span class="p">:</span> <span class="mf">1000.0</span><span class="p">,</span> <span class="mf">250.0</span><span class="p">:</span> <span class="mf">50.0</span><span class="p">},</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_fault</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"F"</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="s2">"S2"</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="n">gi</span><span class="o">.</span><span class="n">run_fault</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="s2">"F"</span><span class="p">)</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="n">buses</span> <span class="o">=</span> <span class="n">net</span><span class="o">.</span><span class="n">res_buses</span><span class="p">(</span><span class="n">fault</span><span class="o">=</span><span class="s2">"F"</span><span class="p">)</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="n">at_50_hz</span> <span class="o">=</span> <span class="n">buses</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"frequency_Hz"</span><span class="p">)</span> <span class="o">==</span> <span class="mf">50.0</span><span class="p">)</span>    <span class="c1"># one row per bus</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="n">rms</span> <span class="o">=</span> <span class="n">buses</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"is_rms"</span><span class="p">))</span>                       <span class="c1"># one row per bus, frequency_Hz null</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="nb">print</span><span class="p">(</span><span class="n">buses</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">at_50_hz</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">rms</span><span class="p">[</span><span class="s2">"frequency_Hz"</span><span class="p">]</span><span class="o">.</span><span class="n">null_count</span><span class="p">())</span>   <span class="c1"># (9, 10) (3, 10) 3</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="n">study</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">run_outage_study</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">fault</span><span class="o">=</span><span class="s2">"F"</span><span class="p">,</span> <span class="n">scenarios</span><span class="o">=</span><span class="p">[</span><span class="n">gi</span><span class="o">.</span><span class="n">Outage</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"K2 out"</span><span class="p">,</span> <span class="n">disabled_branches</span><span class="o">=</span><span class="p">[</span><span class="s2">"K2"</span><span class="p">])])</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="n">compared</span> <span class="o">=</span> <span class="n">study</span><span class="o">.</span><span class="n">compare_buses</span><span class="p">()</span>
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="nb">print</span><span class="p">(</span><span class="n">compared</span><span class="o">.</span><span class="n">schema</span><span class="p">[</span><span class="s2">"frequency_Hz"</span><span class="p">])</span>                     <span class="c1"># String</span>
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="nb">print</span><span class="p">(</span><span class="n">compared</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"frequency_Hz"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"RMS"</span><span class="p">)</span><span class="o">.</span><span class="n">height</span><span class="p">)</span>   <span class="c1"># 6: 3 buses x 2 scenarios</span>
+</code></pre></div>
+<h2 id="results-of-a-solve">Results of a solve<a class="headerlink" href="#results-of-a-solve" title="Permanent link">&para;</a></h2>
+<h3 id="networkres_busesfaultnone"><code>Network.res_buses(fault=None)</code><a class="headerlink" href="#networkres_busesfaultnone" title="Permanent link">&para;</a></h3>
+<p>One row per bus and frequency plus one RMS row per bus, for one fault or for
+every stored result. <code>I_bus_A</code> is the current through the bus's own electrode
+into the soil; <code>I_inj_A</code> is the current of the earthing conductor at a source
+or fault bus. Sizing an earthing conductor with <code>I_bus_A</code> underestimates it —
+the thermal check of the node uses the right one for each element.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bus_name</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the bus</td>
+</tr>
+<tr>
+<td><code>fault</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the fault the result belongs to</td>
+</tr>
+<tr>
+<td><code>frequency_Hz</code></td>
+<td>Float64</td>
+<td>Hz</td>
+<td>frequency of the row; null on the RMS row</td>
+</tr>
+<tr>
+<td><code>is_rms</code></td>
+<td>Boolean</td>
+<td>–</td>
+<td>true on the one RMS row per element, which combines all frequencies as √Σ|X(f)|²</td>
+</tr>
+<tr>
+<td><code>EPR_V</code></td>
+<td>Float64</td>
+<td>V</td>
+<td>earth potential rise of the bus, <code>ResultBus.uepr_freq</code>; RMS row: <code>ResultBus.uepr</code></td>
+</tr>
+<tr>
+<td><code>EPR_degree</code></td>
+<td>Float64</td>
+<td>°</td>
+<td>angle of the EPR in the earth-side sign frame (see Conventions); null on the RMS row</td>
+</tr>
+<tr>
+<td><code>I_bus_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>electrode current: what the bus's own electrode passes into the soil, <code>ResultBus.ia_freq</code>; summed over all buses it is zero</td>
+</tr>
+<tr>
+<td><code>I_bus_degree</code></td>
+<td>Float64</td>
+<td>°</td>
+<td>angle of <code>I_bus_A</code>; null on the RMS row</td>
+</tr>
+<tr>
+<td><code>I_inj_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>current of the earthing conductor at a source or fault bus, <code>ResultBus.i_inj_freq</code> -- the source current at a source bus, the fault current at the fault bus, 0 elsewhere; the quantity a conductor is sized for</td>
+</tr>
+<tr>
+<td><code>I_inj_degree</code></td>
+<td>Float64</td>
+<td>°</td>
+<td>angle of <code>I_inj_A</code>; null on the RMS row</td>
+</tr>
+</tbody>
+</table>
+<h3 id="networkres_branchesfaultnone"><code>Network.res_branches(fault=None)</code><a class="headerlink" href="#networkres_branchesfaultnone" title="Permanent link">&para;</a></h3>
+<p>One row per branch and frequency plus one RMS row per branch.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>branch_name</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the branch</td>
+</tr>
+<tr>
+<td><code>fault</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the fault the result belongs to</td>
+</tr>
+<tr>
+<td><code>frequency_Hz</code></td>
+<td>Float64</td>
+<td>Hz</td>
+<td>frequency of the row; null on the RMS row</td>
+</tr>
+<tr>
+<td><code>is_rms</code></td>
+<td>Boolean</td>
+<td>–</td>
+<td>true on the one RMS row per element, which combines all frequencies as √Σ|X(f)|²</td>
+</tr>
+<tr>
+<td><code>I_branch_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>current of the earthing conductor (cable screen, earth wire) of the branch, <code>ResultBranch.i_s_freq</code>; counted positive from <code>from_bus</code> to <code>to_bus</code> for the physical fault</td>
+</tr>
+<tr>
+<td><code>I_branch_degree</code></td>
+<td>Float64</td>
+<td>°</td>
+<td>angle of <code>I_branch_A</code>; null on the RMS row</td>
+</tr>
+</tbody>
+</table>
+<h3 id="networkres_all_impedances"><code>Network.res_all_impedances()</code><a class="headerlink" href="#networkres_all_impedances" title="Permanent link">&para;</a></h3>
+<p>One row per stored fault and frequency, no RMS row: the earthing impedance and
+<strong>both</strong> reduction factors at the fault location.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fault_name</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the fault (this frame says <code>fault_name</code>, the others <code>fault</code>)</td>
+</tr>
+<tr>
+<td><code>fault_bus</code></td>
+<td>String</td>
+<td>–</td>
+<td>bus the fault sits on</td>
+</tr>
+<tr>
+<td><code>frequency_Hz</code></td>
+<td>Float64</td>
+<td>Hz</td>
+<td>frequency of the row; the frame has no RMS row</td>
+</tr>
+<tr>
+<td><code>grounding_impedance_Ohm</code></td>
+<td>Float64</td>
+<td>Ω</td>
+<td>earthing impedance Z_E of EN 50522 at the fault bus: the driving-point impedance of the earthing network seen from there (<code>ResultGroundingImpedance.value</code>, equal to <code>z_earthing</code>); null where it is undefined</td>
+</tr>
+<tr>
+<td><code>grounding_impedance_deg</code></td>
+<td>Float64</td>
+<td>°</td>
+<td>angle of Z_E</td>
+</tr>
+<tr>
+<td><code>reduction_factor</code></td>
+<td>Float64</td>
+<td>–</td>
+<td><code>value</code>: EPR at the fault bus with the inductive coupling over the EPR without it -- a property of the line, <strong>not</strong> the r of EN 50522</td>
+</tr>
+<tr>
+<td><code>reduction_factor_current</code></td>
+<td>Float64</td>
+<td>–</td>
+<td><code>value_current</code>: |I_E| / |I_F|, the reduction factor r of EN 50522</td>
+</tr>
+</tbody>
+</table>
+<h3 id="networkres_faultfault"><code>Network.res_fault(fault)</code><a class="headerlink" href="#networkres_faultfault" title="Permanent link">&para;</a></h3>
+<p>The key figures of one fault, read from the stored result: one row per network
+frequency plus one RMS row. The schema is <code>gi.RES_FAULT_SCHEMA</code>; this is the
+frame the <a href="../../howto/en50522-check/">EN 50522 how-to</a> and the command line
+report.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fault</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the fault</td>
+</tr>
+<tr>
+<td><code>fault_bus</code></td>
+<td>String</td>
+<td>–</td>
+<td>bus the result was computed for</td>
+</tr>
+<tr>
+<td><code>frequency_Hz</code></td>
+<td>Float64</td>
+<td>Hz</td>
+<td>frequency of the row; null on the RMS row</td>
+</tr>
+<tr>
+<td><code>is_rms</code></td>
+<td>Boolean</td>
+<td>–</td>
+<td>true on the one RMS row per element, which combines all frequencies as √Σ|X(f)|²</td>
+</tr>
+<tr>
+<td><code>I_F_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>fault current I_F (3I_0 of EN 50522): the currents of the sources that reach the fault, times the fault scalings (<code>ResultReductionFactor.i_fault</code>); RMS row √Σ|I_F(f)|²</td>
+</tr>
+<tr>
+<td><code>I_F_degree</code></td>
+<td>Float64</td>
+<td>°</td>
+<td>angle of I_F; null on the RMS row</td>
+</tr>
+<tr>
+<td><code>EPR_fault_V</code></td>
+<td>Float64</td>
+<td>V</td>
+<td>earth potential rise of the fault bus; RMS row: its stored RMS value</td>
+</tr>
+<tr>
+<td><code>EPR_fault_degree</code></td>
+<td>Float64</td>
+<td>°</td>
+<td>angle of that EPR; null on the RMS row</td>
+</tr>
+<tr>
+<td><code>EPR_max_V</code></td>
+<td>Float64</td>
+<td>V</td>
+<td>largest earth potential rise of any bus at that frequency (RMS row: largest RMS value)</td>
+</tr>
+<tr>
+<td><code>EPR_max_bus</code></td>
+<td>String</td>
+<td>–</td>
+<td>the bus where <code>EPR_max_V</code> occurs</td>
+</tr>
+<tr>
+<td><code>r_epr</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>EPR-based reduction factor <code>value</code> -- not the r of EN 50522; null on the RMS row</td>
+</tr>
+<tr>
+<td><code>r_current</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>current-based reduction factor <code>value_current</code> = |I_E| / |I_F|, the r of EN 50522; null on the RMS row and where it is undefined</td>
+</tr>
+<tr>
+<td><code>I_E_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>earth-return current I_E (<code>i_earth</code>); RMS row √Σ|I_E(f)|²</td>
+</tr>
+<tr>
+<td><code>U_E_V</code></td>
+<td>Float64</td>
+<td>V</td>
+<td>earthing voltage U_E of EN 50522: the EPR at the fault bus (<code>u_earthing</code>); RMS row √Σ|U_E(f)|², the value compared with U_Tp</td>
+</tr>
+<tr>
+<td><code>Z_E_Ohm</code></td>
+<td>Float64</td>
+<td>Ω</td>
+<td>earthing impedance Z_E of EN 50522, the driving point of the earthing network at the fault bus (<code>z_earthing</code>); null on the RMS row</td>
+</tr>
+<tr>
+<td><code>Z_E_degree</code></td>
+<td>Float64</td>
+<td>°</td>
+<td>angle of Z_E; null on the RMS row</td>
+</tr>
+<tr>
+<td><code>n_diagnostics</code></td>
+<td>Int64</td>
+<td>–</td>
+<td>number of records in <code>Result.diagnostics</code>, the same on every row</td>
+</tr>
+</tbody>
+</table>
+<h2 id="studies">Studies<a class="headerlink" href="#studies" title="Permanent link">&para;</a></h2>
+<h3 id="sweepresultbuses-branches-impedances-cuts"><code>SweepResult.buses()</code>, <code>.branches()</code>, <code>.impedances()</code>, <code>.cuts()</code><a class="headerlink" href="#sweepresultbuses-branches-impedances-cuts" title="Permanent link">&para;</a></h3>
+<p>A parameter sweep stacks the frames of its points: <code>buses()</code> the rows of
+<code>res_buses</code>, <code>branches()</code> those of <code>res_branches</code> (collected only with
+<code>run_sweep(..., collect_branches=True)</code>), <code>impedances()</code> those of
+<code>res_all_impedances</code> for the swept fault, and <code>cuts()</code> those of
+<code>CutAnalysis.to_polars()</code> (only with <code>cuts=</code>). Each frame starts with the
+column <code>point</code> (<code>String</code>, the <code>SweepPoint.label</code>) followed by one column per key
+of <code>SweepPoint.parameters</code> — <code>rho_f_points</code> adds <code>bus</code>, <code>rho_Ohm_m</code> and
+<code>k1</code> … <code>k5</code> — and then the columns of the frame it stacks, with the types
+listed above. A frame with nothing collected is an empty frame without
+columns. See <a href="../../howto/sweeps/">Parameter sweeps and statistics</a>.</p>
+<h3 id="outagestudyresultcompare_buses-and-compare_branches"><code>OutageStudyResult.compare_buses()</code> and <code>.compare_branches()</code><a class="headerlink" href="#outagestudyresultcompare_buses-and-compare_branches" title="Permanent link">&para;</a></h3>
+<p>Long format, one row per element, frequency, scenario and metric, with the
+difference to a reference scenario (<code>against=</code>, by default the base case).
+<code>frequency_Hz</code> is text here (see above).</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bus_name</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the bus</td>
+</tr>
+<tr>
+<td><code>frequency_Hz</code></td>
+<td>String</td>
+<td>–</td>
+<td>frequency as <strong>text</strong> (<code>"50.0"</code>) or <code>"RMS"</code> -- the join key of the comparison, not a number</td>
+</tr>
+<tr>
+<td><code>metric</code></td>
+<td>String</td>
+<td>–</td>
+<td>the compared <code>res_buses</code> column, <code>EPR_V</code> unless <code>columns=</code> names others</td>
+</tr>
+<tr>
+<td><code>value</code></td>
+<td>Float64</td>
+<td>unit of the metric</td>
+<td>the metric in this scenario</td>
+</tr>
+<tr>
+<td><code>scenario</code></td>
+<td>String</td>
+<td>–</td>
+<td>scenario label (<code>base</code> for the unmodified network)</td>
+</tr>
+<tr>
+<td><code>delta_vs_base</code></td>
+<td>Float64</td>
+<td>unit of the metric</td>
+<td>value minus the reference scenario's value; the suffix is the reference label (<code>against=</code>)</td>
+</tr>
+<tr>
+<td><code>delta_pct_vs_base</code></td>
+<td>Float64</td>
+<td>%</td>
+<td>100 · delta / reference value; null where the reference value is 0</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>branch_name</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the branch</td>
+</tr>
+<tr>
+<td><code>frequency_Hz</code></td>
+<td>String</td>
+<td>–</td>
+<td>frequency as <strong>text</strong> (<code>"50.0"</code>) or <code>"RMS"</code></td>
+</tr>
+<tr>
+<td><code>metric</code></td>
+<td>String</td>
+<td>–</td>
+<td>the compared <code>res_branches</code> column, <code>I_branch_A</code> unless <code>columns=</code> names others</td>
+</tr>
+<tr>
+<td><code>value</code></td>
+<td>Float64</td>
+<td>unit of the metric</td>
+<td>the metric in this scenario</td>
+</tr>
+<tr>
+<td><code>scenario</code></td>
+<td>String</td>
+<td>–</td>
+<td>scenario label</td>
+</tr>
+<tr>
+<td><code>delta_vs_base</code></td>
+<td>Float64</td>
+<td>unit of the metric</td>
+<td>value minus the reference scenario's value</td>
+</tr>
+<tr>
+<td><code>delta_pct_vs_base</code></td>
+<td>Float64</td>
+<td>%</td>
+<td>100 · delta / reference value; null where the reference value is 0</td>
+</tr>
+</tbody>
+</table>
+<h3 id="cutanalysisto_polars"><code>CutAnalysis.to_polars()</code><a class="headerlink" href="#cutanalysisto_polars" title="Permanent link">&para;</a></h3>
+<p>One row per direction (cut) and frequency of <code>gi.analyze_cuts</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fault</code></td>
+<td>String</td>
+<td>–</td>
+<td>the analysed fault</td>
+</tr>
+<tr>
+<td><code>fault_bus</code></td>
+<td>String</td>
+<td>–</td>
+<td>bus the fault sits on, the reference point of the decomposition</td>
+</tr>
+<tr>
+<td><code>cut</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the direction (a <code>Cut</code>, or the implicit <code>rest</code> / <code>source_loop</code> side)</td>
+</tr>
+<tr>
+<td><code>side_buses</code></td>
+<td>String</td>
+<td>–</td>
+<td>buses seen through that cut, comma-separated</td>
+</tr>
+<tr>
+<td><code>n_side_buses</code></td>
+<td>Int64</td>
+<td>–</td>
+<td>number of buses on that side</td>
+</tr>
+<tr>
+<td><code>branches</code></td>
+<td>String</td>
+<td>–</td>
+<td>branches of the cut, comma-separated</td>
+</tr>
+<tr>
+<td><code>sides_are_disjoint</code></td>
+<td>Boolean</td>
+<td>–</td>
+<td>true when no two directions reach the same bus; the far-side currents are defined only then</td>
+</tr>
+<tr>
+<td><code>frequency_Hz</code></td>
+<td>Float64</td>
+<td>Hz</td>
+<td>frequency of the row (no RMS row)</td>
+</tr>
+<tr>
+<td><code>Z_side_Ohm</code></td>
+<td>Float64</td>
+<td>Ω</td>
+<td>parallel impedance of that direction, from source-free current division</td>
+</tr>
+<tr>
+<td><code>Z_side_deg</code></td>
+<td>Float64</td>
+<td>°</td>
+<td>its angle</td>
+</tr>
+<tr>
+<td><code>Z_local_Ohm</code></td>
+<td>Float64</td>
+<td>Ω</td>
+<td>impedance of the fault bus's own electrode</td>
+</tr>
+<tr>
+<td><code>Z_parallel_Ohm</code></td>
+<td>Float64</td>
+<td>Ω</td>
+<td>Z_local in parallel with every Z_side</td>
+</tr>
+<tr>
+<td><code>Z_driving_point_Ohm</code></td>
+<td>Float64</td>
+<td>Ω</td>
+<td>driving-point impedance of the solved nodal system at the fault bus</td>
+</tr>
+<tr>
+<td><code>identity_residual</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>|Z_parallel − Z_driving_point| / |Z_driving_point|; grows when the decomposition misses a current path</td>
+</tr>
+<tr>
+<td><code>I_fault_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>injection at the fault bus</td>
+</tr>
+<tr>
+<td><code>I_local_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>part of it taken by the fault bus's own electrode</td>
+</tr>
+<tr>
+<td><code>I_shield_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>shield current leaving the fault bus in that direction</td>
+</tr>
+<tr>
+<td><code>I_shield_deg</code></td>
+<td>Float64</td>
+<td>°</td>
+<td>its angle</td>
+</tr>
+<tr>
+<td><code>current_share</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>|I_shield| / |I_fault|</td>
+</tr>
+<tr>
+<td><code>I_earth_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>soil current crossing the cut, summed over the far side; null when the directions overlap</td>
+</tr>
+<tr>
+<td><code>I_total_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>total current crossing the cut; null when the directions overlap</td>
+</tr>
+<tr>
+<td><code>r_side</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>|I_earth| / |I_total|, the earth-return share of that direction</td>
+</tr>
+<tr>
+<td><code>kcl_residual</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>|I_fault − I_local − Σ I_shield| / |I_fault|; zero confirms the split accounts for the whole fault current</td>
+</tr>
+</tbody>
+</table>
+<h3 id="select_rho_f_from_catalog"><code>select_rho_f_from_catalog(...)</code><a class="headerlink" href="#select_rho_f_from_catalog" title="Permanent link">&para;</a></h3>
+<p>One row per catalogue entry, sorted by <code>sort_by</code>; one <code>epr_&lt;bus&gt;_V</code> column per
+swept fault bus.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the catalogue entry</td>
+</tr>
+<tr>
+<td><code>k1</code></td>
+<td>Float64</td>
+<td>Ω/(Ω·m)</td>
+<td>coefficient of ρ in Z = k1·ρ + (k2 + j·k3)·f + (k4 + j·k5)·ρ·f</td>
+</tr>
+<tr>
+<td><code>k2</code></td>
+<td>Float64</td>
+<td>Ω/Hz</td>
+<td>coefficient of f, real part</td>
+</tr>
+<tr>
+<td><code>k3</code></td>
+<td>Float64</td>
+<td>Ω/Hz</td>
+<td>coefficient of f, imaginary part</td>
+</tr>
+<tr>
+<td><code>k4</code></td>
+<td>Float64</td>
+<td>Ω/(Ω·m·Hz)</td>
+<td>coefficient of ρ·f, real part</td>
+</tr>
+<tr>
+<td><code>k5</code></td>
+<td>Float64</td>
+<td>Ω/(Ω·m·Hz)</td>
+<td>coefficient of ρ·f, imaginary part</td>
+</tr>
+<tr>
+<td><code>max_epr_rms_V</code></td>
+<td>Float64</td>
+<td>V</td>
+<td>largest RMS EPR over the swept fault buses</td>
+</tr>
+<tr>
+<td><code>admissible</code></td>
+<td>Boolean</td>
+<td>–</td>
+<td><code>max_epr_rms_V</code> ≤ <code>u_limit</code></td>
+</tr>
+<tr>
+<td><code>epr_&lt;bus&gt;_V</code></td>
+<td>Float64</td>
+<td>V</td>
+<td>RMS EPR with the fault at that bus, one column per entry of <code>bus_names</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="summarizeframe-value-by-and-classifyframe-value-edges"><code>summarize(frame, value, by=...)</code> and <code>classify(frame, value, edges)</code><a class="headerlink" href="#summarizeframe-value-by-and-classifyframe-value-edges" title="Permanent link">&para;</a></h3>
+<p><code>summarize</code> returns one row per group: the grouping columns, then <code>n</code>,
+<code>n_null</code>, <code>n_nan</code>, <code>mean</code>, <code>std</code>, <code>min</code>, one column per quantile (<code>p05</code>,
+<code>p50</code>, <code>p95</code> by default) and <code>max</code> — read <code>n_nan</code> first, a NaN propagates into
+the mean and the quantiles. <code>classify</code> returns its input with one <code>String</code>
+column added (<code>class</code> unless <code>name=</code> says otherwise); a null or NaN value gets
+a null class.</p>
+<h3 id="resulttransientto_polars"><code>ResultTransient.to_polars()</code><a class="headerlink" href="#resulttransientto_polars" title="Permanent link">&para;</a></h3>
+<p>Long format, one row per sample and signal.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>time_s</code></td>
+<td>Float64</td>
+<td>s</td>
+<td>time of the sample</td>
+</tr>
+<tr>
+<td><code>signal_kind</code></td>
+<td>String</td>
+<td>–</td>
+<td><code>epr</code> for a bus potential, <code>i_branch</code> for a branch current, <code>source</code> for a source waveform</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>String</td>
+<td>–</td>
+<td>the observed bus, branch or source</td>
+</tr>
+<tr>
+<td><code>value</code></td>
+<td>Float64</td>
+<td>V or A</td>
+<td>instantaneous value (not RMS), in the earth-side frame of the stationary results</td>
+</tr>
+</tbody>
+</table>
+<h3 id="run_reference_cases"><code>run_reference_cases()</code><a class="headerlink" href="#run_reference_cases" title="Permanent link">&para;</a></h3>
+<p>One row per closed-form reference case; see
+<a href="../../explanation/verification/">Verification and validation</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>case</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the reference case</td>
+</tr>
+<tr>
+<td><code>quantity</code></td>
+<td>String</td>
+<td>–</td>
+<td>the compared quantity, with its unit</td>
+</tr>
+<tr>
+<td><code>conditions</code></td>
+<td>String</td>
+<td>–</td>
+<td>conditions under which the closed form holds</td>
+</tr>
+<tr>
+<td><code>closed_form</code></td>
+<td>Float64</td>
+<td>unit of the quantity</td>
+<td>value of the closed form</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td>Float64</td>
+<td>unit of the quantity</td>
+<td>value the solver computes</td>
+</tr>
+<tr>
+<td><code>rel_deviation</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>|model − closed form| / |closed form|</td>
+</tr>
+<tr>
+<td><code>tolerance</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>largest admitted relative deviation</td>
+</tr>
+<tr>
+<td><code>agrees</code></td>
+<td>Boolean</td>
+<td>–</td>
+<td>rel_deviation ≤ tolerance</td>
+</tr>
+</tbody>
+</table>
+<h2 id="thermal-checks">Thermal checks<a class="headerlink" href="#thermal-checks" title="Permanent link">&para;</a></h2>
+<h3 id="check_conductor_limitsnetwork-fault"><code>check_conductor_limits(network, fault, ...)</code><a class="headerlink" href="#check_conductor_limitsnetwork-fault" title="Permanent link">&para;</a></h3>
+<p>One row per branch. The thermal columns are null for a branch whose type
+declares no material and cross-section; the currents are filled in anyway. See
+<a href="../../howto/thermal/">Thermal limits of earthing conductors</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>branch_name</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the branch</td>
+</tr>
+<tr>
+<td><code>I_s_rms_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>RMS of the earthing-conductor current over all frequencies, 0 Hz included</td>
+</tr>
+<tr>
+<td><code>I_dc_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>the 0 Hz component, taken out of the adiabatic check (<code>THERMAL_DC_EXCLUDED</code>)</td>
+</tr>
+<tr>
+<td><code>I_ac_rms_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>RMS of the alternating components, the I_k of the check</td>
+</tr>
+<tr>
+<td><code>i_p_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>peak current κ·√2·I_ac_rms, input for an electrodynamic check</td>
+</tr>
+<tr>
+<td><code>kappa</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>peak factor κ of IEC 60909-0</td>
+</tr>
+<tr>
+<td><code>m</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>DC heat factor m of IEC 60909-0</td>
+</tr>
+<tr>
+<td><code>n</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>AC heat factor n of IEC 60909-0</td>
+</tr>
+<tr>
+<td><code>t_k_s</code></td>
+<td>Float64</td>
+<td>s</td>
+<td>short-circuit duration T_k</td>
+</tr>
+<tr>
+<td><code>I_th_factor</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>√(m + n), the factor from I_ac_rms to I_th</td>
+</tr>
+<tr>
+<td><code>I_th_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>thermal equivalent short-time current I_ac_rms·√(m + n)</td>
+</tr>
+<tr>
+<td><code>material</code></td>
+<td>String</td>
+<td>–</td>
+<td>conductor material of the branch type, null when not declared</td>
+</tr>
+<tr>
+<td><code>cross_section_mm2</code></td>
+<td>Float64</td>
+<td>mm²</td>
+<td>cross-section of the branch type, null when not declared</td>
+</tr>
+<tr>
+<td><code>k</code></td>
+<td>Float64</td>
+<td>A·√s/mm²</td>
+<td>material constant k of IEC 60949 for the initial and final temperatures</td>
+</tr>
+<tr>
+<td><code>I_admissible_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>admissible short-time current k·S/√t_k</td>
+</tr>
+<tr>
+<td><code>utilization</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>I_th / I_admissible</td>
+</tr>
+<tr>
+<td><code>within_limit</code></td>
+<td>Boolean</td>
+<td>–</td>
+<td>utilization ≤ 1; null when the branch type declares no thermal data</td>
+</tr>
+</tbody>
+</table>
+<h3 id="check_node_limitsnetwork-fault"><code>check_node_limits(network, fault, ...)</code><a class="headerlink" href="#check_node_limitsnetwork-fault" title="Permanent link">&para;</a></h3>
+<p>One row per bus and element — earthing conductor and electrode.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bus_name</code></td>
+<td>String</td>
+<td>–</td>
+<td>name of the bus</td>
+</tr>
+<tr>
+<td><code>element</code></td>
+<td>String</td>
+<td>–</td>
+<td><code>earthing_conductor</code> (carries <code>I_inj</code>) or <code>electrode</code> (carries <code>I_bus</code>)</td>
+</tr>
+<tr>
+<td><code>I_rms_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>RMS of the element's current over all frequencies, before the split</td>
+</tr>
+<tr>
+<td><code>current_split</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>share of that current one physical conductor carries (<code>*_current_split</code> of the bus type)</td>
+</tr>
+<tr>
+<td><code>I_conductor_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>I_rms · current_split</td>
+</tr>
+<tr>
+<td><code>I_dc_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>the 0 Hz component, taken out of the adiabatic check</td>
+</tr>
+<tr>
+<td><code>I_ac_rms_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>RMS of the alternating components</td>
+</tr>
+<tr>
+<td><code>i_p_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>peak current κ·√2·I_ac_rms</td>
+</tr>
+<tr>
+<td><code>kappa</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>peak factor κ</td>
+</tr>
+<tr>
+<td><code>m</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>DC heat factor m</td>
+</tr>
+<tr>
+<td><code>n</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>AC heat factor n</td>
+</tr>
+<tr>
+<td><code>t_k_s</code></td>
+<td>Float64</td>
+<td>s</td>
+<td>short-circuit duration T_k</td>
+</tr>
+<tr>
+<td><code>I_th_factor</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>√(m + n), the factor from I_ac_rms to I_th</td>
+</tr>
+<tr>
+<td><code>I_th_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>thermal equivalent short-time current</td>
+</tr>
+<tr>
+<td><code>material</code></td>
+<td>String</td>
+<td>–</td>
+<td>material declared for the element, null when not declared</td>
+</tr>
+<tr>
+<td><code>cross_section_mm2</code></td>
+<td>Float64</td>
+<td>mm²</td>
+<td>cross-section declared for the element</td>
+</tr>
+<tr>
+<td><code>k</code></td>
+<td>Float64</td>
+<td>A·√s/mm²</td>
+<td>material constant k of IEC 60949</td>
+</tr>
+<tr>
+<td><code>I_admissible_A</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>admissible short-time current k·S/√t_k</td>
+</tr>
+<tr>
+<td><code>utilization</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>I_th / I_admissible</td>
+</tr>
+<tr>
+<td><code>within_limit</code></td>
+<td>Boolean</td>
+<td>–</td>
+<td>utilization ≤ 1; null when the element is not declared</td>
+</tr>
+</tbody>
+</table>
+<h2 id="importers">Importers<a class="headerlink" href="#importers" title="Permanent link">&para;</a></h2>
+<h3 id="preview_pandapower_importnet"><code>preview_pandapower_import(net, ...)</code><a class="headerlink" href="#preview_pandapower_importnet" title="Permanent link">&para;</a></h3>
+<p>One row per pandapower element that the import would keep or skip.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kind</code></td>
+<td>String</td>
+<td>–</td>
+<td><code>bus</code>, <code>line</code>, <code>switch</code>, <code>trafo</code> or <code>impedance</code></td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>String</td>
+<td>–</td>
+<td><code>keep</code> or <code>skip</code></td>
+</tr>
+<tr>
+<td><code>pp_index</code></td>
+<td>Int64</td>
+<td>–</td>
+<td>row index in the pandapower table</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>String</td>
+<td>–</td>
+<td>name the element gets (or had)</td>
+</tr>
+<tr>
+<td><code>vn_kv</code></td>
+<td>Float64</td>
+<td>kV</td>
+<td>nominal voltage of a bus, null for the other kinds</td>
+</tr>
+<tr>
+<td><code>from_bus</code></td>
+<td>String</td>
+<td>–</td>
+<td>first bus of a line or bond</td>
+</tr>
+<tr>
+<td><code>to_bus</code></td>
+<td>String</td>
+<td>–</td>
+<td>second bus of a line or bond</td>
+</tr>
+<tr>
+<td><code>length_km</code></td>
+<td>Float64</td>
+<td>km</td>
+<td>length the branch gets</td>
+</tr>
+<tr>
+<td><code>in_service</code></td>
+<td>Boolean</td>
+<td>–</td>
+<td>pandapower's in_service, becomes <code>active</code></td>
+</tr>
+<tr>
+<td><code>reason</code></td>
+<td>String</td>
+<td>–</td>
+<td>why a row is skipped, see the reason table on the I/O page</td>
+</tr>
+</tbody>
+</table>
+<h3 id="read_shortcircuit_resultsnet"><code>read_shortcircuit_results(net, ...)</code><a class="headerlink" href="#read_shortcircuit_resultsnet" title="Permanent link">&para;</a></h3>
+<p>One row per bus of a case solved by <code>pandapower.shortcircuit.calc_sc</code>, in
+amperes.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pp_bus_index</code></td>
+<td>Int64</td>
+<td>–</td>
+<td>pandapower bus index</td>
+</tr>
+<tr>
+<td><code>bus_name</code></td>
+<td>String</td>
+<td>–</td>
+<td>bus name, the key to the groundinsight network</td>
+</tr>
+<tr>
+<td><code>vn_kv</code></td>
+<td>Float64</td>
+<td>kV</td>
+<td>nominal voltage</td>
+</tr>
+<tr>
+<td><code>fault_type</code></td>
+<td>String</td>
+<td>–</td>
+<td>fault type of the solved case, e.g. <code>1ph</code></td>
+</tr>
+<tr>
+<td><code>case</code></td>
+<td>String</td>
+<td>–</td>
+<td><code>max</code> or <code>min</code></td>
+</tr>
+<tr>
+<td><code>i_k_a</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>initial short-circuit current I_k'' (pandapower's <code>ikss_ka</code> in A)</td>
+</tr>
+<tr>
+<td><code>r1_ohm</code></td>
+<td>Float64</td>
+<td>Ω</td>
+<td>positive-sequence resistance at the bus</td>
+</tr>
+<tr>
+<td><code>x1_ohm</code></td>
+<td>Float64</td>
+<td>Ω</td>
+<td>positive-sequence reactance</td>
+</tr>
+<tr>
+<td><code>r0_ohm</code></td>
+<td>Float64</td>
+<td>Ω</td>
+<td>zero-sequence resistance (earth faults)</td>
+</tr>
+<tr>
+<td><code>x0_ohm</code></td>
+<td>Float64</td>
+<td>Ω</td>
+<td>zero-sequence reactance</td>
+</tr>
+<tr>
+<td><code>r_to_x</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>R/X of the fault loop; for <code>1ph</code> the earth-fault loop (2R1 + R0)/(2X1 + X0)</td>
+</tr>
+<tr>
+<td><code>kappa</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>peak factor κ</td>
+</tr>
+<tr>
+<td><code>kappa_origin</code></td>
+<td>String</td>
+<td>–</td>
+<td><code>pandapower</code>, <code>iec_closed_form</code> or <code>unavailable</code></td>
+</tr>
+<tr>
+<td><code>t_k_s</code></td>
+<td>Float64</td>
+<td>s</td>
+<td>short-circuit duration of the case</td>
+</tr>
+<tr>
+<td><code>n_factor</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>AC heat factor n</td>
+</tr>
+<tr>
+<td><code>m</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>DC heat factor m</td>
+</tr>
+<tr>
+<td><code>i_p_a</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>peak short-circuit current</td>
+</tr>
+<tr>
+<td><code>i_th_a</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>thermal equivalent short-time current</td>
+</tr>
+</tbody>
+</table>
+<h3 id="apply_shortcircuit_characteristics"><code>apply_shortcircuit_characteristics(...)</code><a class="headerlink" href="#apply_shortcircuit_characteristics" title="Permanent link">&para;</a></h3>
+<p>The audit trail: one row per source that feeds the fault.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fault_name</code></td>
+<td>String</td>
+<td>–</td>
+<td>the fault the characteristics were written for</td>
+</tr>
+<tr>
+<td><code>source_name</code></td>
+<td>String</td>
+<td>–</td>
+<td>a source that feeds it</td>
+</tr>
+<tr>
+<td><code>bus</code></td>
+<td>String</td>
+<td>–</td>
+<td>the source's bus</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>Float64</td>
+<td>Hz</td>
+<td>frequency whose source value is meant</td>
+</tr>
+<tr>
+<td><code>i_k_total_a</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>I_k'' at the fault bus</td>
+</tr>
+<tr>
+<td><code>share</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>this source's share of it</td>
+</tr>
+<tr>
+<td><code>i_k_previous_a</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>the source value before the call</td>
+</tr>
+<tr>
+<td><code>i_k_a</code></td>
+<td>Float64</td>
+<td>A</td>
+<td>the source's share of I_k''</td>
+</tr>
+<tr>
+<td><code>r_to_x</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>loop R/X written onto the source</td>
+</tr>
+<tr>
+<td><code>kappa</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>κ written onto the source</td>
+</tr>
+<tr>
+<td><code>kappa_origin</code></td>
+<td>String</td>
+<td>–</td>
+<td>where κ came from</td>
+</tr>
+<tr>
+<td><code>t_k_s</code></td>
+<td>Float64</td>
+<td>s</td>
+<td>short-circuit duration written onto the fault</td>
+</tr>
+<tr>
+<td><code>n_factor</code></td>
+<td>Float64</td>
+<td>–</td>
+<td>AC heat factor written onto the fault</td>
+</tr>
+<tr>
+<td><code>values_updated</code></td>
+<td>Boolean</td>
+<td>–</td>
+<td>whether <code>Source.values</code> was overwritten (<code>set_source_values=True</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The ten input tables of <code>Network.to_tables()</code> and <code>gi.network_from_tables</code>
+are listed on the <a href="../../api/io/#networks-as-tables">I/O page</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024&ndash;2026 Christian Ehlert
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Ce1ectric/groundinsight" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "content.code.annotate", "toc.follow", "search.highlight", "search.share"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
