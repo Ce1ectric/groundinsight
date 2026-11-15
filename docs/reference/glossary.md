@@ -25,7 +25,10 @@ reports it. The symbols follow EN 50522 where the standard has one.
 | earth group | the buses whose electrodes feed the soil, from the fault outwards up to where the potential profile turns | `ResultReductionFactor.earth_buses` |
 | `r` | reduction factor of EN 50522, the earth current over the fault current | `ResultReductionFactor.value_current`; column `reduction_factor_current` |
 | `value` | EPR ratio at the fault bus with and without the inductive coupling; for a single line the magnitude of `1 − k`, whatever the electrodes | `ResultReductionFactor.value`; column `reduction_factor` |
-| `U_T`, `U_vT` | touch voltage and prospective touch voltage | not computed; `U_E` is their upper bound |
+| `U_vT` | prospective touch voltage: the potential difference a person bridges between a touched part and the ground 1 m away, before body and additional resistances | `ResultBus.u_touch`, `u_touch_freq`; column `U_vT_V` of `res_buses()`, for a bus with `k_touch` ([explanation](../explanation/touch-and-transfer.md)) |
+| `U_T` | touch voltage, with body and additional resistances | not computed; `U_vT` and `U_E` are upper bounds |
+| `U_transfer` | transferred potential: the largest difference between the electrode potential and the earth surface at a target point that a bonded conductor reaches (EN 50522, Clause 6) | `ResultBus.u_transfer`; column `U_transfer_V` of `res_buses()`, for a bus with `k_transfer` |
+| `k_touch`, `k_transfer` | touch and transfer factor of an electrode, `U_vT / U_E` and `U_transfer / U_E`, from a field calculation | `EarthingCharacteristic.k_touch`, `k_transfer`; at the bus `Bus.k_touch`, `Bus.k_transfer` |
 | `U_Tp` | permissible touch voltage of EN 50522, a function of the fault duration | not part of the package |
 | `t_F` | fault duration, set by the protection; the argument of `U_Tp` | not used by the stationary solve |
 | `T_k` | short-circuit duration of IEC 60909-0, used by the thermal checks | `Fault.t_k_s` |

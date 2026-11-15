@@ -1,8 +1,9 @@
 # Getting started
 
-Three pages take you from an empty Python environment to a solved ring.
-Each states the numbers you should get, computes them a second way by hand,
-and the test suite checks both on every change.
+Three pages take you from an empty Python environment to a solved ring;
+a fourth draws and solves a network in the GUI. Each states the numbers you
+should get, computes them a second way, and the test suite checks both on
+every change.
 
 1. [Installation](installation.md) — a virtual environment, the package,
    Jupyter or VS Code, and a self-test that takes a second.
@@ -11,6 +12,9 @@ and the test suite checks both on every change.
    factors.
 3. [From a line to a ring](ring.md) — the same cable as a ring: how the fault
    current divides, the phase impedance, a harmonic.
+4. [Draw and solve a network](gui.md) — the first network in
+   `groundinsight-gui`: a station drawn on the canvas, a fault solved, the
+   same numbers from the library.
 
 ## Tasks after the tutorials
 
@@ -19,6 +23,7 @@ and the test suite checks both on every change.
 | Derive bus and branch types from cable and electrode data | [Bus and branch types from data sheets](../howto/types-from-datasheets.md) |
 | Several frequencies, fault scalings, direct current | [Harmonics, fault scalings and DC](../howto/harmonics.md) |
 | Compare the results with the limits of EN 50522 | [Compare results with EN 50522 limits](../howto/en50522-check.md) |
+| Earthing impedance and touch factors of a station from a field calculation | [Earthing characteristic from groundfield](../howto/groundfield-characteristics.md) |
 | Vary soil resistivity or electrodes over many cases | [Parameter sweeps and statistics](../howto/sweeps.md) |
 | Take branches or stations out of service | [Outage and what-if studies](../howto/outage.md) |
 | Find the largest admissible soil resistivity | [Admissible soil resistivity](../howto/inverse-rho.md) |

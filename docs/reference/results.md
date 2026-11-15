@@ -177,6 +177,26 @@ One row per closed-form reference case; see
 
 <!-- result-table: reference_cases -->
 
+## Earthing characteristics and touch voltages
+
+### `check_touch_voltages(network, fault, u_limit, t_k_s=None)`
+
+The touch-voltage assessment of EN 50522 per bus, from the stored result of
+the fault; the limit is the caller's
+([explanation](../explanation/touch-and-transfer.md)). Schema constant
+`gi.TOUCH_VOLTAGE_SCHEMA`.
+
+<!-- result-table: touch_voltages -->
+
+### `EarthingCharacteristic.to_frame()`
+
+The grid of a characteristic as a long table, one row per specific earth
+resistance and frequency. The per-bus results of a characteristic are the
+columns `U_vT_V` and `U_transfer_V` of `res_buses` and their maxima in
+`res_fault`, above.
+
+<!-- result-table: characteristic -->
+
 ## Thermal checks
 
 ### `check_conductor_limits(network, fault, ...)`

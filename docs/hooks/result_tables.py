@@ -139,6 +139,10 @@ def _rho_f_catalog(gi):
     return gi.select_rho_f_from_catalog(net, bus_names=["<bus>"], u_limit=1.0, candidates={})
 
 
+def _characteristic(gi):
+    return gi.EarthingCharacteristic(rho_Ohm_m=(100.0,), frequency_Hz=(50.0,), impedance_Ohm=[[1.0]]).to_frame()
+
+
 # --- the descriptions ---------------------------------------------------------
 
 _RMS_ROW = "null on the RMS row"
@@ -242,6 +246,26 @@ FRAMES: Dict[str, FrameSpec] = {
         "I_total_A": ("A", "total current crossing the cut; null when the directions overlap"),
         "r_side": (NO_UNIT, "|I_earth| / |I_total|, the earth-return share of that direction"),
         "kcl_residual": (NO_UNIT, "|I_fault − I_local − Σ I_shield| / |I_fault|; zero confirms the split accounts for the whole fault current"),
+    }),
+    "touch_voltages": FrameSpec(("groundinsight.analysis.touch", "TOUCH_VOLTAGE_SCHEMA"), {
+        "bus_name": (NO_UNIT, "name of the bus"),
+        "fault": (NO_UNIT, "name of the fault whose stored result is assessed"),
+        "EPR_V": ("V", "RMS earth potential rise of the bus over all frequencies"),
+        "U_vT_V": ("V", "RMS prospective touch voltage k_touch · |EPR|; null for a bus without a tabulated touch factor"),
+        "t_k_s": ("s", "fault duration the limit was read at; null for a constant limit given without one"),
+        "U_limit_V": ("V", "permissible value passed by the caller: the constant, or the curve read at t_k_s on log-log axes"),
+        "utilisation": (NO_UNIT, "U_vT / U_limit"),
+        "within_limit": (NO_UNIT, "utilisation ≤ 1; null where U_vT is null"),
+    }),
+    "characteristic": FrameSpec(_characteristic, {
+        "rho_Ohm_m": ("Ω·m", "specific earth resistance of the grid point (an effective resistivity for layered soil)"),
+        "frequency_Hz": ("Hz", "frequency of the grid point"),
+        "Z_Ohm": ("Ω", "magnitude of the tabulated earthing impedance; null without an impedance table"),
+        "Z_degree": ("°", "angle of the tabulated earthing impedance"),
+        "R_Ohm": ("Ω", "real part of the tabulated earthing impedance"),
+        "X_Ohm": ("Ω", "imaginary part of the tabulated earthing impedance"),
+        "k_touch": (NO_UNIT, "touch factor U_vT / U_E at the grid point; null without a touch table"),
+        "k_transfer": (NO_UNIT, "transfer factor U_transfer / U_E at the grid point; null without a transfer table"),
     }),
     "conductor_limits": FrameSpec(("groundinsight.analysis.thermal", "_BRANCH_SCHEMA"), {
         "branch_name": (NO_UNIT, "name of the branch"),

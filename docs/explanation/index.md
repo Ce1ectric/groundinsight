@@ -13,6 +13,7 @@ procedures.
 | [Impedance formulas and where they come from](formulas.md) | what a formula means to the model, which values it may produce, how it is evaluated |
 | [Phase currents in rings and meshes](phase-currents.md) | how the fault current divides between routes, what `phase_impedance_formula` must describe, when the one-way coupling is exact |
 | [Reduction factors and earthing impedance](reduction-factors.md) | the EPR ratio and the reduction factor of EN 50522, $U_E$, $Z_E$ and $I_E$ at the fault bus |
+| [Touch voltage and transferred potential](touch-and-transfer.md) | why a factor of the electrode gives the touch voltage, how it is formed, and why closely spaced electrodes need one characteristic |
 | [Splitting the network, location response](decomposition.md) | what each direction contributes at the fault, and the response to any electrode at a bus |
 | [Direct current (`f = 0`)](dc.md) | what a formula means at zero frequency, the stand-in for ideal bonds, what a DC study needs |
 | [Transient simulation](../transient.md) | the FFT and state-space solvers for time-domain studies |

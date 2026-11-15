@@ -346,6 +346,7 @@ EXPLANATION_PAGES = [
     "explanation/formulas.md",
     "explanation/phase-currents.md",
     "explanation/reduction-factors.md",
+    "explanation/touch-and-transfer.md",
     "explanation/decomposition.md",
     "explanation/dc.md",
     "transient.md",
@@ -436,6 +437,7 @@ GETTING_STARTED = [
     "getting-started/installation.md",
     "getting-started/first-calculation.md",
     "getting-started/ring.md",
+    "getting-started/gui.md",
 ]
 
 

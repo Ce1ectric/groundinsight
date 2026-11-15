@@ -77,6 +77,7 @@ def test_results_page_markers_name_known_frames(hook):
     "res_buses", "res_branches", "res_all_impedances", "res_fault", "compare_buses",
     "compare_branches", "cut_analysis", "conductor_limits", "node_limits", "transient",
     "reference_cases", "rho_f_catalog", "pandapower_preview", "shortcircuit_results",
+    "touch_voltages", "characteristic",
     "shortcircuit_report",
 ])
 def test_every_column_has_a_unit_and_a_meaning(hook, key):

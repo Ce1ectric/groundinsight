@@ -19,14 +19,25 @@ permissible values: take them from the edition you apply.
 Per fault and per frequency, `groundinsight` computes the fault current, the
 earth potential rise of every bus, the shield currents, the earth current and
 the earthing impedance at the fault location, and the reduction factor of
-EN 50522. It does **not** compute:
+EN 50522. The network model has no soil surface; touch voltages and
+transferred potentials come from an earthing characteristic on the bus — a
+table computed by a field solver such as groundfield, with the touch factor
+`k_touch` and the transfer factor `k_transfer`
+([how-to](groundfield-characteristics.md),
+[explanation](../explanation/touch-and-transfer.md)). With it the result
+carries, per bus, the prospective touch voltage `U_vT = k_touch · |U_E|` and
+the largest transferred potential `U_transfer = k_transfer · |U_E|`; without
+it, neither. The package does **not** compute:
 
-- touch voltages, step voltages and surface potentials — there is no model of
-  the soil surface;
+- step voltages and surface potentials themselves — only the factors of the
+  characteristic reach the network;
+- the coupling of neighbouring electrodes through the soil, which raises
+  their potentials and lowers their touch factors; characterise closely
+  spaced electrodes as one system
+  ([explanation](../explanation/touch-and-transfer.md#electrodes-that-see-each-other));
 - additional resistances such as footwear or a surface layer, which the
   prospective touch voltage of the standard takes into account (Annex A);
 - the permissible touch voltage itself;
-- potentials transferred to other systems (Clause 6);
 - the dimensioning for corrosion and mechanical strength (5.2); the thermal
   check of earthing conductors is available separately
   (`check_conductor_limits`, `check_node_limits`, see [Analysis](../api/analysis.md)).
@@ -40,7 +51,9 @@ EN 50522. It does **not** compute:
 | `I_E` | earth current, `r·3I_0` | `ResultReductionFactor.i_earth` | `I_E_A` of `res_fault()` |
 | `Z_E` | earthing impedance | `ResultReductionFactor.z_earthing`, equal to `ResultGroundingImpedance.value` | `Z_E_Ohm`, `Z_E_degree` of `res_fault()`; `grounding_impedance_Ohm` of `res_all_impedances()` |
 | `U_E` | earth potential rise | `ResultReductionFactor.u_earthing`, equal to the `uepr_freq` of the fault bus | `U_E_V` of `res_fault()`; `EPR_V` of the fault bus in `res_buses()` |
-| `U_T`, `U_vT` | touch voltage, prospective touch voltage | not computed | – |
+| `U_vT` | prospective touch voltage | `ResultBus.u_touch` (RMS) and `u_touch_freq`, for a bus whose earthing characteristic has `k_touch` | `U_vT_V` of `res_buses()`; `U_vT_max_V`, `U_vT_max_bus` of `res_fault()` |
+| `U_T` | touch voltage, with body and additional resistances | not computed | – |
+| – | transferred potential (Clause 6) | `ResultBus.u_transfer`, for a bus whose earthing characteristic has `k_transfer` | `U_transfer_V` of `res_buses()`; `U_transfer_max_V` of `res_fault()` |
 | `U_Tp` | permissible touch voltage | not part of the package | EN 50522:2022, 5.4.1 and Annexes A, B |
 | `t_F` | fault duration | not used by the solve | from the protection |
 
@@ -79,9 +92,12 @@ EN 50522. It does **not** compute:
    earthing-system design, Figure 9): it compares `U_E` with `U_Tp`, taking the
    recognised measures `M` of Annex E into account, and tells you when the
    touch voltages themselves have to be determined — by measurement
-   (Annex H), or by a calculation of surface potentials, which
-   `groundinsight` does not do. An installation that is part of a global
-   earthing system follows its own branch of the procedure (Annex N).
+   (Annex H), or by a calculation of surface potentials. With an earthing
+   characteristic on the station bus, `gi.check_touch_voltages(net, fault,
+   u_limit)` compares the prospective touch voltage `U_vT` with the
+   permissible value you pass (a number, or the curve `U(t_F)` as points)
+   and reports the utilisation per bus. An installation that is part of a
+   global earthing system follows its own branch of the procedure (Annex N).
 6. **Measure.** Clause 8 and Annex L describe the measurements of the earthing
    impedance (L.2), the earth potential rise (L.3) and touch voltages (L.4).
    Compare them with the model; the model does not replace them.
@@ -184,9 +200,10 @@ part and the point where the feet stand. For a person standing in the
 potential funnel of the same earthing system, the surface potential there lies
 between remote earth and `U_E`, so the touch voltage cannot exceed `U_E`. A
 result `U_E ≤ U_Tp` therefore covers the touch voltage; `U_E > U_Tp` does not
-mean that the touch voltage is too high, only that it has to be determined.
-Potentials transferred from other installations (Clause 6) are outside this
-bound.
+mean that the touch voltage is too high, only that it has to be determined —
+for instance from an earthing characteristic, whose `k_touch ≤ 1` gives
+`U_vT ≤ U_E`. Potentials transferred from other installations (Clause 6) are
+outside this bound.
 
 ## References
 

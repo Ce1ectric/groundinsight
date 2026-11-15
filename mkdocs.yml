@@ -172,10 +172,12 @@ nav:
       - Installation: getting-started/installation.md
       - Your first fault calculation: getting-started/first-calculation.md
       - From a line to a ring: getting-started/ring.md
+      - Draw and solve a network: getting-started/gui.md
   - How-to guides:
       - Bus and branch types from data sheets: howto/types-from-datasheets.md
       - Harmonics, fault scalings and DC: howto/harmonics.md
       - Compare results with EN 50522 limits: howto/en50522-check.md
+      - Earthing characteristic from groundfield: howto/groundfield-characteristics.md
       - Parameter sweeps and statistics: howto/sweeps.md
       - Outage and what-if studies: howto/outage.md
       - Admissible soil resistivity: howto/inverse-rho.md
@@ -192,6 +194,7 @@ nav:
       - Impedance formulas and where they come from: explanation/formulas.md
       - Phase currents in rings and meshes: explanation/phase-currents.md
       - Reduction factors and earthing impedance: explanation/reduction-factors.md
+      - Touch voltage and transferred potential: explanation/touch-and-transfer.md
       - Splitting the network, location response: explanation/decomposition.md
       - "Direct current (f = 0)": explanation/dc.md
       - Transient simulation: transient.md

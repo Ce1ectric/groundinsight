@@ -217,7 +217,7 @@ version section when a release is cut.
   Drawn in the GUI, with characteristics computed by groundfield in
   two-layer soil. Against groundfield's full field solution of the coupled
   arrangement, the node model -- one characteristic per electrode -- gives
-  an earthing impedance 43 % too low at 25 m house spacing (1.8 % at 800 m),
+  an earthing impedance 43 % too low at 25 m house spacing (1.9 % at 800 m),
   because it ignores the mutual resistance of the electrodes; the
   characteristic of the whole LV network attached to the station reproduces
   the field solution.
@@ -243,8 +243,40 @@ version section when a release is cut.
   command line, expand `~/projekt.json` and `$HOME/projekt.json`; before,
   the path was taken literally and failed with "No such file or directory".
 
+### Docs
+
+- **Formulas are typeset on every page.** MathJax now processes exactly the
+  formulas of the Markdown pages and docstrings (pymdownx.arithmatex) and the
+  markdown cells of the example notebooks, and typesets again after each page
+  change of Material's instant loading. Before, the notebook formulas stayed
+  TeX source -- the configuration ignored every paragraph inside a notebook
+  cell -- and docstrings written with reST math (`.. math::`, `:math:`)
+  showed it raw; they use `$$ ... $$` and `\( ... \)` now. A `$` outside a
+  formula or a notebook cell stays a dollar sign.
+- **New pages.** The tutorial *Draw and solve a network* takes the first
+  network through `groundinsight-gui` and computes the same numbers with the
+  library; the how-to *Earthing characteristic from groundfield* reads,
+  computes and attaches characteristics (in the GUI and in Python) and says
+  which ρ, grid and backend they need; the explanation *Touch voltage and
+  transferred potential* derives `U_vT = k_touch · |U_E|`, and shows with the
+  example of a station and five houses why closely spaced electrodes need one
+  characteristic of the whole system. *Result tables* documents the frames of
+  `check_touch_voltages` and `EarthingCharacteristic.to_frame()`, the glossary
+  the new symbols, and the EN 50522 how-to maps `U_vT` and the transferred
+  potential to the result fields instead of calling them not computed.
+- **The GUI's README** describes the installation from the repository: the
+  GUI is not on PyPI yet and needs the library of the same checkout.
+
 ### Internal
 
+- **MathJax is served with the documentation, and a browser checks every
+  formula.** MathJax 3.2.2 is vendored under `docs/javascripts/mathjax/`
+  (`scripts/vendor_mathjax.py build` fetches the pinned npm tarball, checks
+  its sha512 and writes `SHA256SUMS`; a test compares the files offline), so
+  the site loads nothing from a CDN. `tests/test_docs_math_gate.py` opens every
+  page of the built site in Chromium and fails on a MathJax error and on TeX
+  source left visible outside code; the docs job of CI runs it after the
+  build (`GI_DOCS_GATE=1`), and a probe page shows that the gate catches both.
 - **Documentation deploys queue instead of racing
   (`.github/workflows/docs.yml`).** The merge before 2026.11.1 and its release
   commit started two deploys within seconds. The second one built on the
@@ -3625,6 +3657,20 @@ Carried forward:
   `Z_G_Ohm`; rename it to `Z_E_Ohm` with a deprecation period, as
   `res_fault` names it.
 - The frequency rules exist a second time in `io/defaults.py`.
+
+**Earthing characteristics.**
+
+- Mutual resistance between the electrodes of different buses. A network of
+  single-electrode characteristics connects the electrodes in parallel and
+  misses how closely spaced electrodes raise each other's potential (43 % low
+  on `Z_E` for a station and five houses 25 m apart, 8 % at 200 m); today the
+  remedy is one characteristic of the whole system at the feed, which does
+  not follow an outage of a single electrode. A coupling impedance between
+  bus electrodes, from groundfield's multi-port solution, would close it --
+  a model extension of the nodal kernel, planned as a work package of its own.
+- Recompute the characteristics of the example project
+  `docs/examples/ortsnetzstation_5_haeuser.json` with the released
+  groundfield 2026.11.0; their provenance names the pre-release 0.15.0.
 
 **Graphical interface.**
 
