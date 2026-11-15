@@ -320,6 +320,31 @@ Both frames also carry an explicit schema, so a network genuinely without
 branches returns an empty frame that is still selectable and filterable,
 rather than a schema-less `(0, 0)` frame on which `pl.col(...)` raises.
 
+## Touch voltages (EN 50522)
+
+With an earthing characteristic on the station buses
+([Core models](core_models.md#earthing-characteristics)) every solve reports
+the prospective touch voltage `U_vT = k_touch · |EPR|` per bus.
+`gi.check_touch_voltages(net, fault, u_limit, t_k_s=None)` compares its RMS
+value with a limit and returns one row per bus with the utilisation
+`U_vT / U_limit` and the verdict. The library carries no table of admissible
+values: pass the limit you cite, as one value in volts or as the curve
+`[(t_F in s, U in V), ...]`, which is read at `t_k_s` (default
+`Fault.t_k_s`) on log-log axes and never extrapolated.
+
+```python
+# fragment: assumes a solved network `net` whose station buses carry a characteristic
+curve = [(0.1, 650.0), (0.5, 220.0), (1.0, 120.0)]   # cite the edition you use
+table = gi.check_touch_voltages(net, "F1", u_limit=curve, t_k_s=0.3)
+print(table.filter(~pl.col("within_limit")))
+```
+
+`U_vT` is the *prospective* touch voltage (no body or additional
+resistances): against `U_Tp` the check is conservative, against `U_vTp` with
+the additional resistances of EN 50522 Annex B it is the refined one. A
+result without any touch factor gives an all-null frame and the warning
+`TOUCH_FACTORS_MISSING`.
+
 ## API reference
 
 ::: groundinsight.analysis

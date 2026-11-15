@@ -74,6 +74,14 @@ version section when a release is cut.
   DTO of the service layer carries the four columns. The factors describe
   each electrode on its own; overlapping potential funnels of neighbouring
   electrodes are not superposed.
+- **`gi.check_touch_voltages(network, fault, u_limit, t_k_s=None)`**, the
+  touch-voltage assessment of EN 50522 per bus: the RMS `U_vT` of the stored
+  result against a limit, with utilisation and verdict
+  (`gi.TOUCH_VOLTAGE_SCHEMA`). The library carries no table of admissible
+  values; the caller passes the limit as one value or as the curve
+  `[(t_F, U), ...]`, read at the fault duration (default `Fault.t_k_s`) on
+  log-log axes and never extrapolated. Without any touch factor the frame is
+  all null and the warning `TOUCH_FACTORS_MISSING` says so.
 
 ### Internal
 

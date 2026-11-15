@@ -191,6 +191,7 @@ category and the function whose docstring describes the condition:
 
 | Code | Category | Raised by |
 |---|---|---|
+| `CHARACTERISTIC_EXTRAPOLATED` | `ModelAssumptionWarning` | `run_fault`, `check_network`: a bus evaluated outside the grid of its earthing characteristic |
 | `DC_LIMIT` | `DCLimitWarning` | impedance evaluation at 0 Hz |
 | `EARTH_GROUP_SPREAD` | `ModelAssumptionWarning` | `run_fault`: electrode currents spread in angle, `I_E` and `r_current` describe the dominant direction only |
 | `EARTH_GROUP_UNDEFINED` | `ModelAssumptionWarning` | `run_fault`: no electrode carries a non-noise share of the fault current |
@@ -222,6 +223,7 @@ category and the function whose docstring describes the condition:
 | `SOURCE_WITHOUT_PHASE_PATH` | `ModelAssumptionWarning` | `run_fault`: a source with no phase-conductor path to the fault |
 | `THERMAL_DATA_INCOMPLETE` | `InputWarning` | `check_conductor_limits` / `check_node_limits`: half-declared thermal data |
 | `THERMAL_DC_EXCLUDED` | `ModelAssumptionWarning` | `check_conductor_limits` / `check_node_limits`: 0 Hz left out of the adiabatic check |
+| `TOUCH_FACTORS_MISSING` | `InputWarning` | `check_touch_voltages`: no bus of the result has a tabulated touch factor |
 | `THEVENIN_COUPLING` | `ModelAssumptionWarning` | `run_fault`: a Thevenin source drives coupled branches |
 | `TRANSIENT_BRANCH_SKIPPED` | `InputWarning` | `TransientStudy.solve` (state space): branches without `R_self`/`L_self` |
 | `TRANSIENT_COUPLING_SKIPPED` | `TransientModelWarning` | `TransientStudy.solve` (state space): coupling of voltage sources |

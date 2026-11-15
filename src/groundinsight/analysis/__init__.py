@@ -27,6 +27,7 @@ from .shortcircuit import (
     resolve_fault_sc_characteristics,
     thermal_equivalent_current,
 )
+from .touch import TOUCH_VOLTAGE_SCHEMA, check_touch_voltages
 from .thermal import (
     admissible_short_circuit_current,
     check_conductor_limits,
@@ -67,4 +68,6 @@ __all__ = [
     "FINAL_TEMPERATURES",
     "CABLE_INSULATION_LIMITS",
     "IEC60949_MATERIALS",
+    "TOUCH_VOLTAGE_SCHEMA",
+    "check_touch_voltages",
 ]
