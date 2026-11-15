@@ -261,6 +261,9 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "legend_within": "eingehalten",
         "legend_exceeded": "überschritten",
         "legend_not_assessed": "nicht bewertet",
+        "calc_solve": "Fehlerort rechnen",
+        "calc_solve_all": "Alle Fehlerorte rechnen",
+        "calc_check": "Netz prüfen",
     },
     "en": {
         "app_title": "groundinsight",
@@ -503,6 +506,9 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "legend_within": "within the limit",
         "legend_exceeded": "exceeded",
         "legend_not_assessed": "not assessed",
+        "calc_solve": "Solve the fault",
+        "calc_solve_all": "Solve all faults",
+        "calc_check": "Check the network",
     },
 }
 
@@ -815,10 +821,39 @@ def column_label(language: str, column: str, unit: Optional[str] = None) -> str:
     -------
     str
         The header text; a column without a label shows its name with
-        spaces for the underscores (a header is read by people, not code).
+        spaces for the underscores and its unit suffix in brackets (a header
+        is read by people, not code).
     """
-    label = COLUMN_LABELS[language].get(column, column.replace("_", " "))
+    label = COLUMN_LABELS[language].get(column)
+    if label is None:
+        label = _readable(column)
     return f"{label} [{unit}]" if unit else label
+
+
+#: Unit suffixes of the library's column names and how a header writes them.
+_UNIT_SUFFIXES = {"V": "V", "A": "A", "Ohm": "Ω", "deg": "°", "degree": "°", "Hz": "Hz", "s": "s",
+                  "km": "km", "mm2": "mm²", "C": "°C", "pct": "%"}
+
+
+def _readable(column: str) -> str:
+    """
+    A header for a column without a label: words, and the unit in brackets.
+
+    Parameters
+    ----------
+    column : str
+        The library's column name, e.g. ``Z_driving_point_Ohm``.
+
+    Returns
+    -------
+    str
+        ``"Z driving point [Ω]"``; a name without a unit suffix just gets
+        spaces for its underscores.
+    """
+    parts = column.split("_")
+    if len(parts) > 1 and parts[-1] in _UNIT_SUFFIXES:
+        return f"{' '.join(parts[:-1])} [{_UNIT_SUFFIXES[parts[-1]]}]"
+    return " ".join(parts)
 
 
 def template_label(language: str, name: str) -> str:

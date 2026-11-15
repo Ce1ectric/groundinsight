@@ -130,3 +130,5 @@ def test_people_read_no_underscores():
         assert [k for k, v in STRINGS[language].items() if "_" in v] == []
         assert ["_" in template_label(language, name) for name in EXAMPLES] == [False] * len(EXAMPLES)
     assert column_label("de", "some_new_column") == "some new column"
+    assert column_label("de", "Z_driving_point_Ohm") == "Z driving point [Ω]"
+    assert column_label("en", "EPR_b01_V") == "EPR b01 [V]"

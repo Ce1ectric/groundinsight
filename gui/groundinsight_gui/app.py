@@ -421,10 +421,10 @@ class ProjectPage:
                 with ui.button(self.t("calculation"), icon="calculate").props("flat dense no-caps").mark(
                         "calculation"):
                     with ui.menu():
-                        ui.menu_item(self.t("run"), on_click=lambda: self._calculate("solve")).mark("calc-solve")
-                        ui.menu_item(self.t("run_all"), on_click=lambda: self._calculate("solve_all")).mark(
+                        ui.menu_item(self.t("calc_solve"), on_click=lambda: self._calculate("solve")).mark("calc-solve")
+                        ui.menu_item(self.t("calc_solve_all"), on_click=lambda: self._calculate("solve_all")).mark(
                             "calc-solve_all")
-                        ui.menu_item(self.t("tab_check"), on_click=lambda: self.show_tab("check")).mark(
+                        ui.menu_item(self.t("calc_check"), on_click=lambda: self.show_tab("check")).mark(
                             "calc-check")
                         ui.separator()
                         for study in STUDIES:
@@ -528,8 +528,8 @@ class ProjectPage:
             self.view_ids = self.evaluations.ids()
             for view in self.evaluations.views():
                 ui.tab(view.id, label=view.title, icon="insights").mark(f"tab-{view.id}")
-            ui.button(icon="add", on_click=self.evaluations.add_tab).props("flat dense round").tooltip(
-                self.t("view_new")).mark("view-add")
+            ui.button(icon="add", on_click=self.evaluations.add_tab).props(
+                f'flat dense round aria-label="{self.t("view_new")}"').tooltip(self.t("view_new")).mark("view-add")
         if self.tab not in ("plan", "network", "results", "check", *self.view_ids):
             self.tab = "plan"
         with ui.tab_panels(self.tabs, value=self.tab).classes("w-full bg-transparent"):
