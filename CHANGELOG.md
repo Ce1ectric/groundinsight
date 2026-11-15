@@ -115,6 +115,23 @@ version section when a release is cut.
   automatically -- columns by graph distance from the infeed, deterministic
   and on the raster -- either completely or only the elements without an
   entry (`only_unplaced=True`).
+- **Editing network and diagram through the service layer
+  (`groundinsight.api`).** Rename commands for every element and both type
+  catalogues (`RenameBus`, `RenameBranch`, `RenameSource`, `RenameFault`,
+  `RenameBusType`, `RenameBranchType`) rewire every reference through the
+  library and move the diagram entry with the element; stored results go
+  stale and are current again after undo. Diagram commands -- `PlaceBus`
+  (a bus with its symbol), `MoveNodes` (several symbols, one undo step),
+  `RouteBranch`, `UpdateDiagramNode`, `AutoLayout` (the library's layout, or
+  the positions a front end computed) -- change no input of a result.
+  `SetCharacteristic`, `ClearCharacteristic` and `ImportCharacteristic`
+  attach earthing characteristics to a bus or a bus type. Removing an
+  element removes its diagram entry. `ProjectSession` keeps the diagram and
+  the evaluation tabs (`diagram()`, `diagram_model`, `views`), saves them
+  in the project file, lays out a network opened without a diagram, and
+  shows a characteristic with `characteristic("bus" | "bus_type", name)`.
+  New DTOs: `DiagramDTO` (with `DiagramNodeDTO`, `DiagramEdgeDTO`,
+  `DiagramMarkerDTO`) and `CharacteristicDTO`.
 - **groundfield BusType documents as earthing characteristics
   (`groundinsight.integrations.groundfield`).**
   `characteristic_from_bustype_spec(document)` and `read_bustype_json(path)`
@@ -129,6 +146,21 @@ version section when a release is cut.
 - **`SCHEMA_VERSION` of the project file is 2** (see *Breaking*).
   `save_network_to_json` writes a version-2 file without diagram and views;
   `load_network_from_json` reads every version and returns the network.
+- **DTO schema version 2 (`groundinsight.api.DTO_SCHEMA_VERSION`).** DTOs
+  are written as version 2 and versions 1 and 2 are read
+  (`READABLE_DTO_SCHEMA_VERSIONS`): version 2 adds fields with defaults
+  only, so requests written for version 1 still parse.
+- **`MemoryStore` keeps the text of a project file** (diagram and views
+  included) instead of the network's JSON; `ProjectStore` gains
+  `load_project` / `save_project`, which default to the network alone, as
+  `DatabaseStore` keeps it.
+
+### Fixed
+
+- **`~` and environment variables in project paths.** `ProjectSession`
+  (`from_file`, `save`), and with it the GUI's *Open* and *Save as* and the
+  command line, expand `~/projekt.json` and `$HOME/projekt.json`; before,
+  the path was taken literally and failed with "No such file or directory".
 
 ### Internal
 

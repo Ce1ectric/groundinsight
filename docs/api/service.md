@@ -269,8 +269,8 @@ needs and a notebook does not, and adds no physics:
 
 | Building block | What it does |
 |---|---|
-| `ProjectSession` | One open project: open/save, edit commands with undo/redo and a revision counter, a type catalogue, resource limits, results, jobs. |
-| Commands (`AddBus`, `UpdateBranch`, `RemoveFault`, `SetFrequencies`, ...) | Every edit, atomic and undoable, through the library's editing API. |
+| `ProjectSession` | One open project: open/save, edit commands with undo/redo and a revision counter, a type catalogue, the diagram, resource limits, results, jobs. |
+| Commands (`AddBus`, `UpdateBranch`, `RenameBus`, `MoveNodes`, `SetCharacteristic`, ...) | Every edit of network and diagram, atomic and undoable, through the library's editing API. |
 | `JobRunner` | Solves and studies off the caller's thread, in a thread or a process, with progress, cancel and a runtime limit. |
 | DTOs (`FaultResultDTO`, `NetworkTablesDTO`, `JobStatusDTO`, ...) | The only data shape towards a front end: JSON-safe, versioned, with JSON schemas. |
 | `EXAMPLES` | The documented example networks (`quickstart`, `minimal`, `mv_ring`) as project templates. |
@@ -291,7 +291,7 @@ inherits them.
 | R4 | Every change is a command: atomic (a rejected command changes nothing, not even the revision), undoable, through the library's editing API. |
 | R5 | Library work that can take longer than a moment runs as a job, never in a user interface's event loop. |
 | R6 | The diagnostics of a run belong to its result: they arrive in the DTO with code, severity and the elements they concern. |
-| R7 | The project file is the library's network JSON -- UTF-8, written atomically, with `schema_version` -- without stored results and without view state. |
+| R7 | The project file is the library's project file -- UTF-8, written atomically, with `schema_version` -- holding the network without stored results, its diagram and the evaluation tabs. |
 | R8 | The service layer imports no UI or web toolkit and keeps no module state: one session per user and project, two sessions never share state. |
 | R9 | Every number a front end shows is checked against the library two independent ways (the DTOs of the documented examples against the `res_*` frames of `run_fault` and against an independent reference solver; thread against process execution). |
 | R10 | A result is bound to the revision it was computed from; whether it is stale is the library's verdict (`Network.is_result_stale`), so undoing an edit makes a result current again. |
@@ -312,25 +312,34 @@ report.revision, session.is_stale("fault_at_remote_bus")    # (1, True)
 session.undo()
 session.is_stale("fault_at_remote_bus")                      # False: current again
 
-session.save("projekt.json")      # UTF-8, atomic, schema-versioned, no results
+session.save("~/projekt.json")    # UTF-8, atomic, schema-versioned, no results
 session.close()
 ```
 
-A session owns one network. Front ends read it through the DTO methods --
-`summary()`, `tables()` (the ten tables of `Network.to_tables`, plus catalogue
-types nobody uses yet), `check()` (the pre-flight check), `result(fault)` --
-and change it only through `apply(command)`. `revision` identifies an input
+A session owns one network and its diagram. Front ends read them through the
+DTO methods -- `summary()`, `tables()` (the ten tables of `Network.to_tables`,
+plus catalogue types nobody uses yet), `diagram()` (every bus and branch with
+its place), `characteristic(kind, name)` (the earthing characteristic of a bus
+or bus type), `check()` (the pre-flight check), `result(fault)` -- and change
+them only through `apply(command)`. `revision` identifies an input
 state: a new command gets a new number, undo and redo return to the number of
 the state they restore. `dirty` compares it with the last opened or saved
 revision.
 
-Opening and saving use the library's project-file functions, so a file
-written by the GUI opens in a notebook and the other way round. Results are
-left out of the file (they are derived and go stale with the next edit); a
-file that carries results keeps them on open, and the library says whether
-they are stale. A server keeps projects in a `ProjectStore` instead: a
-`MemoryStore`, or a `DatabaseStore` over a `gi.Database`
-(`ProjectSession.from_store(store, key)`, `session.save_to(store, key)`).
+Opening and saving use the library's project-file functions
+(`gi.load_project`, `gi.save_project`), so a file written by the GUI opens in
+a notebook and the other way round; a path may start with `~` and contain
+environment variables, which are expanded. Results are left out of the file
+(they are derived and go stale with the next edit); a file that carries
+results keeps them on open, and the library says whether they are stale. The
+diagram and the evaluation tabs (`session.views`) are saved with the network.
+A network opened without a diagram -- a file of 2026.11.x, a database -- is
+laid out automatically (`gi.Diagram.with_layout`), and so is every element
+without a place; that layout is not an edit and does not make the project
+dirty. A server keeps projects in a `ProjectStore` instead: a `MemoryStore`
+(which keeps the diagram and views), or a `DatabaseStore` over a
+`gi.Database` (network only) (`ProjectSession.from_store(store, key)`,
+`session.save_to(store, key)`).
 
 The constructor takes the resource limits a server sets per user:
 `max_buses`, `max_branches` (a larger file is refused on open, a command that
@@ -342,15 +351,19 @@ so two sessions with different caps share nothing.
 
 ### Commands
 
-| Element | Add | Update (`fields`) | Remove |
-|---|---|---|---|
-| bus | `AddBus` | `UpdateBus` (`Network.update_bus`) | `RemoveBus` |
-| branch | `AddBranch` | `UpdateBranch` (`Network.update_branch`) | `RemoveBranch` |
-| source | `AddSource` | `UpdateSource` (a validated replacement) | `RemoveSource` |
-| fault | `AddFault` | `UpdateFault` (validated, then assigned) | `RemoveFault` |
-| bus type | `AddBusType` | `UpdateBusType` | `RemoveBusType` |
-| branch type | `AddBranchType` | `UpdateBranchType` | `RemoveBranchType` |
-| frequencies | -- | `SetFrequencies` | -- |
+| Element | Add | Update (`fields`) | Rename (`new_name`) | Remove |
+|---|---|---|---|---|
+| bus | `AddBus`, `PlaceBus` (with its symbol) | `UpdateBus` (`Network.update_bus`) | `RenameBus` | `RemoveBus` |
+| branch | `AddBranch` | `UpdateBranch` (`Network.update_branch`) | `RenameBranch` | `RemoveBranch` |
+| source | `AddSource` | `UpdateSource` (a validated replacement) | `RenameSource` | `RemoveSource` |
+| fault | `AddFault` | `UpdateFault` (validated, then assigned) | `RenameFault` | `RemoveFault` |
+| bus type | `AddBusType` | `UpdateBusType` | `RenameBusType` | `RemoveBusType` |
+| branch type | `AddBranchType` | `UpdateBranchType` | `RenameBranchType` | `RemoveBranchType` |
+| frequencies | -- | `SetFrequencies` | -- | -- |
+
+| Diagram | Earthing characteristic (`target="bus"` or `"bus_type"`) |
+|---|---|
+| `MoveNodes` (several symbols, one undo step), `RouteBranch` (waypoints), `UpdateDiagramNode` (symbol, label offset, busbar length), `AutoLayout` (the library's layout, or positions a front end computed) | `SetCharacteristic` (its JSON form), `ImportCharacteristic` (a groundfield BusType document), `ClearCharacteristic` |
 
 A command calls the library's own editing API, so the library validates the
 input and re-derives the impedances; a rejected command raises `CommandError`
@@ -361,7 +374,13 @@ removed fault, the position of a re-added element): after an undo the
 serialised network is identical to the one before the command. Elements refer
 to types by name; types are read-only in the library, so a type edit creates
 a changed copy and swaps it into every element of that type, all or nothing.
-The commands are pydantic models with a discriminator `op`, so
+A rename follows the element everywhere it is named: `RenameBus` adds a
+renamed copy, rewires every branch, source and fault to it and removes the old
+bus, and the diagram entry moves with it; stored results become stale (they
+name the old element) and are current again after undo -- the result of a
+renamed fault is put aside until then. Removing an element removes its
+diagram entry. Diagram commands change no input of a result, so every result
+stays current. The commands are pydantic models with a discriminator `op`, so
 `parse_command({"op": "update_bus", "name": "b1", "fields": {"active": False}})`
 builds one from JSON; `COMMAND_OPS` lists the `op` value of every command.
 
@@ -391,7 +410,12 @@ current one.
 ### DTOs and JSON schemas
 
 Every DTO is a pydantic model with `dto_schema_version`; `model_dump_json()`
-is the wire format and never contains `NaN` or `Infinity`.
+is the wire format and never contains `NaN` or `Infinity`. This release
+writes version 2 (`DTO_SCHEMA_VERSION`) and reads versions 1 and 2
+(`READABLE_DTO_SCHEMA_VERSIONS`): version 2 only added fields with defaults --
+`DiagramDTO`, `CharacteristicDTO`, the touch-voltage columns of
+`KeyFigureRowDTO`, the new commands -- so a request written for version 1
+still parses.
 `groundinsight.api.schemas.json_schemas()` returns the JSON schema of every
 DTO plus `Command` (all edit commands) and `JobRequest` (all job requests) --
 the request and response schemas of a future REST API. The key figures are

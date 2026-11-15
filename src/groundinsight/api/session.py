@@ -14,9 +14,18 @@ everything a user interface needs around it and a notebook does not:
   :class:`ProjectStore` -- an in-memory store or a :class:`~groundinsight.Database`
   (server use). Opening and saving go through the library's project-file
   functions, so a GUI project is a library project: UTF-8, atomic,
-  schema-versioned. The file holds the network only -- no stored results
+  schema-versioned. The file holds the network without its stored results
   (they are derived, go stale with the next edit and make a file useless in a
-  diff) and no view state;
+  diff), its diagram and the evaluation tabs (``views``). A path may start
+  with ``~`` and contain environment variables (``$HOME``, ``%USERPROFILE%``);
+  both are expanded, as a shell would;
+* the **diagram** (:class:`~groundinsight.Diagram`): edited by the same
+  commands as the network, undone with them, and never part of a result's
+  inputs, so moving a symbol leaves every result current. A network opened
+  without a diagram -- a file of an earlier release, a database -- is laid
+  out automatically (:meth:`Diagram.with_layout
+  <groundinsight.Diagram.with_layout>`), and so are elements without an
+  entry; that layout is not an edit and does not make the project dirty;
 * the **type catalogue** by name (see :mod:`~groundinsight.api.commands`);
 * **resource limits** (network size, job runtime, undo depth) given to the
   constructor, so a server can set them per user;
@@ -45,6 +54,7 @@ that is current with one that is stale.
 
 import itertools
 import logging
+import os
 import threading
 from typing import Any, Dict, Iterable, List, Optional, Union
 
@@ -56,8 +66,10 @@ from .examples import EXAMPLES
 from .jobs import JobHandle, JobRunner, snapshot_network
 from .tasks import TaskOutcome, run_task
 from .schemas import (
+    CharacteristicDTO,
     CheckReportDTO,
     CommandResultDTO,
+    DiagramDTO,
     FaultResultDTO,
     FaultResultsDTO,
     NetworkSummaryDTO,
@@ -67,7 +79,14 @@ from .schemas import (
     TableDTO,
     parse_job_request,
 )
-from .views import check_report_dto, diagnostic_dto, element_tables_dto, fault_result_dto
+from .views import (
+    characteristic_dto,
+    check_report_dto,
+    diagnostic_dto,
+    diagram_dto,
+    element_tables_dto,
+    fault_result_dto,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -148,14 +167,51 @@ class ProjectStore:
         """
         raise NotImplementedError
 
+    def load_project(self, key: str) -> "gi.Project":
+        """
+        Load the project stored under ``key``: network, diagram and views.
+
+        The default keeps networks only (:meth:`load`); a store that keeps
+        the diagram and the views overrides this and :meth:`save_project`.
+
+        Parameters
+        ----------
+        key : str
+            The project key.
+
+        Returns
+        -------
+        Project
+            The network, without diagram and views by default.
+
+        Raises
+        ------
+        KeyError
+            If no project is stored under ``key``.
+        """
+        return gi.Project(network=self.load(key))
+
+    def save_project(self, key: str, project: "gi.Project") -> None:
+        """
+        Store a project under ``key``; by default its network only (:meth:`save`).
+
+        Parameters
+        ----------
+        key : str
+            The project key.
+        project : Project
+            The network (without stored results), diagram and views.
+        """
+        self.save(key, project.network)
+
 
 class MemoryStore(ProjectStore):
     """
     Projects in memory, as their JSON text -- for a demo server and for tests.
 
-    Saving stores ``model_dump_json()`` of the network; loading validates it
-    into a new object, so a loaded project shares nothing with the saved one,
-    exactly as with a file.
+    Saving stores the text of a project file (:func:`groundinsight.project_to_json`,
+    diagram and views included); loading validates it into new objects, so a
+    loaded project shares nothing with the saved one, exactly as with a file.
 
     Examples
     --------
@@ -189,11 +245,7 @@ class MemoryStore(ProjectStore):
         KeyError
             If no project is stored under ``key``.
         """
-        with self._lock:
-            text = self._projects.get(key)
-        if text is None:
-            raise KeyError(f"no project '{key}' in the memory store")
-        return gi.Network.model_validate_json(text)
+        return self.load_project(key).network
 
     def save(self, key: str, network: gi.Network) -> None:
         """
@@ -206,9 +258,7 @@ class MemoryStore(ProjectStore):
         network : Network
             The network, kept as its JSON form.
         """
-        text = network.model_dump_json()
-        with self._lock:
-            self._projects[key] = text
+        self.save_project(key, gi.Project(network=network))
 
     def keys(self) -> List[str]:
         """
@@ -222,6 +272,46 @@ class MemoryStore(ProjectStore):
         with self._lock:
             return sorted(self._projects)
 
+    def load_project(self, key: str) -> "gi.Project":
+        """
+        Load network, diagram and views (see :meth:`ProjectStore.load_project`).
+
+        Parameters
+        ----------
+        key : str
+            The project key.
+
+        Returns
+        -------
+        Project
+            Fresh objects, parsed from the stored text.
+
+        Raises
+        ------
+        KeyError
+            If no project is stored under ``key``.
+        """
+        with self._lock:
+            text = self._projects.get(key)
+        if text is None:
+            raise KeyError(f"no project '{key}' in the memory store")
+        return gi.project_from_json(text, source=f"memory:{key}")
+
+    def save_project(self, key: str, project: "gi.Project") -> None:
+        """
+        Store network, diagram and views (see :meth:`ProjectStore.save_project`).
+
+        Parameters
+        ----------
+        key : str
+            The project key; a project stored under it is replaced.
+        project : Project
+            The project, kept as the text of a project file.
+        """
+        text = gi.project_to_json(project.network, project.diagram, project.views)
+        with self._lock:
+            self._projects[key] = text
+
 
 class DatabaseStore(ProjectStore):
     """
@@ -229,7 +319,8 @@ class DatabaseStore(ProjectStore):
 
     The database keys networks by their name, so the store key must be the
     network's name. Saving replaces a stored network of that name; the
-    database stores no results.
+    database stores no results, no diagram and no views -- a project opened
+    from it is laid out automatically.
 
     Parameters
     ----------
@@ -303,6 +394,47 @@ class DatabaseStore(ProjectStore):
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
+
+def _expand_path(path: Any) -> str:
+    """
+    A path with ``~`` and environment variables expanded.
+
+    Parameters
+    ----------
+    path : str or os.PathLike
+        The path as a user typed it.
+
+    Returns
+    -------
+    str
+        :func:`os.path.expanduser` of :func:`os.path.expandvars` of it; an
+        undefined variable is left as it is.
+    """
+    return os.path.expanduser(os.path.expandvars(os.fspath(path)))
+
+
+def _initial_diagram(network: gi.Network, diagram: Optional[gi.Diagram]) -> gi.Diagram:
+    """
+    The diagram a session starts with: every element placed.
+
+    Parameters
+    ----------
+    network : Network
+        The network.
+    diagram : Diagram, optional
+        The stored diagram, if any.
+
+    Returns
+    -------
+    Diagram
+        ``diagram`` with the elements it lacks laid out, or the automatic
+        layout of the whole network without one.
+    """
+    diagram = diagram if diagram is not None else gi.Diagram()
+    if diagram.placed(network):
+        return diagram
+    return diagram.with_layout(network, only_unplaced=True)
 
 
 def _without_results(network: gi.Network) -> gi.Network:
@@ -420,6 +552,11 @@ class ProjectSession:
         network's own :class:`groundinsight.PathfinderSettings`, so other
         sessions in the process keep theirs. ``None`` leaves the network's
         settings as they are.
+    diagram : Diagram, optional
+        The network's diagram; elements without an entry, or every element
+        when it is ``None``, are laid out automatically.
+    views : list of dict, optional
+        The evaluation tabs, kept and saved unchanged.
 
     Raises
     ------
@@ -457,6 +594,8 @@ class ProjectSession:
         max_job_runtime_s: Optional[float] = None,
         max_undo: Optional[int] = 500,
         max_paths: Optional[int] = None,
+        diagram: Optional[gi.Diagram] = None,
+        views: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         if not isinstance(network, gi.Network):
             raise TypeError(f"a session holds a groundinsight.Network, got {type(network).__name__}")
@@ -486,6 +625,8 @@ class ProjectSession:
         self._key = key
         self._bus_types = _catalogue(network.buses.values())
         self._branch_types = _catalogue(network.branches.values())
+        self._diagram = _initial_diagram(network, diagram)
+        self._views: List[Dict[str, Any]] = [dict(view) for view in (views or [])]
         self._lock = threading.RLock()
         self._revision = 0
         self._saved_revision = 0
@@ -506,20 +647,21 @@ class ProjectSession:
     @classmethod
     def from_file(cls, path: str, **options: Any) -> "ProjectSession":
         """
-        Open a project file (:func:`groundinsight.load_network_from_json`).
+        Open a project file (:func:`groundinsight.load_project`).
 
         Parameters
         ----------
         path : str
-            The project file.
+            The project file; ``~`` and environment variables are expanded.
         **options
             Keyword arguments of the constructor (limits, runner).
 
         Returns
         -------
         ProjectSession
-            A session located at ``path``. Results stored in the file are kept
-            on the network (the library reports whether they are stale).
+            A session located at the expanded ``path``, with the file's
+            diagram and views. Results stored in the file are kept on the
+            network (the library reports whether they are stale).
 
         Raises
         ------
@@ -527,12 +669,14 @@ class ProjectSession:
             If the file cannot be read, is not a project file, or exceeds the
             session's limits.
         """
+        path = _expand_path(path)
         try:
-            network = gi.load_network_from_json(path)
+            project = gi.load_project(path)
         except (OSError, ValueError) as exc:
             raise ProjectError(f"cannot open '{path}': {rejection_reason(exc)}") from exc
         try:
-            return cls(network, path=path, **options)
+            return cls(project.network, path=path, diagram=project.diagram,
+                       views=project.views, **options)
         except ValueError as exc:
             raise ProjectError(f"cannot open '{path}': {rejection_reason(exc)}") from exc
 
@@ -563,11 +707,12 @@ class ProjectSession:
         """
         location = f"{store.scheme}:{key}"
         try:
-            network = store.load(key)
+            project = store.load_project(key)
         except (KeyError, OSError, ValueError, RuntimeError) as exc:
             raise ProjectError(f"cannot open '{location}': {rejection_reason(exc)}") from exc
         try:
-            return cls(network, store=store, key=key, **options)
+            return cls(project.network, store=store, key=key, diagram=project.diagram,
+                       views=project.views, **options)
         except ValueError as exc:
             raise ProjectError(f"cannot open '{location}': {rejection_reason(exc)}") from exc
 
@@ -640,6 +785,34 @@ class ProjectSession:
             The session's working network (not a copy).
         """
         return self._network
+
+    @property
+    def diagram_model(self) -> gi.Diagram:
+        """
+        The session's diagram, for reading (notebooks, tests).
+
+        Front ends use :meth:`diagram`; every change goes through
+        :meth:`apply`.
+
+        Returns
+        -------
+        Diagram
+            The current diagram; commands replace it, they never edit it.
+        """
+        return self._diagram
+
+    @property
+    def views(self) -> List[Dict[str, Any]]:
+        """
+        The evaluation tabs of the project, as stored.
+
+        Returns
+        -------
+        list of dict
+            A copy of the views.
+        """
+        with self._lock:
+            return [dict(view) for view in self._views]
 
     @property
     def revision(self) -> int:
@@ -764,7 +937,8 @@ class ProjectSession:
         Parameters
         ----------
         path : str, optional
-            A project file. Without it, the session's file or store location.
+            A project file; ``~`` and environment variables are expanded.
+            Without it, the session's file or store location.
 
         Returns
         -------
@@ -784,14 +958,14 @@ class ProjectSession:
                 raise ProjectError("the project has no location yet; pass a path")
             view = _without_results(self._network)
             if path is not None or self._store is None:
-                target = str(path) if path is not None else self._path
+                target = _expand_path(path) if path is not None else self._path
                 try:
-                    gi.save_network_to_json(view, target)
-                except (OSError, ValueError) as exc:
+                    gi.save_project(target, view, self._diagram, self._views)
+                except (OSError, ValueError, TypeError) as exc:
                     raise ProjectError(f"cannot save '{target}': {rejection_reason(exc)}") from exc
                 self._path, self._store, self._key = target, None, None
             else:
-                self._save_to_store(self._store, self._key, view)
+                self._save_to_store(self._store, self._key, self._project(view))
             self._saved_revision = self._revision
             return self.location
 
@@ -818,16 +992,20 @@ class ProjectSession:
         """
         with self._lock:
             self._require_open()
-            self._save_to_store(store, key, _without_results(self._network))
+            self._save_to_store(store, key, self._project(_without_results(self._network)))
             self._path, self._store, self._key = None, store, key
             self._saved_revision = self._revision
             return self.location
 
+    def _project(self, network: gi.Network) -> "gi.Project":
+        """The project to store: ``network`` with the session's diagram and views."""
+        return gi.Project(network=network, diagram=self._diagram, views=self._views)
+
     @staticmethod
-    def _save_to_store(store: ProjectStore, key: str, network: gi.Network) -> None:
+    def _save_to_store(store: ProjectStore, key: str, project: "gi.Project") -> None:
         """Write to a store, turning its failures into :class:`ProjectError`."""
         try:
-            store.save(key, network)
+            store.save_project(key, project)
         except (OSError, ValueError, RuntimeError) as exc:
             raise ProjectError(f"cannot save '{store.scheme}:{key}': {rejection_reason(exc)}") from exc
 
@@ -835,7 +1013,8 @@ class ProjectSession:
 
     def _context(self) -> CommandContext:
         """The objects commands act on."""
-        return CommandContext(self._network, self._bus_types, self._branch_types, self._limits)
+        return CommandContext(self._network, self._bus_types, self._branch_types, self._limits,
+                              diagram=self._diagram)
 
     def _require_open(self) -> None:
         """Refuse work on a closed session."""
@@ -883,8 +1062,10 @@ class ProjectSession:
         with self._lock:
             self._require_open()
             paths_before = self._network.paths
+            context = self._context()
             with collecting() as records:
-                command.apply(self._context())
+                command.apply(context)
+            self._diagram = context.diagram
             entry = _Entry(command, self._revision, next(self._revisions), paths_before)
             self._done.append(entry)
             self._undone.clear()
@@ -909,9 +1090,10 @@ class ProjectSession:
             if not self._done:
                 return None
             entry = self._done[-1]
+            context = self._context()
             try:
                 with collecting() as records:
-                    entry.command.revert(self._context())
+                    entry.command.revert(context)
                     if self._network.paths is not entry.paths:
                         self._network.paths = entry.paths
             except Exception:
@@ -920,6 +1102,7 @@ class ProjectSession:
                 # exception reaches the caller.
                 logger.debug("undo of '%s' failed", entry.command.label, exc_info=True)
                 raise
+            self._diagram = context.diagram
             self._done.pop()
             self._undone.append(entry)
             self._revision = entry.before
@@ -941,8 +1124,10 @@ class ProjectSession:
                 return None
             entry = self._undone.pop()
             entry.paths = self._network.paths
+            context = self._context()
             with collecting() as records:
-                entry.command.apply(self._context())
+                entry.command.apply(context)
+            self._diagram = context.diagram
             self._done.append(entry)
             self._revision = entry.after
             return self._command_result(entry.command, records)
@@ -1024,6 +1209,45 @@ class ProjectSession:
             If ``name`` is not a table.
         """
         return self.tables().tables[name]
+
+    def diagram(self) -> DiagramDTO:
+        """
+        The diagram as a front end draws it.
+
+        Returns
+        -------
+        DiagramDTO
+            Every bus and branch with its place; one added without a place
+            (an ``AddBus`` from the table view) at the position of the
+            automatic layout, marked ``placed=False``.
+        """
+        with self._lock:
+            return diagram_dto(self._network, self._diagram, revision=self._revision)
+
+    def characteristic(self, kind: str, name: str) -> Optional[CharacteristicDTO]:
+        """
+        The earthing characteristic of a bus or a bus type.
+
+        Parameters
+        ----------
+        kind : {"bus", "bus_type"}
+            Whether ``name`` is a bus or a catalogue bus type.
+        name : str
+            The bus or bus type.
+
+        Returns
+        -------
+        CharacteristicDTO or None
+            For a bus the one it uses (its own, else its type's), with where
+            it hangs; ``None`` without one.
+
+        Raises
+        ------
+        ValueError
+            If there is no such bus or type.
+        """
+        with self._lock:
+            return characteristic_dto(self._network, kind, name, self._bus_types)
 
     def check(self, fault: Optional[str] = None) -> CheckReportDTO:
         """

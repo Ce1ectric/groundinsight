@@ -35,9 +35,12 @@ it is stale).
 ## Every edit is a command
 
 A front end changes the project only through `session.apply(command)`. The
-commands — `AddBus`, `UpdateBus`, `RemoveBus` and their counterparts for
-branches, sources, faults and the two type catalogues, plus `SetFrequencies` —
-call the library's editing API, so the library validates the input and
+commands — `AddBus`, `UpdateBus`, `RenameBus`, `RemoveBus` and their
+counterparts for branches, sources, faults and the two type catalogues,
+`SetFrequencies`, the diagram commands (`PlaceBus`, `MoveNodes`,
+`RouteBranch`, `UpdateDiagramNode`, `AutoLayout`) and the characteristic
+commands (`SetCharacteristic`, `ImportCharacteristic`,
+`ClearCharacteristic`) — call the library's editing API, so the library validates the input and
 derives the impedances. A command is atomic: a rejected one raises
 `CommandError` and changes nothing, not even the revision. `session.undo()`
 and `session.redo()` restore the network exactly; `revision` identifies an
@@ -75,8 +78,9 @@ is its wire format and never contains `NaN` or `Infinity` (a non-finite number
 is `null`). `json_schemas()` returns the JSON schema of every DTO, of all
 commands and of all job requests — the request and response schemas of a REST
 API. `session.save(path)` writes the library's project file (UTF-8, atomic,
-with `schema_version`) without stored results, so a file saved by a front end
-opens in a notebook and the other way round.
+with `schema_version`) with the diagram and without stored results, so a file
+saved by a front end opens in a notebook and the other way round; `~` and
+environment variables in the path are expanded.
 
 ```python
 --8<-- "docs/snippets/service_layer.py:wire"
@@ -144,7 +148,7 @@ RMS: I_F = 1026.2 A, EPR at the fault = 276.1 V, I_E = 274.6 A, U_E = 276.1 V
 diagnostics: ['SCALINGS_INCOMPLETE']
 after the edit: revision 1, stale True; after undo: revision 0, stale False
 job: done, same figures: True
-wire format: FaultResultDTO as JSON, 27 schemas
+wire format: FaultResultDTO as JSON, 32 schemas
 ```
 
 The test suite compares the key figures of the session with `res_fault` of a

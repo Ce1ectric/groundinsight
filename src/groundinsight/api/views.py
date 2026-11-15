@@ -29,9 +29,14 @@ import groundinsight as gi
 from groundinsight.io import TABLE_SCHEMAS
 
 from .schemas import (
+    CharacteristicDTO,
     CheckReportDTO,
     ColumnDTO,
     DiagnosticDTO,
+    DiagramDTO,
+    DiagramEdgeDTO,
+    DiagramMarkerDTO,
+    DiagramNodeDTO,
     ElementRefDTO,
     FaultResultDTO,
     KeyFigureRowDTO,
@@ -44,8 +49,10 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "COLUMN_UNITS",
+    "characteristic_dto",
     "check_report_dto",
     "diagnostic_dto",
+    "diagram_dto",
     "element_tables_dto",
     "fault_result_dto",
     "key_figures_dto",
@@ -312,4 +319,146 @@ def check_report_dto(
         n_errors=n_errors,
         n_warnings=sum(d.severity == "warning" for d in diagnostics),
         diagnostics=diagnostics,
+    )
+
+
+def _characteristic_origin(bus: gi.Bus) -> Optional[str]:
+    """
+    Where the characteristic of a bus hangs.
+
+    Parameters
+    ----------
+    bus : Bus
+        The bus.
+
+    Returns
+    -------
+    str or None
+        ``"bus"`` for its own, ``"bus_type"`` for its type's, ``None``
+        without one.
+    """
+    if bus.characteristic is not None:
+        return "bus"
+    return "bus_type" if bus.type.characteristic is not None else None
+
+
+def diagram_dto(network: gi.Network, diagram: gi.Diagram, *, revision: int) -> DiagramDTO:
+    """
+    The diagram of a network, every element listed.
+
+    Parameters
+    ----------
+    network : Network
+        The network.
+    diagram : Diagram
+        Its stored diagram.
+    revision : int
+        Session revision the diagram describes.
+
+    Returns
+    -------
+    DiagramDTO
+        One node per bus and one edge per branch in network order; elements
+        without an entry at the position of
+        :meth:`Diagram.with_layout <groundinsight.Diagram.with_layout>` with
+        ``only_unplaced=True`` and ``placed`` false. The stored diagram is
+        not changed.
+    """
+    shown = diagram.with_layout(network, only_unplaced=True)
+    fed = {source.bus for source in network.sources.values()}
+    faulted = {fault.bus for fault in network.faults.values()}
+    nodes = [
+        DiagramNodeDTO(
+            name=name, x=node.x, y=node.y, symbol=node.symbol, label_offset=node.label_offset,
+            length=node.length, placed=name in diagram.nodes, bus_type=bus.type.name,
+            voltage_level=bus.type.voltage_level, active=bus.active, has_source=name in fed,
+            has_fault=name in faulted, characteristic=_characteristic_origin(bus),
+        )
+        for name, bus in network.buses.items()
+        for node in (shown.nodes[name],)
+    ]
+    edges = [
+        DiagramEdgeDTO(
+            name=name, from_bus=branch.from_bus, to_bus=branch.to_bus,
+            waypoints=shown.edges[name].waypoints, label_offset=shown.edges[name].label_offset,
+            placed=name in diagram.edges, branch_type=branch.type.name, active=branch.active,
+            grounding_conductor=branch.type.grounding_conductor,
+        )
+        for name, branch in network.branches.items()
+    ]
+    markers = [
+        DiagramMarkerDTO(kind=kind, name=name, bus=element.bus,
+                         offset=entries[name].offset if name in entries else (0.0, 0.0))
+        for kind, collection, entries in (("fault", network.faults, diagram.faults),
+                                          ("source", network.sources, diagram.sources))
+        for name, element in collection.items()
+    ]
+    return DiagramDTO(
+        revision=revision, nodes=nodes, edges=edges, markers=markers,
+        color_scheme=diagram.color_scheme, grid_size=diagram.grid_size,
+        diagnostics=[diagnostic_dto(d) for d in diagram.check(network)],
+    )
+
+
+def characteristic_dto(
+    network: gi.Network,
+    kind: str,
+    name: str,
+    bus_types: Dict[str, gi.BusType],
+) -> Optional[CharacteristicDTO]:
+    """
+    The earthing characteristic of a bus or a catalogue bus type.
+
+    Parameters
+    ----------
+    network : Network
+        The network.
+    kind : {"bus", "bus_type"}
+        What ``name`` is.
+    name : str
+        The bus or bus type.
+    bus_types : dict of str to BusType
+        The session's bus type catalogue.
+
+    Returns
+    -------
+    CharacteristicDTO or None
+        For a bus the characteristic it uses (its own, else its type's),
+        with ``extrapolated`` from :meth:`EarthingCharacteristic.is_extrapolated
+        <groundinsight.EarthingCharacteristic.is_extrapolated>` at its ``rho``
+        and the network frequencies; ``None`` when it has none.
+
+    Raises
+    ------
+    ValueError
+        If ``kind`` is unknown or ``name`` is no bus / catalogue type.
+    """
+    extrapolated = None
+    if kind == "bus":
+        bus = network.buses.get(name)
+        if bus is None:
+            raise ValueError(f"bus '{name}' does not exist in network '{network.name}'")
+        origin = "bus" if bus.characteristic is not None else "bus_type"
+        characteristic = bus.resolved_characteristic()
+        if characteristic is not None:
+            extrapolated = characteristic.is_extrapolated(
+                bus.specific_earth_resistance, network.frequencies)
+    elif kind == "bus_type":
+        if name not in bus_types:
+            raise ValueError(f"bus type '{name}' is not in the catalogue")
+        origin = "bus_type"
+        characteristic = bus_types[name].characteristic
+    else:
+        raise ValueError(f"unknown owner kind {kind!r}; expected 'bus' or 'bus_type'")
+    if characteristic is None:
+        return None
+    provenance = characteristic.provenance
+    return CharacteristicDTO(
+        owner_kind=kind, owner=name, origin=origin, name=characteristic.name,
+        impedance_source=characteristic.impedance_source,
+        impedance_formula=characteristic.impedance_formula,
+        rho_Ohm_m=list(characteristic.rho_Ohm_m), frequency_Hz=list(characteristic.frequency_Hz),
+        table=table_dto("characteristic", characteristic.to_frame()),
+        extrapolated=extrapolated,
+        provenance=provenance.model_dump(mode="json") if provenance is not None else {},
     )

@@ -881,7 +881,10 @@ def test_commands_parse_from_json_and_name_unknown_operations():
     assert isinstance(command, api.UpdateBus) and command.fields == {"active": False}
     with pytest.raises(api.CommandError, match="op"):
         api.parse_command({"op": "format_disk"})
-    assert {c.op for c in _command_catalogue()} == set(api.COMMAND_OPS)
+    # The commands of the diagram, the renames and the characteristics have
+    # their own catalogue (tests/test_api_diagram_editing.py), which checks
+    # that the two together cover every op.
+    assert {c.op for c in _command_catalogue()} <= set(api.COMMAND_OPS)
 
 
 @COMMAND_DIAGNOSTICS

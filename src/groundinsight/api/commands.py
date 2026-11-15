@@ -66,20 +66,34 @@ __all__ = [
     "AddBusType",
     "AddFault",
     "AddSource",
+    "AutoLayout",
+    "ClearCharacteristic",
     "Command",
     "CommandContext",
     "CommandError",
+    "ImportCharacteristic",
+    "MoveNodes",
+    "PlaceBus",
     "RemoveBranch",
     "RemoveBranchType",
     "RemoveBus",
     "RemoveBusType",
     "RemoveFault",
     "RemoveSource",
+    "RenameBranch",
+    "RenameBranchType",
+    "RenameBus",
+    "RenameBusType",
+    "RenameFault",
+    "RenameSource",
+    "RouteBranch",
+    "SetCharacteristic",
     "SetFrequencies",
     "UpdateBranch",
     "UpdateBranchType",
     "UpdateBus",
     "UpdateBusType",
+    "UpdateDiagramNode",
     "UpdateFault",
     "UpdateSource",
     "parse_command",
@@ -106,6 +120,10 @@ class CommandContext:
         dictionaries in place.
     limits : SessionLimitsDTO
         The session's resource limits.
+    diagram : Diagram, optional
+        The session's diagram; default an empty one. A command replaces it
+        by a changed copy (diagrams are not edited in place); the session
+        reads it back afterwards.
     """
 
     def __init__(
@@ -114,11 +132,13 @@ class CommandContext:
         bus_types: Dict[str, gi.BusType],
         branch_types: Dict[str, gi.BranchType],
         limits: SessionLimitsDTO,
+        diagram: Optional[gi.Diagram] = None,
     ) -> None:
         self.network = network
         self.bus_types = bus_types
         self.branch_types = branch_types
         self.limits = limits
+        self.diagram = diagram if diagram is not None else gi.Diagram()
 
     def catalogue(self, kind: str) -> Dict[str, Any]:
         """
@@ -391,8 +411,16 @@ class Command(BaseDTO):
     Subclasses define their fields, a :attr:`label` and the two methods
     ``_apply``/``_revert``; this class turns the library's ``ValueError``,
     ``TypeError``, ``KeyError`` and ``AttributeError`` into
-    :class:`CommandError`. ``_apply`` must leave everything unchanged when it
-    raises; ``_revert`` undoes a successful ``_apply`` and must not fail.
+    :class:`CommandError`. ``_apply`` must leave the network unchanged when
+    it raises; ``_revert`` undoes a successful ``_apply`` on the network and
+    must not fail.
+
+    The diagram is handled here, for every command alike: ``_apply`` may
+    replace ``context.diagram`` by a changed copy, and this class puts the
+    former diagram back when ``_apply`` raises and on :meth:`revert`. A
+    diagram is small and never edited in place, so keeping the former object
+    costs nothing -- unlike a snapshot of the network, which the commands
+    avoid (see the module docstring).
 
     Attributes
     ----------
@@ -402,6 +430,7 @@ class Command(BaseDTO):
 
     op: str
     _undo: Any = PrivateAttr(default=None)
+    _diagram_before: Any = PrivateAttr(default=None)
 
     @property
     def label(self) -> str:
@@ -429,12 +458,16 @@ class Command(BaseDTO):
         CommandError
             If the library rejects the change; nothing has changed then.
         """
+        diagram = context.diagram
         try:
             self._apply(context)
         except CommandError:
+            context.diagram = diagram
             raise
         except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            context.diagram = diagram
             raise CommandError(f"{self.label}: {rejection_reason(exc)}") from exc
+        self._diagram_before = diagram
 
     def revert(self, context: CommandContext) -> None:
         """
@@ -453,6 +486,7 @@ class Command(BaseDTO):
         if self._undo is None:
             raise RuntimeError(f"cannot revert '{self.label}': it was not applied")
         self._revert(context)
+        context.diagram = self._diagram_before
         self._undo = None
 
     def _apply(self, context: CommandContext) -> None:  # pragma: no cover - abstract
@@ -606,6 +640,7 @@ class RemoveBus(Command):
 
     def _apply(self, context: CommandContext) -> None:
         _remove_element(self, context, "buses")
+        context.diagram = context.diagram.without("bus", self.name)
 
     def _revert(self, context: CommandContext) -> None:
         _readd_element(self, context, "buses")
@@ -728,6 +763,7 @@ class RemoveBranch(Command):
 
     def _apply(self, context: CommandContext) -> None:
         _remove_element(self, context, "branches")
+        context.diagram = context.diagram.without("branch", self.name)
 
     def _revert(self, context: CommandContext) -> None:
         _readd_element(self, context, "branches")
@@ -992,6 +1028,7 @@ class RemoveSource(Command):
             raise CommandError(f"{self.label}: it does not exist")
         order = list(network.sources)
         self._undo = (network.remove_source(self.name), order)
+        context.diagram = context.diagram.without("source", self.name)
 
     def _revert(self, context: CommandContext) -> None:
         removed, order = self._undo
@@ -1152,17 +1189,32 @@ class RemoveFault(Command):
         )
         removed = network.remove_fault(self.name)
         self._undo = (removed, *state)
+        context.diagram = context.diagram.without("fault", self.name)
 
     def _revert(self, context: CommandContext) -> None:
-        network = context.network
-        removed, order, result, result_order, was_active = self._undo
-        network.add_fault(removed)
-        _restore_order(network, "faults", order)
-        if result is not None:
-            network.results[self.name] = result
-            _restore_order(network, "results", result_order)
-        if was_active:
-            network.set_active_fault(self.name, keep_results=True)
+        _restore_fault(context.network, self._undo)
+
+
+def _restore_fault(network: gi.Network, removed_state: Tuple[Any, ...]) -> None:
+    """
+    Put a removed fault back with its position, stored result and active state.
+
+    Parameters
+    ----------
+    network : Network
+        The network.
+    removed_state : tuple
+        ``(fault, fault order, result or None, result order, was active)``
+        as recorded before ``Network.remove_fault``.
+    """
+    removed, order, result, result_order, was_active = removed_state
+    network.add_fault(removed)
+    _restore_order(network, "faults", order)
+    if result is not None:
+        network.results[removed.name] = result
+        _restore_order(network, "results", result_order)
+    if was_active:
+        network.set_active_fault(removed.name, keep_results=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1485,6 +1537,839 @@ class SetFrequencies(Command):
 
 
 # ---------------------------------------------------------------------------
+# renaming
+# ---------------------------------------------------------------------------
+
+
+def _renamed_copy(element: Any, new_name: str) -> Any:
+    """
+    A detached copy of an element under another name, derived afresh.
+
+    Parameters
+    ----------
+    element : Bus, Branch, Source or Fault
+        The element.
+    new_name : str
+        The name of the copy.
+
+    Returns
+    -------
+    Bus, Branch, Source or Fault
+        A new object with the element's inputs (the same type and
+        characteristic objects); its derived values are computed when it is
+        added to the network.
+    """
+    cls = type(element)
+    derived = getattr(cls, "DERIVED_FIELDS", ())
+    data = {field: getattr(element, field) for field in cls.model_fields if field not in derived}
+    data.update({field: {} for field in derived if cls.model_fields[field].is_required()})
+    data["name"] = new_name
+    return cls.model_validate(data)
+
+
+def _rename_bus(network: gi.Network, old: str, new: str) -> None:
+    """
+    Rename a bus: a renamed copy, every reference rewired, the old bus removed.
+
+    Every step is a library call (``add_bus``, ``update_branch``, assignment
+    of ``Source.bus``/``Fault.bus``, ``remove_bus``); a failure undoes the
+    steps already done. Derived values the user had overridden are carried
+    over, and the bus keeps its position.
+
+    Parameters
+    ----------
+    network : Network
+        The network.
+    old, new : str
+        Former and new name; checked by the caller.
+    """
+    bus = network.buses[old]
+    order = [new if name == old else name for name in network.buses]
+    derived = _derived(bus)
+    copy = _renamed_copy(bus, new)
+    done: List[Any] = []
+    try:
+        network.add_bus(copy)
+        done.append(lambda: network.remove_bus(new))
+        _restore_derived(copy, derived)
+        _rewire(network, old, new, done)
+        network.remove_bus(old)
+    except Exception:
+        for step in reversed(done):
+            step()
+        raise
+    _restore_order(network, "buses", order)
+
+
+def _rewire(network: gi.Network, old: str, new: str, done: List[Any]) -> None:
+    """
+    Point every branch end, source and fault at bus ``old`` to bus ``new``.
+
+    Parameters
+    ----------
+    network : Network
+        The network; both buses exist.
+    old, new : str
+        The former and the new bus.
+    done : list of callable
+        Each change appends the call that reverses it.
+    """
+    for branch in list(network.branches.values()):
+        for end in ("from_bus", "to_bus"):
+            if getattr(branch, end) == old:
+                network.update_branch(branch.name, **{end: new})
+                done.append(lambda b=branch.name, e=end: network.update_branch(b, **{e: old}))
+    users = [e for c in ("sources", "faults") for e in getattr(network, c).values() if e.bus == old]
+    for element in users:
+        element.bus = new
+        done.append(lambda e=element: setattr(e, "bus", old))
+
+
+def _rename_branch(network: gi.Network, old: str, new: str) -> None:
+    """
+    Rename a branch: a renamed copy added, the old branch removed.
+
+    Parameters
+    ----------
+    network : Network
+        The network.
+    old, new : str
+        Former and new name; checked by the caller.
+    """
+    branch = network.branches[old]
+    order = [new if name == old else name for name in network.branches]
+    derived = _derived(branch)
+    copy = _renamed_copy(branch, new)
+    network.add_branch(copy)
+    _restore_derived(copy, derived)
+    try:
+        network.remove_branch(old)
+    except Exception:  # pragma: no cover - remove_branch fails only for a missing name
+        network.remove_branch(new)
+        raise
+    _restore_order(network, "branches", order)
+
+
+def _rename_source(network: gi.Network, old: str, new: str) -> None:
+    """
+    Rename a source: removed, and added back as a renamed copy.
+
+    Parameters
+    ----------
+    network : Network
+        The network.
+    old, new : str
+        Former and new name; checked by the caller.
+    """
+    order = [new if name == old else name for name in network.sources]
+    copy = _renamed_copy(network.sources[old], new)
+    removed = network.remove_source(old)
+    try:
+        network.add_source(copy)
+    except Exception:  # pragma: no cover - the copy validated already
+        network.add_source(removed)
+        _restore_order(network, "sources", [old if n == new else n for n in order])
+        raise
+    _restore_order(network, "sources", order)
+
+
+class _Rename(Command):
+    """
+    Base of the rename commands: one element and, with it, its diagram entry.
+
+    Elements refer to buses, and results to every element, by name, so a
+    rename is a sequence of library edits (see each command). Stored results
+    become stale -- they name the element under its former name -- and are
+    current again after undo.
+
+    Attributes
+    ----------
+    name : str
+        The element.
+    new_name : str
+        Its new name; not empty, not taken.
+    """
+
+    name: str
+    new_name: str
+
+    _KIND: ClassVar[str] = "bus"
+    _COLLECTION: ClassVar[str] = "buses"
+
+    @property
+    def label(self) -> str:
+        """``rename <kind> '<name>' to '<new_name>'``."""
+        return f"rename {self._KIND} '{self.name}' to '{self.new_name}'"
+
+    def _check(self, context: CommandContext) -> None:
+        """
+        Refuse a missing element, an empty, unchanged or taken name.
+
+        Parameters
+        ----------
+        context : CommandContext
+            The session context.
+
+        Raises
+        ------
+        CommandError
+            With the reason.
+        """
+        existing = getattr(context.network, self._COLLECTION)
+        if self.name not in existing:
+            raise CommandError(f"{self.label}: {self._KIND} '{self.name}' does not exist")
+        if not self.new_name.strip():
+            raise CommandError(f"{self.label}: the new name is empty")
+        if self.new_name == self.name:
+            raise CommandError(f"{self.label}: the name is unchanged")
+        if self.new_name in existing:
+            raise CommandError(f"{self.label}: a {self._KIND} '{self.new_name}' exists")
+
+    def _rename_entry(self, context: CommandContext, old: str, new: str) -> None:
+        """Rename the diagram entry (a stale entry under ``new`` gives way)."""
+        context.diagram = context.diagram.without(self._KIND, new).renamed(self._KIND, old, new)
+
+
+class RenameBus(_Rename):
+    """
+    Rename a bus; branches, sources and faults follow, and so does its symbol.
+
+    The library keeps elements under their name and refuses a rename in
+    place, so the command adds a renamed copy, rewires every branch, source
+    and fault to it and removes the old bus -- all through the library's
+    editing API, all or nothing. The bus keeps its position in the network
+    and overridden derived values.
+    """
+
+    op: Literal["rename_bus"] = "rename_bus"
+
+    def _apply(self, context: CommandContext) -> None:
+        self._check(context)
+        _rename_bus(context.network, self.name, self.new_name)
+        self._rename_entry(context, self.name, self.new_name)
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        _rename_bus(context.network, self.new_name, self.name)
+
+
+class RenameBranch(_Rename):
+    """Rename a branch (a renamed copy replaces it, at the same position)."""
+
+    op: Literal["rename_branch"] = "rename_branch"
+    _KIND: ClassVar[str] = "branch"
+    _COLLECTION: ClassVar[str] = "branches"
+
+    def _apply(self, context: CommandContext) -> None:
+        self._check(context)
+        _rename_branch(context.network, self.name, self.new_name)
+        self._rename_entry(context, self.name, self.new_name)
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        _rename_branch(context.network, self.new_name, self.name)
+
+
+class RenameSource(_Rename):
+    """Rename a source (a renamed copy replaces it, at the same position)."""
+
+    op: Literal["rename_source"] = "rename_source"
+    _KIND: ClassVar[str] = "source"
+    _COLLECTION: ClassVar[str] = "sources"
+
+    def _apply(self, context: CommandContext) -> None:
+        self._check(context)
+        _rename_source(context.network, self.name, self.new_name)
+        self._rename_entry(context, self.name, self.new_name)
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        _rename_source(context.network, self.new_name, self.name)
+
+
+class RenameFault(_Rename):
+    """
+    Rename a fault; an active fault stays active under its new name.
+
+    The stored result of the fault is dropped: it is the result of the fault
+    under its former name, and ``Network.res_*`` look results up by fault
+    name. Undo puts it back, current as before.
+    """
+
+    op: Literal["rename_fault"] = "rename_fault"
+    _KIND: ClassVar[str] = "fault"
+    _COLLECTION: ClassVar[str] = "faults"
+
+    def _apply(self, context: CommandContext) -> None:
+        self._check(context)
+        network = context.network
+        order = list(network.faults)
+        state = (order, network.results.get(self.name), list(network.results),
+                 network.active_fault == self.name)
+        copy = _renamed_copy(network.faults[self.name], self.new_name)
+        removed = network.remove_fault(self.name)
+        try:
+            network.add_fault(copy)
+        except Exception:  # pragma: no cover - the copy validated already
+            _restore_fault(network, (removed, *state))
+            raise
+        _restore_order(network, "faults", [self.new_name if n == self.name else n for n in order])
+        if state[3]:
+            network.set_active_fault(self.new_name, keep_results=True)
+        self._rename_entry(context, self.name, self.new_name)
+        self._undo = (removed, *state)
+
+    def _revert(self, context: CommandContext) -> None:
+        context.network.remove_fault(self.new_name)
+        _restore_fault(context.network, self._undo)
+
+
+class _RenameType(Command):
+    """
+    Rename a catalogue type; its users follow (an ``Update*Type`` of ``name``).
+
+    Attributes
+    ----------
+    name : str
+        The type.
+    new_name : str
+        Its new name; not empty, not taken.
+    """
+
+    name: str
+    new_name: str
+
+    _KIND: ClassVar[str] = "bus"
+
+    @property
+    def label(self) -> str:
+        """``rename <kind> type '<name>' to '<new_name>'``."""
+        return f"rename {self._KIND} type '{self.name}' to '{self.new_name}'"
+
+    def _apply(self, context: CommandContext) -> None:
+        if not self.new_name.strip():
+            raise CommandError(f"{self.label}: the new name is empty")
+        if self.new_name == self.name:
+            raise CommandError(f"{self.label}: the name is unchanged")
+        update = UpdateBusType if self._KIND == "bus" else UpdateBranchType
+        inner = update(name=self.name, fields={"name": self.new_name})
+        inner._apply(context)
+        self._undo = inner
+
+    def _revert(self, context: CommandContext) -> None:
+        self._undo._revert(context)
+
+
+class RenameBusType(_RenameType):
+    """Rename a bus type; the buses of that type follow."""
+
+    op: Literal["rename_bus_type"] = "rename_bus_type"
+    _KIND: ClassVar[str] = "bus"
+
+
+class RenameBranchType(_RenameType):
+    """Rename a branch type; the branches of that type follow."""
+
+    op: Literal["rename_branch_type"] = "rename_branch_type"
+    _KIND: ClassVar[str] = "branch"
+
+
+# ---------------------------------------------------------------------------
+# the diagram
+# ---------------------------------------------------------------------------
+
+#: A point of the drawing area, ``(x, y)``.
+Point = Tuple[float, float]
+
+
+def _require_buses(command: Command, context: CommandContext, names: Any) -> None:
+    """
+    Refuse names that are no bus of the network.
+
+    Parameters
+    ----------
+    command : Command
+        The command, for the message.
+    context : CommandContext
+        The session context.
+    names : iterable of str
+        The bus names.
+
+    Raises
+    ------
+    CommandError
+        Naming the unknown buses.
+    """
+    unknown = [name for name in names if name not in context.network.buses]
+    if unknown:
+        raise CommandError(
+            f"{command.label}: {', '.join(repr(n) for n in unknown)} "
+            f"{'is no bus' if len(unknown) == 1 else 'are no buses'} of the network"
+        )
+
+
+def _require_branches(command: Command, context: CommandContext, names: Any) -> None:
+    """
+    Refuse names that are no branch of the network.
+
+    Parameters
+    ----------
+    command : Command
+        The command, for the message.
+    context : CommandContext
+        The session context.
+    names : iterable of str
+        The branch names.
+
+    Raises
+    ------
+    CommandError
+        Naming the unknown branches.
+    """
+    unknown = [name for name in names if name not in context.network.branches]
+    if unknown:
+        raise CommandError(
+            f"{command.label}: {', '.join(repr(n) for n in unknown)} "
+            f"{'is no branch' if len(unknown) == 1 else 'are no branches'} of the network"
+        )
+
+
+def _moved_node(diagram: gi.Diagram, name: str, point: Point) -> gi.DiagramNode:
+    """
+    The node of a bus at a new position, validated.
+
+    Parameters
+    ----------
+    diagram : Diagram
+        The diagram.
+    name : str
+        The bus.
+    point : tuple of float
+        The new centre.
+
+    Returns
+    -------
+    DiagramNode
+        The former node at ``point``, or a new ``bus`` node.
+    """
+    old = diagram.nodes.get(name)
+    data = old.model_dump() if old is not None else {}
+    data.update(x=point[0], y=point[1])
+    return gi.DiagramNode.model_validate(data)
+
+
+class PlaceBus(AddBus):
+    """
+    Add a bus and its symbol in one step -- what drawing a bus does.
+
+    Attributes
+    ----------
+    x, y : float
+        Centre of the symbol.
+    symbol : {"bus", "source_bus", "busbar"}
+        The symbol.
+    label_offset : tuple of float
+        Position of the name relative to the centre.
+    length : float
+        Length of a busbar; 0 for the front end's default.
+    """
+
+    op: Literal["place_bus"] = "place_bus"
+    x: float
+    y: float
+    symbol: str = "bus"
+    label_offset: Point = (0.0, 0.0)
+    length: float = 0.0
+
+    @property
+    def label(self) -> str:
+        """
+        ``place bus '<name>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"place bus '{self.name}'"
+
+    def _apply(self, context: CommandContext) -> None:
+        node = gi.DiagramNode(x=self.x, y=self.y, symbol=self.symbol,
+                              label_offset=self.label_offset, length=self.length)
+        super()._apply(context)
+        context.diagram = context.diagram.with_entries("bus", {self.name: node})
+
+
+class MoveNodes(Command):
+    """
+    Move the symbols of several buses, as one undo step (a dragged selection).
+
+    A bus without a symbol gets one at the given position.
+
+    Attributes
+    ----------
+    positions : dict of str to tuple of float
+        Bus name to the new centre ``(x, y)``.
+    """
+
+    op: Literal["move_nodes"] = "move_nodes"
+    positions: Dict[str, Point]
+
+    @property
+    def label(self) -> str:
+        """
+        ``move <n> node(s)``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"move {len(self.positions)} node(s)"
+
+    def _apply(self, context: CommandContext) -> None:
+        if not self.positions:
+            raise CommandError(f"{self.label}: no positions given")
+        _require_buses(self, context, self.positions)
+        nodes = {name: _moved_node(context.diagram, name, point)
+                 for name, point in self.positions.items()}
+        context.diagram = context.diagram.with_entries("bus", nodes)
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        """The base class restores the diagram; the network is untouched."""
+
+
+class RouteBranch(Command):
+    """
+    Route a branch along waypoints; an empty list draws it straight.
+
+    Attributes
+    ----------
+    name : str
+        The branch.
+    waypoints : list of tuple of float
+        The intermediate points, from ``from_bus`` to ``to_bus``.
+    """
+
+    op: Literal["route_branch"] = "route_branch"
+    name: str
+    waypoints: List[Point]
+
+    @property
+    def label(self) -> str:
+        """
+        ``route branch '<name>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"route branch '{self.name}'"
+
+    def _apply(self, context: CommandContext) -> None:
+        _require_branches(self, context, [self.name])
+        old = context.diagram.edges.get(self.name)
+        data = old.model_dump() if old is not None else {}
+        data["waypoints"] = self.waypoints
+        edge = gi.DiagramEdge.model_validate(data)
+        context.diagram = context.diagram.with_entries("branch", {self.name: edge})
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        """The base class restores the diagram; the network is untouched."""
+
+
+class UpdateDiagramNode(Command):
+    """
+    Change how the symbol of a placed bus is drawn.
+
+    Attributes
+    ----------
+    name : str
+        The bus; it must have a symbol (:class:`PlaceBus`, :class:`MoveNodes`).
+    fields : dict
+        Fields of :class:`groundinsight.DiagramNode` to change: ``symbol``,
+        ``label_offset``, ``length``, ``x``, ``y``.
+    """
+
+    op: Literal["update_diagram_node"] = "update_diagram_node"
+    name: str
+    fields: Dict[str, Any]
+
+    @property
+    def label(self) -> str:
+        """
+        ``update node '<name>': field=value, ...``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"update node '{self.name}': {_field_text(self.fields)}"
+
+    def _apply(self, context: CommandContext) -> None:
+        _require_buses(self, context, [self.name])
+        old = context.diagram.nodes.get(self.name)
+        if old is None:
+            raise CommandError(f"{self.label}: bus '{self.name}' has no symbol yet; place it first")
+        if not self.fields:
+            raise CommandError(f"{self.label}: no fields to update")
+        node = gi.DiagramNode.model_validate({**old.model_dump(), **self.fields})
+        context.diagram = context.diagram.with_entries("bus", {self.name: node})
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        """The base class restores the diagram; the network is untouched."""
+
+
+class AutoLayout(Command):
+    """
+    Lay the diagram out automatically, or take a layout a front end computed.
+
+    Without ``positions`` and ``routes`` the library lays out
+    (:meth:`groundinsight.Diagram.with_layout`): every bus anew, or with
+    ``only_unplaced`` only those without a symbol. A front end that lays out
+    with a library of its own (the GUI uses elkjs) sends the positions and
+    the bent routes it computed; buses it leaves out keep theirs, branches
+    without a route are drawn straight. A layout that changes nothing is
+    refused, so it does not fill the history.
+
+    Attributes
+    ----------
+    only_unplaced : bool
+        Place only buses and branches without an entry.
+    positions : dict of str to tuple of float, optional
+        Bus name to centre, computed by the front end.
+    routes : dict of str to list of tuple of float, optional
+        Branch name to waypoints, computed by the front end.
+    """
+
+    op: Literal["auto_layout"] = "auto_layout"
+    only_unplaced: bool = False
+    positions: Optional[Dict[str, Point]] = None
+    routes: Optional[Dict[str, List[Point]]] = None
+
+    @property
+    def label(self) -> str:
+        """
+        ``auto layout`` with what it laid out.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        if self.positions is not None or self.routes is not None:
+            return "auto layout (front end)"
+        return "auto layout (unplaced elements)" if self.only_unplaced else "auto layout"
+
+    def _from_front_end(self, context: CommandContext) -> gi.Diagram:
+        """The diagram with the front end's positions and routes."""
+        positions = self.positions or {}
+        routes = self.routes or {}
+        _require_buses(self, context, positions)
+        _require_branches(self, context, routes)
+        diagram = context.diagram.with_layout(context.network, only_unplaced=True)
+        nodes = {name: _moved_node(diagram, name, point) for name, point in positions.items()}
+        edges = {
+            name: gi.DiagramEdge.model_validate(
+                {**diagram.edges[name].model_dump(), "waypoints": routes.get(name, [])})
+            for name in context.network.branches
+        }
+        return diagram.with_entries("bus", nodes).with_entries("branch", edges)
+
+    def _apply(self, context: CommandContext) -> None:
+        before = context.diagram
+        if self.positions is not None or self.routes is not None:
+            after = self._from_front_end(context)
+        else:
+            after = before.with_layout(context.network, only_unplaced=self.only_unplaced)
+        if after == before:
+            reason = ("every bus and branch has its place already" if self.only_unplaced
+                      else "the diagram has this layout already")
+            raise CommandError(f"{self.label}: {reason}")
+        context.diagram = after
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        """The base class restores the diagram; the network is untouched."""
+
+
+# ---------------------------------------------------------------------------
+# earthing characteristics
+# ---------------------------------------------------------------------------
+
+
+class _CharacteristicCommand(Command):
+    """
+    Base of the characteristic commands: an update of the bus or bus type.
+
+    A characteristic is a field of :class:`groundinsight.Bus` and of
+    :class:`groundinsight.BusType`; the commands are ``UpdateBus`` and
+    ``UpdateBusType`` of that field, so the library re-derives the
+    impedances and touch factors of every bus concerned, all or nothing,
+    and undo goes the same way back.
+
+    Attributes
+    ----------
+    target : {"bus", "bus_type"}
+        Whether ``name`` is a bus (its own characteristic, which wins over
+        its type's) or a catalogue bus type (shared by its buses).
+    name : str
+        The bus or bus type.
+    """
+
+    target: Literal["bus", "bus_type"]
+    name: str
+
+    def _owner(self, context: CommandContext) -> Any:
+        """
+        The bus or the catalogue type the command changes.
+
+        Parameters
+        ----------
+        context : CommandContext
+            The session context.
+
+        Returns
+        -------
+        Bus or BusType
+            The object.
+
+        Raises
+        ------
+        CommandError
+            If it does not exist.
+        """
+        if self.target == "bus_type":
+            return context.type_named("bus", self.name)
+        bus = context.network.buses.get(self.name)
+        if bus is None:
+            raise CommandError(f"{self.label}: bus '{self.name}' does not exist")
+        return bus
+
+    def _set(self, context: CommandContext, value: Optional[gi.EarthingCharacteristic]) -> None:
+        """Assign ``value`` through the update command of the target."""
+        update = UpdateBus if self.target == "bus" else UpdateBusType
+        inner = update(name=self.name, fields={"characteristic": value})
+        inner._apply(context)
+        self._undo = inner
+
+    def _revert(self, context: CommandContext) -> None:
+        self._undo._revert(context)
+
+    def _owner_text(self) -> str:
+        """``bus 'S1'`` or ``bus type 'station'``."""
+        return f"{'bus' if self.target == 'bus' else 'bus type'} '{self.name}'"
+
+
+class SetCharacteristic(_CharacteristicCommand):
+    """
+    Attach an earthing characteristic to a bus or a bus type.
+
+    Attributes
+    ----------
+    characteristic : dict
+        The characteristic in its JSON form
+        (:class:`groundinsight.EarthingCharacteristic`), validated by the
+        model when the command is applied.
+    """
+
+    op: Literal["set_characteristic"] = "set_characteristic"
+    characteristic: Dict[str, Any]
+
+    @property
+    def label(self) -> str:
+        """
+        ``set characteristic of <owner>``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"set characteristic of {self._owner_text()}"
+
+    def _apply(self, context: CommandContext) -> None:
+        self._owner(context)
+        self._set(context, gi.EarthingCharacteristic.model_validate(self.characteristic))
+
+
+class ClearCharacteristic(_CharacteristicCommand):
+    """
+    Remove the characteristic of a bus or a bus type.
+
+    A bus without one of its own uses its type's characteristic again, or
+    the type's formula.
+    """
+
+    op: Literal["clear_characteristic"] = "clear_characteristic"
+
+    @property
+    def label(self) -> str:
+        """
+        ``clear characteristic of <owner>``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"clear characteristic of {self._owner_text()}"
+
+    def _apply(self, context: CommandContext) -> None:
+        if self._owner(context).characteristic is None:
+            raise CommandError(f"{self.label}: it has no characteristic of its own")
+        self._set(context, None)
+
+
+class ImportCharacteristic(_CharacteristicCommand):
+    """
+    Attach the characteristic of a groundfield BusType document.
+
+    The document is read by
+    :func:`groundinsight.integrations.groundfield.characteristic_from_bustype_spec`:
+    its samples become the table, its formula and provenance are kept.
+
+    Attributes
+    ----------
+    document : dict
+        The parsed JSON of the document (schema ``"groundfield.bustype"``).
+        A front end reads the file and sends its content, so a server never
+        opens a path a client names.
+    impedance_source : {"table", "formula"}
+        Whether the bus impedance comes from the samples or the formula.
+    """
+
+    op: Literal["import_characteristic"] = "import_characteristic"
+    document: Dict[str, Any]
+    impedance_source: Literal["table", "formula"] = "table"
+
+    @property
+    def label(self) -> str:
+        """
+        ``import characteristic '<document name>' into <owner>``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"import characteristic '{self.document.get('name')}' into {self._owner_text()}"
+
+    def _apply(self, context: CommandContext) -> None:
+        from groundinsight.integrations.groundfield import characteristic_from_bustype_spec
+
+        self._owner(context)
+        characteristic = characteristic_from_bustype_spec(
+            self.document, impedance_source=self.impedance_source)
+        self._set(context, characteristic)
+
+
+# ---------------------------------------------------------------------------
 # parsing
 # ---------------------------------------------------------------------------
 
@@ -1509,6 +2394,20 @@ COMMAND_TYPES = (
     UpdateBranchType,
     RemoveBranchType,
     SetFrequencies,
+    RenameBus,
+    RenameBranch,
+    RenameSource,
+    RenameFault,
+    RenameBusType,
+    RenameBranchType,
+    PlaceBus,
+    MoveNodes,
+    RouteBranch,
+    UpdateDiagramNode,
+    AutoLayout,
+    SetCharacteristic,
+    ClearCharacteristic,
+    ImportCharacteristic,
 )
 
 #: The ``op`` value of every command.

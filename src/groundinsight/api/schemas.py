@@ -21,8 +21,13 @@ what a front end gets instead, and they are deliberately plain:
   ``None`` cannot be mistaken for a number by a template either.
 * **Versioned.** Every DTO carries ``dto_schema_version``
   (:data:`DTO_SCHEMA_VERSION`). A change that a reader of the previous
-  version would misread increments it; a validator refuses a DTO of another
-  version instead of guessing.
+  version would misread increments it; a validator refuses a DTO of a
+  version it does not know (:data:`READABLE_DTO_SCHEMA_VERSIONS`) instead of
+  guessing. Version 2 added fields only -- the diagram and characteristic
+  DTOs, the touch-voltage columns of the key figures, the rename, diagram
+  and characteristic commands -- each with a default, so a DTO or a request
+  of version 1 reads unchanged; a reader of version 1 would refuse the new
+  fields, hence the new number.
 * **Schemas of a REST API.** The DTOs are pydantic models, so they are the
   request and response schemas of a future HTTP layer as they stand:
   :func:`json_schemas` returns the JSON schema of every DTO, of the edit
@@ -60,12 +65,18 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "DTO_SCHEMA_VERSION",
+    "READABLE_DTO_SCHEMA_VERSIONS",
     "Cell",
+    "CharacteristicDTO",
     "ColumnDTO",
     "CheckReportDTO",
     "CommandResultDTO",
     "ComplexDTO",
     "DiagnosticDTO",
+    "DiagramDTO",
+    "DiagramEdgeDTO",
+    "DiagramMarkerDTO",
+    "DiagramNodeDTO",
     "ElementRefDTO",
     "FaultResultDTO",
     "FaultResultsDTO",
@@ -92,10 +103,14 @@ __all__ = [
     "parse_job_request",
 ]
 
-DTO_SCHEMA_VERSION = 1
-"""Version of the DTO layout. Incremented when a field changes its meaning or
-shape, or a required field is added -- whenever a reader of the previous
-version would misread a DTO of this one."""
+DTO_SCHEMA_VERSION = 2
+"""Version of the DTO layout this release writes. Incremented when a field
+changes its meaning or shape, or a field is added -- whenever a reader of the
+previous version would misread or refuse a DTO of this one."""
+
+READABLE_DTO_SCHEMA_VERSIONS = (1, 2)
+"""Versions of the DTO layout this release reads. Version 1 lacks the fields
+version 2 added, which take their defaults."""
 
 
 def finite_or_none(value: Any) -> Optional[float]:
@@ -196,12 +211,15 @@ class BaseDTO(BaseModel):
     Attributes
     ----------
     dto_schema_version : int
-        :data:`DTO_SCHEMA_VERSION`; a DTO of another version is refused.
+        The version the DTO was written with: :data:`DTO_SCHEMA_VERSION` for
+        a DTO built here, an earlier one of
+        :data:`READABLE_DTO_SCHEMA_VERSIONS` for one read from an older
+        writer; any other version is refused.
     """
 
     model_config = ConfigDict(extra="forbid", ser_json_inf_nan="null")
 
-    dto_schema_version: Literal[DTO_SCHEMA_VERSION] = DTO_SCHEMA_VERSION  # type: ignore[valid-type]
+    dto_schema_version: Literal[READABLE_DTO_SCHEMA_VERSIONS] = DTO_SCHEMA_VERSION  # type: ignore[valid-type]
 
 
 # ---------------------------------------------------------------------------
@@ -724,6 +742,207 @@ class StudyResultDTO(BaseDTO):
         if not isinstance(values, dict):
             return values
         return {key: _cell(value) for key, value in values.items()}
+
+
+# ---------------------------------------------------------------------------
+# diagram
+# ---------------------------------------------------------------------------
+
+#: A point of the drawing area, ``[x, y]`` in JSON.
+PointDTO = Tuple[float, float]
+
+
+class DiagramNodeDTO(BaseDTO):
+    """
+    The symbol of one bus, with what a front end needs to draw and colour it.
+
+    Attributes
+    ----------
+    name : str
+        The bus.
+    x, y : float
+        Centre of the symbol.
+    symbol : {"bus", "source_bus", "busbar"}
+        The symbol.
+    label_offset : tuple of float
+        Position of the name relative to the centre.
+    length : float
+        Length of a busbar; 0 for the default.
+    placed : bool
+        ``False`` for a bus without an entry in the diagram yet: the position
+        is the automatic layout's, not stored (a :class:`MoveNodes
+        <groundinsight.api.MoveNodes>` stores it).
+    bus_type : str
+        Name of the bus type.
+    voltage_level : float or None
+        Voltage level of the bus type, in kV.
+    active : bool
+        Whether the bus takes part in the solve.
+    has_source, has_fault : bool
+        Whether a source feeds the bus, a fault sits at it.
+    characteristic : {"bus", "bus_type"} or None
+        Where the bus's earthing characteristic comes from, if it has one.
+    """
+
+    name: str
+    x: float
+    y: float
+    symbol: Literal["bus", "source_bus", "busbar"] = "bus"
+    label_offset: PointDTO = (0.0, 0.0)
+    length: float = 0.0
+    placed: bool = True
+    bus_type: str
+    voltage_level: FiniteFloat = None
+    active: bool = True
+    has_source: bool = False
+    has_fault: bool = False
+    characteristic: Optional[Literal["bus", "bus_type"]] = None
+
+
+class DiagramEdgeDTO(BaseDTO):
+    """
+    The line of one branch.
+
+    Attributes
+    ----------
+    name : str
+        The branch.
+    from_bus, to_bus : str
+        Its buses.
+    waypoints : list of tuple of float
+        Intermediate points; empty for a straight line.
+    label_offset : tuple of float
+        Position of the label relative to the middle of the line.
+    placed : bool
+        ``False`` for a branch without an entry in the diagram yet.
+    branch_type : str
+        Name of the branch type.
+    active : bool
+        Whether the branch takes part in the solve (a switch).
+    grounding_conductor : bool
+        Whether the branch connects the earthing systems of its buses.
+    """
+
+    name: str
+    from_bus: str
+    to_bus: str
+    waypoints: List[PointDTO] = Field(default_factory=list)
+    label_offset: PointDTO = (0.0, 0.0)
+    placed: bool = True
+    branch_type: str
+    active: bool = True
+    grounding_conductor: bool = True
+
+
+class DiagramMarkerDTO(BaseDTO):
+    """
+    The symbol of a fault or a source at its bus.
+
+    Attributes
+    ----------
+    kind : {"fault", "source"}
+        What it marks.
+    name : str
+        The fault or source.
+    bus : str
+        The bus it is drawn at.
+    offset : tuple of float
+        Position relative to the bus symbol.
+    """
+
+    kind: Literal["fault", "source"]
+    name: str
+    bus: str
+    offset: PointDTO = (0.0, 0.0)
+
+
+class DiagramDTO(BaseDTO):
+    """
+    The diagram of the network as a front end draws it.
+
+    Every bus and branch of the network is listed, in network order -- a
+    bus without a stored place at the position the automatic layout gives it
+    (``placed`` false) -- and nothing else: entries of elements the network
+    no longer has are reported in ``diagnostics``, not drawn.
+
+    Attributes
+    ----------
+    revision : int
+        Session revision the diagram describes.
+    nodes : list of DiagramNodeDTO
+        One per bus.
+    edges : list of DiagramEdgeDTO
+        One per branch.
+    markers : list of DiagramMarkerDTO
+        One per fault and source.
+    color_scheme : str
+        The colouring the diagram was last shown with.
+    grid_size : float
+        The snapping raster.
+    diagnostics : list of DiagnosticDTO
+        :meth:`Diagram.check <groundinsight.Diagram.check>` of the stored
+        diagram.
+    """
+
+    revision: int
+    nodes: List[DiagramNodeDTO] = Field(default_factory=list)
+    edges: List[DiagramEdgeDTO] = Field(default_factory=list)
+    markers: List[DiagramMarkerDTO] = Field(default_factory=list)
+    color_scheme: str = "default"
+    grid_size: float = 20.0
+    diagnostics: List[DiagnosticDTO] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# earthing characteristics
+# ---------------------------------------------------------------------------
+
+
+class CharacteristicDTO(BaseDTO):
+    """
+    An earthing characteristic, as the characteristic tab of a bus shows it.
+
+    Attributes
+    ----------
+    owner_kind : {"bus", "bus_type"}
+        What was asked for: a bus or a bus type.
+    owner : str
+        Its name.
+    origin : {"bus", "bus_type"}
+        Where the characteristic hangs: at the bus itself or at its type.
+        For a bus type, always ``"bus_type"``.
+    name : str, optional
+        Name of the characteristic.
+    impedance_source : {"table", "formula"}
+        Where the bus impedance comes from.
+    impedance_formula : str, optional
+        The characteristic's own formula.
+    rho_Ohm_m, frequency_Hz : list of float
+        The grid.
+    table : TableDTO
+        :meth:`EarthingCharacteristic.to_frame
+        <groundinsight.EarthingCharacteristic.to_frame>`, one row per grid
+        point.
+    extrapolated : bool or None
+        For a bus: whether its ``rho`` or a network frequency lies outside
+        the grid (the diagnostic ``CHARACTERISTIC_EXTRAPOLATED``); ``None``
+        for a bus type.
+    provenance : dict
+        :class:`groundinsight.CharacteristicProvenance` as JSON; empty
+        without one.
+    """
+
+    owner_kind: Literal["bus", "bus_type"]
+    owner: str
+    origin: Literal["bus", "bus_type"]
+    name: Optional[str] = None
+    impedance_source: Literal["table", "formula"] = "table"
+    impedance_formula: Optional[str] = None
+    rho_Ohm_m: List[float]
+    frequency_Hz: List[float]
+    table: TableDTO
+    extrapolated: Optional[bool] = None
+    provenance: Dict[str, Any] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
