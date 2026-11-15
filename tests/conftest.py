@@ -21,6 +21,13 @@ checks and the bandit check were skipped there unnoticed -- so under
 ``GROUNDINSIGHT_CI=1`` (set by the workflows' test jobs) such a skip becomes
 a failure. Skips for any other reason (platform, permissions, ``+SKIP``
 doctests) are left alone.
+
+One package is exempt: groundfield. It is not on PyPI before its release
+2026.11.0, so it cannot be a dependency in the lock file CI installs
+(``poetry lock`` would fail on it). The tests of the coupling carry the
+marker ``groundfield`` and run where groundfield is installed by hand; in CI
+they are skipped, which is expected and not a broken job. The exemption goes
+when groundfield becomes a dev dependency.
 """
 
 from __future__ import annotations
@@ -43,6 +50,10 @@ _STRICT_ENV = "GROUNDINSIGHT_CI"
 #: How pytest words a skip raised by ``pytest.importorskip`` (missing module
 #: or a version below ``minversion``).
 _MISSING_IMPORT = re.compile(r"could not import |module '[^']+' has __version__ ")
+
+#: Packages whose absence skips their tests even in CI strict mode (see the
+#: module docstring for why).
+OPTIONAL_IN_CI = ("groundfield",)
 
 
 def _strict_ci() -> bool:
@@ -97,6 +108,8 @@ def _fail_on_missing_import(report) -> None:
     """
     reason = _missing_import_reason(report)
     if reason is None or not _strict_ci():
+        return
+    if any(f"import '{name}'" in reason for name in OPTIONAL_IN_CI):
         return
     report.outcome = "failed"
     report.longrepr = (

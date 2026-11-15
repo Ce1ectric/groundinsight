@@ -69,6 +69,8 @@ import pytest
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
+from tests.conftest import OPTIONAL_IN_CI
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -762,7 +764,13 @@ def test_every_optional_import_of_the_suite_is_in_the_dev_group():
         for name in _pyproject()["tool"]["poetry"]["group"]["dev"]["dependencies"]
     }
     locked_groups = {p["name"]: set(p.get("groups", [])) for p in _lock()["package"]}
+    # groundfield is not on PyPI yet and cannot be locked; its tests skip in CI
+    # (tests/conftest.py). Once it is a dev dependency the exemption must go.
+    for module in OPTIONAL_IN_CI:
+        assert module not in dev, f"{module} is a dev dependency now: drop it from OPTIONAL_IN_CI"
     for test_file, module in imports:
+        if module in OPTIONAL_IN_CI:
+            continue
         distribution = _DISTRIBUTION_OF.get(module, module)
         assert distribution in dev, f"{test_file}: {distribution} is not in the dev group"
         # Second route: the resolved lock, not the declaration.

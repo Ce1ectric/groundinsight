@@ -104,6 +104,7 @@ testpaths = ["tests", "src/groundinsight"]
 addopts = "-ra --doctest-modules"
 markers = [
     "slow: size and timing checks (deselect with '-m \"not slow\"')",
+    "groundfield: needs groundfield, which is no dependency yet (skipped without it, also in CI)",
 ]
 # A warning in the suite is an error unless the test asserts it
 # (pytest.warns) or acknowledges it by name with a reason
