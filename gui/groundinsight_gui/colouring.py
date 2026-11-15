@@ -23,7 +23,7 @@ __all__ = ["MODES", "NEUTRAL", "Colouring", "LegendEntry", "colour"]
 
 #: The colouring modes, in menu order.
 MODES = ("voltage_level", "type", "group", "infeed_fault", "epr", "u_touch", "i_branch",
-         "characteristic", "diagnostics")
+         "utilisation", "characteristic", "diagnostics")
 
 #: Modes that need a fault result.
 RESULT_MODES = ("epr", "u_touch", "i_branch")
@@ -272,7 +272,7 @@ def _severities(report: Any) -> Dict[Tuple[str, str], str]:
     return worst
 
 
-def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None) -> Colouring:
+def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None, touch: Any = None) -> Colouring:
     """
     Colour the diagram in one mode.
 
@@ -286,6 +286,10 @@ def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None) ->
         The fault result the numerical modes read.
     check : CheckReportDTO, optional
         The pre-flight check the ``diagnostics`` mode reads.
+    touch : TableDTO, optional
+        The table ``touch`` of an EN 50522 check (``TouchCheckRequestDTO``),
+        which the ``utilisation`` mode reads: within the limit, above it, or
+        not assessed (no touch factor).
 
     Returns
     -------
@@ -339,6 +343,13 @@ def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None) ->
                 column = "EPR_V" if mode == "epr" else "U_vT_V"
                 values = _rms(result.buses.rows, "bus_name", column)
                 out.nodes, out.scale = _numerical({n.name: values.get(n.name) for n in diagram.nodes}, "V")
+    elif mode == "utilisation":
+        verdict = {r["bus_name"]: r["within_limit"] for r in (touch.rows if touch is not None else [])}
+        colours = {True: SEVERITY_COLOURS["ok"], False: SEVERITY_COLOURS["error"], None: NEUTRAL}
+        out.nodes = {n.name: colours[verdict.get(n.name)] for n in diagram.nodes}
+        out.entries = [LegendEntry(colours[True], "legend_within", True),
+                       LegendEntry(colours[False], "legend_exceeded", True),
+                       LegendEntry(NEUTRAL, "legend_not_assessed", True)]
     elif mode == "characteristic":
         labels = {"bus": "legend_char_bus", "bus_type": "legend_char_type", None: "legend_char_formula"}
         colours = {"bus": PALETTE[2], "bus_type": PALETTE[4], None: NEUTRAL}

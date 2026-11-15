@@ -55,6 +55,7 @@ from groundinsight.api import (
     RemoveFault,
     RemoveSource,
     SolveAllRequestDTO,
+    StudyResultDTO,
     TableDTO,
     UpdateBranch,
     UpdateBranchType,
@@ -65,9 +66,11 @@ from groundinsight.api import (
 )
 
 from .colouring import MODES
+from .evaluations import EvaluationTabs
 from .formatting import DASH, format_number, format_unit, parse_number
 from .i18n import STRINGS, column_label, template_label, text
 from .plan import PlanView
+from .studies import STUDIES, StudyDialog, grid_options, study_chart, study_tables
 
 logger = logging.getLogger(__name__)
 
@@ -301,6 +304,10 @@ class ProjectPage:
         self.mode = "auto"
         self.tab = "plan"
         self.plan = PlanView(self)
+        self.evaluations = EvaluationTabs(self)
+        self.study: Optional[StudyResultDTO] = None
+        self.dialog_host: Any = None
+        self.view_ids: List[str] = []
         self.durations: Dict[str, Optional[float]] = {}
         self.selected: Dict[str, Optional[str]] = {table: None for table in TABLES}
         self.grids: Dict[str, Any] = {}
@@ -360,6 +367,7 @@ class ProjectPage:
         self.selected = {table: None for table in TABLES}
         self.tab = "plan"
         self.plan = PlanView(self)
+        self.study = None
 
     def _replace_session(self, session: ProjectSession) -> None:
         """Show another project; the previous session is closed."""
@@ -375,6 +383,7 @@ class ProjectPage:
     def root(self) -> None:
         """Toolbar plus start page or workspace (rebuilt on a language switch)."""
         self.grids, self.expansions = {}, {}
+        self.dialog_host = ui.element("div").mark("page-dialog-host")
         self._toolbar()
         if self.session is None:
             self._start_page()
@@ -384,21 +393,22 @@ class ProjectPage:
     def _toolbar(self) -> None:
         """Title, file actions, undo/redo, language."""
         with ui.row().classes("w-full items-center gap-2 px-4 py-2 bg-white shadow-sm no-wrap"):
-            ui.label(self.t("app_title")).classes("text-lg font-semibold tracking-tight")
-            self.title_label = ui.label().classes("text-sm text-gray-600").mark("project-title")
+            ui.label(self.t("app_title")).classes("text-lg font-semibold tracking-tight whitespace-nowrap")
+            self.title_label = ui.label().classes("text-sm text-gray-600 truncate min-w-0").mark("project-title")
             self.dirty_marker = ui.label("●").classes("text-amber-600").mark("dirty")
             self.dirty_marker.tooltip(self.t("unsaved"))
             ui.space()
-            with ui.button(self.t("new"), icon="note_add").props("flat dense no-caps").mark("new"):
+            # The file actions as icons (with tooltip and accessible name): the
+            # menus to their right need the room for their labels.
+            with self._icon_button("new", "note_add", None):
                 with ui.menu():
                     for name in self.templates:
                         ui.menu_item(template_label(self.language, name),
                                      on_click=lambda _, n=name: self._open_template(n)).mark(f"new-{name}")
-            ui.button(self.t("open"), icon="folder_open", on_click=self._open_open_dialog).props(
-                "flat dense no-caps").mark("open")
+            self._icon_button("open", "folder_open", self._open_open_dialog)
             if self.session is not None:
-                ui.button(self.t("save"), icon="save", on_click=self._save).props("flat dense no-caps").mark("save")
-                ui.button(self.t("save_as"), on_click=self._open_save_dialog).props("flat dense no-caps").mark("save-as")
+                self._icon_button("save", "save", self._save)
+                self._icon_button("save_as", "save_as", self._open_save_dialog).mark("save-as")
                 self.undo_button = ui.button(icon="undo", on_click=self._undo).props("flat dense").mark("undo")
                 self.redo_button = ui.button(icon="redo", on_click=self._redo).props("flat dense").mark("redo")
                 self.undo_button.props(f'aria-label="{self.t("undo")}"')
@@ -408,6 +418,25 @@ class ProjectPage:
                         for mode in MODES:
                             ui.menu_item(self.t(f"colour_{mode}"), on_click=lambda _, m=mode: self._colour(m)).mark(
                                 f"colour-{mode}")
+                with ui.button(self.t("calculation"), icon="calculate").props("flat dense no-caps").mark(
+                        "calculation"):
+                    with ui.menu():
+                        ui.menu_item(self.t("run"), on_click=lambda: self._calculate("solve")).mark("calc-solve")
+                        ui.menu_item(self.t("run_all"), on_click=lambda: self._calculate("solve_all")).mark(
+                            "calc-solve_all")
+                        ui.menu_item(self.t("tab_check"), on_click=lambda: self.show_tab("check")).mark(
+                            "calc-check")
+                        ui.separator()
+                        for study in STUDIES:
+                            ui.menu_item(self.t(f"study_{study}"),
+                                         on_click=lambda _, st=study: StudyDialog(self, st).open()).mark(
+                                f"calc-{study}")
+                with ui.button(self.t("import_export"), icon="import_export").props("flat dense no-caps").mark(
+                        "import-export"):
+                    with ui.menu():
+                        for action in ("export_tables", "import_tables", "import_pandapower"):
+                            ui.menu_item(self.t(action), on_click=lambda _, a=action: self._io_dialog(a)).mark(
+                                f"io-{action}")
                 with ui.button(self.t("auto_layout"), icon="account_tree").props("flat dense no-caps").mark(
                         "auto-layout"):
                     with ui.menu():
@@ -431,6 +460,29 @@ class ProjectPage:
                 self.save_input = ui.input(self.t("path")).classes("w-full").mark("save-path")
                 ui.button(self.t("save"), on_click=lambda: self._do_save(self.save_input.value)).mark("save-confirm")
         self._refresh_toolbar()
+
+    def _icon_button(self, key: str, icon: str, on_click: Any) -> Any:
+        """
+        A toolbar button with an icon, a tooltip and an accessible name.
+
+        Parameters
+        ----------
+        key : str
+            Text key of its name; also its marker (``save_as`` is marked
+            ``save-as`` by the caller).
+        icon : str
+            Material icon.
+        on_click : callable or None
+            The action; ``None`` for a button that opens a menu.
+
+        Returns
+        -------
+        ui.button
+            The button.
+        """
+        button = ui.button(icon=icon, on_click=on_click).props(
+            f'flat dense aria-label="{self.t(key)}"').tooltip(self.t(key))
+        return button.mark(key)
 
     def _refresh_toolbar(self) -> None:
         """Project title, dirty marker and the undo/redo state."""
@@ -473,6 +525,13 @@ class ProjectPage:
             ui.tab("network", label=self.t("tab_network"), icon="table_view").mark("tab-network")
             ui.tab("results", label=self.t("tab_results"), icon="bar_chart").mark("tab-results")
             ui.tab("check", label=self.t("tab_check"), icon="fact_check").mark("tab-check")
+            self.view_ids = self.evaluations.ids()
+            for view in self.evaluations.views():
+                ui.tab(view.id, label=view.title, icon="insights").mark(f"tab-{view.id}")
+            ui.button(icon="add", on_click=self.evaluations.add_tab).props("flat dense round").tooltip(
+                self.t("view_new")).mark("view-add")
+        if self.tab not in ("plan", "network", "results", "check", *self.view_ids):
+            self.tab = "plan"
         with ui.tab_panels(self.tabs, value=self.tab).classes("w-full bg-transparent"):
             with ui.tab_panel("plan").classes("gap-2 p-2"):
                 self.plan.build()
@@ -482,6 +541,9 @@ class ProjectPage:
                 self._results_panel()
             with ui.tab_panel("check").classes("gap-2"):
                 self.check_view()
+            for view_id in self.view_ids:
+                with ui.tab_panel(view_id).classes("gap-2"):
+                    self.view_panel(view_id)
 
     # -- network tables ---------------------------------------------------------
 
@@ -703,21 +765,100 @@ class ProjectPage:
         self.result_view.refresh()
         self.check_view.refresh()
         self.plan.refresh()
+        if self.evaluations.ids() != self.view_ids:
+            self.root.refresh()  # a tab was added or removed (or undone)
+        else:
+            self.view_panel.refresh()
 
     def _colour(self, mode: str) -> None:
         """Colour the plan in another mode and show the plan."""
         self.plan.set_mode(mode)
-        self._show_tab("plan")
+        self.show_tab("plan")
 
     def _layout(self, how: str) -> None:
         """Lay the plan out and show it."""
-        self._show_tab("plan")
+        self.show_tab("plan")
         self.plan.auto_layout(how)
 
-    def _show_tab(self, tab: str) -> None:
-        """Switch the workspace tab."""
+    def show_tab(self, tab: str) -> None:
+        """
+        Switch the workspace tab.
+
+        Parameters
+        ----------
+        tab : str
+            ``"plan"``, ``"network"``, ``"results"``, ``"check"`` or the id
+            of an evaluation tab.
+        """
         self.tab = tab
         self.tabs.set_value(tab)
+
+    def apply(self, command: Any) -> bool:
+        """
+        Apply a command, report a rejection, refresh the page.
+
+        Parameters
+        ----------
+        command : Command
+            The command.
+
+        Returns
+        -------
+        bool
+            Whether it was applied.
+        """
+        try:
+            report = self.session.apply(command)
+        except ValueError as exc:  # CommandError is a ValueError
+            ui.notify(f"{self.t('edit_rejected')}: {exc}", type="negative", multi_line=True)
+            return False
+        self._notify_diagnostics(report.diagnostics)
+        self._after_change()
+        return True
+
+    @ui.refreshable_method
+    def view_panel(self, view_id: str) -> None:
+        """One evaluation tab (refreshed after every command)."""
+        view = next((v for v in self.evaluations.views() if v.id == view_id), None)
+        if view is not None:
+            self.evaluations.panel(view)
+
+    def _calculate(self, what: str) -> None:
+        """Run one fault or all faults from the menu, in the results tab."""
+        self.show_tab("results")
+        if what == "solve":
+            self._run()
+        else:
+            self._run_all()
+
+    def submit_study(self, request: Any, label: str) -> bool:
+        """
+        Run a study job and show its result in the results tab when it ends.
+
+        Parameters
+        ----------
+        request : job request DTO
+            The request.
+        label : str
+            What runs, for the progress line.
+
+        Returns
+        -------
+        bool
+            Whether the job was started (not while another one runs).
+        """
+        if self._busy():
+            ui.notify(self.t("job_running"), type="warning")
+            return False
+        try:
+            self.handle = self.session.submit(request)
+        except ValueError as exc:
+            ui.notify(f"{self.t('edit_rejected')}: {exc}", type="negative", multi_line=True)
+            return False
+        self.show_tab("results")
+        self.progress_label.set_text(f"{label} · {self.t('running')}")
+        self._update_busy()
+        return True
 
     def _undo(self) -> None:
         """Undo the last command."""
@@ -771,6 +912,7 @@ class ProjectPage:
         self.progress_label = ui.label().classes("text-xs text-gray-500").mark("progress-label")
         self._update_busy()
         self.result_view()
+        self.study_view()
 
     def _on_fault_change(self, event: Any) -> None:
         """Show the stored result of the chosen fault, if any."""
@@ -826,6 +968,13 @@ class ProjectPage:
         self.handle = None
         if status.state == "done":
             result = handle.result(timeout=0)
+            if isinstance(result, StudyResultDTO):
+                self.study = result
+                self.progress_label.set_text("")
+                self.study_view.refresh()
+                self.plan.refresh()
+                self._update_busy()
+                return
             results = result.results if isinstance(result, FaultResultsDTO) else [result]
             for item in results:
                 if isinstance(item, FaultResultDTO):
@@ -834,6 +983,7 @@ class ProjectPage:
             self.result_view.refresh()
             self._refresh_toolbar()
             self.plan.refresh()
+            self.view_panel.refresh()  # the evaluation tabs read the stored results
         else:
             message = {
                 "cancelled": self.t("cancelled"),
@@ -885,6 +1035,82 @@ class ProjectPage:
             f"groundinsight {result.groundinsight_version}",
         ]
         ui.label(" · ".join(parts)).classes("text-xs text-gray-500").mark("result-footer")
+
+    @ui.refreshable_method
+    def study_view(self) -> None:
+        """The result of the last study of the *Calculation* menu."""
+        dto = self.study
+        if dto is None:
+            return
+        with ui.card().classes("w-full p-3 gap-2").props("flat bordered").mark("study-result"):
+            title = self.t(f"study_{dto.study}") if f"study_{dto.study}" in STRINGS[self.language] else dto.study
+            ui.label(f"{title}{' · ' + dto.fault if dto.fault else ''}").classes("text-base font-medium")
+            if dto.values:
+                ui.label(" · ".join(f"{column_label(self.language, k)}: {self._cell(v)}"
+                                    for k, v in dto.values.items())).classes("text-sm text-gray-700").mark(
+                    "study-values")
+            for name, reason in dto.failures.items():
+                ui.label(f"{name}: {reason}").classes("text-xs text-red-800")
+            chart = study_chart(dto, self.language)
+            if chart is not None:
+                ui.echart(chart).classes("w-full h-72").mark("study-chart")
+            for name, table in study_tables(dto):
+                ui.label(self.t(f"study_table_{name}") if f"study_table_{name}" in STRINGS[self.language]
+                         else name).classes("text-sm font-medium text-gray-700")
+                ui.aggrid(grid_options(table, self.language, lambda lang: "de-DE" if lang == "de" else "en-US"),
+                          theme="quartz").classes("h-64").mark(f"study-table-{name}")
+            self._diagnostics_panel(dto.diagnostics, title=self.t("diagnostics"))
+
+    def _cell(self, value: Any) -> str:
+        """A scalar of a study for the values line."""
+        if isinstance(value, bool) or value is None or isinstance(value, str):
+            return {True: self.t("yes"), False: self.t("no"), None: DASH}.get(value, value)
+        return format_number(value, self.language, 6)
+
+    def _io_dialog(self, action: str) -> None:
+        """Export or import tables, import a pandapower net."""
+        with self.dialog_host, ui.dialog() as dialog, ui.card().classes("w-[34rem]").mark("io-dialog"):
+            ui.label(self.t(action)).classes("text-base font-medium")
+            path = ui.input(self.t("directory") if action != "import_pandapower" else self.t("path"),
+                            placeholder="~/…").classes("w-full").mark("io-path")
+            extra: Dict[str, Any] = {}
+            if action == "import_pandapower" and self.session is not None:
+                summary = self.session.summary()
+                extra["voltage"] = ui.input(self.t("voltage_level_kv"), value="20").mark("io-voltage")
+                extra["rho"] = ui.input("ρ / Ω·m", value="100").mark("io-rho")
+                extra["bus_type"] = ui.select(summary.bus_types, value=summary.bus_types[0] if summary.bus_types
+                                              else None, label=self.t("new_bus_type")).classes("w-full")
+                extra["branch_type"] = ui.select(summary.branch_types, value=summary.branch_types[0]
+                                                 if summary.branch_types else None,
+                                                 label=self.t("new_branch_type")).classes("w-full")
+            ui.button(self.t("apply"), on_click=lambda: self._io(action, path.value, extra, dialog)).props(
+                "no-caps").mark("io-apply")
+        dialog.on_value_change(lambda e: None if e.value else dialog.delete())
+        dialog.open()
+
+    async def _io(self, action: str, path: Optional[str], extra: Dict[str, Any], dialog: Any) -> None:
+        """Run an import or export (off the event loop) and report it."""
+        path = (path or "").strip()
+        try:
+            if action == "export_tables":
+                written = await run.io_bound(self.session.export_tables, path)
+                ui.notify(f"{self.t('exported')}: {len(written)} · {path}", type="positive")
+                dialog.close()
+                return
+            if action == "import_tables":
+                session = await run.io_bound(ProjectSession.from_tables, path, runner=self.runner,
+                                             max_job_runtime_s=self.options.max_job_runtime_s)
+            else:
+                session = await run.io_bound(
+                    self.session.import_pandapower, path, voltage_level_kV=parse_number(extra["voltage"].value),
+                    rho=parse_number(extra["rho"].value), bus_type=extra["bus_type"].value,
+                    branch_type=extra["branch_type"].value, runner=self.runner,
+                    max_job_runtime_s=self.options.max_job_runtime_s)
+        except ValueError as exc:  # ProjectError is a ValueError
+            ui.notify(f"{self.t('open_failed')}: {exc}", type="negative", multi_line=True)
+            return
+        dialog.close()
+        self._replace_session(session)
 
     def _tiles(self, result: FaultResultDTO) -> None:
         """The key-figure tiles: RMS row and the row of the fundamental."""

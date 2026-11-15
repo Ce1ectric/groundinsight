@@ -178,7 +178,8 @@ async def test_colouring_and_auto_layout_from_the_toolbar(user: User):
     await user.should_see(marker="legend-empty")  # no result yet
     _fire(user, "move", positions={"b05": [900, 900]})
     user.find(marker="layout-library").click()
-    assert session.diagram_model == gi.Diagram().with_layout(session.network)
+    assert session.diagram_model.nodes == gi.Diagram().with_layout(session.network).nodes
+    assert session.diagram_model.color_scheme == "epr"  # the colouring is kept in the project
     _fire(user, "layout", positions={"b01": [0, 0], "b02": [100, 0]})
     assert session.history()[-1] == "auto layout (front end)"
     assert session.diagram_model.nodes["b02"].x == 100.0

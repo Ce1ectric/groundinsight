@@ -46,13 +46,14 @@ from groundinsight.api import (
     RemoveSource,
     RenameBranch,
     RenameBus,
+    SetColourScheme,
     UpdateBranch,
     UpdateBus,
     UpdateSource,
 )
 
 from .canvas import CANVAS_CSS, TOOLS, NetworkCanvas
-from .colouring import RESULT_MODES, Colouring, colour
+from .colouring import MODES, RESULT_MODES, Colouring, colour
 from .formatting import DASH, format_number, parse_number
 from .i18n import column_label
 
@@ -164,13 +165,21 @@ class PlanView:
         if self.mode in RESULT_MODES and self.page.fault:
             result = self.session.result(self.page.fault)
         check = self.session.check() if self.mode == "diagnostics" else None
-        return colour(self.mode, diagram, result=result, check=check)
+        study = self.page.study
+        touch = study.tables.get("touch") if study is not None and study.study == "touch" else None
+        return colour(self.mode, diagram, result=result, check=check, touch=touch)
+
+    def _mode_of_diagram(self) -> str:
+        """The colouring the project keeps (``Diagram.color_scheme``), or by type."""
+        scheme = self.session.diagram_model.color_scheme
+        return scheme if scheme in MODES else "type"
 
     # -- layout -------------------------------------------------------------------
 
     def build(self) -> None:
         """Palette, canvas with legend, properties."""
         ui.add_css(CANVAS_CSS)
+        self.mode = self._mode_of_diagram()
         summary = self.session.summary()
         if self.bus_type not in summary.bus_types:
             self.bus_type = summary.bus_types[0] if summary.bus_types else None
@@ -258,6 +267,9 @@ class PlanView:
         mode : str
             One of :data:`groundinsight_gui.colouring.MODES`.
         """
+        if mode != self.session.diagram_model.color_scheme:
+            # Kept in the project, like every other edit (and undone like one).
+            self.page.apply(SetColourScheme(color_scheme=mode))
         self.mode = mode
         self.refresh()
 
@@ -265,6 +277,7 @@ class PlanView:
         """Send the current diagram and colours to the canvas; redraw legend and properties."""
         if self.canvas is None or self.session is None:
             return
+        self.mode = self._mode_of_diagram()
         colours = self.colouring()
         self.canvas.show(self.session.diagram().model_dump(mode="json"),
                          {"nodes": colours.nodes, "edges": colours.edges})
