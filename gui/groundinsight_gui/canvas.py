@@ -66,7 +66,7 @@ CANVAS_CSS = """
 .gi-edge.gi-noearth .gi-edge-line { stroke-dasharray: 7 4; }
 .gi-edge.gi-off .gi-edge-line { stroke-dasharray: 2 5; opacity: 0.5; }
 .gi-edge.gi-sel .gi-edge-line { stroke-width: 4.5; filter: drop-shadow(0 0 2px #ffb300); }
-.gi-edge-label { font-size: 11px; fill: #3b4652; text-anchor: middle; pointer-events: none; }
+.gi-edge-label { font-size: 11px; fill: #3b4652; pointer-events: none; }
 """
 
 

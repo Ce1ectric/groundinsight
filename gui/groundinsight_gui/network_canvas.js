@@ -22,6 +22,11 @@ injectStyles();
 const SYMBOL_SIZE = 22;
 const BUSBAR_HEIGHT = 8;
 const BUSBAR_DEFAULT_LENGTH = 100;
+// Fit of the whole diagram, for the first draw, after a layout and for the fit
+// button of the controls. Vue Flow fits the symbols only; the bus labels stand
+// to the right of them, hence the generous padding. A short feeder would fill
+// the screen at several-fold zoom, hence maxZoom 1 (labels at their own size).
+const FIT = { padding: 0.3, maxZoom: 1.0 };
 
 function symbolSize(node) {
   if (node.symbol === "busbar") {
@@ -66,11 +71,17 @@ const LineEdge = {
     path() {
       return this.points.map((p, i) => (i ? "L" : "M") + p[0] + " " + p[1]).join(" ");
     },
-    middle() {
+    // The label sits beside the middle segment, on the side away from the bus
+    // labels (those are above and right of their symbol): below a horizontal
+    // segment, left of a vertical one -- so neither covers the other.
+    label() {
       const p = this.points;
       const a = p[Math.floor((p.length - 1) / 2)];
       const b = p[Math.ceil((p.length - 1) / 2)];
-      return [(a[0] + b[0]) / 2 + this.data.label_offset[0], (a[1] + b[1]) / 2 + this.data.label_offset[1]];
+      const x = (a[0] + b[0]) / 2 + this.data.label_offset[0];
+      const y = (a[1] + b[1]) / 2 + this.data.label_offset[1];
+      const vertical = Math.abs(b[1] - a[1]) > Math.abs(b[0] - a[0]);
+      return vertical ? { x: x - 8, y: y + 4, anchor: "end" } : { x: x, y: y + 16, anchor: "middle" };
     },
   },
   template: `
@@ -78,7 +89,7 @@ const LineEdge = {
        :data-branch="id">
       <path :d="path" class="gi-edge-hit" />
       <path :d="path" class="gi-edge-line" :style="{ stroke: data.colour }" />
-      <text :x="middle[0]" :y="middle[1] - 6" class="gi-edge-label">{{ id }}</text>
+      <text :x="label.x" :y="label.y" :text-anchor="label.anchor" class="gi-edge-label">{{ id }}</text>
     </g>`,
 };
 
@@ -99,6 +110,7 @@ export default {
       nodeTypes: markRaw({ bus: markRaw(BusNode) }),
       edgeTypes: markRaw({ line: markRaw(LineEdge) }),
       fitted: false,
+      fitParams: FIT,
       active: false,
       clicked: null,
     };
@@ -219,10 +231,9 @@ export default {
     },
     fit() {
       // After the next render and layout pass: the nodes of a new diagram and
-      // the final size of the canvas are known only then. A short feeder
-      // would otherwise fill the screen at four-fold zoom, hence maxZoom.
+      // the final size of the canvas are known only then.
       this.$nextTick(() => {
-        window.setTimeout(() => this.flow.fitView({ padding: 0.2, maxZoom: 1.5 }), 80);
+        window.setTimeout(() => this.flow.fitView(FIT), 80);
       });
     },
     async layoutElk() {
@@ -260,7 +271,7 @@ export default {
                @edge-double-click="onEdgeDoubleClick" @connect="onConnect">
         <Background :gap="grid" pattern-color="#d6dbe1" />
         <MiniMap pannable zoomable />
-        <Controls :show-interactive="false" />
+        <Controls :show-interactive="false" :fit-view-params="fitParams" />
       </VueFlow>
     </div>`,
 };
