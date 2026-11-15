@@ -218,8 +218,12 @@ export default {
       }
     },
     fit() {
-      // A short feeder would otherwise fill the screen at four-fold zoom.
-      this.flow.fitView({ padding: 0.2, maxZoom: 1.5 });
+      // After the next render and layout pass: the nodes of a new diagram and
+      // the final size of the canvas are known only then. A short feeder
+      // would otherwise fill the screen at four-fold zoom, hence maxZoom.
+      this.$nextTick(() => {
+        window.setTimeout(() => this.flow.fitView({ padding: 0.2, maxZoom: 1.5 }), 80);
+      });
     },
     async layoutElk() {
       const ELK = await loadELK();

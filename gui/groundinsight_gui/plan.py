@@ -419,7 +419,8 @@ class PlanView:
     def _on_layout(self, args: Dict[str, Any]) -> None:
         """Take the layout elkjs computed in the browser."""
         positions = {name: (float(p[0]), float(p[1])) for name, p in (args.get("positions") or {}).items()}
-        self.apply(AutoLayout(positions=positions, routes={}))
+        if self.apply(AutoLayout(positions=positions, routes={})):
+            self.canvas.fit()
 
     def auto_layout(self, how: str) -> None:
         """
