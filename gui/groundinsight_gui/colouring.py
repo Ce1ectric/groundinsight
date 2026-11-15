@@ -5,7 +5,8 @@ Colouring of the network diagram: a colour per element and a legend.
 Pure functions of DTOs -- the diagram, a fault result, the pre-flight check --
 so they are tested without a browser and contain no physics: a numerical mode
 maps a number the result already carries (the RMS ``EPR_V`` of ``res_buses``,
-``U_vT_V``, ``I_branch_A`` of ``res_branches``) onto a colour scale, a
+``U_vT_V``, the shield current ``I_branch_A`` of ``res_branches`` -- the
+current in a branch's earthing conductor or cable shield) onto a colour scale, a
 categorical mode maps a property (voltage level, type, characteristic origin)
 onto a palette. The only derived quantity is the *earthing group*: the
 connected parts of the graph of active branches with a grounding conductor,
