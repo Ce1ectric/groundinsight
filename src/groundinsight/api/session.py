@@ -77,6 +77,7 @@ from .schemas import (
     SessionLimitsDTO,
     SolveRequestDTO,
     TableDTO,
+    ViewBlockDTO,
     parse_job_request,
 )
 from .views import (
@@ -86,6 +87,7 @@ from .views import (
     diagram_dto,
     element_tables_dto,
     fault_result_dto,
+    view_table_dto,
 )
 
 logger = logging.getLogger(__name__)
@@ -681,6 +683,140 @@ class ProjectSession:
             raise ProjectError(f"cannot open '{path}': {rejection_reason(exc)}") from exc
 
     @classmethod
+    def from_tables(cls, directory: str, **options: Any) -> "ProjectSession":
+        """
+        A new, unsaved project from a directory of ``<table>.csv`` files.
+
+        Parameters
+        ----------
+        directory : str
+            The directory (:func:`groundinsight.network_from_tables`); ``~``
+            and environment variables are expanded.
+        **options
+            Keyword arguments of the constructor.
+
+        Returns
+        -------
+        ProjectSession
+            A session without location.
+
+        Raises
+        ------
+        ProjectError
+            If the tables cannot be read or do not describe a network.
+        """
+        directory = _expand_path(directory)
+        try:
+            network = gi.network_from_tables(directory)
+            return cls(network, **options)
+        except (OSError, ValueError) as exc:
+            raise ProjectError(f"cannot import '{directory}': {rejection_reason(exc)}") from exc
+
+    def export_tables(self, directory: str) -> List[str]:
+        """
+        Write the network's ten tables as ``<table>.csv`` files.
+
+        The tables of :meth:`Network.to_tables
+        <groundinsight.Network.to_tables>`, which
+        :meth:`from_tables` and :func:`groundinsight.network_from_tables`
+        read back.
+
+        Parameters
+        ----------
+        directory : str
+            Target directory, created if missing; ``~`` and environment
+            variables are expanded. Existing files of the same names are
+            replaced.
+
+        Returns
+        -------
+        list of str
+            The files written.
+
+        Raises
+        ------
+        ProjectError
+            If a file cannot be written.
+        """
+        directory = _expand_path(directory)
+        with self._lock:
+            tables = self._network.to_tables()
+        written = []
+        try:
+            os.makedirs(directory, exist_ok=True)
+            for name, frame in tables.items():
+                path = os.path.join(directory, f"{name}.csv")
+                frame.write_csv(path)
+                written.append(path)
+        except OSError as exc:
+            raise ProjectError(f"cannot export to '{directory}': {exc}") from exc
+        return written
+
+    def import_pandapower(
+        self,
+        path: str,
+        *,
+        voltage_level_kV: float,
+        rho: float,
+        bus_type: str,
+        branch_type: str,
+        **options: Any,
+    ) -> "ProjectSession":
+        """
+        A new, unsaved project from a pandapower network file.
+
+        :func:`groundinsight.from_pandapower` with
+        :class:`groundinsight.ImportDefaults` built from this session: its
+        frequencies and the named types of its catalogue.
+
+        Parameters
+        ----------
+        path : str
+            A pandapower JSON file (``pandapower.to_json``); ``~`` and
+            environment variables are expanded.
+        voltage_level_kV : float
+            The voltage level imported.
+        rho : float
+            Specific earth resistance of every element, in Ohm*m.
+        bus_type, branch_type : str
+            Catalogue types of the imported buses and lines.
+        **options
+            Keyword arguments of the new session's constructor.
+
+        Returns
+        -------
+        ProjectSession
+            A session without location.
+
+        Raises
+        ------
+        ProjectError
+            If pandapower is not installed, the file cannot be read, a type
+            is not in the catalogue, or the import fails.
+        """
+        path = _expand_path(path)
+        with self._lock:
+            catalogue = {"bus type": (self._bus_types, bus_type),
+                         "branch type": (self._branch_types, branch_type)}
+            for what, (types, name) in catalogue.items():
+                if name not in types:
+                    raise ProjectError(f"cannot import '{path}': {what} '{name}' is not in the catalogue")
+            defaults = gi.ImportDefaults(rho=rho, frequencies=list(self._network.frequencies),
+                                         default_bus_type=self._bus_types[bus_type],
+                                         default_branch_type=self._branch_types[branch_type])
+        try:
+            import pandapower
+
+            net = pandapower.from_json(path)
+            network = gi.from_pandapower(net, defaults=defaults, voltage_level_kV=voltage_level_kV)
+            return type(self)(network, **options)
+        except ImportError as exc:
+            raise ProjectError(f"cannot import '{path}': pandapower is not installed "
+                               "(pip install 'groundinsight[pandapower]')") from exc
+        except (OSError, ValueError, KeyError) as exc:
+            raise ProjectError(f"cannot import '{path}': {rejection_reason(exc)}") from exc
+
+    @classmethod
     def from_store(cls, store: ProjectStore, key: str, **options: Any) -> "ProjectSession":
         """
         Open a project from a store.
@@ -1014,7 +1150,7 @@ class ProjectSession:
     def _context(self) -> CommandContext:
         """The objects commands act on."""
         return CommandContext(self._network, self._bus_types, self._branch_types, self._limits,
-                              diagram=self._diagram)
+                              diagram=self._diagram, views=self._views)
 
     def _require_open(self) -> None:
         """Refuse work on a closed session."""
@@ -1065,7 +1201,7 @@ class ProjectSession:
             context = self._context()
             with collecting() as records:
                 command.apply(context)
-            self._diagram = context.diagram
+            self._diagram, self._views = context.diagram, context.views
             entry = _Entry(command, self._revision, next(self._revisions), paths_before)
             self._done.append(entry)
             self._undone.clear()
@@ -1102,7 +1238,7 @@ class ProjectSession:
                 # exception reaches the caller.
                 logger.debug("undo of '%s' failed", entry.command.label, exc_info=True)
                 raise
-            self._diagram = context.diagram
+            self._diagram, self._views = context.diagram, context.views
             self._done.pop()
             self._undone.append(entry)
             self._revision = entry.before
@@ -1127,7 +1263,7 @@ class ProjectSession:
             context = self._context()
             with collecting() as records:
                 entry.command.apply(context)
-            self._diagram = context.diagram
+            self._diagram, self._views = context.diagram, context.views
             self._done.append(entry)
             self._revision = entry.after
             return self._command_result(entry.command, records)
@@ -1223,6 +1359,35 @@ class ProjectSession:
         """
         with self._lock:
             return diagram_dto(self._network, self._diagram, revision=self._revision)
+
+    def view_table(self, block: Any) -> TableDTO:
+        """
+        The numbers of one block of an evaluation tab.
+
+        Parameters
+        ----------
+        block : ViewBlockDTO or dict
+            The block.
+
+        Returns
+        -------
+        TableDTO
+            Columns ``element`` and ``value``: the block's quantity of each
+            chosen element (all when none is chosen) in the stored result of
+            its fault (or of the first fault with one), at its frequency or
+            the RMS row. Empty without a stored result.
+
+        Raises
+        ------
+        ValueError
+            If the quantity is no column of the block's result table.
+        """
+        block = ViewBlockDTO.model_validate(block)
+        with self._lock:
+            faults = [block.fault] if block.fault else list(self._network.results)
+            fault = next((f for f in faults if f in self._network.results), None)
+            result = self.result(fault) if fault is not None else None
+            return view_table_dto(result, block)
 
     def characteristic(self, kind: str, name: str) -> Optional[CharacteristicDTO]:
         """

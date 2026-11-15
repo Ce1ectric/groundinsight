@@ -68,10 +68,13 @@ __all__ = [
     "READABLE_DTO_SCHEMA_VERSIONS",
     "Cell",
     "CharacteristicDTO",
+    "BusResponseRequestDTO",
     "ColumnDTO",
     "CheckReportDTO",
     "CommandResultDTO",
     "ComplexDTO",
+    "CutDTO",
+    "CutsRequestDTO",
     "DiagnosticDTO",
     "DiagramDTO",
     "DiagramEdgeDTO",
@@ -91,6 +94,7 @@ __all__ = [
     "OutageScenarioDTO",
     "OutageStudyRequestDTO",
     "ProgressDTO",
+    "ReferenceCasesRequestDTO",
     "SessionLimitsDTO",
     "SolveAllRequestDTO",
     "SolveRequestDTO",
@@ -98,6 +102,11 @@ __all__ = [
     "SweepPointDTO",
     "SweepRequestDTO",
     "TableDTO",
+    "ThermalRequestDTO",
+    "TouchCheckRequestDTO",
+    "TransientRequestDTO",
+    "ViewBlockDTO",
+    "ViewDTO",
     "finite_or_none",
     "json_schemas",
     "parse_job_request",
@@ -946,6 +955,61 @@ class CharacteristicDTO(BaseDTO):
 
 
 # ---------------------------------------------------------------------------
+# evaluation tabs (views)
+# ---------------------------------------------------------------------------
+
+
+class ViewBlockDTO(BaseDTO):
+    """
+    One block of an evaluation tab: a chart or a table of one result quantity.
+
+    Attributes
+    ----------
+    kind : {"chart", "table"}
+        How it is shown.
+    source : {"buses", "branches", "key_figures"}
+        The result table it reads: ``res_buses``, ``res_branches`` or
+        ``res_fault``.
+    quantity : str
+        A column of that table (``EPR_V``, ``U_vT_V``, ``I_branch_A``,
+        ``U_E_V``, ...).
+    elements : list of str
+        Buses or branches to show; empty for all.
+    frequency_Hz : float, optional
+        The frequency; ``None`` for the RMS row.
+    fault : str, optional
+        The fault whose stored result is read; ``None`` for the fault the
+        front end has selected.
+    """
+
+    kind: Literal["chart", "table"] = "chart"
+    source: Literal["buses", "branches", "key_figures"] = "buses"
+    quantity: str
+    elements: List[str] = Field(default_factory=list)
+    frequency_Hz: Optional[float] = Field(default=None, allow_inf_nan=False)
+    fault: Optional[str] = None
+
+
+class ViewDTO(BaseDTO):
+    """
+    An evaluation tab of a project, stored in the project file's ``views``.
+
+    Attributes
+    ----------
+    id : str
+        Unique identifier within the project.
+    title : str
+        The tab's title.
+    blocks : list of ViewBlockDTO
+        Its blocks, top to bottom.
+    """
+
+    id: str = Field(min_length=1)
+    title: str
+    blocks: List[ViewBlockDTO] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # jobs
 # ---------------------------------------------------------------------------
 
@@ -1149,6 +1213,10 @@ class SweepRequestDTO(BaseDTO):
         As in :func:`groundinsight.run_fault`.
     collect_branches : bool
         Also collect the branch results.
+    summary_value : str, optional
+        A column of the ``buses`` table summarised per bus over the points
+        (:func:`groundinsight.summarize`: count, mean, extremes, quantiles)
+        into the table ``summary``; ``None`` for none.
     """
 
     task: Literal["sweep"] = "sweep"
@@ -1156,6 +1224,7 @@ class SweepRequestDTO(BaseDTO):
     points: List[SweepPointDTO]
     phase_current_mode: PhaseCurrentMode = "auto"
     collect_branches: bool = False
+    summary_value: Optional[str] = "EPR_V"
 
 
 class OutageScenarioDTO(BaseDTO):
@@ -1247,6 +1316,209 @@ class MaxRhoRequestDTO(BaseDTO):
     phase_current_mode: PhaseCurrentMode = "auto"
 
 
+class CutDTO(BaseDTO):
+    """
+    One cut of a cut analysis (:class:`groundinsight.Cut`).
+
+    Attributes
+    ----------
+    name : str
+        Unique label.
+    branches : list of str
+        The branches cut, at least one.
+    description : str, optional
+        Free text.
+    """
+
+    name: str
+    branches: List[str] = Field(min_length=1)
+    description: Optional[str] = None
+
+
+class CutsRequestDTO(BaseDTO):
+    """
+    Split the fault location at cuts (:func:`groundinsight.analyze_cuts`).
+
+    The fault is solved first; the result's table ``cuts`` is
+    ``CutAnalysis.to_polars()``.
+
+    Attributes
+    ----------
+    task : "cuts"
+        Discriminator.
+    fault : str
+        The fault.
+    cuts : list of CutDTO
+        The cuts.
+    phase_current_mode : {"auto", "paths"}
+        As in :func:`groundinsight.run_fault`.
+    """
+
+    task: Literal["cuts"] = "cuts"
+    fault: str
+    cuts: List[CutDTO] = Field(min_length=1)
+    phase_current_mode: PhaseCurrentMode = "auto"
+
+
+class BusResponseRequestDTO(BaseDTO):
+    """
+    The response of the network at a bus (:func:`groundinsight.bus_response`).
+
+    The fault is solved first. The result's tables are ``extremes``
+    (``BusResponse.extremes()``) and, with ``electrodes``, ``sweep``
+    (``BusResponse.sweep``).
+
+    Attributes
+    ----------
+    task : "bus_response"
+        Discriminator.
+    fault : str
+        The fault.
+    bus : str, optional
+        The bus; default the fault's bus.
+    electrodes : dict of str to Phasor
+        Label to an electrode impedance in ohms (the same at every
+        frequency) to evaluate the bus with.
+    phase_current_mode : {"auto", "paths"}
+        As in :func:`groundinsight.run_fault`.
+    """
+
+    task: Literal["bus_response"] = "bus_response"
+    fault: str
+    bus: Optional[str] = None
+    electrodes: Dict[str, Phasor] = Field(default_factory=dict)
+    phase_current_mode: PhaseCurrentMode = "auto"
+
+
+class ThermalRequestDTO(BaseDTO):
+    """
+    The thermal check of conductors or nodes.
+
+    :func:`groundinsight.check_conductor_limits` or
+    :func:`groundinsight.check_node_limits` after a solve of the fault; the
+    result's table ``limits`` is the library's frame.
+
+    Attributes
+    ----------
+    task : "thermal"
+        Discriminator.
+    fault : str
+        The fault.
+    scope : {"conductors", "nodes"}
+        Branch conductors, or the earthing conductors and electrodes of the
+        buses.
+    t_k_s : float, optional
+        Fault duration in s; default ``Fault.t_k_s``.
+    kappa, r_to_x : float, optional
+        Peak factor or R/X ratio of IEC 60909 (one of them, unless the
+        sources carry them).
+    phase_current_mode : {"auto", "paths"}
+        As in :func:`groundinsight.run_fault`.
+    """
+
+    task: Literal["thermal"] = "thermal"
+    fault: str
+    scope: Literal["conductors", "nodes"] = "conductors"
+    t_k_s: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    kappa: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    r_to_x: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    phase_current_mode: PhaseCurrentMode = "auto"
+
+
+class TouchCheckRequestDTO(BaseDTO):
+    """
+    The EN 50522 touch-voltage check (:func:`groundinsight.check_touch_voltages`).
+
+    The fault is solved first; the result's table ``touch`` is the
+    library's frame.
+
+    Attributes
+    ----------
+    task : "touch"
+        Discriminator.
+    fault : str
+        The fault.
+    u_limit : float or list of (float, float)
+        The limit in volts, or the curve ``[(t_F in s, U in V), ...]``.
+    t_k_s : float, optional
+        Fault duration in s; default ``Fault.t_k_s``.
+    phase_current_mode : {"auto", "paths"}
+        As in :func:`groundinsight.run_fault`.
+    """
+
+    task: Literal["touch"] = "touch"
+    fault: str
+    u_limit: Union[float, List[Tuple[float, float]]]
+    t_k_s: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    phase_current_mode: PhaseCurrentMode = "auto"
+
+
+class TransientRequestDTO(BaseDTO):
+    """
+    A transient simulation (:class:`groundinsight.TransientStudy`).
+
+    Every source of the network gets the same waveform; the result's table
+    ``series`` is ``ResultTransient.to_polars()`` of the observed buses.
+
+    Attributes
+    ----------
+    task : "transient"
+        Discriminator.
+    fault : str
+        The fault.
+    t_end, dt : float
+        End time and step in s.
+    solver : {"fft", "state_space"}
+        As in :meth:`groundinsight.TransientStudy.solve`.
+    waveform : {"step", "sine"}
+        A current step, or a sine with a decaying DC offset
+        (:mod:`groundinsight.simulation.waveforms`).
+    amplitude : float
+        Peak current in A.
+    frequency_Hz : float
+        Frequency of the sine.
+    dc_decay_tau : float, optional
+        Time constant of the DC offset of the sine in s; ``None`` for none.
+    t_off : float, optional
+        The source is switched off at ``t_off`` (a pulse); ``None`` keeps it
+        on. The FFT solver needs a response that has decayed by ``t_end``.
+    zero_pad : bool
+        Solve the FFT on a window twice as long (see
+        :meth:`groundinsight.TransientStudy.solve`).
+    observe_buses : list of str
+        Buses whose potential is returned; empty for every bus.
+    """
+
+    task: Literal["transient"] = "transient"
+    fault: str
+    t_end: float = Field(gt=0, allow_inf_nan=False)
+    dt: float = Field(gt=0, allow_inf_nan=False)
+    solver: Literal["fft", "state_space"] = "fft"
+    waveform: Literal["step", "sine"] = "step"
+    amplitude: float = Field(default=1000.0, allow_inf_nan=False)
+    frequency_Hz: float = Field(default=50.0, gt=0, allow_inf_nan=False)
+    dc_decay_tau: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    t_off: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    zero_pad: bool = False
+    observe_buses: List[str] = Field(default_factory=list)
+
+
+class ReferenceCasesRequestDTO(BaseDTO):
+    """
+    The closed-form reference cases (:func:`groundinsight.run_reference_cases`).
+
+    The result's table ``cases`` is the library's frame; the session's
+    network is not used.
+
+    Attributes
+    ----------
+    task : "reference_cases"
+        Discriminator.
+    """
+
+    task: Literal["reference_cases"] = "reference_cases"
+
+
 #: Any job request, discriminated by ``task``.
 JobRequest = Annotated[
     Union[
@@ -1255,6 +1527,12 @@ JobRequest = Annotated[
         SweepRequestDTO,
         OutageStudyRequestDTO,
         MaxRhoRequestDTO,
+        CutsRequestDTO,
+        BusResponseRequestDTO,
+        ThermalRequestDTO,
+        TouchCheckRequestDTO,
+        TransientRequestDTO,
+        ReferenceCasesRequestDTO,
     ],
     Field(discriminator="task"),
 ]
@@ -1270,8 +1548,10 @@ def parse_job_request(data: Any) -> BaseModel:
     ----------
     data : dict or BaseModel
         A mapping with a ``task`` key (``"solve"``, ``"solve_all"``,
-        ``"sweep"``, ``"outage"``, ``"max_rho"``), or a request DTO, which is
-        returned unchanged.
+        ``"sweep"``, ``"outage"``, ``"max_rho"``, ``"cuts"``,
+        ``"bus_response"``, ``"thermal"``, ``"touch"``, ``"transient"``,
+        ``"reference_cases"``), or a request DTO, which is returned
+        unchanged.
 
     Returns
     -------

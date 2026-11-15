@@ -332,7 +332,7 @@ def test_the_catalogues_cover_every_command():
 
     # The characteristic commands and Batch have their own tests.
     characteristic_ops = {"set_characteristic", "clear_characteristic", "import_characteristic",
-                          "batch"}
+                          "batch", "add_view", "update_view", "remove_view", "set_colour_scheme"}
     covered = {c.op for c in _command_catalogue()} | {c.op for c in _catalogue()} | characteristic_ops
     assert covered == set(api.COMMAND_OPS)
 

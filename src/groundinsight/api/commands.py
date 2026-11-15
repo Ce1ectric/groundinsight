@@ -47,6 +47,7 @@ are also the request bodies of a future REST endpoint; :func:`parse_command`
 builds one from its JSON form.
 """
 
+import copy
 import logging
 from typing import Annotated, Any, ClassVar, Dict, List, Literal, Optional, Tuple, Union
 
@@ -54,7 +55,7 @@ from pydantic import Field, PrivateAttr, TypeAdapter, ValidationError, field_val
 
 import groundinsight as gi
 
-from .schemas import BaseDTO, ComplexDTO, Phasor, SessionLimitsDTO
+from .schemas import BaseDTO, ComplexDTO, Phasor, SessionLimitsDTO, ViewDTO
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,7 @@ __all__ = [
     "AddBusType",
     "AddFault",
     "AddSource",
+    "AddView",
     "AutoLayout",
     "Batch",
     "ClearCharacteristic",
@@ -81,6 +83,7 @@ __all__ = [
     "RemoveBusType",
     "RemoveFault",
     "RemoveSource",
+    "RemoveView",
     "RenameBranch",
     "RenameBranchType",
     "RenameBus",
@@ -89,6 +92,7 @@ __all__ = [
     "RenameSource",
     "RouteBranch",
     "SetCharacteristic",
+    "SetColourScheme",
     "SetFrequencies",
     "UpdateBranch",
     "UpdateBranchType",
@@ -97,6 +101,7 @@ __all__ = [
     "UpdateDiagramNode",
     "UpdateFault",
     "UpdateSource",
+    "UpdateView",
     "parse_command",
 ]
 
@@ -125,6 +130,9 @@ class CommandContext:
         The session's diagram; default an empty one. A command replaces it
         by a changed copy (diagrams are not edited in place); the session
         reads it back afterwards.
+    views : list of dict, optional
+        The session's evaluation tabs; replaced, never edited in place, like
+        the diagram.
     """
 
     def __init__(
@@ -134,12 +142,14 @@ class CommandContext:
         branch_types: Dict[str, gi.BranchType],
         limits: SessionLimitsDTO,
         diagram: Optional[gi.Diagram] = None,
+        views: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         self.network = network
         self.bus_types = bus_types
         self.branch_types = branch_types
         self.limits = limits
         self.diagram = diagram if diagram is not None else gi.Diagram()
+        self.views: List[Dict[str, Any]] = list(views) if views is not None else []
 
     def catalogue(self, kind: str) -> Dict[str, Any]:
         """
@@ -416,9 +426,10 @@ class Command(BaseDTO):
     it raises; ``_revert`` undoes a successful ``_apply`` on the network and
     must not fail.
 
-    The diagram is handled here, for every command alike: ``_apply`` may
-    replace ``context.diagram`` by a changed copy, and this class puts the
-    former diagram back when ``_apply`` raises and on :meth:`revert`. A
+    The diagram and the views are handled here, for every command alike:
+    ``_apply`` may replace ``context.diagram`` or ``context.views`` by a
+    changed copy, and this class puts the former ones back when ``_apply``
+    raises and on :meth:`revert`. A
     diagram is small and never edited in place, so keeping the former object
     costs nothing -- unlike a snapshot of the network, which the commands
     avoid (see the module docstring).
@@ -459,16 +470,16 @@ class Command(BaseDTO):
         CommandError
             If the library rejects the change; nothing has changed then.
         """
-        diagram = context.diagram
+        diagram, views = context.diagram, context.views
         try:
             self._apply(context)
         except CommandError:
-            context.diagram = diagram
+            context.diagram, context.views = diagram, views
             raise
         except (ValueError, TypeError, KeyError, AttributeError) as exc:
-            context.diagram = diagram
+            context.diagram, context.views = diagram, views
             raise CommandError(f"{self.label}: {rejection_reason(exc)}") from exc
-        self._diagram_before = diagram
+        self._diagram_before = (diagram, views)
 
     def revert(self, context: CommandContext) -> None:
         """
@@ -487,7 +498,7 @@ class Command(BaseDTO):
         if self._undo is None:
             raise RuntimeError(f"cannot revert '{self.label}': it was not applied")
         self._revert(context)
-        context.diagram = self._diagram_before
+        context.diagram, context.views = self._diagram_before
         self._undo = None
 
     def _apply(self, context: CommandContext) -> None:  # pragma: no cover - abstract
@@ -2371,6 +2382,175 @@ class ImportCharacteristic(_CharacteristicCommand):
 
 
 # ---------------------------------------------------------------------------
+# evaluation tabs and the colouring
+# ---------------------------------------------------------------------------
+
+
+def _view(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    A view validated by :class:`ViewDTO`, in the plain form the file stores.
+
+    Parameters
+    ----------
+    data : dict
+        The view.
+
+    Returns
+    -------
+    dict
+        ``ViewDTO.model_dump(mode="json")`` without the schema version.
+    """
+    view = ViewDTO.model_validate(data).model_dump(mode="json", exclude={"dto_schema_version"})
+    for block in view["blocks"]:
+        block.pop("dto_schema_version", None)
+    return view
+
+
+class AddView(Command):
+    """
+    Add an evaluation tab.
+
+    Attributes
+    ----------
+    view : dict
+        The tab (:class:`~groundinsight.api.ViewDTO` in its JSON form); its
+        ``id`` must be new.
+    """
+
+    op: Literal["add_view"] = "add_view"
+    view: Dict[str, Any]
+
+    @property
+    def label(self) -> str:
+        """
+        ``add view '<title>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"add view '{self.view.get('title')}'"
+
+    def _apply(self, context: CommandContext) -> None:
+        view = _view(self.view)
+        if any(v.get("id") == view["id"] for v in context.views):
+            raise CommandError(f"{self.label}: a view with id '{view['id']}' exists")
+        context.views = [copy.deepcopy(v) for v in context.views] + [view]
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        """The base class restores the views."""
+
+
+class UpdateView(Command):
+    """
+    Replace an evaluation tab (found by its ``id``).
+
+    Attributes
+    ----------
+    view : dict
+        The new tab.
+    """
+
+    op: Literal["update_view"] = "update_view"
+    view: Dict[str, Any]
+
+    @property
+    def label(self) -> str:
+        """
+        ``update view '<title>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"update view '{self.view.get('title')}'"
+
+    def _apply(self, context: CommandContext) -> None:
+        view = _view(self.view)
+        ids = [v.get("id") for v in context.views]
+        if view["id"] not in ids:
+            raise CommandError(f"{self.label}: there is no view '{view['id']}'")
+        context.views = [view if v.get("id") == view["id"] else copy.deepcopy(v) for v in context.views]
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        """The base class restores the views."""
+
+
+class RemoveView(Command):
+    """
+    Remove an evaluation tab.
+
+    Attributes
+    ----------
+    id : str
+        The tab's ``id``.
+    """
+
+    op: Literal["remove_view"] = "remove_view"
+    id: str
+
+    @property
+    def label(self) -> str:
+        """
+        ``remove view '<id>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"remove view '{self.id}'"
+
+    def _apply(self, context: CommandContext) -> None:
+        if not any(v.get("id") == self.id for v in context.views):
+            raise CommandError(f"{self.label}: there is no view '{self.id}'")
+        context.views = [copy.deepcopy(v) for v in context.views if v.get("id") != self.id]
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        """The base class restores the views."""
+
+
+class SetColourScheme(Command):
+    """
+    Keep the diagram's colouring (``Diagram.color_scheme``) in the project.
+
+    Attributes
+    ----------
+    color_scheme : str
+        The colouring's name; the front end interprets it.
+    """
+
+    op: Literal["set_colour_scheme"] = "set_colour_scheme"
+    color_scheme: str = Field(min_length=1)
+
+    @property
+    def label(self) -> str:
+        """
+        ``colouring: <name>``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"colouring: {self.color_scheme}"
+
+    def _apply(self, context: CommandContext) -> None:
+        if context.diagram.color_scheme == self.color_scheme:
+            raise CommandError(f"{self.label}: the diagram has this colouring already")
+        context.diagram = context.diagram.model_copy(update={"color_scheme": self.color_scheme}, deep=True)
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        """The base class restores the diagram."""
+
+
+# ---------------------------------------------------------------------------
 # several commands as one step
 # ---------------------------------------------------------------------------
 
@@ -2478,6 +2658,10 @@ COMMAND_TYPES = (
     SetCharacteristic,
     ClearCharacteristic,
     ImportCharacteristic,
+    AddView,
+    UpdateView,
+    RemoveView,
+    SetColourScheme,
     Batch,
 )
 

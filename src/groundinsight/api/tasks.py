@@ -11,7 +11,10 @@ the job's progress and cancellation callbacks, and returns a
 The tasks call the public library functions with the documented hooks --
 :func:`groundinsight.solve`, :func:`~groundinsight.run_sweep`,
 :func:`~groundinsight.run_outage_study`,
-:func:`~groundinsight.find_max_rho_scaling` -- and convert what comes back
+:func:`~groundinsight.find_max_rho_scaling`,
+:func:`~groundinsight.analyze_cuts`, :func:`~groundinsight.bus_response`,
+the thermal and touch-voltage checks, :class:`~groundinsight.TransientStudy`
+and :func:`~groundinsight.run_reference_cases` -- and convert what comes back
 with the builders of :mod:`groundinsight.api.views`. They are module-level
 functions registered by name in :data:`TASKS`, so a worker *process* finds the
 same function, runs the same code on an unpickled copy of the same network
@@ -20,7 +23,10 @@ what they compute, only in where.
 
 A study's own ``progress``/``should_cancel`` hooks are passed
 straight through. A single solve has no hook inside; it is checked for
-cancellation before it starts, and a fault sweep between faults.
+cancellation before it starts, and a fault sweep between faults. The
+analyses that read a solved fault (cuts, bus response, thermal and touch
+checks) solve it on the job's copy first -- the job snapshot carries no
+stored results.
 """
 
 import logging
@@ -34,14 +40,20 @@ import groundinsight as gi
 from groundinsight.diagnostics import collecting, unique
 
 from .schemas import (
+    BusResponseRequestDTO,
     ComplexDTO,
+    CutsRequestDTO,
     FaultResultsDTO,
     MaxRhoRequestDTO,
     OutageStudyRequestDTO,
+    ReferenceCasesRequestDTO,
     SolveAllRequestDTO,
     SolveRequestDTO,
     StudyResultDTO,
     SweepRequestDTO,
+    ThermalRequestDTO,
+    TouchCheckRequestDTO,
+    TransientRequestDTO,
 )
 from .views import diagnostic_dto, fault_result_dto, table_dto
 
@@ -273,6 +285,9 @@ def _sweep(network: gi.Network, request: SweepRequestDTO, context: TaskContext) 
         }
         if request.collect_branches:
             tables["branches"] = table_dto("branches", study.branches())
+        if request.summary_value is not None and study.labels:
+            tables["summary"] = table_dto(
+                "summary", gi.summarize(study.buses(), request.summary_value, by=["bus_name"]))
         return {
             "tables": tables,
             "values": {"points": len(study.labels), "failed": len(study.failures)},
@@ -353,6 +368,154 @@ def _max_rho(network: gi.Network, request: MaxRhoRequestDTO, context: TaskContex
     return _study("max_rho", request, context, run, convert)
 
 
+def _solved(network: gi.Network, fault: str, mode: str, context: TaskContext, what: str) -> None:
+    """
+    Solve a fault on the job's copy before an analysis that reads it.
+
+    Parameters
+    ----------
+    network : Network
+        The job's copy.
+    fault : str
+        The fault.
+    mode : str
+        Phase-current mode.
+    context : TaskContext
+        For cancellation.
+    what : str
+        The task, for the cancellation message.
+    """
+    context.checkpoint(0, 2, what)
+    gi.run_fault(network, fault, phase_current_mode=mode)
+    context.report(1, 2, f"solve {fault}")
+
+
+def _cuts(network: gi.Network, request: CutsRequestDTO, context: TaskContext) -> TaskOutcome:
+    """Task ``"cuts"``: :func:`groundinsight.analyze_cuts` after a solve."""
+    cuts = [gi.Cut(name=c.name, branches=list(c.branches), description=c.description)
+            for c in request.cuts]
+
+    def run():
+        _solved(network, request.fault, request.phase_current_mode, context, "cut analysis")
+        return gi.analyze_cuts(network, fault=request.fault, cuts=cuts)
+
+    def convert(analysis) -> Dict[str, Any]:
+        return {"tables": {"cuts": table_dto("cuts", analysis.to_polars())},
+                "values": {"cuts": len(cuts)}}
+
+    return _study("cuts", request, context, run, convert)
+
+
+def _bus_response(network: gi.Network, request: BusResponseRequestDTO, context: TaskContext) -> TaskOutcome:
+    """Task ``"bus_response"``: :func:`groundinsight.bus_response` after a solve."""
+
+    def run():
+        _solved(network, request.fault, request.phase_current_mode, context, "bus response")
+        return gi.bus_response(network, fault=request.fault, bus=request.bus)
+
+    def convert(response) -> Dict[str, Any]:
+        tables = {"extremes": table_dto("extremes", response.extremes())}
+        if request.electrodes:
+            labels = list(request.electrodes)
+            values = [v.to_complex() if isinstance(v, ComplexDTO) else complex(v)
+                      for v in request.electrodes.values()]
+            tables["sweep"] = table_dto("sweep", response.sweep(values, labels=labels))
+        return {"tables": tables, "values": {"bus": request.bus or network.faults[request.fault].bus}}
+
+    return _study("bus_response", request, context, run, convert)
+
+
+def _thermal(network: gi.Network, request: ThermalRequestDTO, context: TaskContext) -> TaskOutcome:
+    """Task ``"thermal"``: the conductor or node limits after a solve."""
+    check = gi.check_conductor_limits if request.scope == "conductors" else gi.check_node_limits
+
+    def run():
+        _solved(network, request.fault, request.phase_current_mode, context, "thermal check")
+        return check(network, request.fault, request.t_k_s, kappa=request.kappa, r_to_x=request.r_to_x)
+
+    def convert(frame: pl.DataFrame) -> Dict[str, Any]:
+        return {"tables": {"limits": table_dto("limits", frame)}, "values": {"scope": request.scope}}
+
+    return _study("thermal", request, context, run, convert)
+
+
+def _touch(network: gi.Network, request: TouchCheckRequestDTO, context: TaskContext) -> TaskOutcome:
+    """Task ``"touch"``: :func:`groundinsight.check_touch_voltages` after a solve."""
+
+    def run():
+        _solved(network, request.fault, request.phase_current_mode, context, "touch-voltage check")
+        return gi.check_touch_voltages(network, request.fault, request.u_limit, request.t_k_s)
+
+    def convert(frame: pl.DataFrame) -> Dict[str, Any]:
+        assessed = frame.filter(pl.col("within_limit").is_not_null())
+        return {
+            "tables": {"touch": table_dto("touch", frame)},
+            "values": {"assessed": assessed.height,
+                       "exceeded": assessed.filter(~pl.col("within_limit")).height},
+        }
+
+    return _study("touch", request, context, run, convert)
+
+
+def _waveform(request: TransientRequestDTO) -> Callable[[Any], Any]:
+    """
+    The source waveform of a transient request.
+
+    Parameters
+    ----------
+    request : TransientRequestDTO
+        The request.
+
+    Returns
+    -------
+    callable
+        ``waveform(t) -> i(t)`` from :mod:`groundinsight.simulation.waveforms`.
+    """
+    from groundinsight.simulation import waveforms
+
+    if request.waveform == "step":
+        return waveforms.step(request.amplitude, t_off=request.t_off)
+    return waveforms.sinusoidal_with_dc_offset(
+        request.amplitude, request.frequency_Hz, t_off=request.t_off,
+        dc_amplitude=-request.amplitude if request.dc_decay_tau is not None else 0.0,
+        dc_decay_tau=request.dc_decay_tau,
+    )
+
+
+def _transient(network: gi.Network, request: TransientRequestDTO, context: TaskContext) -> TaskOutcome:
+    """Task ``"transient"``: :class:`groundinsight.TransientStudy`."""
+
+    def run():
+        study = gi.TransientStudy(network, request.fault)
+        for source in network.sources:
+            study.set_source_waveform(source, _waveform(request))
+        study.set_observation(buses=list(request.observe_buses) or list(network.buses))
+        return study.solve(t_end=request.t_end, dt=request.dt, solver=request.solver,
+                           zero_pad=request.zero_pad, progress=context.progress,
+                           should_cancel=context.should_cancel)
+
+    def convert(result) -> Dict[str, Any]:
+        frame = result.to_polars()
+        return {"tables": {"series": table_dto("series", frame)}, "values": {"rows": frame.height}}
+
+    return _study("transient", request, context, run, convert)
+
+
+def _reference_cases(network: gi.Network, request: ReferenceCasesRequestDTO,
+                     context: TaskContext) -> TaskOutcome:
+    """Task ``"reference_cases"``: :func:`groundinsight.run_reference_cases`."""
+
+    def run():
+        context.checkpoint(0, 1, "reference cases")
+        return gi.run_reference_cases()
+
+    def convert(frame: pl.DataFrame) -> Dict[str, Any]:
+        return {"tables": {"cases": table_dto("cases", frame)},
+                "values": {"cases": frame.height, "agree": int(frame["agrees"].sum())}}
+
+    return _study("reference_cases", request, context, run, convert)
+
+
 #: Task name (the request's ``task``) to the function that computes it.
 TASKS = {
     "solve": _solve,
@@ -360,6 +523,12 @@ TASKS = {
     "sweep": _sweep,
     "outage": _outage,
     "max_rho": _max_rho,
+    "cuts": _cuts,
+    "bus_response": _bus_response,
+    "thermal": _thermal,
+    "touch": _touch,
+    "transient": _transient,
+    "reference_cases": _reference_cases,
 }
 
 

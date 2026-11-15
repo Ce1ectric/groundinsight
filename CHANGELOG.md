@@ -174,6 +174,35 @@ version section when a release is cut.
   impedance, diagnostics, with a legend) and *Auto layout* (groundinsight's
   layout, or elkjs in the browser). Every gesture is a command of the service
   layer; the browser decides nothing about the network.
+- **More study jobs in the service layer.** `CutsRequestDTO`
+  (`analyze_cuts`), `BusResponseRequestDTO` (`bus_response`, with an
+  electrode sweep), `ThermalRequestDTO` (`check_conductor_limits` /
+  `check_node_limits`), `TouchCheckRequestDTO` (`check_touch_voltages`),
+  `TransientRequestDTO` (`TransientStudy`: a current step or a sine with a
+  decaying DC offset, optionally switched off) and
+  `ReferenceCasesRequestDTO` (`run_reference_cases`); the analyses that read
+  a solved fault solve it on the job's copy first. A sweep also returns the
+  statistics of `summary_value` per bus (`summarize`).
+- **Evaluation tabs and the colouring in the project.** `AddView`,
+  `UpdateView` and `RemoveView` edit the `views` of a project (`ViewDTO`,
+  `ViewBlockDTO`: one result quantity of chosen elements at one frequency or
+  RMS, as chart or table), undoably; `ProjectSession.view_table` returns a
+  block's numbers from the stored result. `SetColourScheme` keeps
+  `Diagram.color_scheme`.
+- **Tables and pandapower through the session.**
+  `ProjectSession.export_tables(directory)`, `ProjectSession.from_tables` and
+  `ProjectSession.import_pandapower(path, ...)` (frequencies and types from
+  the session's catalogue); `~` and environment variables are expanded.
+- **GUI: every function of groundinsight.** A *Calculation* menu runs single
+  and all faults, the check, outage study, rho-f variation with statistics,
+  cuts, bus response, the largest admissible rho scaling, the thermal check,
+  the EN 50522 touch-voltage check, a transient and the reference cases as
+  jobs with progress and cancel; their tables (the library frames) and charts
+  appear in the results tab. Evaluation tabs with chart and table blocks are
+  saved in the project. An *Import/Export* menu exports and imports the
+  tables (CSV) and imports a pandapower net. The plan gains the colouring by
+  touch-voltage utilisation of the last EN 50522 check, and the chosen
+  colouring is kept in the project.
 
 ### Changed
 

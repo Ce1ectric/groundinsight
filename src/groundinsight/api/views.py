@@ -21,7 +21,7 @@ network, and only the DTO travels back.
 """
 
 import logging
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import polars as pl
 
@@ -43,6 +43,7 @@ from .schemas import (
     KeyFiguresDTO,
     NetworkTablesDTO,
     TableDTO,
+    ViewBlockDTO,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ __all__ = [
     "fault_result_dto",
     "key_figures_dto",
     "table_dto",
+    "view_table_dto",
 ]
 
 #: Units of the element-table columns whose name does not carry one. The
@@ -462,3 +464,104 @@ def characteristic_dto(
         extrapolated=extrapolated,
         provenance=provenance.model_dump(mode="json") if provenance is not None else {},
     )
+
+
+#: Per block source: the result table of the fault result DTO and its name column.
+_VIEW_SOURCES = {"buses": ("buses", "bus_name"), "branches": ("branches", "branch_name")}
+
+
+def _key_figure_value(result: FaultResultDTO, block: ViewBlockDTO) -> Any:
+    """
+    A key figure of the RMS row or of one frequency.
+
+    Parameters
+    ----------
+    result : FaultResultDTO
+        The result.
+    block : ViewBlockDTO
+        The block (quantity, frequency).
+
+    Returns
+    -------
+    Any
+        The value, ``None`` when the result has no such row.
+
+    Raises
+    ------
+    ValueError
+        If the quantity is no key-figure column.
+    """
+    if block.quantity not in KeyFigureRowDTO.model_fields:
+        raise ValueError(f"the key figures have no column '{block.quantity}'")
+    figures = result.key_figures
+    row = figures.rms() if block.frequency_Hz is None else figures.at(block.frequency_Hz)
+    return getattr(row, block.quantity) if row is not None else None
+
+
+def _element_values(result: FaultResultDTO, block: ViewBlockDTO) -> Dict[str, Any]:
+    """
+    The quantity of every bus or branch at the block's frequency or RMS.
+
+    Parameters
+    ----------
+    result : FaultResultDTO
+        The result.
+    block : ViewBlockDTO
+        The block.
+
+    Returns
+    -------
+    dict of str to Any
+        Element name to value, in result order.
+
+    Raises
+    ------
+    ValueError
+        If the quantity is no column of the table.
+    """
+    table_name, key = _VIEW_SOURCES[block.source]
+    table = getattr(result, table_name)
+    if block.quantity not in [c.name for c in table.columns]:
+        raise ValueError(f"the {block.source} results have no column '{block.quantity}'")
+    if block.frequency_Hz is None:
+        rows = [r for r in table.rows if r["is_rms"]]
+    else:
+        rows = [r for r in table.rows if not r["is_rms"] and r["frequency_Hz"] == block.frequency_Hz]
+    return {r[key]: r[block.quantity] for r in rows}
+
+
+def view_table_dto(result: Optional[FaultResultDTO], block: ViewBlockDTO) -> TableDTO:
+    """
+    The numbers of one block of an evaluation tab, picked from a fault result.
+
+    Parameters
+    ----------
+    result : FaultResultDTO or None
+        The stored result the block reads; ``None`` gives an empty table.
+    block : ViewBlockDTO
+        The block.
+
+    Returns
+    -------
+    TableDTO
+        Columns ``element`` and ``value``, in the order of the result (or of
+        ``block.elements`` when given): the rows of ``res_buses`` /
+        ``res_branches`` at the block's frequency (``None``: the RMS row), or
+        for ``key_figures`` the fault's row of ``res_fault``. Selection only;
+        no number is computed.
+
+    Raises
+    ------
+    ValueError
+        If the quantity is no column of that table.
+    """
+    columns = [ColumnDTO(name="element", dtype="str"), ColumnDTO(name="value", dtype="float")]
+    if result is None:
+        return TableDTO(name="view", columns=columns, rows=[])
+    if block.source == "key_figures":
+        value = _key_figure_value(result, block)
+        return TableDTO(name="view", columns=columns, rows=[{"element": result.fault, "value": value}])
+    values = _element_values(result, block)
+    order = block.elements or list(values)
+    return TableDTO(name="view", columns=columns,
+                    rows=[{"element": e, "value": values[e]} for e in order if e in values])

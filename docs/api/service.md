@@ -367,7 +367,14 @@ so two sessions with different caps share nothing.
 
 `Batch(commands=[...], title=...)` applies several commands as one step of
 the history, all or nothing -- a bus drawn with its infeed, a bus deleted with
-its branches, the changes of an element dialog.
+its branches, the changes of an element dialog. The evaluation tabs of a
+project (`session.views`, stored in the project file) are edited with
+`AddView`, `UpdateView` and `RemoveView` (a `ViewDTO` of `ViewBlockDTO`s);
+`session.view_table(block)` picks a block's numbers out of the stored result.
+`SetColourScheme` keeps the diagram's colouring in the project.
+`session.export_tables(directory)`, `ProjectSession.from_tables(directory)`
+and `session.import_pandapower(path, ...)` move a network in and out as CSV
+tables or from a pandapower file.
 
 A command calls the library's own editing API, so the library validates the
 input and re-derives the impedances; a rejected command raises `CommandError`
@@ -397,10 +404,23 @@ status = handle.status()                         # JobStatusDTO: state, progress
 dto = handle.result(timeout=60)                  # FaultResultDTO, or JobCancelled/JobTimeout/JobFailed
 ```
 
-`session.submit(request)` takes a job request -- `SolveRequestDTO`,
-`SolveAllRequestDTO`, `SweepRequestDTO`, `OutageStudyRequestDTO`,
-`MaxRhoRequestDTO` -- and runs it on a snapshot of the network taken at
-submission, so editing can go on meanwhile. Progress and cancellation use the
+`session.submit(request)` takes a job request and runs it on a snapshot of
+the network taken at submission, so editing can go on meanwhile:
+
+| Request | Library call | Result tables |
+|---|---|---|
+| `SolveRequestDTO`, `SolveAllRequestDTO` | `gi.solve` | a `FaultResultDTO` per fault |
+| `SweepRequestDTO` | `gi.run_sweep` (+ `gi.summarize` of `summary_value` per bus) | `buses`, `impedances`, `branches`, `summary` |
+| `OutageStudyRequestDTO` | `gi.run_outage_study` | `buses`, `branches` |
+| `MaxRhoRequestDTO` | `gi.find_max_rho_scaling` | `rho_max` |
+| `CutsRequestDTO` | `gi.analyze_cuts` | `cuts` |
+| `BusResponseRequestDTO` | `gi.bus_response` | `extremes`, `sweep` |
+| `ThermalRequestDTO` | `gi.check_conductor_limits` / `gi.check_node_limits` | `limits` |
+| `TouchCheckRequestDTO` | `gi.check_touch_voltages` | `touch` |
+| `TransientRequestDTO` | `gi.TransientStudy` | `series` |
+| `ReferenceCasesRequestDTO` | `gi.run_reference_cases` | `cases` |
+
+The analyses that read a solved fault solve it on the job's copy first. Progress and cancellation use the
 studies' `progress`/`should_cancel` hooks ([above](#progress-and-cancellation));
 `handle.cancel()` and the runtime limit both end a study at its next unit
 boundary with `gi.StudyCancelled` (`JobCancelled` and `JobTimeout` subclass
