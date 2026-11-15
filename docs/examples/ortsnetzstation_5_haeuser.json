@@ -1,0 +1,2222 @@
+{
+    "schema_version": 2,
+    "groundinsight_version": "2026.11.1",
+    "network": {
+        "name": "Ortsnetzstation mit 5 Häusern",
+        "description": null,
+        "frequencies": [
+            50.0,
+            150.0,
+            250.0,
+            550.0,
+            1000.0
+        ],
+        "buses": {
+            "UW": {
+                "name": "UW",
+                "description": null,
+                "type": {
+                    "name": "UW",
+                    "description": null,
+                    "system_type": "HV/MV",
+                    "voltage_level": 110.0,
+                    "impedance_formula": "0.1 + 0*rho",
+                    "R_formula": null,
+                    "L_formula": null,
+                    "C_formula": null,
+                    "earthing_conductor_material": null,
+                    "earthing_conductor_cross_section_mm2": null,
+                    "earthing_conductor_theta_initial_C": 20.0,
+                    "earthing_conductor_theta_final_C": null,
+                    "earthing_conductor_current_split": 1.0,
+                    "electrode_material": null,
+                    "electrode_cross_section_mm2": null,
+                    "electrode_theta_initial_C": 20.0,
+                    "electrode_theta_final_C": null,
+                    "electrode_current_split": 1.0,
+                    "characteristic": null
+                },
+                "impedance": {
+                    "50.0": {
+                        "real": 0.1,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 0.1,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 0.1,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 0.1,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 0.1,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 100.0,
+                "active": true,
+                "R": null,
+                "L": null,
+                "C": null,
+                "characteristic": null,
+                "k_touch": null,
+                "k_transfer": null
+            },
+            "ONS": {
+                "name": "ONS",
+                "description": null,
+                "type": {
+                    "name": "ONS",
+                    "description": null,
+                    "system_type": "MV/LV",
+                    "voltage_level": 20.0,
+                    "impedance_formula": "-9.50516297383e-18*f*rho + 2.49973639221e-16*f + 0.0786706316441*rho - 2.6944999161e-13",
+                    "R_formula": null,
+                    "L_formula": null,
+                    "C_formula": null,
+                    "earthing_conductor_material": null,
+                    "earthing_conductor_cross_section_mm2": null,
+                    "earthing_conductor_theta_initial_C": 20.0,
+                    "earthing_conductor_theta_final_C": null,
+                    "earthing_conductor_current_split": 1.0,
+                    "electrode_material": null,
+                    "electrode_cross_section_mm2": null,
+                    "electrode_theta_initial_C": 20.0,
+                    "electrode_theta_final_C": null,
+                    "electrode_current_split": 1.0,
+                    "characteristic": {
+                        "rho_Ohm_m": [
+                            109.3470595339999,
+                            218.6941190679998,
+                            437.38823813599964,
+                            874.7764762719992
+                        ],
+                        "frequency_Hz": [
+                            50.0,
+                            150.0,
+                            250.0,
+                            550.0,
+                            1000.0
+                        ],
+                        "impedance_Ohm": [
+                            [
+                                {
+                                    "real": 8.602402241969221,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 8.602402241969221,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 8.602402241969221,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 8.602402241969221,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 8.602402241969221,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 17.204804483938442,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 17.204804483938442,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 17.204804483938442,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 17.204804483938442,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 17.204804483938442,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 34.409608967876885,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 34.409608967876885,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 34.409608967876885,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 34.409608967876885,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 34.409608967876885,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 68.81921793575377,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 68.81921793575377,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 68.81921793575377,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 68.81921793575377,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 68.81921793575377,
+                                    "imag": 0.0
+                                }
+                            ]
+                        ],
+                        "k_touch": [
+                            [
+                                0.3053785509333538,
+                                0.3053785509333538,
+                                0.3053785509333538,
+                                0.3053785509333538,
+                                0.3053785509333538
+                            ],
+                            [
+                                0.3053785509333538,
+                                0.3053785509333538,
+                                0.3053785509333538,
+                                0.3053785509333538,
+                                0.3053785509333538
+                            ],
+                            [
+                                0.3053785509333538,
+                                0.3053785509333538,
+                                0.3053785509333538,
+                                0.3053785509333538,
+                                0.3053785509333538
+                            ],
+                            [
+                                0.3053785509333538,
+                                0.3053785509333538,
+                                0.3053785509333538,
+                                0.3053785509333538,
+                                0.3053785509333538
+                            ]
+                        ],
+                        "k_transfer": [
+                            [
+                                0.8524023246222339,
+                                0.8524023246222339,
+                                0.8524023246222339,
+                                0.8524023246222339,
+                                0.8524023246222339
+                            ],
+                            [
+                                0.8524023246222339,
+                                0.8524023246222339,
+                                0.8524023246222339,
+                                0.8524023246222339,
+                                0.8524023246222339
+                            ],
+                            [
+                                0.8524023246222339,
+                                0.8524023246222339,
+                                0.8524023246222339,
+                                0.8524023246222339,
+                                0.8524023246222339
+                            ],
+                            [
+                                0.8524023246222339,
+                                0.8524023246222339,
+                                0.8524023246222339,
+                                0.8524023246222339,
+                                0.8524023246222339
+                            ]
+                        ],
+                        "impedance_formula": "-9.50516297383e-18*f*rho + 2.49973639221e-16*f + 0.0786706316441*rho - 2.6944999161e-13",
+                        "impedance_source": "table",
+                        "name": "ONS Ring 5 m + 4 Stäbe",
+                        "provenance": {
+                            "source": "groundfield",
+                            "groundfield_version": "0.15.0",
+                            "solver": "mom",
+                            "soil": {
+                                "soils": [
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 50.0,
+                                        "rho_2": 250.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 100.0,
+                                        "rho_2": 500.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 200.0,
+                                        "rho_2": 1000.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 400.0,
+                                        "rho_2": 2000.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    }
+                                ],
+                                "rho_definition": "effective_resistivity"
+                            },
+                            "geometry_id": "ring r2.5 t0.6 + 4 rods 2.5 m",
+                            "rho_preset": "station",
+                            "created": "2026-11-15T20:15:36Z",
+                            "input_hash": "sha256:9c63bd0b47150b58bad747d7af22c8549432a20d954495029a019b9ca4740c47",
+                            "note": "cluster impedance of 'ONS'; k_touch: envelope at 1.0 m, 24 directions, interior=False; k_transfer: 1 target point(s)"
+                        }
+                    }
+                },
+                "impedance": {
+                    "50.0": {
+                        "real": 17.204804483938442,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 17.204804483938442,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 17.204804483938442,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 17.204804483938442,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 17.204804483938442,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 218.6941190679998,
+                "active": true,
+                "R": null,
+                "L": null,
+                "C": null,
+                "characteristic": null,
+                "k_touch": {
+                    "50.0": 0.3053785509333538,
+                    "150.0": 0.3053785509333538,
+                    "250.0": 0.3053785509333538,
+                    "550.0": 0.3053785509333538,
+                    "1000.0": 0.3053785509333538
+                },
+                "k_transfer": {
+                    "50.0": 0.8524023246222339,
+                    "150.0": 0.8524023246222339,
+                    "250.0": 0.8524023246222339,
+                    "550.0": 0.8524023246222339,
+                    "1000.0": 0.8524023246222339
+                }
+            },
+            "H1": {
+                "name": "H1",
+                "description": null,
+                "type": {
+                    "name": "Haus",
+                    "description": null,
+                    "system_type": "LV",
+                    "voltage_level": 0.4,
+                    "impedance_formula": "1.22624244381e-18*f*rho - 6.64852739844e-16*f + 0.0490810298548*rho + 2.70444492777e-13",
+                    "R_formula": null,
+                    "L_formula": null,
+                    "C_formula": null,
+                    "earthing_conductor_material": null,
+                    "earthing_conductor_cross_section_mm2": null,
+                    "earthing_conductor_theta_initial_C": 20.0,
+                    "earthing_conductor_theta_final_C": null,
+                    "earthing_conductor_current_split": 1.0,
+                    "electrode_material": null,
+                    "electrode_cross_section_mm2": null,
+                    "electrode_theta_initial_C": 20.0,
+                    "electrode_theta_final_C": null,
+                    "electrode_current_split": 1.0,
+                    "characteristic": {
+                        "rho_Ohm_m": [
+                            106.72336579222466,
+                            213.4467315844493,
+                            426.8934631688986,
+                            853.7869263377974
+                        ],
+                        "frequency_Hz": [
+                            50.0,
+                            150.0,
+                            250.0,
+                            550.0,
+                            1000.0
+                        ],
+                        "impedance_Ohm": [
+                            [
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                }
+                            ]
+                        ],
+                        "k_touch": [
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ]
+                        ],
+                        "k_transfer": null,
+                        "impedance_formula": "1.22624244381e-18*f*rho - 6.64852739844e-16*f + 0.0490810298548*rho + 2.70444492777e-13",
+                        "impedance_source": "table",
+                        "name": "Haus Fundament 10 m",
+                        "provenance": {
+                            "source": "groundfield",
+                            "groundfield_version": "0.15.0",
+                            "solver": "mom",
+                            "soil": {
+                                "soils": [
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 50.0,
+                                        "rho_2": 250.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 100.0,
+                                        "rho_2": 500.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 200.0,
+                                        "rho_2": 1000.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 400.0,
+                                        "rho_2": 2000.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    }
+                                ],
+                                "rho_definition": "effective_resistivity"
+                            },
+                            "geometry_id": "foundation 10x10 2x2 t0.8",
+                            "rho_preset": "lv_network",
+                            "created": "2026-11-15T20:15:36Z",
+                            "input_hash": "sha256:64ed5dbb54ee71b50279d8fdbe1c54dc54b1fc237fd2eba15ea18551f01732cf",
+                            "note": "cluster impedance of 'H'; k_touch: envelope at 1.0 m, 24 directions, interior=False"
+                        }
+                    }
+                },
+                "impedance": {
+                    "50.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 213.4467315844493,
+                "active": true,
+                "R": null,
+                "L": null,
+                "C": null,
+                "characteristic": null,
+                "k_touch": {
+                    "50.0": 0.278670273631557,
+                    "150.0": 0.278670273631557,
+                    "250.0": 0.278670273631557,
+                    "550.0": 0.278670273631557,
+                    "1000.0": 0.278670273631557
+                },
+                "k_transfer": null
+            },
+            "H2": {
+                "name": "H2",
+                "description": null,
+                "type": {
+                    "name": "Haus",
+                    "description": null,
+                    "system_type": "LV",
+                    "voltage_level": 0.4,
+                    "impedance_formula": "1.22624244381e-18*f*rho - 6.64852739844e-16*f + 0.0490810298548*rho + 2.70444492777e-13",
+                    "R_formula": null,
+                    "L_formula": null,
+                    "C_formula": null,
+                    "earthing_conductor_material": null,
+                    "earthing_conductor_cross_section_mm2": null,
+                    "earthing_conductor_theta_initial_C": 20.0,
+                    "earthing_conductor_theta_final_C": null,
+                    "earthing_conductor_current_split": 1.0,
+                    "electrode_material": null,
+                    "electrode_cross_section_mm2": null,
+                    "electrode_theta_initial_C": 20.0,
+                    "electrode_theta_final_C": null,
+                    "electrode_current_split": 1.0,
+                    "characteristic": {
+                        "rho_Ohm_m": [
+                            106.72336579222466,
+                            213.4467315844493,
+                            426.8934631688986,
+                            853.7869263377974
+                        ],
+                        "frequency_Hz": [
+                            50.0,
+                            150.0,
+                            250.0,
+                            550.0,
+                            1000.0
+                        ],
+                        "impedance_Ohm": [
+                            [
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                }
+                            ]
+                        ],
+                        "k_touch": [
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ]
+                        ],
+                        "k_transfer": null,
+                        "impedance_formula": "1.22624244381e-18*f*rho - 6.64852739844e-16*f + 0.0490810298548*rho + 2.70444492777e-13",
+                        "impedance_source": "table",
+                        "name": "Haus Fundament 10 m",
+                        "provenance": {
+                            "source": "groundfield",
+                            "groundfield_version": "0.15.0",
+                            "solver": "mom",
+                            "soil": {
+                                "soils": [
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 50.0,
+                                        "rho_2": 250.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 100.0,
+                                        "rho_2": 500.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 200.0,
+                                        "rho_2": 1000.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 400.0,
+                                        "rho_2": 2000.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    }
+                                ],
+                                "rho_definition": "effective_resistivity"
+                            },
+                            "geometry_id": "foundation 10x10 2x2 t0.8",
+                            "rho_preset": "lv_network",
+                            "created": "2026-11-15T20:15:36Z",
+                            "input_hash": "sha256:64ed5dbb54ee71b50279d8fdbe1c54dc54b1fc237fd2eba15ea18551f01732cf",
+                            "note": "cluster impedance of 'H'; k_touch: envelope at 1.0 m, 24 directions, interior=False"
+                        }
+                    }
+                },
+                "impedance": {
+                    "50.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 213.4467315844493,
+                "active": true,
+                "R": null,
+                "L": null,
+                "C": null,
+                "characteristic": null,
+                "k_touch": {
+                    "50.0": 0.278670273631557,
+                    "150.0": 0.278670273631557,
+                    "250.0": 0.278670273631557,
+                    "550.0": 0.278670273631557,
+                    "1000.0": 0.278670273631557
+                },
+                "k_transfer": null
+            },
+            "H3": {
+                "name": "H3",
+                "description": null,
+                "type": {
+                    "name": "Haus",
+                    "description": null,
+                    "system_type": "LV",
+                    "voltage_level": 0.4,
+                    "impedance_formula": "1.22624244381e-18*f*rho - 6.64852739844e-16*f + 0.0490810298548*rho + 2.70444492777e-13",
+                    "R_formula": null,
+                    "L_formula": null,
+                    "C_formula": null,
+                    "earthing_conductor_material": null,
+                    "earthing_conductor_cross_section_mm2": null,
+                    "earthing_conductor_theta_initial_C": 20.0,
+                    "earthing_conductor_theta_final_C": null,
+                    "earthing_conductor_current_split": 1.0,
+                    "electrode_material": null,
+                    "electrode_cross_section_mm2": null,
+                    "electrode_theta_initial_C": 20.0,
+                    "electrode_theta_final_C": null,
+                    "electrode_current_split": 1.0,
+                    "characteristic": {
+                        "rho_Ohm_m": [
+                            106.72336579222466,
+                            213.4467315844493,
+                            426.8934631688986,
+                            853.7869263377974
+                        ],
+                        "frequency_Hz": [
+                            50.0,
+                            150.0,
+                            250.0,
+                            550.0,
+                            1000.0
+                        ],
+                        "impedance_Ohm": [
+                            [
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                }
+                            ]
+                        ],
+                        "k_touch": [
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ]
+                        ],
+                        "k_transfer": null,
+                        "impedance_formula": "1.22624244381e-18*f*rho - 6.64852739844e-16*f + 0.0490810298548*rho + 2.70444492777e-13",
+                        "impedance_source": "table",
+                        "name": "Haus Fundament 10 m",
+                        "provenance": {
+                            "source": "groundfield",
+                            "groundfield_version": "0.15.0",
+                            "solver": "mom",
+                            "soil": {
+                                "soils": [
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 50.0,
+                                        "rho_2": 250.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 100.0,
+                                        "rho_2": 500.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 200.0,
+                                        "rho_2": 1000.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 400.0,
+                                        "rho_2": 2000.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    }
+                                ],
+                                "rho_definition": "effective_resistivity"
+                            },
+                            "geometry_id": "foundation 10x10 2x2 t0.8",
+                            "rho_preset": "lv_network",
+                            "created": "2026-11-15T20:15:36Z",
+                            "input_hash": "sha256:64ed5dbb54ee71b50279d8fdbe1c54dc54b1fc237fd2eba15ea18551f01732cf",
+                            "note": "cluster impedance of 'H'; k_touch: envelope at 1.0 m, 24 directions, interior=False"
+                        }
+                    }
+                },
+                "impedance": {
+                    "50.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 213.4467315844493,
+                "active": true,
+                "R": null,
+                "L": null,
+                "C": null,
+                "characteristic": null,
+                "k_touch": {
+                    "50.0": 0.278670273631557,
+                    "150.0": 0.278670273631557,
+                    "250.0": 0.278670273631557,
+                    "550.0": 0.278670273631557,
+                    "1000.0": 0.278670273631557
+                },
+                "k_transfer": null
+            },
+            "H4": {
+                "name": "H4",
+                "description": null,
+                "type": {
+                    "name": "Haus",
+                    "description": null,
+                    "system_type": "LV",
+                    "voltage_level": 0.4,
+                    "impedance_formula": "1.22624244381e-18*f*rho - 6.64852739844e-16*f + 0.0490810298548*rho + 2.70444492777e-13",
+                    "R_formula": null,
+                    "L_formula": null,
+                    "C_formula": null,
+                    "earthing_conductor_material": null,
+                    "earthing_conductor_cross_section_mm2": null,
+                    "earthing_conductor_theta_initial_C": 20.0,
+                    "earthing_conductor_theta_final_C": null,
+                    "earthing_conductor_current_split": 1.0,
+                    "electrode_material": null,
+                    "electrode_cross_section_mm2": null,
+                    "electrode_theta_initial_C": 20.0,
+                    "electrode_theta_final_C": null,
+                    "electrode_current_split": 1.0,
+                    "characteristic": {
+                        "rho_Ohm_m": [
+                            106.72336579222466,
+                            213.4467315844493,
+                            426.8934631688986,
+                            853.7869263377974
+                        ],
+                        "frequency_Hz": [
+                            50.0,
+                            150.0,
+                            250.0,
+                            550.0,
+                            1000.0
+                        ],
+                        "impedance_Ohm": [
+                            [
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                }
+                            ]
+                        ],
+                        "k_touch": [
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ]
+                        ],
+                        "k_transfer": null,
+                        "impedance_formula": "1.22624244381e-18*f*rho - 6.64852739844e-16*f + 0.0490810298548*rho + 2.70444492777e-13",
+                        "impedance_source": "table",
+                        "name": "Haus Fundament 10 m",
+                        "provenance": {
+                            "source": "groundfield",
+                            "groundfield_version": "0.15.0",
+                            "solver": "mom",
+                            "soil": {
+                                "soils": [
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 50.0,
+                                        "rho_2": 250.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 100.0,
+                                        "rho_2": 500.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 200.0,
+                                        "rho_2": 1000.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 400.0,
+                                        "rho_2": 2000.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    }
+                                ],
+                                "rho_definition": "effective_resistivity"
+                            },
+                            "geometry_id": "foundation 10x10 2x2 t0.8",
+                            "rho_preset": "lv_network",
+                            "created": "2026-11-15T20:15:36Z",
+                            "input_hash": "sha256:64ed5dbb54ee71b50279d8fdbe1c54dc54b1fc237fd2eba15ea18551f01732cf",
+                            "note": "cluster impedance of 'H'; k_touch: envelope at 1.0 m, 24 directions, interior=False"
+                        }
+                    }
+                },
+                "impedance": {
+                    "50.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 213.4467315844493,
+                "active": true,
+                "R": null,
+                "L": null,
+                "C": null,
+                "characteristic": null,
+                "k_touch": {
+                    "50.0": 0.278670273631557,
+                    "150.0": 0.278670273631557,
+                    "250.0": 0.278670273631557,
+                    "550.0": 0.278670273631557,
+                    "1000.0": 0.278670273631557
+                },
+                "k_transfer": null
+            },
+            "H5": {
+                "name": "H5",
+                "description": null,
+                "type": {
+                    "name": "Haus",
+                    "description": null,
+                    "system_type": "LV",
+                    "voltage_level": 0.4,
+                    "impedance_formula": "1.22624244381e-18*f*rho - 6.64852739844e-16*f + 0.0490810298548*rho + 2.70444492777e-13",
+                    "R_formula": null,
+                    "L_formula": null,
+                    "C_formula": null,
+                    "earthing_conductor_material": null,
+                    "earthing_conductor_cross_section_mm2": null,
+                    "earthing_conductor_theta_initial_C": 20.0,
+                    "earthing_conductor_theta_final_C": null,
+                    "earthing_conductor_current_split": 1.0,
+                    "electrode_material": null,
+                    "electrode_cross_section_mm2": null,
+                    "electrode_theta_initial_C": 20.0,
+                    "electrode_theta_final_C": null,
+                    "electrode_current_split": 1.0,
+                    "characteristic": {
+                        "rho_Ohm_m": [
+                            106.72336579222466,
+                            213.4467315844493,
+                            426.8934631688986,
+                            853.7869263377974
+                        ],
+                        "frequency_Hz": [
+                            50.0,
+                            150.0,
+                            250.0,
+                            550.0,
+                            1000.0
+                        ],
+                        "impedance_Ohm": [
+                            [
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 5.238092702653861,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 10.476185405307723,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 20.952370810615445,
+                                    "imag": 0.0
+                                }
+                            ],
+                            [
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                },
+                                {
+                                    "real": 41.90474162123089,
+                                    "imag": 0.0
+                                }
+                            ]
+                        ],
+                        "k_touch": [
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ],
+                            [
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557,
+                                0.278670273631557
+                            ]
+                        ],
+                        "k_transfer": null,
+                        "impedance_formula": "1.22624244381e-18*f*rho - 6.64852739844e-16*f + 0.0490810298548*rho + 2.70444492777e-13",
+                        "impedance_source": "table",
+                        "name": "Haus Fundament 10 m",
+                        "provenance": {
+                            "source": "groundfield",
+                            "groundfield_version": "0.15.0",
+                            "solver": "mom",
+                            "soil": {
+                                "soils": [
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 50.0,
+                                        "rho_2": 250.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 100.0,
+                                        "rho_2": 500.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 200.0,
+                                        "rho_2": 1000.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    },
+                                    {
+                                        "kind": "two_layer",
+                                        "rho_1": 400.0,
+                                        "rho_2": 2000.0,
+                                        "h_1": 2.0,
+                                        "relative_permittivity": 10.0
+                                    }
+                                ],
+                                "rho_definition": "effective_resistivity"
+                            },
+                            "geometry_id": "foundation 10x10 2x2 t0.8",
+                            "rho_preset": "lv_network",
+                            "created": "2026-11-15T20:15:36Z",
+                            "input_hash": "sha256:64ed5dbb54ee71b50279d8fdbe1c54dc54b1fc237fd2eba15ea18551f01732cf",
+                            "note": "cluster impedance of 'H'; k_touch: envelope at 1.0 m, 24 directions, interior=False"
+                        }
+                    }
+                },
+                "impedance": {
+                    "50.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 10.476185405307723,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 213.4467315844493,
+                "active": true,
+                "R": null,
+                "L": null,
+                "C": null,
+                "characteristic": null,
+                "k_touch": {
+                    "50.0": 0.278670273631557,
+                    "150.0": 0.278670273631557,
+                    "250.0": 0.278670273631557,
+                    "550.0": 0.278670273631557,
+                    "1000.0": 0.278670273631557
+                },
+                "k_transfer": null
+            }
+        },
+        "branches": {
+            "L_MS": {
+                "name": "L_MS",
+                "description": null,
+                "type": {
+                    "name": "MS-Freileitung",
+                    "description": null,
+                    "grounding_conductor": false,
+                    "self_impedance_formula": "(0.3 + j*f/50*0.35)*l",
+                    "mutual_impedance_formula": "0*l",
+                    "phase_impedance_formula": "(0.3 + j*f/50*0.35)*l",
+                    "R_self_formula": null,
+                    "L_self_formula": null,
+                    "C_self_formula": null,
+                    "R_mutual_formula": null,
+                    "M_mutual_formula": null,
+                    "conductor_material": null,
+                    "cross_section_mm2": null,
+                    "theta_initial_C": 20.0,
+                    "theta_final_C": null
+                },
+                "length": 5.0,
+                "from_bus": "UW",
+                "to_bus": "ONS",
+                "self_impedance": {
+                    "50.0": {
+                        "real": 1.5,
+                        "imag": 1.7500000000000002
+                    },
+                    "150.0": {
+                        "real": 1.5,
+                        "imag": 5.25
+                    },
+                    "250.0": {
+                        "real": 1.5,
+                        "imag": 8.75
+                    },
+                    "550.0": {
+                        "real": 1.5,
+                        "imag": 19.25
+                    },
+                    "1000.0": {
+                        "real": 1.5,
+                        "imag": 35.0
+                    }
+                },
+                "mutual_impedance": {
+                    "50.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 100.0,
+                "parallel_coefficient": 1.0,
+                "active": true,
+                "phase_impedance": {
+                    "50.0": {
+                        "real": 1.5,
+                        "imag": 1.7500000000000002
+                    },
+                    "150.0": {
+                        "real": 1.5,
+                        "imag": 5.25
+                    },
+                    "250.0": {
+                        "real": 1.5,
+                        "imag": 8.75
+                    },
+                    "550.0": {
+                        "real": 1.5,
+                        "imag": 19.25
+                    },
+                    "1000.0": {
+                        "real": 1.5,
+                        "imag": 35.0
+                    }
+                },
+                "R_self": null,
+                "L_self": null,
+                "C_self": null,
+                "R_mutual": null,
+                "M_mutual": null
+            },
+            "PEN_ONS_H1": {
+                "name": "PEN_ONS_H1",
+                "description": null,
+                "type": {
+                    "name": "NAYY 4x150 PEN",
+                    "description": null,
+                    "grounding_conductor": true,
+                    "self_impedance_formula": "(0.188 + pi**2*f*1e-4 + j*2*pi*f*2e-4*log(658*sqrt(rho/f)/0.00690988))*l",
+                    "mutual_impedance_formula": "0*l",
+                    "phase_impedance_formula": null,
+                    "R_self_formula": null,
+                    "L_self_formula": null,
+                    "C_self_formula": null,
+                    "R_mutual_formula": null,
+                    "M_mutual_formula": null,
+                    "conductor_material": null,
+                    "cross_section_mm2": null,
+                    "theta_initial_C": 20.0,
+                    "theta_final_C": null
+                },
+                "length": 0.0291547594742265,
+                "from_bus": "ONS",
+                "to_bus": "H1",
+                "self_impedance": {
+                    "50.0": {
+                        "real": 0.00691982449325222,
+                        "imag": 0.02163518499910369
+                    },
+                    "150.0": {
+                        "real": 0.009797283917447497,
+                        "imag": 0.061886819630758136
+                    },
+                    "250.0": {
+                        "real": 0.012674743341642772,
+                        "imag": 0.10080531269876049
+                    },
+                    "550.0": {
+                        "real": 0.0213071216142286,
+                        "imag": 0.21382785261692927
+                    },
+                    "1000.0": {
+                        "real": 0.03425568902310734,
+                        "imag": 0.3778264513161529
+                    }
+                },
+                "mutual_impedance": {
+                    "50.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 100.0,
+                "parallel_coefficient": 1.0,
+                "active": true,
+                "phase_impedance": null,
+                "R_self": null,
+                "L_self": null,
+                "C_self": null,
+                "R_mutual": null,
+                "M_mutual": null
+            },
+            "PEN_H1_H2": {
+                "name": "PEN_H1_H2",
+                "description": null,
+                "type": {
+                    "name": "NAYY 4x150 PEN",
+                    "description": null,
+                    "grounding_conductor": true,
+                    "self_impedance_formula": "(0.188 + pi**2*f*1e-4 + j*2*pi*f*2e-4*log(658*sqrt(rho/f)/0.00690988))*l",
+                    "mutual_impedance_formula": "0*l",
+                    "phase_impedance_formula": null,
+                    "R_self_formula": null,
+                    "L_self_formula": null,
+                    "C_self_formula": null,
+                    "R_mutual_formula": null,
+                    "M_mutual_formula": null,
+                    "conductor_material": null,
+                    "cross_section_mm2": null,
+                    "theta_initial_C": 20.0,
+                    "theta_final_C": null
+                },
+                "length": 0.025,
+                "from_bus": "H1",
+                "to_bus": "H2",
+                "self_impedance": {
+                    "50.0": {
+                        "real": 0.00593370055013617,
+                        "imag": 0.018552018083213575
+                    },
+                    "150.0": {
+                        "real": 0.008401101650408511,
+                        "imag": 0.05306751002822331
+                    },
+                    "250.0": {
+                        "real": 0.010868502750680851,
+                        "imag": 0.08643984251342803
+                    },
+                    "550.0": {
+                        "real": 0.01827070605149787,
+                        "imag": 0.1833558709393214
+                    },
+                    "1000.0": {
+                        "real": 0.0293740110027234,
+                        "imag": 0.32398350915067614
+                    }
+                },
+                "mutual_impedance": {
+                    "50.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 100.0,
+                "parallel_coefficient": 1.0,
+                "active": true,
+                "phase_impedance": null,
+                "R_self": null,
+                "L_self": null,
+                "C_self": null,
+                "R_mutual": null,
+                "M_mutual": null
+            },
+            "PEN_H2_H3": {
+                "name": "PEN_H2_H3",
+                "description": null,
+                "type": {
+                    "name": "NAYY 4x150 PEN",
+                    "description": null,
+                    "grounding_conductor": true,
+                    "self_impedance_formula": "(0.188 + pi**2*f*1e-4 + j*2*pi*f*2e-4*log(658*sqrt(rho/f)/0.00690988))*l",
+                    "mutual_impedance_formula": "0*l",
+                    "phase_impedance_formula": null,
+                    "R_self_formula": null,
+                    "L_self_formula": null,
+                    "C_self_formula": null,
+                    "R_mutual_formula": null,
+                    "M_mutual_formula": null,
+                    "conductor_material": null,
+                    "cross_section_mm2": null,
+                    "theta_initial_C": 20.0,
+                    "theta_final_C": null
+                },
+                "length": 0.025,
+                "from_bus": "H2",
+                "to_bus": "H3",
+                "self_impedance": {
+                    "50.0": {
+                        "real": 0.00593370055013617,
+                        "imag": 0.018552018083213575
+                    },
+                    "150.0": {
+                        "real": 0.008401101650408511,
+                        "imag": 0.05306751002822331
+                    },
+                    "250.0": {
+                        "real": 0.010868502750680851,
+                        "imag": 0.08643984251342803
+                    },
+                    "550.0": {
+                        "real": 0.01827070605149787,
+                        "imag": 0.1833558709393214
+                    },
+                    "1000.0": {
+                        "real": 0.0293740110027234,
+                        "imag": 0.32398350915067614
+                    }
+                },
+                "mutual_impedance": {
+                    "50.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 100.0,
+                "parallel_coefficient": 1.0,
+                "active": true,
+                "phase_impedance": null,
+                "R_self": null,
+                "L_self": null,
+                "C_self": null,
+                "R_mutual": null,
+                "M_mutual": null
+            },
+            "PEN_H3_H4": {
+                "name": "PEN_H3_H4",
+                "description": null,
+                "type": {
+                    "name": "NAYY 4x150 PEN",
+                    "description": null,
+                    "grounding_conductor": true,
+                    "self_impedance_formula": "(0.188 + pi**2*f*1e-4 + j*2*pi*f*2e-4*log(658*sqrt(rho/f)/0.00690988))*l",
+                    "mutual_impedance_formula": "0*l",
+                    "phase_impedance_formula": null,
+                    "R_self_formula": null,
+                    "L_self_formula": null,
+                    "C_self_formula": null,
+                    "R_mutual_formula": null,
+                    "M_mutual_formula": null,
+                    "conductor_material": null,
+                    "cross_section_mm2": null,
+                    "theta_initial_C": 20.0,
+                    "theta_final_C": null
+                },
+                "length": 0.025,
+                "from_bus": "H3",
+                "to_bus": "H4",
+                "self_impedance": {
+                    "50.0": {
+                        "real": 0.00593370055013617,
+                        "imag": 0.018552018083213575
+                    },
+                    "150.0": {
+                        "real": 0.008401101650408511,
+                        "imag": 0.05306751002822331
+                    },
+                    "250.0": {
+                        "real": 0.010868502750680851,
+                        "imag": 0.08643984251342803
+                    },
+                    "550.0": {
+                        "real": 0.01827070605149787,
+                        "imag": 0.1833558709393214
+                    },
+                    "1000.0": {
+                        "real": 0.0293740110027234,
+                        "imag": 0.32398350915067614
+                    }
+                },
+                "mutual_impedance": {
+                    "50.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 100.0,
+                "parallel_coefficient": 1.0,
+                "active": true,
+                "phase_impedance": null,
+                "R_self": null,
+                "L_self": null,
+                "C_self": null,
+                "R_mutual": null,
+                "M_mutual": null
+            },
+            "PEN_H4_H5": {
+                "name": "PEN_H4_H5",
+                "description": null,
+                "type": {
+                    "name": "NAYY 4x150 PEN",
+                    "description": null,
+                    "grounding_conductor": true,
+                    "self_impedance_formula": "(0.188 + pi**2*f*1e-4 + j*2*pi*f*2e-4*log(658*sqrt(rho/f)/0.00690988))*l",
+                    "mutual_impedance_formula": "0*l",
+                    "phase_impedance_formula": null,
+                    "R_self_formula": null,
+                    "L_self_formula": null,
+                    "C_self_formula": null,
+                    "R_mutual_formula": null,
+                    "M_mutual_formula": null,
+                    "conductor_material": null,
+                    "cross_section_mm2": null,
+                    "theta_initial_C": 20.0,
+                    "theta_final_C": null
+                },
+                "length": 0.025,
+                "from_bus": "H4",
+                "to_bus": "H5",
+                "self_impedance": {
+                    "50.0": {
+                        "real": 0.00593370055013617,
+                        "imag": 0.018552018083213575
+                    },
+                    "150.0": {
+                        "real": 0.008401101650408511,
+                        "imag": 0.05306751002822331
+                    },
+                    "250.0": {
+                        "real": 0.010868502750680851,
+                        "imag": 0.08643984251342803
+                    },
+                    "550.0": {
+                        "real": 0.01827070605149787,
+                        "imag": 0.1833558709393214
+                    },
+                    "1000.0": {
+                        "real": 0.0293740110027234,
+                        "imag": 0.32398350915067614
+                    }
+                },
+                "mutual_impedance": {
+                    "50.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 0.0,
+                        "imag": 0.0
+                    }
+                },
+                "specific_earth_resistance": 100.0,
+                "parallel_coefficient": 1.0,
+                "active": true,
+                "phase_impedance": null,
+                "R_self": null,
+                "L_self": null,
+                "C_self": null,
+                "R_mutual": null,
+                "M_mutual": null
+            }
+        },
+        "faults": {
+            "F": {
+                "name": "F",
+                "description": null,
+                "bus": "ONS",
+                "scalings": {
+                    "50.0": 1.0,
+                    "150.0": 1.0,
+                    "250.0": 1.0,
+                    "550.0": 1.0,
+                    "1000.0": 1.0
+                },
+                "t_k_s": 0.5,
+                "n_factor": 1.0,
+                "active": false
+            }
+        },
+        "sources": {
+            "I": {
+                "name": "I",
+                "description": null,
+                "bus": "UW",
+                "source_type": "current",
+                "values": {
+                    "50.0": {
+                        "real": 1000.0,
+                        "imag": 0.0
+                    },
+                    "150.0": {
+                        "real": 1000.0,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 1000.0,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 1000.0,
+                        "imag": 0.0
+                    },
+                    "1000.0": {
+                        "real": 1000.0,
+                        "imag": 0.0
+                    }
+                },
+                "voltage": null,
+                "source_impedance": null,
+                "i_k_a": null,
+                "r_to_x": null,
+                "kappa": null
+            }
+        },
+        "results": {},
+        "paths": {},
+        "active_fault": null
+    },
+    "diagram": {
+        "nodes": {
+            "UW": {
+                "x": 0.0,
+                "y": 0.0,
+                "symbol": "source_bus",
+                "label_offset": [
+                    0.0,
+                    0.0
+                ],
+                "length": 0.0
+            },
+            "ONS": {
+                "x": 160.0,
+                "y": 0.0,
+                "symbol": "bus",
+                "label_offset": [
+                    0.0,
+                    0.0
+                ],
+                "length": 0.0
+            },
+            "H1": {
+                "x": 320.0,
+                "y": 0.0,
+                "symbol": "bus",
+                "label_offset": [
+                    0.0,
+                    0.0
+                ],
+                "length": 0.0
+            },
+            "H2": {
+                "x": 480.0,
+                "y": 0.0,
+                "symbol": "bus",
+                "label_offset": [
+                    0.0,
+                    0.0
+                ],
+                "length": 0.0
+            },
+            "H3": {
+                "x": 640.0,
+                "y": 0.0,
+                "symbol": "bus",
+                "label_offset": [
+                    0.0,
+                    0.0
+                ],
+                "length": 0.0
+            },
+            "H4": {
+                "x": 800.0,
+                "y": 0.0,
+                "symbol": "bus",
+                "label_offset": [
+                    0.0,
+                    0.0
+                ],
+                "length": 0.0
+            },
+            "H5": {
+                "x": 960.0,
+                "y": 0.0,
+                "symbol": "bus",
+                "label_offset": [
+                    0.0,
+                    0.0
+                ],
+                "length": 0.0
+            }
+        },
+        "edges": {
+            "L_MS": {
+                "waypoints": [],
+                "label_offset": [
+                    0.0,
+                    0.0
+                ]
+            },
+            "PEN_ONS_H1": {
+                "waypoints": [],
+                "label_offset": [
+                    0.0,
+                    0.0
+                ]
+            },
+            "PEN_H1_H2": {
+                "waypoints": [],
+                "label_offset": [
+                    0.0,
+                    0.0
+                ]
+            },
+            "PEN_H2_H3": {
+                "waypoints": [],
+                "label_offset": [
+                    0.0,
+                    0.0
+                ]
+            },
+            "PEN_H3_H4": {
+                "waypoints": [],
+                "label_offset": [
+                    0.0,
+                    0.0
+                ]
+            },
+            "PEN_H4_H5": {
+                "waypoints": [],
+                "label_offset": [
+                    0.0,
+                    0.0
+                ]
+            }
+        },
+        "faults": {},
+        "sources": {},
+        "color_scheme": "u_touch",
+        "grid_size": 20.0
+    },
+    "views": []
+}

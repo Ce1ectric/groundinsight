@@ -213,6 +213,14 @@ version section when a release is cut.
   runs it for the service layer; the bus dialog of the GUI computes a
   characteristic with groundfield and attaches it to the bus or its type as
   one undoable command (`groundfield_available()` tells whether it can).
+- **Example: a station and five houses** (`docs/examples/ortsnetzstation_5_haeuser.json`).
+  Drawn in the GUI, with characteristics computed by groundfield in
+  two-layer soil. Against groundfield's full field solution of the coupled
+  arrangement, the node model -- one characteristic per electrode -- gives
+  an earthing impedance 43 % too low at 25 m house spacing (1.8 % at 800 m),
+  because it ignores the mutual resistance of the electrodes; the
+  characteristic of the whole LV network attached to the station reproduces
+  the field solution.
 
 ### Changed
 
