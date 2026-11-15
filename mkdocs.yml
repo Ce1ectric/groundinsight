@@ -136,10 +136,10 @@ exclude_docs: |
 
 extra_javascript:
   - javascripts/mathjax.js
-  # polyfill.io was removed in 2026-05 (domain was sold and later served
-  # malicious JavaScript). MathJax 3 does not require a polyfill for
-  # modern browsers; see groundmeas/mkdocs.yml for the same change.
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+  # MathJax 3.2.2, vendored by scripts/vendor_mathjax.py (pinned version and
+  # sha512, SHA256SUMS checked by the test suite): no CDN at run time. MathJax 3
+  # needs no polyfill in current browsers.
+  - javascripts/mathjax/tex-mml-chtml.js
 
 extra:
   social:

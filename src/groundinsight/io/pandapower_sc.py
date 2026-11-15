@@ -37,9 +37,9 @@ layer; both are pinned by ``tests/test_shortcircuit_60909.py``.
    ``_calc_ith`` zeroes ``m`` for ``kappa > 1.99``, whereas the analytic
    limit of
 
-   .. math::
-
-       m = \frac{e^{4 f T_k \ln(\kappa-1)} - 1}{2 f T_k \ln(\kappa-1)}
+   $$
+   m = \frac{e^{4 f T_k \ln(\kappa-1)} - 1}{2 f T_k \ln(\kappa-1)}
+   $$
 
    as ``kappa -> 2`` is ``m -> 2`` (a non-decaying DC component carries the
    *maximum* additional heat, not none). Copying ``ith_ka`` would therefore
@@ -62,9 +62,9 @@ The single line-to-earth loop
 For ``fault="1ph"`` the driving loop is ``2*Z1 + Z0``, so the ratio that
 governs the DC decay is
 
-.. math::
-
-    \frac{R}{X} = \frac{2 R_1 + R_0}{2 X_1 + X_0}
+$$
+\frac{R}{X} = \frac{2 R_1 + R_0}{2 X_1 + X_0}
+$$
 
 and **not** the positive-sequence ratio ``R_1/X_1``. That this is the loop
 pandapower itself uses is verified numerically (``I_k1'' = sqrt(3)*c*U_n /

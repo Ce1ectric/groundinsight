@@ -14,10 +14,10 @@ That intuition turns out to be exact rather than approximate. Adding a shunt
 ``Y_B`` at bus ``b`` is a rank-one change to the nodal matrix, so by the
 Sherman-Morrison identity every nodal voltage is a **Möbius function** of it:
 
-.. math::
-
-    \underline{u}(Y_B) = \underline{u}_0
-        - \frac{Y_B\, \underline{z}\, u_{0,b}}{1 + Y_B Z_\text{net}}
+$$
+\underline{u}(Y_B) = \underline{u}_0
+    - \frac{Y_B\, \underline{z}\, u_{0,b}}{1 + Y_B Z_\text{net}}
+$$
 
 with three site-independent objects, all obtained without knowing the electrode:
 

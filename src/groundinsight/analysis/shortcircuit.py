@@ -7,9 +7,9 @@ IEC 60909-0 short-circuit characteristic quantities and their superposition.
 the nodal system ``Y(f) u(f) = i(f)`` is solved and the contributions of all
 sources add up by superposition. The IEC 60909-0 characteristic quantities
 
-* the **peak short-circuit current** :math:`i_p = \kappa \sqrt{2} I_k''`, and
+* the **peak short-circuit current** \(i_p = \kappa \sqrt{2} I_k''\), and
 * the **thermally equivalent short-time current**
-  :math:`I_{th} = I_k'' \sqrt{m + n}`
+  \(I_{th} = I_k'' \sqrt{m + n}\)
 
 are however *non-linear* functions of the fault-loop ``R/X`` ratio, so they
 must **not** be superposed. This module implements the project rule agreed
@@ -28,16 +28,16 @@ Why a current-weighted mean is the right aggregation
 With several infeeds the DC components add, so the largest possible peak of
 the total current is the sum of the individual peaks,
 
-.. math::
-
-    i_{p,\Sigma} = \sqrt{2} \sum_i \kappa_i I_i .
+$$
+i_{p,\Sigma} = \sqrt{2} \sum_i \kappa_i I_i .
+$$
 
 Writing that as one factor applied to the aggregated current
-:math:`\sum_i I_i` gives
+\(\sum_i I_i\) gives
 
-.. math::
-
-    \kappa_{eff} = \frac{\sum_i \kappa_i I_i}{\sum_i I_i},
+$$
+\kappa_{eff} = \frac{\sum_i \kappa_i I_i}{\sum_i I_i},
+$$
 
 i.e. exactly the current-weighted mean -- it reproduces the sum of the
 individual peaks identically, and degenerates to the common ``kappa`` when

@@ -23,10 +23,10 @@ each cut is read off, and ``Z_side = u_fault / i_cut``. Because the shares and
 the local electrode current add up to the injected ampere, the decomposition
 closes by construction:
 
-.. math::
-
-    \frac{1}{Z_\text{driving point}} = \frac{1}{Z_\text{local}}
-        + \sum_\text{sides} \frac{1}{Z_\text{side}}
+$$
+\frac{1}{Z_\text{driving point}} = \frac{1}{Z_\text{local}}
+    + \sum_\text{sides} \frac{1}{Z_\text{side}}
+$$
 
 and the residual of that identity is reported next to the values, so a study
 never has to take it on trust. The matrix the ampere is injected into is the
@@ -52,10 +52,10 @@ Taken from a solved fault. Across a cut, the current crossing from the far side
 splits into a metallic part through the cable shields and a part travelling
 through the soil:
 
-.. math::
-
-    \underline{I}_\text{total} = \underline{I}_\text{shield}
-                                  + \underline{I}_\text{earth}
+$$
+\underline{I}_\text{total} = \underline{I}_\text{shield}
+                              + \underline{I}_\text{earth}
+$$
 
 where ``I_earth`` is the sum of the electrode currents of every bus on the far
 side and ``I_total`` is the sum of the source injections there. The reduction

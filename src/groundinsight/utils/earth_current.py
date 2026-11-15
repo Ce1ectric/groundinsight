@@ -7,9 +7,9 @@ The reduction factor describes the effect of the inductive coupling between the
 phase conductor and the earth conductor, and as a measured quantity it is the
 ratio of the total earth-return current to the total fault current:
 
-.. math::
-
-    r = \frac{|\underline{I}_E|}{|\underline{I}_F|}
+$$
+r = \frac{|\underline{I}_E|}{|\underline{I}_F|}
+$$
 
 The subtlety is in ``I_E``. Where the stations are bonded to one another --
 which is what a cable network with continuous shields *is* -- the current does
@@ -19,10 +19,10 @@ electrode current at the faulted station. The stations that count are those from
 the fault outwards, in *every* direction -- a ring or a mesh has more than one --
 up to where the potential profile turns:
 
-.. math::
-
-    \underline{I}_E = \sum_i \underline{I}_{a,i}
-    \quad\text{over the buses that feed the soil}
+$$
+\underline{I}_E = \sum_i \underline{I}_{a,i}
+\quad\text{over the buses that feed the soil}
+$$
 
 Why the selection is needed
 ---------------------------

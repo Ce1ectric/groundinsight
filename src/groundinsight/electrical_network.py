@@ -3804,9 +3804,9 @@ class ElectricalNetwork:
         not a peak amplitude. Under that convention the total RMS over all
         frequency components is
 
-        .. math::
-
-            X_{\mathrm{RMS}} = \sqrt{\sum_f |X(f)|^2}
+        $$
+        X_{\mathrm{RMS}} = \sqrt{\sum_f |X(f)|^2}
+        $$
 
         which is exactly what this method computes, with the 0 Hz term
         entering as ``|X_dc|``: a DC component contributes its own
@@ -4278,9 +4278,9 @@ class ElectricalNetwork:
         between the phase conductor and the earth conductor, and as a measured
         quantity it is
 
-        .. math::
-
-            r = \frac{|\underline{I}_E|}{|\underline{I}_F|}
+        $$
+        r = \frac{|\underline{I}_E|}{|\underline{I}_F|}
+        $$
 
         with ``I_E`` the **sum of the electrode currents of every bus that feeds
         the soil** -- not the electrode current at the faulted station. Where the
@@ -4548,11 +4548,11 @@ class ElectricalNetwork:
         impedance ``Z_s``, mutual impedance ``Z_m`` and station electrodes
         summing to ``Z_E`` along the earth-return path,
 
-        .. math::
-
-            r_\text{coupling} = \frac{Z_s - Z_m}{Z_s}
-            \qquad
-            r_I = \frac{Z_s - Z_m}{Z_s + Z_E}
+        $$
+        r_\text{coupling} = \frac{Z_s - Z_m}{Z_s}
+        \qquad
+        r_I = \frac{Z_s - Z_m}{Z_s + Z_E}
+        $$
 
         so their ratio is the current divider ``Z_s / (Z_s + Z_E)`` and nothing
         else. ``value`` is the **ideally bonded** limit -- the tabulated property

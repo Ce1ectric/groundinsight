@@ -2633,9 +2633,9 @@ class Source(_NetworkElement):
     the RMS columns of the results correct: the total RMS of a quantity
     with several frequency components is
 
-    .. math::
-
-        X_{\mathrm{RMS}} = \sqrt{\sum_f |X(f)|^2}
+    $$
+    X_{\mathrm{RMS}} = \sqrt{\sum_f |X(f)|^2}
+    $$
 
     with the 0 Hz term entering as ``|X_dc|`` -- a DC component
     contributes its own magnitude, not ``|X_dc|/sqrt(2)``. Peak-valued

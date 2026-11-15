@@ -217,3 +217,18 @@ jobs:
       # it (DOC4).
       - name: Check that every public name is rendered
         run: poetry run python scripts/check_api_inventory.py site/objects.inv
+
+      # A formula MathJax cannot parse, or TeX it never sees, builds without a
+      # warning. Chromium opens every page of the built site and fails on
+      # MathJax error nodes and on TeX source left visible outside code
+      # (tests/test_docs_math_gate.py). GI_DOCS_GATE=1 turns a missing site
+      # or browser into a failure instead of a skip.
+      - name: Install Chromium for the formula gate
+        run: |
+          poetry run pip install "playwright>=1.55,<2"
+          poetry run python -m playwright install --with-deps chromium
+
+      - name: Check that every formula of the site is typeset
+        env:
+          GI_DOCS_GATE: "1"
+        run: poetry run pytest -p no:randomly tests/test_docs_math_gate.py

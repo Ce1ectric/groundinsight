@@ -13,21 +13,21 @@ Two standards are combined:
 * **IEC 60909-0** — the fault current the conductor actually has to carry
   thermally is the *thermally equivalent short-time current*
 
-  .. math::
+  $$
+  I_{th} = I_k \cdot \sqrt{m + n}
+  $$
 
-      I_{th} = I_k \cdot \sqrt{m + n}
-
-  where :math:`I_k` is the RMS short-circuit current (here the RMS shield
+  where \(I_k\) is the RMS short-circuit current (here the RMS shield
   current from :func:`groundinsight.run_fault`), ``m`` accounts for the
   heat effect of the aperiodic (DC) component and ``n`` for the decay of
   the AC component. ``m`` follows the closed form
 
-  .. math::
+  $$
+  m = \frac{1}{2 f T_k \ln(\kappa - 1)}
+      \left(e^{4 f T_k \ln(\kappa - 1)} - 1\right)
+  $$
 
-      m = \frac{1}{2 f T_k \ln(\kappa - 1)}
-          \left(e^{4 f T_k \ln(\kappa - 1)} - 1\right)
-
-  with the peak factor :math:`\kappa` (from the network ``R/X`` ratio),
+  with the peak factor \(\kappa\) (from the network ``R/X`` ratio),
   the system frequency ``f`` and the fault duration ``T_k``. ``n = 1`` for
   the far-from-generator faults typical of distribution grounding studies.
 
@@ -35,12 +35,12 @@ Two standards are combined:
   current of a conductor of cross-section ``S`` (mm²) over the duration
   ``T_k`` (s) is
 
-  .. math::
+  $$
+  I_{adm} = \frac{k \, S}{\sqrt{T_k}}, \qquad
+  k = K \, \sqrt{\ln\!\frac{\theta_f + \beta}{\theta_i + \beta}}
+  $$
 
-      I_{adm} = \frac{k \, S}{\sqrt{T_k}}, \qquad
-      k = K \, \sqrt{\ln\!\frac{\theta_f + \beta}{\theta_i + \beta}}
-
-  with the material base constant :math:`K = \sqrt{Q_c(\beta+20)/\rho_{20}}`,
+  with the material base constant \(K = \sqrt{Q_c(\beta+20)/\rho_{20}}\),
   the reciprocal temperature coefficient ``β``, and the initial / final
   conductor temperatures ``θ_i`` / ``θ_f``. The tabulated ``K`` and ``β``
   below reproduce the standard ``k`` tables (e.g. copper XLPE
