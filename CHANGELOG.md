@@ -61,6 +61,17 @@ version section when a release is cut.
   solve of the large networks is 5 s -- still a quarter of what the dense
   kernel needs. The structural tests that fail on any dense solve are
   unchanged.
+- **The GUI ships the browser libraries of its coming network canvas
+  (`gui/groundinsight_gui/static/vueflow/`).** Vue Flow 1.48.2 (core,
+  minimap, controls, background) and elkjs 0.12.1 for the automatic layout,
+  bundled into one ES module with Vue left to NiceGUI's import map; elkjs is
+  a chunk of its own, loaded on the first layout. Nothing is fetched from a
+  CDN at run time. `gui/scripts/bundle_vendor.py build` reproduces the bundle
+  from exact versions and a lock file with the sha512 of every tarball,
+  resolved as of two weeks before the pin; `check` (part of the GUI tests,
+  no Node.js needed) compares the shipped files with their SHA-256 sums and
+  the manifest with the pins. The licence texts of all 19 bundled packages
+  ship next to the bundle; elkjs is taken under EPL-2.0.
 
 ---
 

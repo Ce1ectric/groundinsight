@@ -1,0 +1,152 @@
+{
+  "module": "groundinsight-vueflow",
+  "built_with": {
+    "vite": "8.3.5"
+  },
+  "resolved_before": "2026-11-01",
+  "external": [
+    "vue"
+  ],
+  "libraries": {
+    "@vue-flow/core": "1.48.2",
+    "@vue-flow/minimap": "1.5.4",
+    "@vue-flow/controls": "1.1.3",
+    "@vue-flow/background": "1.3.2",
+    "elkjs": "0.12.1"
+  },
+  "packages": [
+    {
+      "name": "@types/web-bluetooth",
+      "version": "0.0.20",
+      "license": "MIT",
+      "integrity": "sha512-g9gZnnXVq7gM7v3tJCWV/qw7w+KeOlSHAhgF9RytFyifW6AF61hdT2ucrYhPq9hLs5JIryeupHV3qGk95dH9ow==",
+      "resolved": "https://registry.npmjs.org/@types/web-bluetooth/-/web-bluetooth-0.0.20.tgz"
+    },
+    {
+      "name": "@vue-flow/background",
+      "version": "1.3.2",
+      "license": "MIT",
+      "integrity": "sha512-eJPhDcLj1wEo45bBoqTXw1uhl0yK2RaQGnEINqvvBsAFKh/camHJd5NPmOdS1w+M9lggc9igUewxaEd3iCQX2w==",
+      "resolved": "https://registry.npmjs.org/@vue-flow/background/-/background-1.3.2.tgz"
+    },
+    {
+      "name": "@vue-flow/controls",
+      "version": "1.1.3",
+      "license": "MIT",
+      "integrity": "sha512-XCf+G+jCvaWURdFlZmOjifZGw3XMhN5hHlfMGkWh9xot+9nH9gdTZtn+ldIJKtarg3B21iyHU8JjKDhYcB6JMw==",
+      "resolved": "https://registry.npmjs.org/@vue-flow/controls/-/controls-1.1.3.tgz"
+    },
+    {
+      "name": "@vue-flow/core",
+      "version": "1.48.2",
+      "license": "MIT",
+      "integrity": "sha512-raxhgKWE+G/mcEvXJjGFUDYW9rAI3GOtiHR3ZkNpwBWuIaCC1EYiBmKGwJOoNzVFgwO7COgErnK7i08i287AFA==",
+      "resolved": "https://registry.npmjs.org/@vue-flow/core/-/core-1.48.2.tgz"
+    },
+    {
+      "name": "@vue-flow/minimap",
+      "version": "1.5.4",
+      "license": "MIT",
+      "integrity": "sha512-l4C+XTAXnRxsRpUdN7cAVFBennC1sVRzq4bDSpVK+ag7tdMczAnhFYGgbLkUw3v3sY6gokyWwMl8CDonp8eB2g==",
+      "resolved": "https://registry.npmjs.org/@vue-flow/minimap/-/minimap-1.5.4.tgz"
+    },
+    {
+      "name": "@vueuse/core",
+      "version": "10.11.1",
+      "license": "MIT",
+      "integrity": "sha512-guoy26JQktXPcz+0n3GukWIy/JDNKti9v6VEMu6kV2sYBsWuGiTU8OWdg+ADfUbHg3/3DlqySDe7JmdHrktiww==",
+      "resolved": "https://registry.npmjs.org/@vueuse/core/-/core-10.11.1.tgz"
+    },
+    {
+      "name": "@vueuse/metadata",
+      "version": "10.11.1",
+      "license": "MIT",
+      "integrity": "sha512-IGa5FXd003Ug1qAZmyE8wF3sJ81xGLSqTqtQ6jaVfkeZ4i5kS2mwQF61yhVqojRnenVew5PldLyRgvdl4YYuSw==",
+      "resolved": "https://registry.npmjs.org/@vueuse/metadata/-/metadata-10.11.1.tgz"
+    },
+    {
+      "name": "@vueuse/shared",
+      "version": "10.11.1",
+      "license": "MIT",
+      "integrity": "sha512-LHpC8711VFZlDaYUXEBbFBCQ7GS3dVU9mjOhhMhXP6txTV4EhYQg/KGnQuvt/sPAtoUKq7VVUnL6mVtFoL42sA==",
+      "resolved": "https://registry.npmjs.org/@vueuse/shared/-/shared-10.11.1.tgz"
+    },
+    {
+      "name": "d3-color",
+      "version": "3.1.0",
+      "license": "ISC",
+      "integrity": "sha512-zg/chbXyeBtMQ1LbD/WSoW2DpC3I0mpmPdW+ynRTj/x2DAWYrIY7qeZIHidozwV24m4iavr15lNwIwLxRmOxhA==",
+      "resolved": "https://registry.npmjs.org/d3-color/-/d3-color-3.1.0.tgz"
+    },
+    {
+      "name": "d3-dispatch",
+      "version": "3.0.1",
+      "license": "ISC",
+      "integrity": "sha512-rzUyPU/S7rwUflMyLc1ETDeBj0NRuHKKAcvukozwhshr6g6c5d8zh4c2gQjY2bZ0dXeGLWc1PF174P2tVvKhfg==",
+      "resolved": "https://registry.npmjs.org/d3-dispatch/-/d3-dispatch-3.0.1.tgz"
+    },
+    {
+      "name": "d3-drag",
+      "version": "3.0.0",
+      "license": "ISC",
+      "integrity": "sha512-pWbUJLdETVA8lQNJecMxoXfH6x+mO2UQo8rSmZ+QqxcbyA3hfeprFgIT//HW2nlHChWeIIMwS2Fq+gEARkhTkg==",
+      "resolved": "https://registry.npmjs.org/d3-drag/-/d3-drag-3.0.0.tgz"
+    },
+    {
+      "name": "d3-ease",
+      "version": "3.0.1",
+      "license": "BSD-3-Clause",
+      "integrity": "sha512-wR/XK3D3XcLIZwpbvQwQ5fK+8Ykds1ip7A2Txe0yxncXSdq1L9skcG7blcedkOX+ZcgxGAmLX1FrRGbADwzi0w==",
+      "resolved": "https://registry.npmjs.org/d3-ease/-/d3-ease-3.0.1.tgz"
+    },
+    {
+      "name": "d3-interpolate",
+      "version": "3.0.1",
+      "license": "ISC",
+      "integrity": "sha512-3bYs1rOD33uo8aqJfKP3JWPAibgw8Zm2+L9vBKEHJ2Rg+viTR7o5Mmv5mZcieN+FRYaAOWX5SJATX6k1PWz72g==",
+      "resolved": "https://registry.npmjs.org/d3-interpolate/-/d3-interpolate-3.0.1.tgz"
+    },
+    {
+      "name": "d3-selection",
+      "version": "3.0.0",
+      "license": "ISC",
+      "integrity": "sha512-fmTRWbNMmsmWq6xJV8D19U/gw/bwrHfNXxrIN+HfZgnzqTHp9jOmKMhsTUjXOJnZOdZY9Q28y4yebKzqDKlxlQ==",
+      "resolved": "https://registry.npmjs.org/d3-selection/-/d3-selection-3.0.0.tgz"
+    },
+    {
+      "name": "d3-timer",
+      "version": "3.0.1",
+      "license": "ISC",
+      "integrity": "sha512-ndfJ/JxxMd3nw31uyKoY2naivF+r29V+Lc0svZxe1JvvIRmi8hUsrMvdOwgS1o6uBHmiz91geQ0ylPP0aj1VUA==",
+      "resolved": "https://registry.npmjs.org/d3-timer/-/d3-timer-3.0.1.tgz"
+    },
+    {
+      "name": "d3-transition",
+      "version": "3.0.1",
+      "license": "ISC",
+      "integrity": "sha512-ApKvfjsSR6tg06xrL434C0WydLr7JewBB3V+/39RMHsaXTOG0zmt/OAXeng5M5LBm0ojmxJrpomQVZ1aPvBL4w==",
+      "resolved": "https://registry.npmjs.org/d3-transition/-/d3-transition-3.0.1.tgz"
+    },
+    {
+      "name": "d3-zoom",
+      "version": "3.0.0",
+      "license": "ISC",
+      "integrity": "sha512-b8AmV3kfQaqWAuacbPuNbL6vahnOJflOhexLzMMNLga62+/nh0JzvJ0aO/5a5MVgUFGS7Hu1P9P03o3fJkDCyw==",
+      "resolved": "https://registry.npmjs.org/d3-zoom/-/d3-zoom-3.0.0.tgz"
+    },
+    {
+      "name": "elkjs",
+      "version": "0.12.1",
+      "license": "EPL-2.0 OR GPL-3.0-or-later",
+      "integrity": "sha512-IhMYKHE4S2vtx0QrhBP3lYOIKDeIiJXBrdq9MGYkuB8ZHqhrBnHNfSUndjXFewrX1CPK8chwq+2NA0K0hliYuw==",
+      "resolved": "https://registry.npmjs.org/elkjs/-/elkjs-0.12.1.tgz"
+    },
+    {
+      "name": "vue-demi",
+      "version": "0.14.10",
+      "license": "MIT",
+      "integrity": "sha512-nMZBOwuzabUO0nLgIcc6rycZEebF6eeUfaiQx9+WSk8e29IbLvPU9feI6tqW4kTo3hvoYAJkMh8n8D0fuISphg==",
+      "resolved": "https://registry.npmjs.org/vue-demi/-/vue-demi-0.14.10.tgz"
+    }
+  ]
+}

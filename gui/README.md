@@ -50,3 +50,20 @@ cd gui && python -m pytest
 The GUI is released together with the library and has the same version;
 `scripts/release.py` rewrites both, and the release workflow refuses a tag on
 which they differ.
+
+## Browser libraries
+
+The network canvas uses [Vue Flow](https://vueflow.dev) (MIT) and
+[elkjs](https://github.com/kieler/elkjs) (EPL-2.0) for the automatic layout.
+Both ship inside the package under `groundinsight_gui/static/vueflow/`,
+bundled into one ES module; the GUI loads nothing from a CDN. The licence
+texts of every bundled package and a manifest with versions, sources and
+integrity hashes lie next to the bundle.
+
+The bundle is built from pinned versions (`scripts/vendor/package.json`,
+`scripts/vendor/package-lock.json`) and needs Node.js only for a rebuild:
+
+```bash
+python gui/scripts/bundle_vendor.py build   # npm ci + vite build, writes static/vueflow
+python gui/scripts/bundle_vendor.py check   # checksums and pins; also a GUI test
+```
