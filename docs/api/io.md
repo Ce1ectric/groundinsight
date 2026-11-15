@@ -308,17 +308,23 @@ setups based on existing distribution-network models.
 ## Project files (JSON)
 
 `gi.save_network_to_json(network, path)` writes one network to a *project
-file*, and `gi.load_network_from_json(path)` reads it back. The file is the
-network's own `model_dump_json(indent=4)` with two header keys in front:
+file*, and `gi.load_network_from_json(path)` reads it back.
+`gi.save_project(path, network, diagram, views)` and `gi.load_project(path)`
+do the same with the network's diagram and the evaluation tabs of a front
+end (a `gi.Project`). The file holds two header keys and three sections:
 
 ```json
 {
-    "schema_version": 1,
-    "groundinsight_version": "2026.11.0",
-    "name": "Umspannwerk Süd",
-    "description": null,
-    "frequencies": [50.0, 250.0],
-    ...
+    "schema_version": 2,
+    "groundinsight_version": "2026.12.0",
+    "network": {
+        "name": "Umspannwerk Süd",
+        "description": null,
+        "frequencies": [50.0, 250.0],
+        ...
+    },
+    "diagram": null,
+    "views": []
 }
 ```
 
@@ -330,7 +336,7 @@ network's own `model_dump_json(indent=4)` with two header keys in front:
   a non-UTF-8 system; it is read with the platform's preferred encoding, as
   0.6.0 did, and an `InputWarning` with the code
   `PROJECT_FILE_LEGACY_ENCODING` says so. Saving it again writes UTF-8.
-- **Atomic.** The network is serialised completely, written to a temporary
+- **Atomic.** The project is serialised completely, written to a temporary
   file in the target directory, flushed and `fsync`-ed, and only then moved
   over the target with `os.replace`. A failure at any point leaves an
   existing project file byte-identical. The replaced file keeps its
@@ -342,21 +348,31 @@ network's own `model_dump_json(indent=4)` with two header keys in front:
 | `schema_version` | Written by | Content |
 |---|---|---|
 | *(absent)* | 0.6.0 and earlier | the model dump only — read unchanged |
-| `1` | the first release after 0.6.0 and later | the two header keys plus the model dump |
+| `1` | 2026.11.x | the two header keys next to the fields of the model dump |
+| `2` | later releases | the two header keys and the sections `network` (the model dump), `diagram` and `views` |
 
 A file with a newer `schema_version` than the running release supports is
 refused with a `ValueError` that names both versions, instead of being read
 with whatever the newer release added silently dropped. The version is
 incremented whenever a release writes something an earlier release would
-ignore or misread.
+ignore or misread. Version 2 added the earthing characteristics, which change
+the bus impedances; its envelope makes a reader that knows no schema version
+(`gi.Network.model_validate_json`, 0.6.0) fail on the missing network fields
+instead of computing without them. Read project files with
+`load_network_from_json` or `load_project`, which accept every version.
 
-The header keys sit next to the model fields rather than in an envelope on
-purpose: `Network` ignores unknown keys, so
-`gi.Network.model_validate_json(text)` still reads a project file — and a
-0.6.0 installation still opens a file written by a newer release of the same
-schema. `load_network_from_json` removes the two keys before validation and
-therefore does not depend on that. The names `schema_version` and
-`groundinsight_version` are reserved; `Network` never gets fields of that
-name.
+The diagram (`gi.Diagram` with `gi.DiagramNode`, `gi.DiagramEdge` and
+`gi.DiagramMarker`) refers to buses, branches, faults and sources by name;
+`Diagram.renamed` and `Diagram.without` follow a rename or a removal, and
+`Diagram.check(network)` reports entries without element and elements
+without entry.
+
+::: groundinsight.diagram
+    options:
+      members:
+        - Diagram
+        - DiagramNode
+        - DiagramEdge
+        - DiagramMarker
 
 ::: groundinsight.io.project_file

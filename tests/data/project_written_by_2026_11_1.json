@@ -1,0 +1,633 @@
+{
+    "schema_version": 1,
+    "groundinsight_version": "2026.11.1",
+    "name": "QuickstartNet",
+    "description": null,
+    "frequencies": [
+        50.0,
+        250.0,
+        350.0,
+        450.0,
+        550.0
+    ],
+    "buses": {
+        "bus_source": {
+            "name": "bus_source",
+            "description": null,
+            "type": {
+                "name": "SubstationBus",
+                "description": "Lumped substation grounding grid",
+                "system_type": "Substation",
+                "voltage_level": 20.0,
+                "impedance_formula": "rho * 0.01 + j * f * 1/50 * 0.1",
+                "R_formula": null,
+                "L_formula": null,
+                "C_formula": null,
+                "earthing_conductor_material": null,
+                "earthing_conductor_cross_section_mm2": null,
+                "earthing_conductor_theta_initial_C": 20.0,
+                "earthing_conductor_theta_final_C": null,
+                "earthing_conductor_current_split": 1.0,
+                "electrode_material": null,
+                "electrode_cross_section_mm2": null,
+                "electrode_theta_initial_C": 20.0,
+                "electrode_theta_final_C": null,
+                "electrode_current_split": 1.0
+            },
+            "impedance": {
+                "50.0": {
+                    "real": 1.0,
+                    "imag": 0.1
+                },
+                "250.0": {
+                    "real": 1.0,
+                    "imag": 0.5
+                },
+                "350.0": {
+                    "real": 1.0,
+                    "imag": 0.7000000000000001
+                },
+                "450.0": {
+                    "real": 1.0,
+                    "imag": 0.9
+                },
+                "550.0": {
+                    "real": 1.0,
+                    "imag": 1.1
+                }
+            },
+            "specific_earth_resistance": 100.0,
+            "active": true,
+            "R": null,
+            "L": null,
+            "C": null
+        },
+        "bus_fault": {
+            "name": "bus_fault",
+            "description": null,
+            "type": {
+                "name": "SubstationBus",
+                "description": "Lumped substation grounding grid",
+                "system_type": "Substation",
+                "voltage_level": 20.0,
+                "impedance_formula": "rho * 0.01 + j * f * 1/50 * 0.1",
+                "R_formula": null,
+                "L_formula": null,
+                "C_formula": null,
+                "earthing_conductor_material": null,
+                "earthing_conductor_cross_section_mm2": null,
+                "earthing_conductor_theta_initial_C": 20.0,
+                "earthing_conductor_theta_final_C": null,
+                "earthing_conductor_current_split": 1.0,
+                "electrode_material": null,
+                "electrode_cross_section_mm2": null,
+                "electrode_theta_initial_C": 20.0,
+                "electrode_theta_final_C": null,
+                "electrode_current_split": 1.0
+            },
+            "impedance": {
+                "50.0": {
+                    "real": 1.0,
+                    "imag": 0.1
+                },
+                "250.0": {
+                    "real": 1.0,
+                    "imag": 0.5
+                },
+                "350.0": {
+                    "real": 1.0,
+                    "imag": 0.7000000000000001
+                },
+                "450.0": {
+                    "real": 1.0,
+                    "imag": 0.9
+                },
+                "550.0": {
+                    "real": 1.0,
+                    "imag": 1.1
+                }
+            },
+            "specific_earth_resistance": 100.0,
+            "active": true,
+            "R": null,
+            "L": null,
+            "C": null
+        }
+    },
+    "branches": {
+        "cable_1": {
+            "name": "cable_1",
+            "description": null,
+            "type": {
+                "name": "MSCable",
+                "description": "20 kV single-core cable with shield",
+                "grounding_conductor": true,
+                "self_impedance_formula": "(0.25 + j * f * 0.012) * l",
+                "mutual_impedance_formula": "(0.0  + j * f * 0.012) * l",
+                "phase_impedance_formula": null,
+                "R_self_formula": null,
+                "L_self_formula": null,
+                "C_self_formula": null,
+                "R_mutual_formula": null,
+                "M_mutual_formula": null,
+                "conductor_material": null,
+                "cross_section_mm2": null,
+                "theta_initial_C": 20.0,
+                "theta_final_C": null
+            },
+            "length": 5.0,
+            "from_bus": "bus_source",
+            "to_bus": "bus_fault",
+            "self_impedance": {
+                "50.0": {
+                    "real": 1.25,
+                    "imag": 3.0
+                },
+                "250.0": {
+                    "real": 1.25,
+                    "imag": 15.0
+                },
+                "350.0": {
+                    "real": 1.25,
+                    "imag": 21.0
+                },
+                "450.0": {
+                    "real": 1.25,
+                    "imag": 27.0
+                },
+                "550.0": {
+                    "real": 1.25,
+                    "imag": 33.0
+                }
+            },
+            "mutual_impedance": {
+                "50.0": {
+                    "real": 0.0,
+                    "imag": 3.0
+                },
+                "250.0": {
+                    "real": 0.0,
+                    "imag": 15.0
+                },
+                "350.0": {
+                    "real": 0.0,
+                    "imag": 21.0
+                },
+                "450.0": {
+                    "real": 0.0,
+                    "imag": 27.0
+                },
+                "550.0": {
+                    "real": 0.0,
+                    "imag": 33.0
+                }
+            },
+            "specific_earth_resistance": 100.0,
+            "parallel_coefficient": 1.0,
+            "active": true,
+            "phase_impedance": null,
+            "R_self": null,
+            "L_self": null,
+            "C_self": null,
+            "R_mutual": null,
+            "M_mutual": null
+        }
+    },
+    "faults": {
+        "fault_at_remote_bus": {
+            "name": "fault_at_remote_bus",
+            "description": "Single-phase-to-ground fault at bus_fault",
+            "bus": "bus_fault",
+            "scalings": {
+                "50.0": 1.0
+            },
+            "t_k_s": null,
+            "n_factor": 1.0,
+            "active": true
+        }
+    },
+    "sources": {
+        "substation_infeed": {
+            "name": "substation_infeed",
+            "description": null,
+            "bus": "bus_source",
+            "source_type": "current",
+            "values": {
+                "50.0": {
+                    "real": 1000.0,
+                    "imag": 0.0
+                },
+                "250.0": {
+                    "real": 200.0,
+                    "imag": 0.0
+                },
+                "350.0": {
+                    "real": 100.0,
+                    "imag": 0.0
+                },
+                "450.0": {
+                    "real": 50.0,
+                    "imag": 0.0
+                },
+                "550.0": {
+                    "real": 25.0,
+                    "imag": 0.0
+                }
+            },
+            "voltage": null,
+            "source_impedance": null,
+            "i_k_a": null,
+            "r_to_x": null,
+            "kappa": null
+        }
+    },
+    "results": {
+        "fault_at_remote_bus": {
+            "buses": [
+                {
+                    "name": "bus_source",
+                    "uepr": 276.0633008888428,
+                    "ia": 274.55702734045747,
+                    "i_inj": 1026.2187875886896,
+                    "uepr_freq": {
+                        "50.0": {
+                            "real": 214.517485879101,
+                            "imag": -172.75567840403798
+                        },
+                        "250.0": {
+                            "real": 10.550996483001171,
+                            "imag": -13.481828839390381
+                        },
+                        "350.0": {
+                            "real": 4.618672808631302,
+                            "imag": -4.910237204104817
+                        },
+                        "450.0": {
+                            "real": 2.1703804452962965,
+                            "imag": -1.9252174844717687
+                        },
+                        "550.0": {
+                            "real": 1.0495837676381063,
+                            "imag": -0.7908764987265989
+                        }
+                    },
+                    "ia_freq": {
+                        "50.0": {
+                            "real": 195.28902776108634,
+                            "imag": -192.2845811801466
+                        },
+                        "250.0": {
+                            "real": 3.0480656506447845,
+                            "imag": -15.005861664712775
+                        },
+                        "350.0": {
+                            "real": 0.792957560911362,
+                            "imag": -5.465307496742771
+                        },
+                        "450.0": {
+                            "real": 0.24181475650370424,
+                            "imag": -2.1428507653251025
+                        },
+                        "550.0": {
+                            "real": 0.08127584571893551,
+                            "imag": -0.8802799290174279
+                        }
+                    },
+                    "i_inj_freq": {
+                        "50.0": {
+                            "real": 1000.0,
+                            "imag": 0.0
+                        },
+                        "250.0": {
+                            "real": 200.0,
+                            "imag": 0.0
+                        },
+                        "350.0": {
+                            "real": 100.0,
+                            "imag": 0.0
+                        },
+                        "450.0": {
+                            "real": 50.0,
+                            "imag": 0.0
+                        },
+                        "550.0": {
+                            "real": 25.0,
+                            "imag": 0.0
+                        }
+                    }
+                },
+                {
+                    "name": "bus_fault",
+                    "uepr": 276.0633008888428,
+                    "ia": 274.55702734045747,
+                    "i_inj": 1026.2187875886896,
+                    "uepr_freq": {
+                        "50.0": {
+                            "real": -214.51748587910103,
+                            "imag": 172.75567840403798
+                        },
+                        "250.0": {
+                            "real": -10.550996483001175,
+                            "imag": 13.481828839390385
+                        },
+                        "350.0": {
+                            "real": -4.618672808631302,
+                            "imag": 4.910237204104818
+                        },
+                        "450.0": {
+                            "real": -2.1703804452962965,
+                            "imag": 1.9252174844717687
+                        },
+                        "550.0": {
+                            "real": -1.0495837676381063,
+                            "imag": 0.790876498726599
+                        }
+                    },
+                    "ia_freq": {
+                        "50.0": {
+                            "real": -195.28902776108637,
+                            "imag": 192.28458118014663
+                        },
+                        "250.0": {
+                            "real": -3.048065650644786,
+                            "imag": 15.00586166471278
+                        },
+                        "350.0": {
+                            "real": -0.7929575609113616,
+                            "imag": 5.4653074967427715
+                        },
+                        "450.0": {
+                            "real": -0.24181475650370424,
+                            "imag": 2.1428507653251025
+                        },
+                        "550.0": {
+                            "real": -0.08127584571893545,
+                            "imag": 0.8802799290174279
+                        }
+                    },
+                    "i_inj_freq": {
+                        "50.0": {
+                            "real": -1000.0,
+                            "imag": 0.0
+                        },
+                        "250.0": {
+                            "real": -200.0,
+                            "imag": 0.0
+                        },
+                        "350.0": {
+                            "real": -100.0,
+                            "imag": 0.0
+                        },
+                        "450.0": {
+                            "real": -50.0,
+                            "imag": 0.0
+                        },
+                        "550.0": {
+                            "real": -25.0,
+                            "imag": 0.0
+                        }
+                    }
+                }
+            ],
+            "branches": [
+                {
+                    "name": "cable_1",
+                    "i_s": 858.2088572716314,
+                    "i_s_freq": {
+                        "50.0": {
+                            "real": -804.7109722389137,
+                            "imag": -192.28458118014666
+                        },
+                        "250.0": {
+                            "real": -196.9519343493552,
+                            "imag": -15.005861664712775
+                        },
+                        "350.0": {
+                            "real": -99.20704243908864,
+                            "imag": -5.4653074967427715
+                        },
+                        "450.0": {
+                            "real": -49.75818524349629,
+                            "imag": -2.142850765325103
+                        },
+                        "550.0": {
+                            "real": -24.918724154281065,
+                            "imag": -0.8802799290174279
+                        }
+                    }
+                }
+            ],
+            "reduction_factor": {
+                "name": null,
+                "fault_bus": "bus_fault",
+                "value": {
+                    "50.0": 0.38461538461538464,
+                    "250.0": 0.08304547985373997,
+                    "350.0": 0.0594186399842153,
+                    "450.0": 0.04624676139488888,
+                    "550.0": 0.03785164279505412
+                },
+                "value_current": {
+                    "50.0": 0.27406416132631195,
+                    "250.0": 0.07656150934234791,
+                    "350.0": 0.05522532727595124,
+                    "450.0": 0.04312903327883584,
+                    "550.0": 0.03536096189932069
+                },
+                "i_fault": {
+                    "50.0": {
+                        "real": 1000.0,
+                        "imag": 0.0
+                    },
+                    "250.0": {
+                        "real": 200.0,
+                        "imag": 0.0
+                    },
+                    "350.0": {
+                        "real": 100.0,
+                        "imag": 0.0
+                    },
+                    "450.0": {
+                        "real": 50.0,
+                        "imag": 0.0
+                    },
+                    "550.0": {
+                        "real": 25.0,
+                        "imag": 0.0
+                    }
+                },
+                "i_earth": {
+                    "50.0": {
+                        "real": -195.28902776108634,
+                        "imag": 192.2845811801466
+                    },
+                    "250.0": {
+                        "real": -3.0480656506447845,
+                        "imag": 15.005861664712775
+                    },
+                    "350.0": {
+                        "real": -0.7929575609113616,
+                        "imag": 5.4653074967427715
+                    },
+                    "450.0": {
+                        "real": -0.24181475650370424,
+                        "imag": 2.1428507653251025
+                    },
+                    "550.0": {
+                        "real": -0.08127584571893551,
+                        "imag": 0.8802799290174279
+                    }
+                },
+                "earth_buses": {
+                    "50.0": [
+                        "bus_fault"
+                    ],
+                    "250.0": [
+                        "bus_fault"
+                    ],
+                    "350.0": [
+                        "bus_fault"
+                    ],
+                    "450.0": [
+                        "bus_fault"
+                    ],
+                    "550.0": [
+                        "bus_fault"
+                    ]
+                },
+                "u_earthing": {
+                    "50.0": {
+                        "real": -214.51748587910103,
+                        "imag": 172.75567840403798
+                    },
+                    "250.0": {
+                        "real": -10.550996483001175,
+                        "imag": 13.481828839390385
+                    },
+                    "350.0": {
+                        "real": -4.618672808631302,
+                        "imag": 4.910237204104818
+                    },
+                    "450.0": {
+                        "real": -2.1703804452962965,
+                        "imag": 1.9252174844717687
+                    },
+                    "550.0": {
+                        "real": -1.0495837676381063,
+                        "imag": 0.790876498726599
+                    }
+                },
+                "z_earthing": {
+                    "50.0": {
+                        "real": 0.814565557024396,
+                        "imag": 0.22104314385290225
+                    },
+                    "250.0": {
+                        "real": 0.9308323563892146,
+                        "imag": 0.5328253223915593
+                    },
+                    "350.0": {
+                        "real": 0.9355532891879627,
+                        "imag": 0.7134173299045034
+                    },
+                    "450.0": {
+                        "real": 0.9375507810988655,
+                        "imag": 0.8995500013392816
+                    },
+                    "550.0": {
+                        "real": 0.9385744666804045,
+                        "imag": 1.08836269933839
+                    }
+                },
+                "u_earthing_group": {
+                    "50.0": {
+                        "real": -214.51748587910103,
+                        "imag": 172.75567840403798
+                    },
+                    "250.0": {
+                        "real": -10.550996483001175,
+                        "imag": 13.481828839390385
+                    },
+                    "350.0": {
+                        "real": -4.618672808631302,
+                        "imag": 4.910237204104818
+                    },
+                    "450.0": {
+                        "real": -2.1703804452962965,
+                        "imag": 1.9252174844717689
+                    },
+                    "550.0": {
+                        "real": -1.0495837676381063,
+                        "imag": 0.790876498726599
+                    }
+                },
+                "z_earthing_group": {
+                    "50.0": {
+                        "real": 1.0000000000000002,
+                        "imag": 0.10000000000000006
+                    },
+                    "250.0": {
+                        "real": 1.0000000000000002,
+                        "imag": 0.5000000000000002
+                    },
+                    "350.0": {
+                        "real": 0.9999999999999999,
+                        "imag": 0.7
+                    },
+                    "450.0": {
+                        "real": 1.0000000000000002,
+                        "imag": 0.9
+                    },
+                    "550.0": {
+                        "real": 1.0000000000000002,
+                        "imag": 1.1
+                    }
+                }
+            },
+            "grounding_impedance": {
+                "name": null,
+                "fault_bus": "bus_fault",
+                "value": {
+                    "50.0": {
+                        "real": 0.814565557024396,
+                        "imag": 0.22104314385290225
+                    },
+                    "250.0": {
+                        "real": 0.9308323563892146,
+                        "imag": 0.5328253223915593
+                    },
+                    "350.0": {
+                        "real": 0.9355532891879627,
+                        "imag": 0.7134173299045034
+                    },
+                    "450.0": {
+                        "real": 0.9375507810988655,
+                        "imag": 0.8995500013392816
+                    },
+                    "550.0": {
+                        "real": 0.9385744666804045,
+                        "imag": 1.08836269933839
+                    }
+                }
+            },
+            "fault": "fault_at_remote_bus",
+            "diagnostics": [
+                {
+                    "code": "SCALINGS_INCOMPLETE",
+                    "severity": "warning",
+                    "category": "InputWarning",
+                    "message": "Fault 'fault_at_remote_bus' gives no scaling at 250 Hz, 350 Hz, 450 Hz, 550 Hz; those frequencies are scaled with 1.0 (full contribution). Add the key with 0.0 to exclude a frequency from this fault, or with 1.0 to make the choice explicit.",
+                    "elements": [
+                        [
+                            "fault",
+                            "fault_at_remote_bus"
+                        ]
+                    ]
+                }
+            ],
+            "input_digest": "gi1:e5e280f741a0164fb380c7a5582efd41"
+        }
+    },
+    "paths": {},
+    "active_fault": "fault_at_remote_bus"
+}

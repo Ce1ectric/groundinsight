@@ -3,16 +3,22 @@
 """
 The JSON project file: one network per file, UTF-8, written atomically.
 
-A project file is what :func:`save_network_to_json` writes and
-:func:`load_network_from_json` reads -- the network's own
-``model_dump_json(indent=4)`` with two header keys in front::
+A project file is what :func:`save_project` (and :func:`save_network_to_json`)
+writes and :func:`load_project` (and :func:`load_network_from_json`) reads:
+two header keys and three sections::
 
     {
-        "schema_version": 1,
-        "groundinsight_version": "2026.11.0",
-        "name": "...",
-        ...
+        "schema_version": 2,
+        "groundinsight_version": "2026.12.0",
+        "network": { ... the network's model_dump_json ... },
+        "diagram": { ... the Diagram, or null ... },
+        "views": [ ... the evaluation tabs of a front end ... ]
     }
+
+``network`` is the physical model, ``diagram`` where its elements are drawn
+(:class:`~groundinsight.Diagram`, kept apart so a moved bus does not touch
+the network), ``views`` the evaluation tabs a front end defines -- a list of
+JSON objects the library stores and returns unchanged.
 
 Three properties are guaranteed, because a desktop application and a server
 open and save these files on every platform:
@@ -46,23 +52,23 @@ Schema version
     ``groundinsight_version`` (a ``str``) names the release that wrote it.
     A reader refuses a ``schema_version`` newer than :data:`SCHEMA_VERSION`
     with a :class:`ValueError` that names both numbers, instead of silently
-    dropping whatever the newer release added. Files without the keys --
-    plain ``model_dump_json`` dumps, the format of groundinsight 0.6.0 and
-    earlier -- load as a network without metadata.
+    dropping whatever the newer release added. Every older layout is read:
+    version 1 (2026.11.x) and files without the keys (0.6.0 and earlier) hold
+    the network's fields at the top level, next to the header keys, and load
+    as a project without diagram and views.
 
-Where the metadata lives, and why not in an envelope
-----------------------------------------------------
-The two keys sit *next to* the model fields rather than in an envelope such
-as ``{"format": ..., "network": {...}}``. ``Network`` does not forbid extra
-keys (its ``model_config`` leaves ``extra`` at Pydantic's default
-``"ignore"``), so ``Network.model_validate_json`` -- the documented way to
-read a dump, used in the docs and by every script written against 0.6.0 --
-still accepts a project file, and a 0.6.0 reader opens a new file too. An
-envelope would break both. The reader here does not rely on ``extra`` being
-``"ignore"``: it removes the two keys before validation, so a later
-``extra="forbid"`` on ``Network`` cannot lock out project files. The names are
-therefore reserved: ``Network`` must never get a field called
-``schema_version`` or ``groundinsight_version``.
+Why version 2 is an envelope
+----------------------------
+Version 1 kept the network's fields at the top level, next to the header
+keys, so that ``Network.model_validate_json`` -- and a 0.6.0 reader, which
+knows no schema version -- could still open a project file. Version 2 holds
+what those readers must not open silently: an earthing characteristic
+changes the bus impedances, and a reader that drops it computes other
+numbers without a word. In the envelope a 0.6.0 reader and
+``Network.model_validate_json`` fail on the missing network fields instead,
+and 2026.11.x refuses the newer schema version (maintainer decision). A
+script that read project files with ``Network.model_validate_json`` uses
+:func:`load_network_from_json` instead.
 
 When to increment :data:`SCHEMA_VERSION`
 ----------------------------------------
@@ -90,31 +96,163 @@ import logging
 import os
 import secrets
 import stat
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..diagnostics import InputWarning, emit
+from ..diagram import Diagram
 from ..models.core_models import Network
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION: int = 1
+SCHEMA_VERSION: int = 2
 """Version of the project-file layout this release writes, and the newest one
 it reads. See the module docstring for when it is incremented."""
 
 METADATA_KEYS: Tuple[str, ...] = ("schema_version", "groundinsight_version")
-"""The top-level keys of a project file that are file metadata, not fields of
-:class:`~groundinsight.Network`, in the order they are written."""
+"""The top-level keys of a project file that are file metadata, in the order
+they are written."""
 
 _PathLike = Union[str, "os.PathLike[str]"]
 
+SECTIONS: Tuple[str, ...] = ("network", "diagram", "views")
+"""The sections of a version-2 project file, in the order they are written."""
+
+
+class Project(BaseModel):
+    """
+    The content of a project file: a network, its diagram and its views.
+
+    Attributes
+    ----------
+    network : Network
+        The physical model, with any stored results.
+    diagram : Diagram, optional
+        Where the elements are drawn; ``None`` for a network that has not
+        been drawn (a front end places it automatically).
+    views : list of dict
+        The evaluation tabs of a front end, as JSON objects; stored and
+        returned unchanged.
+    schema_version : int, optional
+        The layout version of the file it was read from; ``None`` for a file
+        without one (0.6.0 or earlier) and for a project built in memory.
+    groundinsight_version : str, optional
+        The release that wrote the file, as stored.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> project = gi.Project(network=gi.create_network(name="n", frequencies=[50.0]))
+    >>> project.diagram is None, project.views
+    (True, [])
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    network: Network
+    diagram: Optional[Diagram] = None
+    views: List[Dict[str, Any]] = Field(default_factory=list)
+    schema_version: Optional[int] = None
+    groundinsight_version: Optional[Any] = None
+
+
+def save_project(
+    path: _PathLike,
+    network: Network,
+    diagram: Optional[Diagram] = None,
+    views: Optional[List[Dict[str, Any]]] = None,
+) -> None:
+    """
+    Save a network with its diagram and views, atomically and as UTF-8.
+
+    Parameters
+    ----------
+    path : str or os.PathLike
+        Target file. An existing file is replaced as a whole or not at all;
+        if ``path`` is a symbolic link, the file it points to is replaced.
+    network : Network
+        The network, saved with its stored results.
+    diagram : Diagram, optional
+        Its diagram; ``None`` writes ``null``.
+    views : list of dict, optional
+        The evaluation tabs; JSON objects. ``None`` writes ``[]``.
+
+    Raises
+    ------
+    OSError
+        If the file cannot be written; an existing file is then unchanged.
+    TypeError
+        If a view is not a JSON object or holds values JSON cannot store.
+
+    Examples
+    --------
+    >>> import pathlib, tempfile
+    >>> import groundinsight as gi
+    >>> path = pathlib.Path(tempfile.mkdtemp()) / "sued.json"
+    >>> net = gi.create_network(name="Süd", frequencies=[50.0])
+    >>> diagram = gi.Diagram(nodes={"B1": gi.DiagramNode(x=0, y=0)})
+    >>> gi.save_project(path, net, diagram, views=[{"title": "EPR"}])
+    >>> gi.load_project(path).diagram == diagram
+    True
+    """
+    payload = _project_file_text(network, diagram, views).encode("utf-8")
+    target = _resolve_target(os.fspath(path))
+    _atomic_write(target, payload)
+    logger.debug(
+        "Saved project '%s' to '%s' (schema version %d).", network.name, target, SCHEMA_VERSION
+    )
+
+
+def load_project(path: _PathLike) -> Project:
+    """
+    Load a project file of any release.
+
+    Parameters
+    ----------
+    path : str or os.PathLike
+        The project file.
+
+    Returns
+    -------
+    Project
+        The network with its diagram and views. A file of schema version 1
+        or without a version holds a network only: ``diagram`` is ``None``
+        and ``views`` empty.
+
+    Raises
+    ------
+    OSError
+        If the file cannot be read.
+    ValueError
+        As for :func:`load_network_from_json`, and for a version-2 file whose
+        sections are missing or malformed.
+
+    Warns
+    -----
+    InputWarning
+        Code ``PROJECT_FILE_LEGACY_ENCODING``, as for
+        :func:`load_network_from_json`.
+
+    Examples
+    --------
+    >>> import pathlib, tempfile
+    >>> import groundinsight as gi
+    >>> path = pathlib.Path(tempfile.mkdtemp()) / "sued.json"
+    >>> gi.save_project(path, gi.create_network(name="Süd", frequencies=[50.0]))
+    >>> project = gi.load_project(path)
+    >>> project.network.name, project.schema_version, project.diagram
+    ('Süd', 2, None)
+    """
+    return _read_project(os.fspath(path))
 
 def save_network_to_json(network: Network, path: _PathLike) -> None:
     """
     Save a network to a JSON project file, atomically and as UTF-8.
 
-    The file is the network's ``model_dump_json(indent=4)`` preceded by the
-    header keys ``schema_version`` (:data:`SCHEMA_VERSION`) and
-    ``groundinsight_version``. Stored results are included.
+    Writes a project file (see the module docstring) whose ``network``
+    section is the network with its stored results, with no diagram and no
+    views; :func:`save_project` writes those as well.
 
     Parameters
     ----------
@@ -149,15 +287,7 @@ def save_network_to_json(network: Network, path: _PathLike) -> None:
     'Süd'
     """
     # Serialise first: a failure here must not have touched the disk.
-    payload = _project_file_text(network).encode("utf-8")
-    target = _resolve_target(os.fspath(path))
-    _atomic_write(target, payload)
-    logger.debug(
-        "Saved network '%s' to '%s' (schema version %d).",
-        network.name,
-        target,
-        SCHEMA_VERSION,
-    )
+    save_project(path, network)
 
 
 def load_network_from_json(path: _PathLike) -> Network:
@@ -166,6 +296,8 @@ def load_network_from_json(path: _PathLike) -> Network:
 
     Reads files of every release: files with the current or an older
     ``schema_version``, and files without one (written by 0.6.0 or earlier).
+    The diagram and views of a version-2 file are not returned; use
+    :func:`load_project` for those.
 
     Parameters
     ----------
@@ -200,7 +332,30 @@ def load_network_from_json(path: _PathLike) -> Network:
     >>> import groundinsight as gi
     >>> net = gi.load_network_from_json("sued.json")  # doctest: +SKIP
     """
-    source = os.fspath(path)
+    return _read_project(os.fspath(path)).network
+
+
+def _read_project(source: str) -> Project:
+    """
+    Read and validate a project file.
+
+    Parameters
+    ----------
+    source : str
+        The file.
+
+    Returns
+    -------
+    Project
+        Its content.
+
+    Raises
+    ------
+    OSError
+        If the file cannot be read.
+    ValueError
+        As documented for :func:`load_project`.
+    """
     with open(source, "rb") as handle:
         raw = handle.read()
     text, legacy_encoding = _decode(raw, source)
@@ -222,7 +377,9 @@ def load_network_from_json(path: _PathLike) -> Network:
             "valid UTF-8; project files with a schema version are always "
             "written as UTF-8. Re-encode the file as UTF-8."
         )
-    network = Network.model_validate(payload)
+    network_data, diagram_data, views = _sections(payload, schema_version, source)
+    network = Network.model_validate(network_data)
+    diagram = None if diagram_data is None else Diagram.model_validate(diagram_data)
     if legacy_encoding is not None:
         emit(
             InputWarning,
@@ -242,7 +399,56 @@ def load_network_from_json(path: _PathLike) -> Network:
         schema_version if schema_version is not None else "none",
         written_by if written_by is not None else "0.6.0 or earlier",
     )
-    return network
+    return Project(network=network, diagram=diagram, views=views,
+                   schema_version=schema_version, groundinsight_version=written_by)
+
+
+def _sections(
+    payload: Dict[str, Any], schema_version: Optional[int], source: str
+) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Split a parsed project file (metadata removed) into its sections.
+
+    Parameters
+    ----------
+    payload : dict
+        The top-level object without the metadata keys.
+    schema_version : int or None
+        The file's layout version.
+    source : str
+        File name for the error messages.
+
+    Returns
+    -------
+    tuple
+        ``(network data, diagram data or None, views)``. A file before
+        version 2 is the network itself.
+
+    Raises
+    ------
+    ValueError
+        If a version-2 file has keys other than :data:`SECTIONS`, no
+        ``network`` object, a ``diagram`` that is neither an object nor
+        ``null``, or ``views`` that are not a list of objects.
+    """
+    if schema_version is None or schema_version < 2:
+        return payload, None, []
+    unknown = sorted(set(payload) - set(SECTIONS))
+    if unknown:
+        raise ValueError(
+            f"'{source}' (schema version {schema_version}) has unknown top-level "
+            f"keys {unknown}; expected {list(SECTIONS)}."
+        )
+    network = payload.get("network")
+    if not isinstance(network, dict):
+        raise ValueError(f"'{source}' has no 'network' object.")
+    diagram = payload.get("diagram")
+    if diagram is not None and not isinstance(diagram, dict):
+        raise ValueError(f"'{source}': 'diagram' must be an object or null.")
+    views = payload.get("views", [])
+    if not isinstance(views, list) or not all(isinstance(view, dict) for view in views):
+        raise ValueError(f"'{source}': 'views' must be a list of objects.")
+    return network, diagram, views
 
 
 # ---------------------------------------------------------------------------
@@ -250,50 +456,77 @@ def load_network_from_json(path: _PathLike) -> Network:
 # ---------------------------------------------------------------------------
 
 
-def _project_file_text(network: Network) -> str:
+def _project_file_text(
+    network: Network,
+    diagram: Optional[Diagram] = None,
+    views: Optional[List[Dict[str, Any]]] = None,
+) -> str:
     """
-    The text of a project file: two header keys, then the model's own dump.
+    The text of a project file: the header keys, then the three sections.
 
     Parameters
     ----------
     network : Network
         The network to serialise.
+    diagram : Diagram, optional
+        Its diagram.
+    views : list of dict, optional
+        The evaluation tabs.
 
     Returns
     -------
     str
-        A JSON object whose first keys are :data:`METADATA_KEYS`.
+        A JSON object whose first keys are :data:`METADATA_KEYS`, followed
+        by :data:`SECTIONS`.
 
     Raises
     ------
-    RuntimeError
-        If the model dump is not a JSON object (cannot happen for a
-        ``Network``, which always has fields; checked so that a future change
-        of the serialiser fails loudly instead of writing invalid JSON).
+    TypeError
+        If a view is not a JSON object or cannot be serialised.
 
     Notes
     -----
-    The header is spliced in front of ``model_dump_json(indent=4)`` instead of
-    re-serialising a merged dictionary. That keeps Pydantic's own output byte
-    for byte -- a project file minus its first two keys *is* the model dump --
-    and avoids parsing and writing the whole network a second time.
+    The network's ``model_dump_json(indent=4)`` is spliced in as it is,
+    indented by one level, instead of re-serialising a parsed copy: the
+    section is Pydantic's own output, and the network is not parsed and
+    written a second time. Line-wise indentation is safe because JSON
+    strings cannot contain a raw line break.
     """
     # Imported here: the package ``__init__`` imports this module before it
     # defines ``__version__``.
     from .. import __version__
 
-    body = network.model_dump_json(indent=4)
-    if not body.startswith("{") or body[1:].lstrip().startswith("}"):
-        raise RuntimeError(
-            "Network.model_dump_json() did not produce a non-empty JSON "
-            "object; refusing to write a project file from it."
-        )
-    header = (
+    views = [] if views is None else views
+    if not all(isinstance(view, dict) for view in views):
+        raise TypeError("every view must be a JSON object (dict)")
+
+    def section(text: str) -> str:
+        """Indent a JSON text by one level after its first line.
+
+        Parameters
+        ----------
+        text : str
+            The JSON text.
+
+        Returns
+        -------
+        str
+            The indented text.
+        """
+        return text.replace("\n", "\n    ")
+
+    network_text = section(network.model_dump_json(indent=4))
+    diagram_text = "null" if diagram is None else section(diagram.model_dump_json(indent=4))
+    views_text = section(json.dumps(views, indent=4, ensure_ascii=False, allow_nan=False))
+    return (
         "{\n"
         f'    "{METADATA_KEYS[0]}": {SCHEMA_VERSION},\n'
-        f'    "{METADATA_KEYS[1]}": {json.dumps(__version__)},'
+        f'    "{METADATA_KEYS[1]}": {json.dumps(__version__)},\n'
+        f'    "network": {network_text},\n'
+        f'    "diagram": {diagram_text},\n'
+        f'    "views": {views_text}\n'
+        "}\n"
     )
-    return header + body[1:]
 
 
 def _pop_metadata(

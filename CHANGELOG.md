@@ -42,6 +42,22 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+### Breaking
+
+- **Project files are written in schema version 2, an envelope.** The
+  network now sits in a `network` section next to `diagram` and `views`
+  instead of at the top level, so `gi.Network.model_validate_json(text)` no
+  longer reads a project file written by this release (it fails on the
+  missing network fields), and neither does groundinsight 0.6.0; 2026.11.x
+  refuses the newer schema version. This is deliberate: version 2 carries
+  earthing characteristics, which change the bus impedances, and a reader
+  that dropped them would compute other numbers without a word.
+  *Migration:* read project files with `gi.load_network_from_json(path)` or
+  `gi.load_project(path)`, which read every version; for a network embedded
+  in your own JSON keep using `Network.model_dump_json` /
+  `model_validate_json`. Files of version 1 and without a version still
+  load unchanged.
+
 ### Added
 
 - **Earthing characteristics (`gi.EarthingCharacteristic`).** A table of the
@@ -82,6 +98,24 @@ version section when a release is cut.
   `[(t_F, U), ...]`, read at the fault duration (default `Fault.t_k_s`) on
   log-log axes and never extrapolated. Without any touch factor the frame is
   all null and the warning `TOUCH_FACTORS_MISSING` says so.
+- **Network diagrams and project files with diagram and views.**
+  `gi.Diagram` places buses (`gi.DiagramNode`: position, symbol `bus`,
+  `source_bus` or `busbar`, label offset), routes branches
+  (`gi.DiagramEdge`: waypoints) and attaches fault and source symbols
+  (`gi.DiagramMarker`), by element name and apart from the network, so a
+  moved bus does not change the network or its input digest.
+  `Diagram.renamed` / `Diagram.without` follow a rename or a removal;
+  `Diagram.check(network)` reports `DIAGRAM_UNKNOWN_ELEMENT` and
+  `DIAGRAM_ELEMENT_NOT_PLACED`. `gi.save_project(path, network, diagram,
+  views)` and `gi.load_project(path)` (a `gi.Project`) write and read the
+  network together with its diagram and the evaluation tabs of a front end,
+  atomically and as UTF-8 like `save_network_to_json`.
+
+### Changed
+
+- **`SCHEMA_VERSION` of the project file is 2** (see *Breaking*).
+  `save_network_to_json` writes a version-2 file without diagram and views;
+  `load_network_from_json` reads every version and returns the network.
 
 ### Internal
 

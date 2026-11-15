@@ -172,3 +172,13 @@ Conditions that leave no meaningful answer raise instead of warning:
   that is not callable.
 - `ImportError` — a function of the optional `pandapower` extra without
   pandapower installed; the message names the extra.
+
+## Codes of the diagram check
+
+`Diagram.check(network)` compares a diagram with its network and returns
+these as records of category `InputWarning`; it never raises.
+
+| Code | Category | Severity | Elements | Raised when | What to do |
+|---|---|---|---|---|---|
+| `DIAGRAM_UNKNOWN_ELEMENT` | `InputWarning` | warning | the bus, branch, fault or source | The diagram has an entry for an element the network does not have (removed or renamed outside the diagram); it is not drawn. | Remove the entry (`Diagram.without`), or rename it with the element (`Diagram.renamed`). |
+| `DIAGRAM_ELEMENT_NOT_PLACED` | `InputWarning` | info | the bus or branch | A bus or branch of the network has no entry in the diagram yet — a network from a script, an import or the tables. | Nothing: a front end places it automatically; save the project to keep the place. |

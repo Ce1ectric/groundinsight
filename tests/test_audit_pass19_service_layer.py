@@ -476,7 +476,7 @@ def test_save_writes_a_utf8_project_file_without_results(tmp_path, quickstart):
     raw = path.read_bytes()
     payload = _strict_json(raw.decode("utf-8"))
     assert "Süd Ω".encode() in raw
-    assert payload["results"] == {}  # ... the file does not
+    assert payload["network"]["results"] == {}  # ... the file does not
     assert payload["schema_version"] >= 1 and payload["groundinsight_version"] == gi.__version__
     assert quickstart.network.results  # saving did not drop them either
     assert location == str(path) and not quickstart.dirty
@@ -731,7 +731,7 @@ def test_a_project_file_that_does_not_validate_says_where(tmp_path):
     path = tmp_path / "broken.json"
     gi.save_network_to_json(api.EXAMPLES["quickstart"](), path)
     payload = json.loads(path.read_text(encoding="utf-8"))
-    payload["branches"]["cable_1"]["length"] = -1.0
+    payload["network"]["branches"]["cable_1"]["length"] = -1.0
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(api.ProjectError) as caught:
         api.ProjectSession.from_file(str(path))

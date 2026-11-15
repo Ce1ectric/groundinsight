@@ -40,9 +40,18 @@ gi.run_fault(net, "F")
 
 # --8<-- [start:json]
 gi.save_network_to_json(net, "project.json")       # UTF-8, atomic, with schema_version
-header = list(json.loads(Path("project.json").read_text(encoding="utf-8")))[:2]
+header = list(json.loads(Path("project.json").read_text(encoding="utf-8")))
 from_json = gi.load_network_from_json("project.json")
 # --8<-- [end:json]
+
+# --8<-- [start:project]
+diagram = gi.Diagram(nodes={"UW": gi.DiagramNode(x=0, y=0, symbol="source_bus"),
+                            "S": gi.DiagramNode(x=240, y=0)},
+                     edges={"K": gi.DiagramEdge()})
+gi.save_project("drawn.json", net, diagram, views=[{"title": "EPR", "blocks": []}])
+project = gi.load_project("drawn.json")               # network, diagram and views
+diagram_issues = [d.code for d in project.diagram.check(project.network)]
+# --8<-- [end:project]
 
 # --8<-- [start:newer]
 newer = json.loads(Path("project.json").read_text(encoding="utf-8"))
@@ -81,7 +90,7 @@ with gi.Database("library.db") as db:                 # Database(...) migrates o
 
 # --8<-- [start:untrusted]
 untrusted = json.loads(Path("project.json").read_text(encoding="utf-8"))
-untrusted["buses"]["S"]["type"]["impedance_formula"] = "__import__('os').getcwd()"
+untrusted["network"]["buses"]["S"]["type"]["impedance_formula"] = "__import__('os').getcwd()"
 Path("untrusted.json").write_text(json.dumps(untrusted), encoding="utf-8")
 try:
     gi.load_network_from_json("untrusted.json")
@@ -93,6 +102,7 @@ if __name__ == "__main__":
     epr = {b.name: round(b.uepr, 2) for b in net.results["F"].buses}
     print("project file header:", header)
     print("JSON round trip identical:", from_json.model_dump_json() == net.model_dump_json())
+    print("project:", project.diagram == diagram, project.views, diagram_issues)
     print("newer schema: ValueError:", newer_refused)
     print("database holds:", stored)
     print("database round trip identical:", from_database.model_dump_json() == net.model_dump_json())

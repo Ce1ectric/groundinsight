@@ -450,28 +450,36 @@ def test_the_file_carries_schema_and_package_version_first(tmp_path):
     path = tmp_path / "projekt.json"
     gi.save_network_to_json(_network(), str(path))
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert list(payload)[:2] == ["schema_version", "groundinsight_version"]
-    assert payload["schema_version"] == _schema_version() == 1
+    assert list(payload) == ["schema_version", "groundinsight_version", "network", "diagram", "views"]
+    assert payload["schema_version"] == _schema_version() == 2
     assert isinstance(payload["schema_version"], int)
     assert payload["groundinsight_version"] == gi.__version__
 
 
-def test_the_rest_of_the_file_is_the_models_own_dump(tmp_path):
-    """Two header keys in front of ``model_dump_json(indent=4)`` -- nothing else."""
+def test_the_network_section_is_the_models_own_dump(tmp_path):
+    """The ``network`` section is ``model_dump_json(indent=4)`` -- nothing else;
+    without a diagram and views the other sections are ``null`` and ``[]``."""
     net = _solved_network()
     path = tmp_path / "projekt.json"
     gi.save_network_to_json(net, str(path))
     payload = json.loads(path.read_text(encoding="utf-8"))
-    del payload["schema_version"], payload["groundinsight_version"]
-    assert payload == json.loads(net.model_dump_json(indent=4))
+    assert payload["network"] == json.loads(net.model_dump_json(indent=4))
+    assert payload["diagram"] is None and payload["views"] == []
 
 
-def test_model_validate_json_still_reads_a_saved_file(tmp_path):
-    """The metadata lives next to the fields; the model ignores unknown keys."""
+def test_model_validate_json_refuses_a_version_2_file_loudly(tmp_path):
+    """Schema version 2 is an envelope on purpose (maintainer decision): a
+    reader that knows no schema version -- ``Network.model_validate_json``,
+    groundinsight 0.6.0 -- fails on the missing fields instead of computing
+    without the earthing characteristics. The network section itself still
+    validates as before."""
     net = _solved_network()
     path = tmp_path / "projekt.json"
     gi.save_network_to_json(net, str(path))
-    direct = gi.Network.model_validate_json(path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8")
+    with pytest.raises(ValueError, match="frequencies"):
+        gi.Network.model_validate_json(text)
+    direct = gi.Network.model_validate_json(json.dumps(json.loads(text)["network"]))
     via_loader = gi.load_network_from_json(str(path))
     assert direct.model_dump_json() == via_loader.model_dump_json()
     assert direct.model_dump_json() == net.model_dump_json()
@@ -529,12 +537,20 @@ def test_an_invalid_schema_version_is_refused(tmp_path, bad):
 
 def test_the_current_schema_version_loads(tmp_path):
     path = tmp_path / "aktuell.json"
-    _write_with_metadata(
-        path,
-        schema_version=_schema_version(),
-        groundinsight_version="0.0.0-anything",
-    )
+    payload = {"schema_version": _schema_version(), "groundinsight_version": "0.0.0-anything",
+               "network": json.loads(_network().model_dump_json()), "diagram": None, "views": []}
+    path.write_text(json.dumps(payload), encoding="utf-8")
     assert gi.load_network_from_json(str(path)).name == "Umspannwerk Süd Ω"
+
+
+def test_a_version_1_file_loads_as_a_project_without_diagram(tmp_path):
+    """Version 1 (2026.11.x) kept the fields next to the header keys."""
+    path = tmp_path / "version1.json"
+    _write_with_metadata(path, schema_version=1, groundinsight_version="2026.11.1")
+    project = gi.load_project(str(path))
+    assert project.network.name == "Umspannwerk Süd Ω"
+    assert (project.diagram, project.views, project.schema_version) == (None, [], 1)
+    assert project.groundinsight_version == "2026.11.1"
 
 
 @pytest.mark.parametrize(
@@ -596,7 +612,7 @@ def test_loader_and_model_validate_json_agree(tmp_path, builder):
 
     path = tmp_path / f"{builder}.json"
     gi.save_network_to_json(net, str(path))
-    text = path.read_text(encoding="utf-8")
+    text = json.dumps(json.loads(path.read_text(encoding="utf-8"))["network"])
     via_loader = gi.load_network_from_json(str(path))
     via_json_mode = gi.Network.model_validate_json(text)
     assert via_loader.model_dump_json() == via_json_mode.model_dump_json()

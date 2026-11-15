@@ -143,8 +143,8 @@ async def test_save_as_writes_the_project_file_without_results(user: User, tmp_p
     assert str(target) in _element(user, "project-title").text
     await user.should_not_see(marker="dirty")
     payload = json.loads(target.read_text(encoding="utf-8"))
-    assert payload["results"] == {} and payload["schema_version"] >= 1
-    assert payload["name"] == "QuickstartNet"
+    assert payload["network"]["results"] == {} and payload["schema_version"] >= 2
+    assert payload["network"]["name"] == "QuickstartNet"
 
 
 # ---------------------------------------------------------------------------

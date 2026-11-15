@@ -135,9 +135,13 @@ from .io import (
     network_from_tables,
 )
 from .io.project_file import (
+    Project,
     load_network_from_json,
+    load_project,
     save_network_to_json,
+    save_project,
 )
+from .diagram import Diagram, DiagramEdge, DiagramMarker, DiagramNode
 from .analysis import (
     Cut,
     CutAnalysis,
@@ -306,6 +310,13 @@ __all__ = [
     "MigrationReport",
     "save_network_to_json",
     "load_network_from_json",
+    "Project",
+    "save_project",
+    "load_project",
+    "Diagram",
+    "DiagramNode",
+    "DiagramEdge",
+    "DiagramMarker",
     # Cross-repo convention helper.
     "show_versions",
 ]

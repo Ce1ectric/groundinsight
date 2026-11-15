@@ -35,7 +35,7 @@ with a `DeprecationWarning` for at least two releases and six months).
 | Outage studies | `Outage`, `OutageStudyResult`, `outage_context`, `run_outage_study` | [Outage studies](outage.md) |
 | Transient studies | `TransientStudy`, `ResultTransient`, `waveforms` | [Transient simulations](transient.md) |
 | Plots | `plot_bus_voltages`, `plot_branch_currents`, `plot_bus_currents`, `plot_epr_transient`, `plot_branch_current_transient` | [Plotting](plotting.md) |
-| Importers, tables, project files | `ImportDefaults`, `from_pandapower`, `preview_pandapower_import`, `read_shortcircuit_results`, `apply_shortcircuit_characteristics`, `network_from_tables`, `save_network_to_json`, `load_network_from_json` | [I/O](io.md) |
+| Importers, tables, project files | `ImportDefaults`, `from_pandapower`, `preview_pandapower_import`, `read_shortcircuit_results`, `apply_shortcircuit_characteristics`, `network_from_tables`, `save_network_to_json`, `load_network_from_json`, `save_project`, `load_project`, `Project`, `Diagram`, `DiagramNode`, `DiagramEdge`, `DiagramMarker` | [I/O](io.md) |
 | Database | `Database`, `start_dbsession`, `close_dbsession`, `save_bustype_to_db`, `load_bustypes_from_db`, `save_branchtype_to_db`, `load_branchtypes_from_db`, `save_network_to_db`, `load_network_from_db`, `needs_migration`, `migrate_database`, `MigrationReport` | [Database](database.md) |
 | Path search | `PathfinderSettings`, `clear_pathfinder_cache`, `get_pathfinder_cache_size`, `set_pathfinder_cache_size` | [Pathfinder](pathfinder.md) |
 | Logging, versions, warning classes | `set_log_level`, `show_versions`, `NetworkFrequencyOrderWarning`, `TransientModelWarning`, `DCLimitWarning` | [below](#rendered-here) |

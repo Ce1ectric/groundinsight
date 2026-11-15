@@ -26,7 +26,8 @@ frequencies and the stored results — as JSON, and
 - **Atomic.** The file is written to a temporary file next to the target and
   then moved over it, so a failure leaves an existing project file intact.
 - **Versioned.** The file starts with `schema_version` (the version of the file
-  layout) and `groundinsight_version` (the release that wrote it).
+  layout) and `groundinsight_version` (the release that wrote it), followed
+  by three sections: `network`, `diagram` and `views`.
 
 ```python
 --8<-- "docs/snippets/persistence.py:json"
@@ -36,10 +37,35 @@ frequencies and the stored results — as JSON, and
 available for a network embedded in your own file format; the project-file
 functions add the header, the encoding rules and the atomic write.
 
+!!! warning "Changed in schema version 2"
+    Up to 2026.11.x the network's fields stood at the top level of the file,
+    next to the two header keys, and `gi.Network.model_validate_json` could
+    read a project file directly. Since schema version 2 the network is the
+    `network` section, so that a reader that knows no schema version fails
+    instead of dropping the earthing characteristics silently. Read project
+    files with `gi.load_network_from_json(path)` (or `gi.load_project`);
+    files of version 1 and 0.6.0 still load.
+
+## Diagram and views
+
+A front end saves more than the network: where each element is drawn
+(`gi.Diagram`, by element name, kept apart so that moving a bus does not
+change the network) and its evaluation tabs (`views`, JSON objects the
+library stores unchanged). `gi.save_project(path, network, diagram, views)`
+writes all three, `gi.load_project(path)` returns them as a `gi.Project`;
+`Diagram.check(network)` lists entries whose element is gone
+(`DIAGRAM_UNKNOWN_ELEMENT`) and buses or branches without a place yet
+(`DIAGRAM_ELEMENT_NOT_PLACED`).
+
+```python
+--8<-- "docs/snippets/persistence.py:project"
+```
+
 ## What is promised for old and new files
 
-- **Files of every earlier release load.** A project file without
-  `schema_version` (0.6.0 and earlier) is read unchanged. A database is
+- **Files of every earlier release load.** A project file of schema version 1
+  (2026.11.x) or without `schema_version` (0.6.0 and earlier) is read
+  unchanged, as a project without diagram and views. A database is
   migrated to the current schema when it is opened, after a copy of the
   original is kept as `<name>.db.bak`. Results stored before the earthing
   voltage and impedance were redefined at the fault bus load with those
@@ -122,8 +148,9 @@ of the [service layer](service-layer.md) also refuses files above its
 ## Output
 
 ```text title="Output of persistence.py"
-project file header: ['schema_version', 'groundinsight_version']
+project file header: ['schema_version', 'groundinsight_version', 'network', 'diagram', 'views']
 JSON round trip identical: True
+project: True [{'title': 'EPR', 'blocks': []}] []
 newer schema: ValueError: 'from_the_future.json' uses project-file schema version 99
 database holds: ['Umspannwerk Süd']
 database round trip identical: True
