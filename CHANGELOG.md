@@ -140,6 +140,23 @@ version section when a release is cut.
   samples become the table (they must form a full `rho x f` grid), the
   formula and the provenance -- groundfield version, date, resistivity
   preset, electrode, soil, a SHA-256 of the document -- are kept.
+- **Earthing characteristics computed with groundfield
+  (`groundinsight.integrations.groundfield.characterize`).** For an
+  electrode built by a function of the soil, one field solution per soil --
+  a resistivity for homogeneous soil, or layered soils with every layer
+  scaled (`scaled_soils`) -- fills the table at the soil's effective
+  resistivity: the cluster impedance, `k_touch` as the largest touch
+  voltage of groundfield's envelope (1 m, optionally inside the meshes)
+  over the electrode potential, and `k_transfer` as the largest
+  `|U_E - phi(P)| / |U_E|` over target points such as house connections.
+  groundfield's k0..k5 standard form is kept as the formula, and the
+  provenance records the groundfield version, backend, soils, preset and a
+  SHA-256 of the input. `bustype_document` / `write_bustype_json` write a
+  characteristic as a groundfield BusType document, which groundfield reads
+  and groundinsight reads back without loss (the factors travel in the
+  metadata). groundfield is imported only by `characterize` and is not a
+  dependency; its tests carry the marker `groundfield` and are skipped
+  without it.
 
 ### Changed
 

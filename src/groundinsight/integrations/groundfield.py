@@ -58,7 +58,11 @@ import json
 import logging
 import math
 import os
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+import re
+from datetime import UTC, datetime
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+
+import numpy as np
 
 from ..models.characteristic import CharacteristicProvenance, EarthingCharacteristic
 
@@ -67,8 +71,13 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "BUSTYPE_SCHEMA",
     "BUSTYPE_SCHEMA_VERSIONS",
+    "EXTENSION_KEY",
+    "bustype_document",
     "characteristic_from_bustype_spec",
+    "characterize",
     "read_bustype_json",
+    "scaled_soils",
+    "write_bustype_json",
 ]
 
 BUSTYPE_SCHEMA: str = "groundfield.bustype"
@@ -78,6 +87,12 @@ BUSTYPE_SCHEMA_VERSIONS: Tuple[int, ...] = (1,)
 """Versions of the BusType document this module reads."""
 
 _SAMPLE_KEYS = ("rho_Ohm_m", "frequency_Hz", "Z_real_Ohm", "Z_imag_Ohm")
+
+EXTENSION_KEY: str = "groundinsight_characteristic"
+"""Metadata entry of a document written by :func:`bustype_document`: the grid,
+the touch and transfer factors, the impedance source, the name and the
+provenance of the characteristic -- what version 1 of the document has no
+field for. Other readers ignore it (the metadata is free-form)."""
 
 
 def _check_header(document: Any) -> None:
@@ -330,10 +345,120 @@ def _provenance(document: Dict[str, Any]) -> CharacteristicProvenance:
     )
 
 
+def _extension(
+    document: Dict[str, Any], rhos: Tuple[float, ...], freqs: Tuple[float, ...]
+) -> Optional[Dict[str, Any]]:
+    """
+    What groundinsight wrote into the metadata of a document, checked against its grid.
+
+    Parameters
+    ----------
+    document : dict
+        The BusType document.
+    rhos, freqs : tuple of float
+        The grid of its samples.
+
+    Returns
+    -------
+    dict or None
+        ``metadata["groundinsight_characteristic"]``, or ``None`` for a
+        document of another writer.
+
+    Raises
+    ------
+    ValueError
+        If the entry is not an object or names another grid than the
+        samples.
+    """
+    metadata = document.get("metadata")
+    entry = metadata.get(EXTENSION_KEY) if isinstance(metadata, dict) else None
+    if entry is None:
+        return None
+    if not isinstance(entry, dict):
+        raise ValueError(f"metadata[{EXTENSION_KEY!r}] must be a JSON object")
+    grid = (tuple(entry.get("rho_Ohm_m") or ()), tuple(entry.get("frequency_Hz") or ()))
+    if grid != (rhos, freqs):
+        raise ValueError(
+            f"metadata[{EXTENSION_KEY!r}] holds touch factors on another grid than the "
+            "samples; the document has been edited inconsistently"
+        )
+    return entry
+
+
+def _formula_grid(
+    impedance_source: str,
+    rho_Ohm_m: Optional[Sequence[float]],
+    frequency_Hz: Optional[Sequence[float]],
+) -> Dict[str, Any]:
+    """
+    The grid of a document without samples, which only its formula can serve.
+
+    Parameters
+    ----------
+    impedance_source : str
+        Where the impedance is to come from.
+    rho_Ohm_m, frequency_Hz : sequence of float, optional
+        The grid the caller gives.
+
+    Returns
+    -------
+    dict
+        ``rho_Ohm_m`` and ``frequency_Hz``.
+
+    Raises
+    ------
+    ValueError
+        If the impedance is to come from the table, or the grid is missing.
+    """
+    if impedance_source == "table" or rho_Ohm_m is None or frequency_Hz is None:
+        raise ValueError(
+            "the groundfield BusType document has no samples, so there is no table to "
+            "import; import its formula with impedance_source='formula' and give the "
+            "grid (rho_Ohm_m, frequency_Hz) the characteristic is defined on"
+        )
+    return {"rho_Ohm_m": tuple(rho_Ohm_m), "frequency_Hz": tuple(frequency_Hz)}
+
+
+def _table_fields(
+    document: Dict[str, Any],
+    points: List[Tuple[float, float, complex]],
+    impedance_source: Optional[str],
+) -> Dict[str, Any]:
+    """
+    The fields of a characteristic that come from the samples of a document.
+
+    Parameters
+    ----------
+    document : dict
+        The BusType document.
+    points : list of tuple
+        Its samples, ``(rho, f, Z)``.
+    impedance_source : str, optional
+        The caller's choice, which wins over a recorded one.
+
+    Returns
+    -------
+    dict
+        The grid and the impedance table; for a document of
+        :func:`bustype_document` also the factors, name, provenance and
+        impedance source it records.
+    """
+    rhos, freqs, table = _grid(points)
+    fields: Dict[str, Any] = {"rho_Ohm_m": rhos, "frequency_Hz": freqs, "impedance_Ohm": table}
+    entry = _extension(document, rhos, freqs)
+    if entry is not None:
+        fields.update(
+            k_touch=entry.get("k_touch"), k_transfer=entry.get("k_transfer"),
+            name=entry.get("name"), provenance=entry.get("provenance"),
+            impedance_source=impedance_source or entry.get("impedance_source", "table"),
+        )
+    return fields
+
+
 def characteristic_from_bustype_spec(
     document: Dict[str, Any],
     *,
-    impedance_source: str = "table",
+    impedance_source: Optional[str] = None,
     rho_Ohm_m: Optional[Sequence[float]] = None,
     frequency_Hz: Optional[Sequence[float]] = None,
     name: Optional[str] = None,
@@ -346,28 +471,32 @@ def characteristic_from_bustype_spec(
     document : dict
         The parsed JSON document (schema ``"groundfield.bustype"``, version
         1).
-    impedance_source : {"table", "formula"}
-        Where the characteristic takes the impedance from: the samples
-        (default) or the document's formula.
+    impedance_source : {"table", "formula"}, optional
+        Where the characteristic takes the impedance from: the samples or
+        the document's formula. Default: what a document written by
+        :func:`bustype_document` records, else ``"table"``.
     rho_Ohm_m, frequency_Hz : sequence of float, optional
         The grid of a document without samples; only with
         ``impedance_source="formula"``. Ignored when there are samples.
     name : str, optional
-        Name of the characteristic; default the document's ``name``.
+        Name of the characteristic; default the document's.
 
     Returns
     -------
     EarthingCharacteristic
-        The table of the samples, the formula, and the provenance (see the
-        module docstring); no touch or transfer factors.
+        The table of the samples, the formula and the provenance (see the
+        module docstring). A document written by :func:`bustype_document`
+        gives back the characteristic it was written from, touch factors
+        and provenance included.
 
     Raises
     ------
     ValueError
         If the document is not a version-1 BusType document, its samples are
         not finite or do not form a full grid, a sampled impedance is not
-        passive, the formula does not pass the formula guard, or there are no
-        samples and ``impedance_source`` is ``"table"``.
+        passive, the formula does not pass the formula guard, groundinsight's
+        metadata entry names another grid, or there are no samples and the
+        impedance is to come from the table.
 
     Examples
     --------
@@ -389,21 +518,16 @@ def characteristic_from_bustype_spec(
         raise ValueError("impedance_formula of the groundfield BusType document must be a string")
     fields: Dict[str, Any] = {
         "impedance_formula": formula,
-        "impedance_source": impedance_source,
-        "name": name if name is not None else str(document.get("name") or "") or None,
+        "impedance_source": impedance_source or "table",
+        "name": str(document.get("name") or "") or None,
         "provenance": _provenance(document),
     }
     if points:
-        rhos, freqs, table = _grid(points)
-        fields.update(rho_Ohm_m=rhos, frequency_Hz=freqs, impedance_Ohm=table)
-    elif impedance_source == "table" or rho_Ohm_m is None or frequency_Hz is None:
-        raise ValueError(
-            "the groundfield BusType document has no samples, so there is no table to "
-            "import; import its formula with impedance_source='formula' and give the "
-            "grid (rho_Ohm_m, frequency_Hz) the characteristic is defined on"
-        )
+        fields.update(_table_fields(document, points, impedance_source))
     else:
-        fields.update(rho_Ohm_m=tuple(rho_Ohm_m), frequency_Hz=tuple(frequency_Hz))
+        fields.update(_formula_grid(fields["impedance_source"], rho_Ohm_m, frequency_Hz))
+    if name is not None:
+        fields["name"] = name
     characteristic = EarthingCharacteristic(**fields)
     logger.debug(
         "read groundfield BusType document '%s': %d x %d grid",
@@ -451,3 +575,728 @@ def read_bustype_json(
     except json.JSONDecodeError as exc:
         raise ValueError(f"'{os.fspath(path)}' is not valid JSON: {exc}") from exc
     return characteristic_from_bustype_spec(document, **options)
+
+
+# ---------------------------------------------------------------------------
+# writing documents
+# ---------------------------------------------------------------------------
+
+
+def bustype_document(
+    characteristic: EarthingCharacteristic,
+    *,
+    system_type: str,
+    voltage_level: float,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    The groundfield BusType document of a characteristic.
+
+    groundfield reads it with ``load_bustype_json`` as a bus type of its
+    own; :func:`characteristic_from_bustype_spec` reads it back as the same
+    characteristic.
+
+    Parameters
+    ----------
+    characteristic : EarthingCharacteristic
+        The characteristic; it needs an ``impedance_formula``, which the
+        document requires.
+    system_type : str
+        ``system_type`` of the document's bus type.
+    voltage_level : float
+        ``voltage_level`` of the document's bus type, in kV.
+    name : str, optional
+        Name of the bus type; default the characteristic's name, else
+        ``"characteristic"``.
+    description : str, optional
+        Description of the bus type.
+
+    Returns
+    -------
+    dict
+        A strict-JSON document of schema ``"groundfield.bustype"``, version
+        1: the table as samples (rho-major), the formula, and the metadata
+        groundfield writes (``source``, ``created_at_utc``, ``rho_preset``,
+        ``electrode_name``, ``soil_summary``, ``rho_definition``), plus
+        :data:`EXTENSION_KEY` with what version 1 has no field for.
+
+    Raises
+    ------
+    ValueError
+        If the characteristic has no formula or no table.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> from groundinsight.integrations.groundfield import bustype_document
+    >>> table = gi.EarthingCharacteristic(rho_Ohm_m=(100.0,), frequency_Hz=(50.0,),
+    ...     impedance_Ohm=[[1.0]], impedance_formula="rho / 100")
+    >>> bustype_document(table, system_type="MV/LV", voltage_level=20.0)["schema"]
+    'groundfield.bustype'
+    """
+    if characteristic.impedance_formula is None:
+        raise ValueError(
+            "a groundfield BusType document needs an impedance formula; give the "
+            "characteristic one (characterize with fit=True fits it)"
+        )
+    if characteristic.impedance_Ohm is None:
+        raise ValueError("a groundfield BusType document needs the table of the impedance")
+    return {
+        "schema": BUSTYPE_SCHEMA,
+        "schema_version": BUSTYPE_SCHEMA_VERSIONS[-1],
+        "name": name or characteristic.name or "characteristic",
+        "description": description,
+        "system_type": str(system_type),
+        "voltage_level": float(voltage_level),
+        "impedance_formula": characteristic.impedance_formula,
+        "samples": _document_samples(characteristic),
+        "metadata": json.loads(json.dumps(_document_metadata(characteristic), allow_nan=False)),
+    }
+
+
+def _document_samples(characteristic: EarthingCharacteristic) -> Dict[str, List[float]]:
+    """
+    The table of a characteristic as the four sample lists of a document.
+
+    Parameters
+    ----------
+    characteristic : EarthingCharacteristic
+        The characteristic, with a table.
+
+    Returns
+    -------
+    dict of str to list of float
+        ``frequency_Hz``, ``rho_Ohm_m``, ``Z_real_Ohm``, ``Z_imag_Ohm``,
+        rho-major.
+    """
+    points = [(r, f, characteristic.impedance_Ohm[i][j])
+              for i, r in enumerate(characteristic.rho_Ohm_m)
+              for j, f in enumerate(characteristic.frequency_Hz)]
+    return {
+        "frequency_Hz": [f for _, f, _ in points],
+        "rho_Ohm_m": [r for r, _, _ in points],
+        "Z_real_Ohm": [z.real for _, _, z in points],
+        "Z_imag_Ohm": [z.imag for _, _, z in points],
+    }
+
+
+def _document_metadata(characteristic: EarthingCharacteristic) -> Dict[str, Any]:
+    """
+    The metadata block of :func:`bustype_document`.
+
+    Parameters
+    ----------
+    characteristic : EarthingCharacteristic
+        The characteristic.
+
+    Returns
+    -------
+    dict
+        groundfield's metadata entries, filled from the provenance, and
+        :data:`EXTENSION_KEY`.
+    """
+    stated = characteristic.provenance
+    provenance = stated or CharacteristicProvenance()
+    return {
+        "fit_method": None,
+        "quantity": "cluster",
+        "rho_definition": "effective_resistivity",
+        "rho_preset": provenance.rho_preset,
+        "electrode_name": provenance.geometry_id,
+        "soil_summary": json.dumps(provenance.soil, sort_keys=True) if provenance.soil else None,
+        "source": "groundinsight",
+        "created_at_utc": provenance.created,
+        EXTENSION_KEY: {
+            "rho_Ohm_m": list(characteristic.rho_Ohm_m),
+            "frequency_Hz": list(characteristic.frequency_Hz),
+            "k_touch": characteristic.k_touch,
+            "k_transfer": characteristic.k_transfer,
+            "impedance_source": characteristic.impedance_source,
+            "name": characteristic.name,
+            "provenance": stated.model_dump(mode="json") if stated is not None else None,
+        },
+    }
+
+
+def write_bustype_json(
+    path: Union[str, "os.PathLike[str]"], characteristic: EarthingCharacteristic, **options: Any
+) -> None:
+    """
+    Write a characteristic as a groundfield BusType JSON file (UTF-8).
+
+    Parameters
+    ----------
+    path : str or os.PathLike
+        The file; replaced if it exists.
+    characteristic : EarthingCharacteristic
+        The characteristic.
+    **options
+        Keyword arguments of :func:`bustype_document` (``system_type`` and
+        ``voltage_level`` are required).
+
+    Raises
+    ------
+    ValueError
+        As for :func:`bustype_document`.
+    OSError
+        If the file cannot be written.
+
+    Examples
+    --------
+    >>> from groundinsight.integrations.groundfield import write_bustype_json
+    >>> write_bustype_json("station.json", characteristic,
+    ...                    system_type="MV/LV", voltage_level=20.0)  # doctest: +SKIP
+    """
+    document = bustype_document(characteristic, **options)
+    text = json.dumps(document, indent=2, ensure_ascii=False, allow_nan=False)
+    with open(os.fspath(path), "w", encoding="utf-8") as handle:
+        handle.write(text + "\n")
+
+
+# ---------------------------------------------------------------------------
+# characterising an electrode with groundfield
+# ---------------------------------------------------------------------------
+
+_RHO_KEY = re.compile(r"^rho(_\d+)?$")
+
+
+def _require_groundfield() -> Any:
+    """
+    Import groundfield, or say how to get it.
+
+    Returns
+    -------
+    module
+        ``groundfield``.
+
+    Raises
+    ------
+    ImportError
+        If groundfield is not installed.
+    """
+    try:
+        import groundfield
+    except ImportError as exc:
+        raise ImportError(
+            "characterize needs groundfield, the field solver: install it with "
+            "'pip install groundfield' (until its release 2026.11.0 is on PyPI: "
+            "'pip install -e <path to the groundfield repository>'). Reading and "
+            "writing BusType documents needs no groundfield."
+        ) from exc
+    return groundfield
+
+
+def _scaled(value: Any, factor: float) -> Any:
+    """
+    A copy of a dumped soil model with every resistivity multiplied by ``factor``.
+
+    Parameters
+    ----------
+    value : Any
+        The ``model_dump()`` of a soil, or a part of it.
+    factor : float
+        The factor.
+
+    Returns
+    -------
+    Any
+        The scaled copy; keys ``rho``, ``rho_1``, ``rho_2``, ... are scaled,
+        thicknesses and permittivities are kept.
+    """
+    if isinstance(value, dict):
+        return {key: item * factor if _RHO_KEY.match(key) and isinstance(item, (int, float))
+                else _scaled(item, factor) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_scaled(item, factor) for item in value]
+    return value
+
+
+def scaled_soils(soil: Any, factors: Sequence[float]) -> List[Any]:
+    """
+    Copies of a groundfield soil with every layer's resistivity scaled.
+
+    Scaling every layer by the same factor keeps the shape of the field and
+    scales the effective resistivity by that factor, so a characteristic
+    over scaled soils is the electrode in "the same soil, wetter or drier".
+
+    Parameters
+    ----------
+    soil : groundfield soil model
+        ``HomogeneousSoil``, ``TwoLayerSoil`` or ``MultiLayerSoil``.
+    factors : sequence of float
+        Positive, finite factors.
+
+    Returns
+    -------
+    list
+        One soil of the same class per factor; thicknesses unchanged.
+
+    Raises
+    ------
+    ValueError
+        If a factor is not finite and positive.
+
+    Examples
+    --------
+    >>> import groundfield as gf  # doctest: +SKIP
+    >>> [s.rho_2 for s in scaled_soils(gf.TwoLayerSoil(rho_1=100, rho_2=500, h_1=2),
+    ...                                [0.5, 2.0])]  # doctest: +SKIP
+    [250.0, 1000.0]
+    """
+    for factor in factors:
+        if not (math.isfinite(factor) and factor > 0.0):
+            raise ValueError(f"a soil scale factor must be finite and positive, got {factor!r}")
+    data = soil.model_dump()
+    return [type(soil).model_validate(_scaled(data, float(factor))) for factor in factors]
+
+
+def _engine_for(gf: Any, engine: Any, frequencies: Optional[Sequence[float]],
+                segment_length: float) -> Any:
+    """
+    The groundfield engine of a characterisation, with positive frequencies.
+
+    Parameters
+    ----------
+    gf : module
+        groundfield.
+    engine : groundfield.Engine, optional
+        The caller's engine; its frequencies are the table's.
+    frequencies : sequence of float, optional
+        The frequencies of a default engine (``create_engine`` with
+        ``segment_length``).
+    segment_length : float
+        Segment length of a default engine, in m.
+
+    Returns
+    -------
+    groundfield.Engine
+        The engine.
+
+    Raises
+    ------
+    ValueError
+        Without engine and frequencies, or for a frequency that is not
+        positive (the table's axis is logarithmic).
+    """
+    if engine is None:
+        if frequencies is None:
+            raise ValueError("characterize needs frequencies, or an engine that has them")
+        engine = gf.create_engine(frequencies=list(frequencies), segment_length=segment_length)
+    if not engine.frequencies or not all(f > 0.0 for f in engine.frequencies):
+        raise ValueError(
+            f"the frequencies of a characteristic must be positive, got {list(engine.frequencies)}"
+        )
+    return engine
+
+
+def _solve_all(gf: Any, build_world: Callable[[Any], Any], soils: List[Any], engine: Any,
+               electrode: str, rho_preset: Optional[str]) -> List[Tuple[float, Any, Any]]:
+    """
+    Build and solve the world of every soil, sorted by effective resistivity.
+
+    Parameters
+    ----------
+    gf : module
+        groundfield.
+    build_world : callable
+        ``build_world(soil) -> World``.
+    soils : list
+        groundfield soil models.
+    engine : groundfield.Engine
+        The engine.
+    electrode : str
+        The electrode characterised; a world without a source gets 1 A into
+        it.
+    rho_preset : str, optional
+        The preset of ``effective_resistivity``.
+
+    Returns
+    -------
+    list of tuple
+        ``(rho_eff, world, result)``, by increasing ``rho_eff``.
+
+    Raises
+    ------
+    ValueError
+        If a world has no electrode ``electrode`` or two soils have the same
+        effective resistivity.
+    """
+    runs = []
+    for soil in soils:
+        world = build_world(soil)
+        names = [e.name for e in world.electrodes]
+        if electrode not in names:
+            raise ValueError(f"the world has no electrode '{electrode}' (electrodes: {names})")
+        if not world.sources:
+            gf.create_source(world, attached_to=electrode, magnitude=1.0)
+        options = {"preset": rho_preset} if rho_preset is not None else {}
+        rho = float(gf.effective_resistivity(soil, **options))
+        runs.append((rho, world, engine.solve(world)))
+    runs.sort(key=lambda run: run[0])
+    for (a, _, _), (b, _, _) in zip(runs[:-1], runs[1:], strict=True):
+        if a == b:
+            raise ValueError(f"the effective resistivity {a:g} Ohm*m occurs twice")
+    return runs
+
+
+def _factors(gf: Any, world: Any, result: Any, electrode: str, frequency_index: int,
+             touch: Dict[str, Any], targets: Optional[Any]) -> Tuple[Optional[float], Optional[float]]:
+    """
+    ``k_touch`` and ``k_transfer`` of one solved world at one frequency.
+
+    Parameters
+    ----------
+    gf : module
+        groundfield.
+    world, result : groundfield.World, groundfield.FieldResult
+        The solved world.
+    electrode : str
+        The electrode.
+    frequency_index : int
+        The frequency.
+    touch : dict
+        Keyword arguments of ``touch_voltage_envelope`` (``distance``,
+        ``n_angles``, ``interior``), or empty for no ``k_touch``.
+    targets : numpy.ndarray, optional
+        Target points, shape ``(n, 3)``.
+
+    Returns
+    -------
+    tuple of float or None
+        The two factors; ``None`` where not asked for.
+
+    Raises
+    ------
+    ValueError
+        If the electrode potential is zero (the factors are undefined).
+    """
+    u_e = complex(result.electrode_potentials[electrode][frequency_index])
+    if u_e == 0:
+        raise ValueError(f"the potential of '{electrode}' is zero; the factors are undefined")
+    k_touch = k_transfer = None
+    if touch:
+        _, voltages = gf.touch_voltage_envelope(result, world, electrode=electrode,
+                                                frequency_index=frequency_index, **touch)
+        k_touch = float(max(abs(v) for v in voltages) / abs(u_e))
+    if targets is not None:
+        phi = result.potential(targets, frequency_index=frequency_index)
+        k_transfer = float(max(abs(u_e - p) for p in phi) / abs(u_e))
+    return k_touch, k_transfer
+
+
+def _evaluation_options(
+    touch_distance: Optional[float],
+    n_angles: int,
+    touch_interior: Union[bool, str],
+    transfer_targets: Optional[Sequence[Sequence[float]]],
+) -> Tuple[Dict[str, Any], Optional[Any]]:
+    """
+    The envelope settings and target points of :func:`characterize`, checked.
+
+    Parameters
+    ----------
+    touch_distance : float or None
+        Reach of the touch voltage; ``None`` for no ``k_touch``.
+    n_angles : int
+        Directions of the envelope.
+    touch_interior : bool or str
+        ``interior`` of the envelope.
+    transfer_targets : sequence of (x, y, z), optional
+        Target points.
+
+    Returns
+    -------
+    touch : dict
+        Keyword arguments of ``touch_voltage_envelope``; empty for no
+        ``k_touch``.
+    targets : numpy.ndarray or None
+        The points, shape ``(n, 3)``.
+
+    Raises
+    ------
+    ValueError
+        If ``touch_distance`` is not positive.
+    """
+    touch: Dict[str, Any] = {}
+    if touch_distance is not None:
+        if not (math.isfinite(touch_distance) and touch_distance > 0):
+            raise ValueError(f"touch_distance must be positive or None, got {touch_distance!r}")
+        touch = {"distance": touch_distance, "n_angles": n_angles, "interior": touch_interior}
+    if transfer_targets is None:
+        return touch, None
+    return touch, np.asarray(transfer_targets, dtype=float).reshape(-1, 3)
+
+
+def _tables(gf: Any, runs: List[Tuple[float, Any, Any]], electrode: str,
+            touch: Dict[str, Any], targets: Optional[Any]) -> Tuple[Any, Any, Any]:
+    """
+    The impedance and factor tables of the solved worlds.
+
+    Parameters
+    ----------
+    gf : module
+        groundfield.
+    runs : list of tuple
+        The output of :func:`_solve_all`.
+    electrode : str
+        The electrode.
+    touch : dict
+        Envelope settings; empty for no ``k_touch``.
+    targets : numpy.ndarray, optional
+        Target points; ``None`` for no ``k_transfer``.
+
+    Returns
+    -------
+    tuple
+        ``(impedance, k_touch, k_transfer)``, rows by resistivity; a factor
+        table is ``None`` when it was not asked for.
+    """
+    impedance, k_touch, k_transfer = [], [], []
+    for _, world, result in runs:
+        impedance.append([complex(z) for z in result.cluster_impedance(electrode)])
+        factors = [_factors(gf, world, result, electrode, j, touch, targets)
+                   for j in range(len(result.frequencies))]
+        k_touch.append([k for k, _ in factors])
+        k_transfer.append([k for _, k in factors])
+    return impedance, (k_touch if touch else None), (k_transfer if targets is not None else None)
+
+
+def _note(electrode: str, touch: Dict[str, Any], targets: Optional[Any]) -> str:
+    """
+    The provenance note of :func:`characterize`: how the table was evaluated.
+
+    Parameters
+    ----------
+    electrode : str
+        The electrode.
+    touch : dict
+        Envelope settings; empty for no ``k_touch``.
+    targets : numpy.ndarray, optional
+        Target points.
+
+    Returns
+    -------
+    str
+        One line.
+    """
+    parts = [f"cluster impedance of '{electrode}'"]
+    if touch:
+        parts.append(f"k_touch: envelope at {touch['distance']} m, {touch['n_angles']} "
+                     f"directions, interior={touch['interior']!r}")
+    if targets is not None:
+        parts.append(f"k_transfer: {len(targets)} target point(s)")
+    return "; ".join(parts)
+
+
+def _fitted_formula(gf: Any, runs: List[Tuple[float, Any, Any]], electrode: str,
+                    rho_preset: Optional[str]) -> Optional[str]:
+    """
+    The k0..k5 standard form fitted by groundfield, as formula text.
+
+    Parameters
+    ----------
+    gf : module
+        groundfield.
+    runs : list of tuple
+        The output of :func:`_solve_all`.
+    electrode : str
+        The electrode whose cluster impedance is fitted.
+    rho_preset : str, optional
+        Recorded with the fit.
+
+    Returns
+    -------
+    str or None
+        The formula as groundfield's exporter prints it; ``None`` for fewer
+        than two resistivities (the standard form needs a spread in rho).
+    """
+    if len(runs) < 2:
+        return None
+    fit = gf.rho_f_standard_from_results([result for _, _, result in runs],
+                                         [rho for rho, _, _ in runs], electrode,
+                                         quantity="cluster")
+    document = gf.to_bustype_dict(fit, name=electrode, system_type="characteristic",
+                                  voltage_level=0.0, rho_preset=rho_preset)
+    return document["impedance_formula"]
+
+
+def _jsonable(value: Any) -> Any:
+    """
+    A JSON form of what ``json.dumps`` cannot store (``json.dumps`` default).
+
+    Parameters
+    ----------
+    value : Any
+        A NumPy array or scalar, or another object.
+
+    Returns
+    -------
+    Any
+        ``value.tolist()`` where it has one, else ``str(value)``.
+    """
+    return value.tolist() if hasattr(value, "tolist") else str(value)
+
+
+def _input_hash(runs: List[Tuple[float, Any, Any]], engine: Any, settings: Dict[str, Any]) -> str:
+    """
+    SHA-256 of what a characterisation computed from.
+
+    Parameters
+    ----------
+    runs : list of tuple
+        The output of :func:`_solve_all` (the worlds enter).
+    engine : groundfield.Engine
+        The engine (its settings enter).
+    settings : dict
+        The other inputs (electrode, preset, touch and transfer settings).
+
+    Returns
+    -------
+    str
+        ``"sha256:<hex>"`` of the canonical JSON of all of it.
+    """
+    payload = {
+        "worlds": [world.model_dump(mode="json") for _, world, _ in runs],
+        "engine": engine.model_dump(mode="json"),
+        "settings": settings,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=_jsonable)
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def characterize(
+    build_world: Callable[[Any], Any],
+    soils: Sequence[Any],
+    *,
+    electrode: str,
+    frequencies: Optional[Sequence[float]] = None,
+    engine: Any = None,
+    segment_length: float = 0.5,
+    rho_preset: Optional[str] = None,
+    touch_distance: Optional[float] = 1.0,
+    touch_interior: Union[bool, str] = False,
+    n_angles: int = 24,
+    transfer_targets: Optional[Sequence[Sequence[float]]] = None,
+    fit: bool = True,
+    impedance_source: str = "table",
+    name: Optional[str] = None,
+    geometry_id: Optional[str] = None,
+) -> EarthingCharacteristic:
+    r"""
+    Compute the earthing characteristic of an electrode with groundfield.
+
+    For every soil the world is built and solved, and the table is filled
+    at the soil's effective resistivity (see the module docstring):
+
+    * ``impedance_Ohm`` -- the cluster impedance of ``electrode``,
+      $Z = \varphi_c / \sum I$ (``FieldResult.cluster_impedance``);
+    * ``k_touch`` -- the largest prospective touch voltage around the
+      electrode over its potential,
+      $\max |U_T| / |U_E|$ with $U_T$ from ``touch_voltage_envelope``
+      (feet ``touch_distance`` from the wires, ``n_angles`` directions,
+      inside the loops with ``touch_interior``);
+    * ``k_transfer`` -- the largest difference between the electrode
+      potential and the earth-surface potential at the target points,
+      $\max_P |U_E - \varphi(P)| / |U_E|$ (``FieldResult.potential``).
+
+    Parameters
+    ----------
+    build_world : callable
+        ``build_world(soil) -> groundfield.World`` with the electrode. A
+        world without a source gets 1 A into ``electrode`` (the field is
+        linear, so the current does not matter).
+    soils : sequence of float or groundfield soil models
+        One entry per row of the table: a number is homogeneous soil of that
+        resistivity in Ohm*m; for layered soil see :func:`scaled_soils`.
+    electrode : str
+        The electrode characterised.
+    frequencies : sequence of float, optional
+        Positive frequencies in Hz, for an engine created here
+        (``groundfield.create_engine`` with ``segment_length``).
+    engine : groundfield.Engine, optional
+        An engine of the caller instead; its frequencies are the table's.
+    segment_length : float
+        Segment length of the engine created here, in m.
+    rho_preset : str, optional
+        The preset of ``groundfield.effective_resistivity`` that turns a
+        layered soil into the ``rho`` of the table; recorded in the
+        provenance. Default groundfield's default preset.
+    touch_distance : float or None
+        Reach of the touch voltage, 1 m by EN 50522; ``None`` computes no
+        ``k_touch``.
+    touch_interior : bool or "meshes"
+        ``interior`` of ``touch_voltage_envelope``: also inside the meshes of
+        an open-air grid.
+    n_angles : int
+        Directions of the envelope.
+    transfer_targets : sequence of (x, y, z), optional
+        Target points of the transferred potential in m (house
+        connections); without them no ``k_transfer``.
+    fit : bool
+        Also fit groundfield's k0..k5 standard form
+        (``rho_f_standard_from_results``) and keep it as
+        ``impedance_formula``; needs at least two soils.
+    impedance_source : {"table", "formula"}
+        Where a bus takes the impedance from.
+    name : str, optional
+        Name of the characteristic.
+    geometry_id : str, optional
+        An identifier of the geometry for the provenance; default
+        ``electrode``.
+
+    Returns
+    -------
+    EarthingCharacteristic
+        The table, the factors, the formula and the provenance (groundfield
+        version, backend, soils, preset, date, SHA-256 of the input).
+
+    Raises
+    ------
+    ImportError
+        If groundfield is not installed.
+    ValueError
+        For no soils, two soils of the same effective resistivity, a
+        frequency that is not positive, an electrode the world does not
+        have, or a ``touch_distance`` that is not positive.
+
+    Examples
+    --------
+    >>> import groundfield as gf  # doctest: +SKIP
+    >>> def station(soil):
+    ...     world = gf.create_world(soil=soil)
+    ...     gf.create_electrode(world, "ring", name="ring", center=(0, 0, 0.8), radius=3.0)
+    ...     return world  # doctest: +SKIP
+    >>> characteristic = characterize(station, [50.0, 100.0, 400.0], electrode="ring",
+    ...                               frequencies=[50.0, 250.0])  # doctest: +SKIP
+    """
+    gf = _require_groundfield()
+    if not soils:
+        raise ValueError("characterize needs at least one soil")
+    touch, targets = _evaluation_options(touch_distance, n_angles, touch_interior, transfer_targets)
+    engine = _engine_for(gf, engine, frequencies, segment_length)
+    models = [gf.HomogeneousSoil(rho=float(s)) if isinstance(s, (int, float)) else s for s in soils]
+    runs = _solve_all(gf, build_world, models, engine, electrode, rho_preset)
+    impedance, k_touch, k_transfer = _tables(gf, runs, electrode, touch, targets)
+    settings = {"electrode": electrode, "rho_preset": rho_preset, "touch": touch,
+                "targets": targets, "fit": fit}
+    provenance = CharacteristicProvenance(
+        source="groundfield",
+        groundfield_version=str(getattr(gf, "__version__", "unknown")),
+        solver=runs[0][2].backend,
+        soil={"soils": [model.model_dump(mode="json") for model in models],
+              "rho_definition": "effective_resistivity"},
+        geometry_id=geometry_id or electrode,
+        rho_preset=rho_preset,
+        created=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        input_hash=_input_hash(runs, engine, settings),
+        note=_note(electrode, touch, targets),
+    )
+    logger.debug("characterised '%s' over %d soils", electrode, len(runs))
+    return EarthingCharacteristic(
+        rho_Ohm_m=tuple(rho for rho, _, _ in runs),
+        frequency_Hz=tuple(float(f) for f in engine.frequencies),
+        impedance_Ohm=impedance, k_touch=k_touch, k_transfer=k_transfer,
+        impedance_formula=_fitted_formula(gf, runs, electrode, rho_preset) if fit else None,
+        impedance_source=impedance_source, name=name, provenance=provenance,
+    )

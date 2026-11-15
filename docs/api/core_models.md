@@ -421,7 +421,18 @@ A characteristic that groundfield computed arrives as its BusType document
 (the JSON of groundfield's `save_bustype_json`).
 `groundinsight.integrations.groundfield.read_bustype_json(path)` reads it
 without groundfield installed: the samples become the table, the formula and
-the provenance are kept.
+the provenance are kept; `write_bustype_json` writes a characteristic as such
+a document, which groundfield reads as a bus type of its own and
+groundinsight reads back unchanged.
+
+With groundfield installed, `characterize(build_world, soils, electrode=...,
+frequencies=...)` computes the characteristic itself: one field solution per
+soil (a resistivity for homogeneous soil, or layered soils scaled with
+`scaled_soils`), the cluster impedance as the table at the soil's effective
+resistivity, `k_touch` as the largest touch voltage 1 m from the electrode
+over its potential, `k_transfer` from the earth-surface potential at given
+target points, and groundfield's k0..k5 fit as the formula. groundfield is
+not a dependency of groundinsight; install it next to it.
 
 ::: groundinsight.integrations.groundfield
 
