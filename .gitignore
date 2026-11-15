@@ -205,3 +205,6 @@ release-plan-*.md
 # result is gui/groundinsight_gui/static/vueflow/)
 /gui/scripts/vendor/node_modules/
 /gui/scripts/vendor/dist/
+
+# Screenshots of the GUI browser tests (the references under reference/ are tracked)
+/gui/tests/screens/*.png

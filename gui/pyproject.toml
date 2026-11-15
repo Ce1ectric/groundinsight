@@ -36,9 +36,11 @@ classifiers = [
 [project.optional-dependencies]
 # ``--native`` opens a desktop window through pywebview instead of a browser.
 native = ["nicegui[native]>=4.0,<4.1"]
-# What the CI's GUI job installs to run gui/tests (the same range as the
-# library's dev group).
-test = ["pytest>=8.3.2,<10.0.0"]
+# What the CI's GUI job installs to run gui/tests (pytest in the same range as
+# the library's dev group). Playwright drives the canvas in Chromium
+# (tests/test_browser.py); its browser comes with
+# ``python -m playwright install chromium``, without it those tests skip.
+test = ["pytest>=8.3.2,<10.0.0", "playwright>=1.55,<2"]
 
 [project.scripts]
 groundinsight-gui = "groundinsight_gui.__main__:main"
@@ -55,6 +57,9 @@ testpaths = ["tests"]
 # The NiceGUI ``user`` fixture simulates a browser without one; its async
 # tests run on anyio's pytest plugin, which NiceGUI's dependencies install.
 addopts = "-ra -p nicegui.testing.user_plugin"
+markers = [
+    "browser: drives the app in Chromium with Playwright (skipped without Playwright or Chromium)",
+]
 # No main file: each test registers the pages it needs through build_app().
 main_file = ""
 

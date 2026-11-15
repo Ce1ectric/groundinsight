@@ -162,6 +162,18 @@ version section when a release is cut.
   reverted and nothing has changed. Front ends use it for gestures that are
   more than one edit (a bus with its infeed, a bus deleted with its branches,
   an element dialog).
+- **GUI: the network plan.** A drawing canvas (Vue Flow, served from the
+  package) becomes the first tab of `groundinsight-gui`: a palette (select,
+  bus, source bus, branch, fault), symbols on a raster, minimap and zoom, an
+  element dialog on double-click with tabs for the general fields, the
+  source, the fault and the earthing characteristic (import of a groundfield
+  BusType JSON) or, for a branch, the type parameters and the switch state,
+  a properties panel, and a selection shared with the tables. The toolbar
+  gains *Open*, *Colouring* (voltage level, type, earthing group, infeed and
+  fault, EPR, touch voltage, branch current, origin of the earthing
+  impedance, diagnostics, with a legend) and *Auto layout* (groundinsight's
+  layout, or elkjs in the browser). Every gesture is a command of the service
+  layer; the browser decides nothing about the network.
 
 ### Changed
 

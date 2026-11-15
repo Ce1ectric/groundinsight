@@ -1,8 +1,8 @@
 # groundinsight-gui
 
 Desktop and browser front end for [groundinsight](https://github.com/Ce1ectric/groundinsight),
-built with [NiceGUI](https://nicegui.io). This is phase 0: a working skeleton
-on top of the library's service layer `groundinsight.api`.
+built with [NiceGUI](https://nicegui.io), on top of the library's service
+layer `groundinsight.api`.
 
 ## Install and start
 
@@ -21,7 +21,18 @@ python -m groundinsight_gui --example mv_ring --lang en
 ## What it does
 
 * start page: a new project from a template, or open a project file
-  (the library's JSON format, `groundinsight.save_network_to_json`);
+  (the library's project file, `groundinsight.save_project`; `~` and
+  environment variables in the path are expanded);
+* network plan: draw the network on a canvas -- buses, buses with an infeed,
+  branches dragged from bus to bus, faults -- move symbols on a raster,
+  double-click for the element dialog (general, source, fault, earthing
+  characteristic with the import of a groundfield BusType JSON; branch:
+  general, type parameters, switch), a properties panel, colouring by voltage
+  level, type, earthing group, infeed and fault, EPR, touch voltage, branch
+  current, origin of the earthing impedance or diagnostics, and automatic
+  layout (groundinsight's, or elkjs in the browser). Every gesture is one
+  command of the service layer and one undo step; plan and tables share the
+  selection;
 * network tables: buses, branches, sources, faults and the type catalogue,
   editable cell by cell; every edit is a command of the service layer and can
   be undone; a rejected edit changes nothing and says why;
@@ -44,8 +55,14 @@ From the repository root:
 
 ```bash
 pip install -e . -e "./gui[test]"
+python -m playwright install chromium   # once, for the browser tests
 cd gui && python -m pytest
 ```
+
+`tests/test_browser.py` starts the app and draws with the mouse in Chromium;
+its screenshots land in `tests/screens/` and are compared with the references
+in `tests/screens/reference/<platform>/` where they exist
+(`GI_UPDATE_SCREENS=1` rewrites them after an intended change).
 
 The GUI is released together with the library and has the same version;
 `scripts/release.py` rewrites both, and the release workflow refuses a tag on

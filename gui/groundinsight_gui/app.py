@@ -1,9 +1,10 @@
 # groundinsight_gui/app.py
 """
-The NiceGUI app of groundinsight-gui (phase 0 skeleton).
+The NiceGUI app of groundinsight-gui.
 
-Start page, network tables, fault jobs, key figures, diagnostics and the
-pre-flight check.
+Start page, the network plan (a drawing canvas, :mod:`groundinsight_gui.plan`),
+the network tables, fault jobs, key figures, diagnostics and the pre-flight
+check.
 
 Everything that touches the network goes through ``groundinsight.api``:
 
@@ -25,9 +26,12 @@ The stale marker is the library's verdict (``FaultResultDTO.stale``, from
 ``Network.is_result_stale``): it appears after an edit that changes an input of
 the result and disappears again when the edit is undone.
 
-Phase-0 limits, by design: no paste from spreadsheets, no formula editor
-beyond a text cell, no network graph, no studies besides the fault sweep; a
-page reload starts a new session (unsaved edits are lost).
+The plan and the tables show the same session: a selection in one selects
+the element in the other, and a command from either refreshes both.
+
+Limits, by design: no paste from spreadsheets, no formula editor beyond a
+text cell, no studies besides the fault sweep; a page reload starts a new
+session (unsaved edits are lost).
 """
 
 import logging
@@ -60,8 +64,10 @@ from groundinsight.api import (
     UpdateSource,
 )
 
+from .colouring import MODES
 from .formatting import DASH, format_number, format_unit, parse_number
 from .i18n import STRINGS, column_label, text
+from .plan import PlanView
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +201,7 @@ class AppOptions:
         return dict(self.templates) if self.templates else dict(EXAMPLES)
 
 
-def build_app(options: AppOptions = AppOptions()) -> None:  # noqa: B008 -- frozen dataclass
+def build_app(options: AppOptions = AppOptions()) -> List["ProjectPage"]:  # noqa: B008 -- frozen dataclass
     """
     Register the app's page with NiceGUI.
 
@@ -207,6 +213,12 @@ def build_app(options: AppOptions = AppOptions()) -> None:  # noqa: B008 -- froz
     ----------
     options : AppOptions
         Start options.
+
+    Returns
+    -------
+    list of ProjectPage
+        The open pages (filled as tabs are opened); tests read the sessions
+        from it to compare what the GUI did with the library.
     """
     pages: List[ProjectPage] = []
 
@@ -229,6 +241,7 @@ def build_app(options: AppOptions = AppOptions()) -> None:  # noqa: B008 -- froz
         pages.clear()
 
     app.on_shutdown(close_all)
+    return pages
 
 
 def run_app(options: AppOptions, *, native: bool = False, host: str = "127.0.0.1",
@@ -286,7 +299,8 @@ class ProjectPage:
         self.handle = None
         self.fault: Optional[str] = None
         self.mode = "auto"
-        self.tab = "network"
+        self.tab = "plan"
+        self.plan = PlanView(self)
         self.durations: Dict[str, Optional[float]] = {}
         self.selected: Dict[str, Optional[str]] = {table: None for table in TABLES}
         self.grids: Dict[str, Any] = {}
@@ -344,7 +358,8 @@ class ProjectPage:
         self.handle = None
         self.durations = {}
         self.selected = {table: None for table in TABLES}
-        self.tab = "network"
+        self.tab = "plan"
+        self.plan = PlanView(self)
 
     def _replace_session(self, session: ProjectSession) -> None:
         """Show another project; the previous session is closed."""
@@ -378,6 +393,8 @@ class ProjectPage:
                 with ui.menu():
                     for name in self.templates:
                         ui.menu_item(name, on_click=lambda _, n=name: self._open_template(n))
+            ui.button(self.t("open"), icon="folder_open", on_click=self._open_open_dialog).props(
+                "flat dense no-caps").mark("open")
             if self.session is not None:
                 ui.button(self.t("save"), icon="save", on_click=self._save).props("flat dense no-caps").mark("save")
                 ui.button(self.t("save_as"), on_click=self._open_save_dialog).props("flat dense no-caps").mark("save-as")
@@ -385,11 +402,28 @@ class ProjectPage:
                 self.redo_button = ui.button(icon="redo", on_click=self._redo).props("flat dense").mark("redo")
                 self.undo_button.props(f'aria-label="{self.t("undo")}"')
                 self.redo_button.props(f'aria-label="{self.t("redo")}"')
+                with ui.button(self.t("colouring"), icon="palette").props("flat dense no-caps").mark("colouring"):
+                    with ui.menu():
+                        for mode in MODES:
+                            ui.menu_item(self.t(f"colour_{mode}"), on_click=lambda _, m=mode: self._colour(m)).mark(
+                                f"colour-{mode}")
+                with ui.button(self.t("auto_layout"), icon="account_tree").props("flat dense no-caps").mark(
+                        "auto-layout"):
+                    with ui.menu():
+                        for how in ("library", "unplaced", "elk"):
+                            ui.menu_item(self.t(f"layout_{how}"), on_click=lambda _, h=how: self._layout(h)).mark(
+                                f"layout-{how}")
             ui.toggle(
                 {"de": "DE", "en": "EN"},
                 value=self.language,
                 on_change=lambda e: self._set_language(e.value),
             ).props(f'dense aria-label="{self.t("language")}"').mark("lang")
+        with ui.dialog() as self.open_dialog, ui.card().classes("w-[34rem]"):
+            ui.label(self.t("open_project")).classes("text-base font-medium")
+            self.open_dialog_input = ui.input(self.t("path"), placeholder=self.t("path_example")).classes(
+                "w-full").mark("open-dialog-path")
+            ui.button(self.t("open"), on_click=lambda: self._open_path(self.open_dialog_input.value)).mark(
+                "open-dialog-confirm")
         if self.session is not None:
             with ui.dialog() as self.save_dialog, ui.card().classes("w-[34rem]"):
                 ui.label(self.t("save_as_title")).classes("text-base font-medium")
@@ -433,10 +467,13 @@ class ProjectPage:
         """The three tabs of an open project."""
         with ui.tabs(value=self.tab, on_change=lambda e: setattr(self, "tab", e.value)).classes(
                 "w-full bg-white text-gray-700").mark("tabs") as self.tabs:
-            ui.tab("network", label=self.t("tab_network"), icon="hub").mark("tab-network")
+            ui.tab("plan", label=self.t("tab_plan"), icon="schema").mark("tab-plan")
+            ui.tab("network", label=self.t("tab_network"), icon="table_view").mark("tab-network")
             ui.tab("results", label=self.t("tab_results"), icon="bar_chart").mark("tab-results")
             ui.tab("check", label=self.t("tab_check"), icon="fact_check").mark("tab-check")
         with ui.tab_panels(self.tabs, value=self.tab).classes("w-full bg-transparent"):
+            with ui.tab_panel("plan").classes("gap-2 p-2"):
+                self.plan.build()
             with ui.tab_panel("network").classes("gap-2"):
                 self._network_panel()
             with ui.tab_panel("results").classes("gap-3"):
@@ -589,8 +626,28 @@ class ProjectPage:
         self._after_change()
 
     def _on_row_clicked(self, table: str, args: Dict[str, Any]) -> None:
-        """Remember the clicked row for the delete button."""
-        self.selected[table] = (args.get("data") or {}).get("name")
+        """Remember the clicked row for the delete button; select a bus or branch in the plan."""
+        name = (args.get("data") or {}).get("name")
+        self.selected[table] = name
+        kind = {"buses": "bus", "branches": "branch"}.get(table)
+        if kind is not None and name:
+            self.plan.select(kind, name, from_table=True)
+
+    def select_row(self, table: str, name: str) -> None:
+        """
+        Select an element's row in its table (the plan selected it).
+
+        Parameters
+        ----------
+        table : str
+            The table.
+        name : str
+            The element.
+        """
+        self.selected[table] = name
+        grid = self.grids.get(table)
+        if grid is not None:
+            grid.run_row_method(name, "setSelected", True)
 
     def _remove_selected(self, table: str) -> None:
         """Delete the selected row through a remove command."""
@@ -643,6 +700,22 @@ class ProjectPage:
         self._refresh_toolbar()
         self.result_view.refresh()
         self.check_view.refresh()
+        self.plan.refresh()
+
+    def _colour(self, mode: str) -> None:
+        """Colour the plan in another mode and show the plan."""
+        self.plan.set_mode(mode)
+        self._show_tab("plan")
+
+    def _layout(self, how: str) -> None:
+        """Lay the plan out and show it."""
+        self._show_tab("plan")
+        self.plan.auto_layout(how)
+
+    def _show_tab(self, tab: str) -> None:
+        """Switch the workspace tab."""
+        self.tab = tab
+        self.tabs.set_value(tab)
 
     def _undo(self) -> None:
         """Undo the last command."""
@@ -701,6 +774,7 @@ class ProjectPage:
         """Show the stored result of the chosen fault, if any."""
         self.fault = event.value
         self.result_view.refresh()
+        self.plan.refresh()
 
     def _busy(self) -> bool:
         """Whether a job of this page is running."""
@@ -757,6 +831,7 @@ class ProjectPage:
             self.progress_label.set_text("")
             self.result_view.refresh()
             self._refresh_toolbar()
+            self.plan.refresh()
         else:
             message = {
                 "cancelled": self.t("cancelled"),
@@ -957,12 +1032,22 @@ class ProjectPage:
 
     async def _open_file(self) -> None:
         """Open the project file named in the start page's field."""
-        path = (self.open_input.value or "").strip()
+        await self._open_path(self.open_input.value)
+
+    def _open_open_dialog(self) -> None:
+        """Ask for a project file to open."""
+        self.open_dialog_input.set_value("")
+        self.open_dialog.open()
+
+    async def _open_path(self, path: Optional[str]) -> None:
+        """Open a project file (``~`` and variables are expanded by the session)."""
+        path = (path or "").strip()
         try:
             session = await run.io_bound(self._session_from_file, path)
         except ProjectError as exc:
             ui.notify(f"{self.t('open_failed')}: {exc}", type="negative", multi_line=True)
             return
+        self.open_dialog.close()
         self._replace_session(session)
 
     def _open_save_dialog(self) -> None:
