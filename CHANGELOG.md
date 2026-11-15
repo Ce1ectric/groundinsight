@@ -157,6 +157,11 @@ version section when a release is cut.
   metadata). groundfield is imported only by `characterize` and is not a
   dependency; its tests carry the marker `groundfield` and are skipped
   without it.
+- **`groundinsight.api.Batch`: several commands as one undo step.** The
+  commands are applied in order; when one is rejected the ones before it are
+  reverted and nothing has changed. Front ends use it for gestures that are
+  more than one edit (a bus with its infeed, a bus deleted with its branches,
+  an element dialog).
 
 ### Changed
 

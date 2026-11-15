@@ -365,6 +365,10 @@ so two sessions with different caps share nothing.
 |---|---|
 | `MoveNodes` (several symbols, one undo step), `RouteBranch` (waypoints), `UpdateDiagramNode` (symbol, label offset, busbar length), `AutoLayout` (the library's layout, or positions a front end computed) | `SetCharacteristic` (its JSON form), `ImportCharacteristic` (a groundfield BusType document), `ClearCharacteristic` |
 
+`Batch(commands=[...], title=...)` applies several commands as one step of
+the history, all or nothing -- a bus drawn with its infeed, a bus deleted with
+its branches, the changes of an element dialog.
+
 A command calls the library's own editing API, so the library validates the
 input and re-derives the impedances; a rejected command raises `CommandError`
 and changes nothing -- not the network, not the revision, not the history.

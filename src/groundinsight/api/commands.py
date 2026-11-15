@@ -67,6 +67,7 @@ __all__ = [
     "AddFault",
     "AddSource",
     "AutoLayout",
+    "Batch",
     "ClearCharacteristic",
     "Command",
     "CommandContext",
@@ -2370,6 +2371,75 @@ class ImportCharacteristic(_CharacteristicCommand):
 
 
 # ---------------------------------------------------------------------------
+# several commands as one step
+# ---------------------------------------------------------------------------
+
+
+class Batch(Command):
+    """
+    Several commands as one step of the history: all or nothing, one undo.
+
+    What a front end does in one gesture is often more than one edit --
+    drawing a bus with an infeed places the bus and adds its source, deleting
+    a bus removes its branches, sources and faults first, an element dialog
+    applies every field that changed. The commands are applied in order;
+    when one is rejected, the ones before it are reverted and the batch is
+    rejected with its reason, so nothing has changed. Undo reverts them in
+    reverse order.
+
+    Attributes
+    ----------
+    commands : list of Command
+        The commands, or their JSON forms (parsed with :func:`parse_command`);
+        batches may be nested.
+    title : str, optional
+        The label in the history; default the labels of the commands.
+    """
+
+    op: Literal["batch"] = "batch"
+    commands: List[Any]
+    title: Optional[str] = None
+
+    @field_validator("commands", mode="before")
+    @classmethod
+    def _parse(cls, commands: Any) -> Any:
+        """Parse every entry into its command class."""
+        if not isinstance(commands, list):
+            return commands
+        return [parse_command(command) for command in commands]
+
+    @property
+    def label(self) -> str:
+        """
+        The title, or the labels of the commands joined by ``"; "``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return self.title or "; ".join(command.label for command in self.commands)
+
+    def _apply(self, context: CommandContext) -> None:
+        if not self.commands:
+            raise CommandError(f"{self.label or 'batch'}: no commands")
+        applied: List[Command] = []
+        try:
+            for command in self.commands:
+                command.apply(context)
+                applied.append(command)
+        except CommandError as exc:
+            for command in reversed(applied):
+                command.revert(context)
+            raise CommandError(f"{self.label}: {exc}") from exc
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        for command in reversed(self.commands):
+            command.revert(context)
+
+
+# ---------------------------------------------------------------------------
 # parsing
 # ---------------------------------------------------------------------------
 
@@ -2408,6 +2478,7 @@ COMMAND_TYPES = (
     SetCharacteristic,
     ClearCharacteristic,
     ImportCharacteristic,
+    Batch,
 )
 
 #: The ``op`` value of every command.

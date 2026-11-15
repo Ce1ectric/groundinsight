@@ -36,6 +36,7 @@ from .commands import (
     AddFault,
     AddSource,
     AutoLayout,
+    Batch,
     ClearCharacteristic,
     Command,
     CommandError,
@@ -152,6 +153,7 @@ __all__ = [
     "SetCharacteristic",
     "ClearCharacteristic",
     "ImportCharacteristic",
+    "Batch",
     # jobs
     "JobRunner",
     "JobHandle",
