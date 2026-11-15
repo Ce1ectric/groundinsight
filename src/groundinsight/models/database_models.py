@@ -50,6 +50,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
 )
+from .characteristic import EarthingCharacteristic
 from .core_models import (
     ComplexNumber,
     BusType,
@@ -147,6 +148,8 @@ class BusTypeDB(Base):
     electrode_theta_initial_C = Column(Float, nullable=True)
     electrode_theta_final_C = Column(Float, nullable=True)
     electrode_current_split = Column(Float, nullable=True)
+    # The earthing characteristic as its JSON document; NULL for none.
+    characteristic = Column(JSON, nullable=True)
 
     def to_pydantic(self):
         """
@@ -196,6 +199,7 @@ class BusTypeDB(Base):
                 if self.electrode_current_split is not None
                 else 1.0
             ),
+            characteristic=_characteristic_from_json(self.characteristic),
         )
 
     @classmethod
@@ -232,7 +236,24 @@ class BusTypeDB(Base):
             electrode_theta_initial_C=bus_type.electrode_theta_initial_C,
             electrode_theta_final_C=bus_type.electrode_theta_final_C,
             electrode_current_split=bus_type.electrode_current_split,
+            characteristic=_characteristic_to_json(bus_type.characteristic),
         )
+
+
+def _characteristic_to_json(characteristic):
+    """
+    Serialise an :class:`EarthingCharacteristic` for a JSON column.
+
+    The document is the characteristic's own JSON form (complex values as
+    ``{"real", "imag"}``), the same as in a project file; ``None`` stays
+    ``None``.
+    """
+    return None if characteristic is None else characteristic.model_dump(mode="json")
+
+
+def _characteristic_from_json(stored):
+    """Rebuild an :class:`EarthingCharacteristic` from its JSON column; ``None`` stays ``None``."""
+    return None if stored is None else EarthingCharacteristic.model_validate(stored)
 
 
 def _real_dict_to_json(values):
@@ -310,6 +331,9 @@ class BusDB(Base):
     R = Column(JSON, nullable=True)
     L = Column(JSON, nullable=True)
     C = Column(JSON, nullable=True)
+    characteristic = Column(JSON, nullable=True)
+    k_touch = Column(JSON, nullable=True)
+    k_transfer = Column(JSON, nullable=True)
 
     type = relationship("BusTypeDB", backref="buses")
     network = relationship("NetworkDB", back_populates="buses")
@@ -359,6 +383,9 @@ class BusDB(Base):
             R=_real_dict_from_json(self.R),
             L=_real_dict_from_json(self.L),
             C=_real_dict_from_json(self.C),
+            characteristic=_characteristic_from_json(self.characteristic),
+            k_touch=_real_dict_from_json(self.k_touch),
+            k_transfer=_real_dict_from_json(self.k_transfer),
         )
 
     @classmethod
@@ -407,6 +434,9 @@ class BusDB(Base):
             R=_real_dict_to_json(bus.R),
             L=_real_dict_to_json(bus.L),
             C=_real_dict_to_json(bus.C),
+            characteristic=_characteristic_to_json(bus.characteristic),
+            k_touch=_real_dict_to_json(bus.k_touch),
+            k_transfer=_real_dict_to_json(bus.k_transfer),
         )
 
 

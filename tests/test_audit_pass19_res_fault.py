@@ -153,7 +153,11 @@ def test_the_schema_is_pinned_and_exported():
         "fault", "fault_bus", "frequency_Hz", "is_rms", "I_F_A", "I_F_degree",
         "EPR_fault_V", "EPR_fault_degree", "EPR_max_V", "EPR_max_bus", "r_epr",
         "r_current", "I_E_A", "U_E_V", "Z_E_Ohm", "Z_E_degree", "n_diagnostics",
+        # schema version 2 appends the touch-voltage columns; the version-1
+        # columns keep their names and positions
+        "U_vT_max_V", "U_vT_max_bus", "U_transfer_max_V", "U_transfer_max_bus",
     ]
+    assert gi.RES_FAULT_SCHEMA_VERSION == 2
     assert gi.RES_FAULT_SCHEMA["n_diagnostics"] == pl.Int64
     assert gi.RES_FAULT_SCHEMA["EPR_max_bus"] == pl.Utf8
     assert gi.RES_FAULT_SCHEMA["is_rms"] == pl.Boolean

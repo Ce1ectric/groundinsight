@@ -62,6 +62,7 @@ from groundinsight.diagnostics import (
     InputWarning,
     emit,
 )
+from groundinsight.models.characteristic import CharacteristicValues, EarthingCharacteristic
 from groundinsight.utils.compat import renamed_parameters
 from groundinsight.utils.validations import (
     BRANCH_FORMULA_SYMBOLS,
@@ -212,6 +213,8 @@ RES_BUSES_SCHEMA: Dict[str, Any] = {
     "I_bus_degree": pl.Float64,
     "I_inj_A": pl.Float64,
     "I_inj_degree": pl.Float64,
+    "U_vT_V": pl.Float64,
+    "U_transfer_V": pl.Float64,
 }
 
 #: Column layout of :meth:`Network.res_branches`, in output order.
@@ -254,6 +257,10 @@ RES_FAULT_SCHEMA: Dict[str, Any] = {
     "Z_E_Ohm": pl.Float64,
     "Z_E_degree": pl.Float64,
     "n_diagnostics": pl.Int64,
+    "U_vT_max_V": pl.Float64,
+    "U_vT_max_bus": pl.Utf8,
+    "U_transfer_max_V": pl.Float64,
+    "U_transfer_max_bus": pl.Utf8,
 }
 """Column layout of :meth:`Network.res_fault`, in output order.
 
@@ -265,8 +272,20 @@ earth potential rise at the fault bus, ``EPR_max`` the largest one in the
 network and its bus, ``r_epr`` and ``r_current`` the EPR-based and the
 current-based reduction factor, ``I_E`` the earth-return current, ``U_E`` and
 ``Z_E`` the earthing voltage and impedance of EN 50522, ``n_diagnostics`` the
-number of records in ``Result.diagnostics``.
+number of records in ``Result.diagnostics``, ``U_vT_max`` and
+``U_transfer_max`` the largest prospective touch voltage and transferred
+potential over the buses with an earthing characteristic, and their buses
+(null when no bus has one).
+
+The four touch-voltage columns came with :data:`RES_FAULT_SCHEMA_VERSION` 2.
+They are appended, so a consumer that selects columns by name -- the only
+supported way -- reads version 1 and version 2 tables alike.
 """
+
+RES_FAULT_SCHEMA_VERSION: int = 2
+"""Version of :data:`RES_FAULT_SCHEMA`; raised when a column is added,
+removed or changes its meaning. 1: the columns up to ``n_diagnostics``;
+2: the touch-voltage columns ``U_vT_max_V`` to ``U_transfer_max_bus``."""
 
 def _magnitude_angle(
     value: Optional["ComplexNumber"], magnitude_key: str, angle_key: str
@@ -551,6 +570,23 @@ def _fault_key_figures(network: "Network", fault: str, result: "Result") -> pl.D
         value = getattr(factor, field).get(float(frequency))
         return None if value is None else float(value)
 
+    def largest(field: str, frequency: Optional[float]) -> Tuple[Optional[str], Optional[float]]:
+        if frequency is None:
+            return _largest_epr([(bus.name, getattr(bus, field)) for bus in buses], fault_bus)
+        return _largest_epr(
+            [(bus.name, getattr(bus, field + "_freq").get(frequency)) for bus in buses], fault_bus
+        )
+
+    def touch_columns(frequency: Optional[float]) -> Dict[str, Any]:
+        touch_bus, touch = largest("u_touch", frequency)
+        transfer_bus, transfer = largest("u_transfer", frequency)
+        return {
+            "U_vT_max_V": touch,
+            "U_vT_max_bus": touch_bus,
+            "U_transfer_max_V": transfer,
+            "U_transfer_max_bus": transfer_bus,
+        }
+
     rows: List[Dict[str, Any]] = []
     fault_currents: List[Optional[complex]] = []
     earth_currents: List[Optional[complex]] = []
@@ -592,6 +628,7 @@ def _fault_key_figures(network: "Network", fault: str, result: "Result") -> pl.D
                 **_magnitude_angle(from_factor("z_earthing", frequency), "Z_E_Ohm",
                                    "Z_E_degree"),
                 "n_diagnostics": n_diagnostics,
+                **touch_columns(frequency),
             }
         )
     # The RMS row: the stored RMS EPR per bus, root sums of squares otherwise;
@@ -616,6 +653,7 @@ def _fault_key_figures(network: "Network", fault: str, result: "Result") -> pl.D
             "Z_E_Ohm": None,
             "Z_E_degree": None,
             "n_diagnostics": n_diagnostics,
+            **touch_columns(None),
         }
     )
     return pl.DataFrame(rows, schema=RES_FAULT_SCHEMA)
@@ -1189,6 +1227,25 @@ class _ReadOnlyType(BaseModel):
         super().__setattr__(name, value)
 
 
+def _frequency_dict(frequencies: List[float], values: np.ndarray) -> Dict[float, float]:
+    """
+    Key an array of real values by frequency.
+
+    Parameters
+    ----------
+    frequencies : List[float]
+        The frequencies, one per value.
+    values : numpy.ndarray
+        The values.
+
+    Returns
+    -------
+    Dict[float, float]
+        ``{frequency: value}``.
+    """
+    return dict(zip((float(f) for f in frequencies), values.tolist(), strict=True))
+
+
 def _check_type_symbols(
     element_type: BaseModel, kind: str, allowed: Tuple[str, ...], element: str
 ) -> None:
@@ -1334,6 +1391,13 @@ class BusType(_ReadOnlyType):
         Share of the dissipated current a single electrode carries, in
         ``(0, 1]``. Use ``1/N`` for ``N`` equal parallel electrodes at
         the same bus.
+    characteristic : EarthingCharacteristic, optional
+        Tabulated earthing impedance and touch factors shared by every bus
+        of this type (e.g. one station design computed with groundfield).
+        A bus's own :attr:`Bus.characteristic` takes precedence. With
+        ``impedance_source="table"`` the bus impedance comes from the table
+        instead of ``impedance_formula``; see
+        :class:`~groundinsight.EarthingCharacteristic`.
 
     Notes
     -----
@@ -1386,6 +1450,7 @@ class BusType(_ReadOnlyType):
     electrode_theta_initial_C: float = 20.0
     electrode_theta_final_C: Optional[float] = None
     electrode_current_split: float = 1.0
+    characteristic: Optional[EarthingCharacteristic] = None
 
     @field_validator("impedance_formula")
     def validate_impedance_formula(cls, value, info: ValidationInfo):
@@ -1470,6 +1535,15 @@ class Bus(_NetworkElement):
     C : dict of float to float, optional
         Evaluated lumped capacitance to remote earth per frequency in
         Farad. Populated only if ``type.C_formula`` is set.
+    characteristic : EarthingCharacteristic, optional
+        The earthing characteristic of this very bus, overriding the one of
+        its type (:meth:`resolved_characteristic`).
+    k_touch : dict of float to float, optional
+        Touch factor ``U_vT / U_E`` per frequency, evaluated from the
+        resolved characteristic at ``specific_earth_resistance``; ``None``
+        when no characteristic tabulates it. Derived, like ``impedance``.
+    k_transfer : dict of float to float, optional
+        Transfer factor ``U_transfer / U_E`` per frequency; as ``k_touch``.
 
     Examples
     --------
@@ -1490,7 +1564,7 @@ class Bus(_NetworkElement):
     _COLLECTION: ClassVar[str] = "buses"
     _KIND: ClassVar[str] = "bus"
     _DERIVATION_INPUTS: ClassVar[FrozenSet[str]] = frozenset(
-        {"type", "specific_earth_resistance"}
+        {"type", "specific_earth_resistance", "characteristic"}
     )
 
     name: str
@@ -1502,10 +1576,16 @@ class Bus(_NetworkElement):
     R: Optional[Dict[float, float]] = None
     L: Optional[Dict[float, float]] = None
     C: Optional[Dict[float, float]] = None
+    characteristic: Optional[EarthingCharacteristic] = None
+    k_touch: Optional[Dict[float, float]] = None
+    k_transfer: Optional[Dict[float, float]] = None
 
     #: Fields that :meth:`calculate_impedance` computes from ``type``,
-    #: ``specific_earth_resistance`` and the network frequencies.
-    DERIVED_FIELDS: ClassVar[Tuple[str, ...]] = ("impedance", "R", "L", "C")
+    #: ``specific_earth_resistance``, ``characteristic`` and the network
+    #: frequencies.
+    DERIVED_FIELDS: ClassVar[Tuple[str, ...]] = (
+        "impedance", "R", "L", "C", "k_touch", "k_transfer"
+    )
     _DERIVED_TABLES: ClassVar[FrozenSet[str]] = frozenset({"impedance"})
 
     def calculate_impedance(self, frequencies: List[float]):
@@ -1562,10 +1642,7 @@ class Bus(_NetworkElement):
         params = self._params()
         _check_type_symbols(self.type, "BusType", BUS_FORMULA_SYMBOLS, f"bus {self.name!r}")
 
-        # Mandatory frequency-domain impedance.
-        values = compute_impedance_array(
-            self.type.impedance_formula, frequencies, params
-        )
+        values, formula, origin, table = self._grounding_impedance(frequencies, params)
         freqs_arr = np.asarray(frequencies, dtype=float)
         # The grounding impedance is inverted into a diagonal admittance, so a
         # value that cannot become an admittance has to be rejected here rather
@@ -1575,11 +1652,14 @@ class Bus(_NetworkElement):
         check_passive_impedance_array(
             values,
             freqs_arr,
-            element=f"bus '{self.name}' (grounding impedance)",
-            formula_str=self.type.impedance_formula,
+            element=f"bus '{self.name}' ({origin})",
+            formula_str=formula,
             params=params,
         )
         derived: Dict[str, Any] = {"impedance": impedance_table(freqs_arr, values)}
+        for field in ("k_touch", "k_transfer"):
+            factors = None if table is None else getattr(table, field)
+            derived[field] = None if factors is None else _frequency_dict(frequencies, factors)
 
         # Optional lumped RLC -- None when the type declares no formula.
         for field, formula in (
@@ -1596,6 +1676,42 @@ class Bus(_NetworkElement):
             )
         return derived
 
+    def _grounding_impedance(
+        self, frequencies: List[float], params: Dict[str, float]
+    ) -> Tuple[np.ndarray, Optional[str], str, Optional[CharacteristicValues]]:
+        """
+        Evaluate the grounding impedance from the source that applies.
+
+        The table of the resolved earthing characteristic, its formula, or
+        -- without a characteristic, the path of every network before
+        characteristics existed -- the type's formula.
+
+        Parameters
+        ----------
+        frequencies : List[float]
+            Frequencies at which to evaluate.
+        params : Dict[str, float]
+            The formula parameters (``rho``).
+
+        Returns
+        -------
+        tuple
+            ``(values, formula, origin, table)``: the complex impedances, the
+            formula they came from (``None`` for the table), a description
+            of the source for error messages, and the characteristic
+            evaluated at this bus's ``rho`` (``None`` without one).
+        """
+        characteristic = self.resolved_characteristic()
+        if characteristic is None:
+            formula = self.type.impedance_formula
+            return compute_impedance_array(formula, frequencies, params), formula, "grounding impedance", None
+        table = characteristic.evaluate(self.specific_earth_resistance, frequencies)
+        if characteristic.impedance_source == "table":
+            return (table.impedance, None,
+                    "grounding impedance from its earthing characteristic table", table)
+        formula = characteristic.impedance_formula or self.type.impedance_formula
+        return compute_impedance_array(formula, frequencies, params), formula, "grounding impedance", table
+
     def _apply_derived(self, derived: Dict[str, Any]) -> None:
         """
         Write values computed by :meth:`_derive`.
@@ -1606,6 +1722,29 @@ class Bus(_NetworkElement):
             Field name to value, as returned by :meth:`_derive`.
         """
         self._store_derived(derived)
+
+    def resolved_characteristic(self) -> Optional[EarthingCharacteristic]:
+        """
+        The earthing characteristic that applies to this bus.
+
+        Returns
+        -------
+        EarthingCharacteristic or None
+            The bus's own characteristic, else its type's, else ``None``
+            (the bus then uses ``type.impedance_formula`` alone).
+
+        Examples
+        --------
+        >>> import groundinsight as gi
+        >>> station = gi.BusType(name="s", system_type="Substation",
+        ...                      voltage_level=20.0, impedance_formula="rho / 100")
+        >>> net = gi.create_network(name="n", frequencies=[50.0])
+        >>> gi.create_bus(name="B1", type=station, network=net).resolved_characteristic() is None
+        True
+        """
+        if self.characteristic is not None:
+            return self.characteristic
+        return self.type.characteristic
 
     def _params(self) -> Dict[str, float]:
         """Formula parameters of this bus: the specific earth resistance ``rho``."""
@@ -2691,6 +2830,28 @@ class ResultBus(BaseModel):
     i_inj_freq : dict of float to ComplexNumber
         Mapping of frequency to complex injection values. Defaults to an
         empty mapping for backwards compatibility.
+    u_touch : float, optional
+        RMS prospective touch voltage ``U_vT`` at the bus, in volts:
+        ``k_touch(f) * |uepr(f)|`` summed as an RMS over the frequencies.
+        ``None`` when the bus has no tabulated touch factor.
+    u_touch_freq : dict of float to float
+        ``U_vT`` per frequency (a magnitude: the touch factor relates
+        magnitudes, not phasors); empty without a touch factor.
+    u_transfer : float, optional
+        RMS largest transferred potential ``U_transfer`` at the bus, in
+        volts, from ``k_transfer``; as ``u_touch``.
+    u_transfer_freq : dict of float to float
+        ``U_transfer`` per frequency; empty without a transfer factor.
+
+    Notes
+    -----
+    ``U_vT`` and ``U_transfer`` scale the factors of the bus's earthing
+    characteristic with the EPR the network solve gives this bus. The
+    factors describe the surface potential an electrode produces *on its
+    own*; the potential funnels of neighbouring electrodes are not
+    superposed. Where electrodes of different buses are close enough to
+    overlap, a field computation of the coupled arrangement is the
+    reference.
 
     Examples
     --------
@@ -2710,6 +2871,10 @@ class ResultBus(BaseModel):
     uepr_freq: Dict[float, ComplexNumber]  # {frequency: voltage}
     ia_freq: Dict[float, ComplexNumber]  # {frequency: current}
     i_inj_freq: Dict[float, ComplexNumber] = {}  # {frequency: injection}
+    u_touch: Optional[float] = None  # RMS prospective touch voltage U_vT
+    u_touch_freq: Dict[float, float] = {}
+    u_transfer: Optional[float] = None  # RMS transferred potential
+    u_transfer_freq: Dict[float, float] = {}
 
     def __str__(self):
         return f"ResultBus(name={self.name}, uepr={self.uepr})"
@@ -3127,7 +3292,7 @@ _DIGEST_SCHEME = "gi1"
 #: read. ``type`` of a branch stands for ``type.grounding_conductor``, the only
 #: type attribute the solver reads directly.
 _DIGEST_FIELDS: Dict[str, Tuple[str, ...]] = {
-    "Bus": ("name", "active", "impedance"),
+    "Bus": ("name", "active", "impedance", "k_touch", "k_transfer"),
     "Branch": (
         "name", "active", "from_bus", "to_bus", "type", "parallel_coefficient",
         "self_impedance", "mutual_impedance", "phase_impedance",
@@ -3146,6 +3311,7 @@ _DIGEST_EXEMPT_FIELDS: Dict[str, Dict[str, str]] = {
         "description": "metadata",
         "type": "enters through the derived impedance",
         "specific_earth_resistance": "enters through the derived impedance",
+        "characteristic": "enters through the derived impedance and touch factors",
         "R": "transient solvers only",
         "L": "transient solvers only",
         "C": "transient solvers only",
@@ -4152,6 +4318,13 @@ class Network(ValidatedAssignmentModel):
             bus = self.buses[name]
             strings.extend((name, "1" if bus.active else "0"))
             _impedance_record(bus.impedance, strings, floats)
+            # The touch factors only where a characteristic tabulates them:
+            # a bus without one adds nothing, so the digest of every result
+            # computed before characteristics existed stays current.
+            for marker, factors in (("kT", bus.k_touch), ("kX", bus.k_transfer)):
+                if factors is not None:
+                    strings.append(marker)
+                    _impedance_record(factors, strings, floats)
         strings.append("|branches")
         for name in sorted(self.branches):
             branch = self.branches[name]
@@ -4639,7 +4812,7 @@ class Network(ValidatedAssignmentModel):
             ``bus_name``, ``fault``, ``frequency_Hz`` (``Float64``, ``null``
             on the RMS row), ``is_rms`` (``Boolean``), ``EPR_V``,
             ``EPR_degree``, ``I_bus_A``, ``I_bus_degree``, ``I_inj_A``,
-            ``I_inj_degree``.
+            ``I_inj_degree``, ``U_vT_V``, ``U_transfer_V``.
 
         Raises
         ------
@@ -4661,6 +4834,12 @@ class Network(ValidatedAssignmentModel):
         earthing conductor has to be sized for. It is a different current from
         ``I_bus_A`` (the share dissipated into the soil through the electrode);
         see :class:`ResultBus`.
+
+        ``U_vT_V`` and ``U_transfer_V`` are the prospective touch voltage and
+        the largest transferred potential, the touch factors of the bus's
+        earthing characteristic times ``|EPR|`` (magnitudes, no angle); null
+        for a bus whose characteristic tabulates no factor. See
+        :class:`ResultBus` for the assumption behind them.
         """
         if fault is None:
             fault = self.active_fault
@@ -4679,21 +4858,29 @@ class Network(ValidatedAssignmentModel):
         frequencies: List[float] = []
         rms_rows: List[int] = []
         epr, current, injection = _PhasorColumn(), _PhasorColumn(), _PhasorColumn()
+        touch: List[Optional[float]] = []
+        transfer: List[Optional[float]] = []
         for result_bus in result.buses:
             ia_freq = result_bus.ia_freq
             inj_freq = result_bus.i_inj_freq
+            touch_freq = result_bus.u_touch_freq
+            transfer_freq = result_bus.u_transfer_freq
             for freq, voltage in result_bus.uepr_freq.items():
                 names.append(result_bus.name)
                 frequencies.append(float(freq))
                 epr.phasor(voltage)
                 current.phasor(ia_freq.get(freq))
                 injection.phasor(inj_freq.get(freq))
+                touch.append(touch_freq.get(freq))
+                transfer.append(transfer_freq.get(freq))
             rms_rows.append(len(names))
             names.append(result_bus.name)
             frequencies.append(0.0)
             epr.rms(result_bus.uepr)
             current.rms(result_bus.ia)
             injection.rms(result_bus.i_inj)
+            touch.append(result_bus.u_touch)
+            transfer.append(result_bus.u_transfer)
 
         is_rms = np.zeros(len(names), dtype=bool)
         is_rms[rms_rows] = True
@@ -4705,6 +4892,8 @@ class Network(ValidatedAssignmentModel):
             *epr.series("EPR_V", "EPR_degree"),
             *current.series("I_bus_A", "I_bus_degree"),
             *injection.series("I_inj_A", "I_inj_degree"),
+            pl.Series("U_vT_V", touch, dtype=pl.Float64),
+            pl.Series("U_transfer_V", transfer, dtype=pl.Float64),
         ]
         return pl.DataFrame(columns, schema=RES_BUSES_SCHEMA)
 
@@ -4823,11 +5012,19 @@ class Network(ValidatedAssignmentModel):
             ``n_diagnostics``
                 The number of records in ``Result.diagnostics``, the same on
                 every row: anything above zero qualifies how the row is read.
+            ``U_vT_max_V``, ``U_vT_max_bus``
+                The largest prospective touch voltage ``U_vT`` over the buses
+                and its bus (``ResultBus.u_touch_freq``; ties as for the
+                EPR). Null when no bus has a tabulated touch factor.
+            ``U_transfer_max_V``, ``U_transfer_max_bus``
+                The same for the transferred potential
+                (``ResultBus.u_transfer_freq``).
 
             A value the result marks as undefined (``None``) is null. The RMS
             row holds the stored RMS EPR of the fault bus and the largest one
             of any bus, and the root sum of squares over the frequencies of
-            ``I_F``, ``I_E`` and ``U_E``; ratios, impedances and angles have
+            ``I_F``, ``I_E`` and ``U_E``, and the largest RMS ``U_vT`` and
+            ``U_transfer`` of any bus; ratios, impedances and angles have
             no RMS value and are null there.
 
         Raises
@@ -4867,7 +5064,7 @@ class Network(ValidatedAssignmentModel):
         >>> _ = gi.run_fault(net, "ef")
         >>> table = net.res_fault("ef")
         >>> table.shape, table["is_rms"].to_list()
-        ((3, 17), [False, False, True])
+        ((3, 21), [False, False, True])
         """
         if fault not in self.faults:
             raise ValueError(

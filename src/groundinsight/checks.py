@@ -58,6 +58,7 @@ import math
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .diagnostics import Diagnostic, collecting, unique
+from .models.characteristic import report_extrapolation
 from .models.core_models import (
     Branch,
     Bus,
@@ -167,7 +168,8 @@ CHECK_CODES: Dict[str, Tuple[str, str]] = {
 }
 """Every code :func:`check_network` produces itself, mapped to its severity
 (``"error"`` or ``"warning"``) and meaning. Package warnings collected during
-the check (``FREQUENCY_ORDER``, ``DC_LIMIT``) keep their own codes. Programs
+the check (``FREQUENCY_ORDER``, ``DC_LIMIT``, ``CHARACTERISTIC_EXTRAPOLATED``)
+keep their own codes. Programs
 branch on the code, never on the message text."""
 
 ElementRef = Tuple[str, str]
@@ -560,6 +562,15 @@ def _check_impedances(report: _Report) -> None:
         )
 
 
+def _check_characteristics(report: _Report) -> None:
+    """Buses whose earthing characteristic does not cover rho or the frequencies.
+
+    Raises the solve's own ``CHARACTERISTIC_EXTRAPOLATED`` warning, which the
+    report collects with its code.
+    """
+    report_extrapolation(report.buses, report.frequencies)
+
+
 def _check_sources(report: _Report) -> None:
     """
     Frequency coverage and finiteness of every source's injection.
@@ -872,6 +883,7 @@ def check_network(network: Network, *, fault: Optional[str] = None) -> List[Diag
             [("fault", fault)],
         )
     report.run("impedance", _check_impedances)
+    report.run("characteristic", _check_characteristics)
     report.run("source", _check_sources)
     report.run("fault", _check_faults)
     report.run("topology", _check_topology)

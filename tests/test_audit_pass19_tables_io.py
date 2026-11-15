@@ -171,7 +171,7 @@ def test_the_schemas_cover_every_input_field_of_the_models():
     expected = {
         "bus_types": set(gi.BusType.model_fields),
         "branch_types": set(gi.BranchType.model_fields),
-        "buses": set(gi.Bus.model_fields) - {"impedance", "R", "L", "C"},
+        "buses": set(gi.Bus.model_fields) - {"impedance", "R", "L", "C", "k_touch", "k_transfer"},
         "branches": set(gi.Branch.model_fields) - {
             "self_impedance", "mutual_impedance", "phase_impedance",
             "R_self", "L_self", "C_self", "R_mutual", "M_mutual",

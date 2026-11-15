@@ -3611,10 +3611,39 @@ class ElectricalNetwork:
                 {"uepr": potentials, "ia": electrode, "i_inj": injection},
             )
         )
+        self._touch_voltages(result.buses)
 
         # Store the result in the network's results dictionary
         self.network.results[fault_name] = result
         self.results = result  # Also keep a reference in self.results
+
+    def _touch_voltages(self, result_buses: List[ResultBus]) -> None:
+        """Scale the touch factors of each bus with its EPR.
+
+        ``U_vT(f) = k_touch(f) |u(f)|`` and ``U_transfer(f) = k_transfer(f)
+        |u(f)|``, with the RMS over the frequencies as for the EPR. Only
+        buses whose earthing characteristic tabulates a factor get a value;
+        every other bus keeps the defaults (``None`` and an empty mapping),
+        so a network without characteristics produces the results it did
+        before.
+
+        Parameters
+        ----------
+        result_buses : list of ResultBus
+            The bus results of this solve; changed in place.
+        """
+        buses = self.network.buses
+        for result_bus in result_buses:
+            bus = buses[result_bus.name]
+            for field, factors in (("u_touch", bus.k_touch), ("u_transfer", bus.k_transfer)):
+                if factors is None:
+                    continue
+                per_frequency = {
+                    freq: factors[freq] * abs(complex(potential))
+                    for freq, potential in result_bus.uepr_freq.items()
+                }
+                setattr(result_bus, field + "_freq", per_frequency)
+                setattr(result_bus, field, math.sqrt(sum(v * v for v in per_frequency.values())))
 
     def _stacked(self, vectors: Dict[float, np.ndarray]) -> np.ndarray:
         """Per-frequency bus vectors as one ``(n, F)`` array (zeros if absent).

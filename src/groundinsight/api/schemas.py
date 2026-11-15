@@ -540,6 +540,15 @@ class KeyFigureRowDTO(BaseDTO):
         degrees.
     n_diagnostics : int
         The number of diagnostics of the result, the same on every row.
+    U_vT_max_V : float or None
+        The largest prospective touch voltage ``U_vT`` over the buses with
+        an earthing characteristic, in V.
+    U_vT_max_bus : str or None
+        The bus it occurs at.
+    U_transfer_max_V : float or None
+        The largest transferred potential, in V.
+    U_transfer_max_bus : str or None
+        The bus it occurs at.
     """
 
     fault: str
@@ -559,6 +568,10 @@ class KeyFigureRowDTO(BaseDTO):
     Z_E_Ohm: FiniteFloat = None
     Z_E_degree: FiniteFloat = None
     n_diagnostics: int = 0
+    U_vT_max_V: FiniteFloat = None
+    U_vT_max_bus: Optional[str] = None
+    U_transfer_max_V: FiniteFloat = None
+    U_transfer_max_bus: Optional[str] = None
 
 
 class KeyFiguresDTO(BaseDTO):

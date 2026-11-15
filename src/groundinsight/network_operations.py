@@ -13,6 +13,7 @@ import logging
 import warnings
 
 from .diagnostics import ModelAssumptionWarning, collecting, emit, unique
+from .models.characteristic import report_extrapolation
 from .models.core_models import Network, Bus, BusType, Branch, BranchType, Fault, Source
 from .utils.compat import renamed_parameters, warn_stacklevel
 from typing import Optional, List, Dict
@@ -963,6 +964,9 @@ def run_fault(
         # fault actually has parallel routes -- see _warning_parallel_coeffcient.
         if not auto_phase_currents:
             _warning_parallel_coeffcient(network, auto_phase_currents)
+
+        # Buses evaluated outside the grid of their earthing characteristic.
+        report_extrapolation(network.buses, network.frequencies)
 
         # Build the electrical network from the physical network.
         # auto_phase_currents switches the phase-current determination from

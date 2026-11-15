@@ -159,6 +159,8 @@ FRAMES: Dict[str, FrameSpec] = {
         "I_bus_degree": ("°", f"angle of `I_bus_A`; {_RMS_ROW}"),
         "I_inj_A": ("A", "current of the earthing conductor at a source or fault bus, `ResultBus.i_inj_freq` -- the source current at a source bus, the fault current at the fault bus, 0 elsewhere; the quantity a conductor is sized for"),
         "I_inj_degree": ("°", f"angle of `I_inj_A`; {_RMS_ROW}"),
+        "U_vT_V": ("V", "prospective touch voltage U_vT = k_touch · |EPR|, the touch factor of the bus's earthing characteristic times its EPR (`ResultBus.u_touch_freq`; RMS row `u_touch`); null for a bus without a tabulated touch factor"),
+        "U_transfer_V": ("V", "largest transferred potential U_transfer = k_transfer · |EPR| (`ResultBus.u_transfer_freq`; RMS row `u_transfer`); null for a bus without a tabulated transfer factor"),
     }),
     "res_branches": FrameSpec(("groundinsight.models.core_models", "RES_BRANCHES_SCHEMA"), {
         "branch_name": (NO_UNIT, "name of the branch"),
@@ -193,6 +195,10 @@ FRAMES: Dict[str, FrameSpec] = {
         "Z_E_Ohm": ("Ω", f"earthing impedance Z_E of EN 50522, the driving point of the earthing network at the fault bus (`z_earthing`); {_RMS_ROW}"),
         "Z_E_degree": ("°", f"angle of Z_E; {_RMS_ROW}"),
         "n_diagnostics": (NO_UNIT, "number of records in `Result.diagnostics`, the same on every row"),
+        "U_vT_max_V": ("V", "largest prospective touch voltage U_vT of any bus at that frequency (RMS row: largest RMS value); null when no bus has a tabulated touch factor"),
+        "U_vT_max_bus": (NO_UNIT, "the bus where `U_vT_max_V` occurs"),
+        "U_transfer_max_V": ("V", "largest transferred potential of any bus at that frequency (RMS row: largest RMS value); null when no bus has a tabulated transfer factor"),
+        "U_transfer_max_bus": (NO_UNIT, "the bus where `U_transfer_max_V` occurs"),
     }),
     "compare_buses": FrameSpec(_compare_buses, {
         "bus_name": (NO_UNIT, "name of the bus"),

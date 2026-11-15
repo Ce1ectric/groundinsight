@@ -60,6 +60,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 import polars as pl
 from pydantic import BaseModel, ValidationError
 
+from ..models.characteristic import EarthingCharacteristic
 from ..models.core_models import Branch, BranchType, Bus, BusType, Fault, Network, Source
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,7 @@ TABLE_SCHEMAS: Dict[str, Dict[str, Any]] = {
         "electrode_theta_initial_C": _FLOAT,
         "electrode_theta_final_C": _FLOAT,
         "electrode_current_split": _FLOAT,
+        "characteristic": _TEXT,
     },
     "branch_types": {
         "name": _TEXT,
@@ -124,6 +126,7 @@ TABLE_SCHEMAS: Dict[str, Dict[str, Any]] = {
         "specific_earth_resistance": _FLOAT,
         "active": _BOOL,
         "description": _TEXT,
+        "characteristic": _TEXT,
     },
     "branches": {
         "name": _TEXT,
@@ -170,7 +173,10 @@ model fields (``specific_earth_resistance``, ``length`` in km, ``t_k_s``);
 frequency columns are ``frequency_Hz``. In ``source_values`` the column
 ``quantity`` is ``"current"`` for a current source and ``"voltage"`` or
 ``"impedance"`` for a Thevenin source; ``real``/``imag`` are the RMS phasor
-(A, V or Ohm)."""
+(A, V or Ohm). The ``characteristic`` column of ``bus_types`` and ``buses``
+holds an :class:`~groundinsight.EarthingCharacteristic` as its JSON
+(``model_dump_json``) -- a grid over ``rho`` and ``f`` is not a cell value --
+and is empty for none."""
 
 REQUIRED_COLUMNS: Dict[str, Tuple[str, ...]] = {
     "network": ("name",),
@@ -528,7 +534,7 @@ def _model(
         names one.
     **fixed
         Keyword arguments that override the row (resolved references, the
-        frequency-dependent dictionaries).
+        frequency-dependent dictionaries, parsed cells).
 
     Returns
     -------
@@ -554,6 +560,62 @@ def _model(
     except (ValueError, TypeError) as exc:
         problems.add(table, str(exc), row)
     return None
+
+
+def _characteristic_cell(
+    record: Dict[str, Any], table: str, row: int, problems: _Problems
+) -> Optional[EarthingCharacteristic]:
+    """
+    Parse the ``characteristic`` cell of a type or bus row.
+
+    The earthing characteristic is a grid, not a value, so its cell holds
+    the characteristic's JSON (``EarthingCharacteristic.model_dump_json``),
+    the same text a project file holds for it; an empty cell means none.
+
+    Parameters
+    ----------
+    record : dict
+        The coerced row.
+    table : str
+        Table name, for messages.
+    row : int
+        1-based row, for messages.
+    problems : _Problems
+        Receives a parse or validation error.
+
+    Returns
+    -------
+    EarthingCharacteristic or None
+        The characteristic; ``None`` for an empty cell and for one that
+        could not be read -- that problem is recorded, and
+        :func:`network_from_tables` raises with all problems at the end.
+    """
+    text = record.get("characteristic")
+    if text is None or not str(text).strip():
+        return None
+    try:
+        return EarthingCharacteristic.model_validate_json(text)
+    except ValidationError as exc:
+        problems.add(table, f"characteristic: {exc.errors()[0].get('msg', exc)}", row,
+                     "characteristic")
+        return None
+
+
+def _characteristic_text(characteristic: Optional[EarthingCharacteristic]) -> Optional[str]:
+    """
+    The ``characteristic`` cell of an exported row.
+
+    Parameters
+    ----------
+    characteristic : EarthingCharacteristic or None
+        The characteristic of a type or bus.
+
+    Returns
+    -------
+    str or None
+        Its JSON, or ``None`` (an empty cell) without one.
+    """
+    return None if characteristic is None else characteristic.model_dump_json()
 
 
 # --------------------------------------------------------------------------
@@ -726,7 +788,8 @@ def _build(
             continue
         if row != bus_type_names.get(record["name"]):
             continue
-        instance = _model(BusType, record, "bus_types", row, problems)
+        instance = _model(BusType, record, "bus_types", row, problems,
+                          characteristic=_characteristic_cell(record, "bus_types", row, problems))
         if instance is not None:
             bus_types[record["name"]] = instance
     branch_type_names = _unique_names(
@@ -762,7 +825,8 @@ def _build(
         if type_name not in bus_types:
             continue  # the type itself is reported
         bus = _model(Bus, record, "buses", row, problems,
-                     type=bus_types[type_name], impedance={})
+                     type=bus_types[type_name], impedance={},
+                     characteristic=_characteristic_cell(record, "buses", row, problems))
         if bus is not None and network is not None:
             try:
                 network.add_bus(bus)
@@ -963,6 +1027,8 @@ def _type_rows(
     for element in elements.values():
         dumped = element.type.model_dump()
         row = {column: dumped.get(column) for column in columns}
+        if "characteristic" in columns:
+            row["characteristic"] = _characteristic_text(element.type.characteristic)
         existing = rows.get(row["name"])
         if existing is None:
             rows[row["name"]] = row
@@ -1034,6 +1100,7 @@ def network_to_tables(network: Network) -> Dict[str, pl.DataFrame]:
                 "specific_earth_resistance": bus.specific_earth_resistance,
                 "active": bus.active,
                 "description": bus.description,
+                "characteristic": _characteristic_text(bus.characteristic),
             }
         )
     for name, branch in network.branches.items():

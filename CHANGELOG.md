@@ -42,6 +42,39 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+### Added
+
+- **Earthing characteristics (`gi.EarthingCharacteristic`).** A table of the
+  earthing impedance over a grid of specific earth resistances and
+  frequencies -- what a field solver such as groundfield computes for a
+  station -- together with the touch factor `k_touch = U_vT / U_E` and the
+  transfer factor `k_transfer = U_transfer / U_E`, an optional formula and
+  its provenance (`gi.CharacteristicProvenance`). It hangs at
+  `BusType.characteristic` or, overriding the type, at `Bus.characteristic`;
+  `Bus.resolved_characteristic()` names the one that applies. With
+  `impedance_source="table"` the bus impedance is interpolated from the
+  table (log-log for `|Z|`, linear in `ln rho`, `ln f` for the angle and the
+  factors; the stored value at a grid point), with `"formula"` it comes from
+  the characteristic's formula or the type's. Outside the grid the edge cell
+  is continued, and `run_fault` and `check_network` record
+  `CHARACTERISTIC_EXTRAPOLATED` for the bus. The evaluated factors are the
+  new derived bus fields `k_touch` and `k_transfer`. A network without
+  characteristics computes exactly what 2026.11.1 computed and keeps the
+  input digest of its stored results (both tested against frozen results of
+  that release). Characteristics survive JSON, the SQLite store (new JSON
+  columns, added to existing files by the migration on open) and the tables
+  of `network_to_tables` (a `characteristic` column with the JSON).
+- **Touch voltage and transferred potential in the results.** `res_buses`
+  gains `U_vT_V = k_touch · |EPR|` and `U_transfer_V = k_transfer · |EPR|`
+  per bus and frequency, with the RMS on the RMS row (new `ResultBus` fields
+  `u_touch`, `u_touch_freq`, `u_transfer`, `u_transfer_freq`); `res_fault`
+  gains the largest of each with its bus (`U_vT_max_V`, `U_vT_max_bus`,
+  `U_transfer_max_V`, `U_transfer_max_bus`), appended to the pinned schema,
+  whose version is now `gi.RES_FAULT_SCHEMA_VERSION = 2`. The key-figure
+  DTO of the service layer carries the four columns. The factors describe
+  each electrode on its own; overlapping potential funnels of neighbouring
+  electrodes are not superposed.
+
 ### Internal
 
 - **Documentation deploys queue instead of racing

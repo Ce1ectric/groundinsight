@@ -77,6 +77,7 @@ These are raised by `gi.run_fault` and `gi.solve` and stored in
 | `EARTH_GROUP_SPREAD` | `ModelAssumptionWarning` | warning | the fault, the fault bus | The electrode currents are spread in angle, so the split into the group that feeds the soil and the group that returns the current is less sharp than usual; `I_E` and `value_current` describe the dominant direction. | Read `r_current` with care; compare with the EPR itself. |
 | `REDUCTION_FACTOR_UNDEFINED` | `ModelAssumptionWarning` | warning | the fault, the fault bus | The EPR of the fault bus without coupling is zero to numerical precision (or the solve without coupling fails), so the EPR-based factor `value` has no reference and is `None` at that frequency. | Expected for a fault without a path to earth at that frequency; the EN 50522 factor `value_current` is unaffected. |
 | `EARTHING_IMPEDANCE_UNDEFINED` | `ModelAssumptionWarning` | warning | the fault, the fault bus, the buses of its earthing group | No bus connected to the fault bus through screens has an electrode, or the fault bus reaches the earthing network only through a Thévenin loop: `z_earthing` and `Z_G` are `None`. | Give the earthing group an electrode; a Thévenin loop is not an earthing impedance. |
+| `CHARACTERISTIC_EXTRAPOLATED` | `ModelAssumptionWarning` | warning | the bus | A bus's earthing characteristic (its own, or its type's) is evaluated at a specific earth resistance or a frequency outside its grid. Impedance and touch factors are continued from the edge cell (a power law in rho and f; touch factors clipped at 0; at or below 0 Hz the lowest grid frequency). Once per bus and run. Also reported by `gi.check_network`. | Extend the table over the network's resistivities and frequencies, e.g. a groundfield sweep over a wider rho range. |
 | `PARALLEL_COEFFICIENT_DEFAULT` | `ModelAssumptionWarning` | warning | the sources | Legacy mode `phase_current_mode="paths"`: a source reaches the fault over several paths whose `parallel_coefficient` is left at the default, so each path carries the full current. | Use the default mode `"auto"`, or set the coefficients. |
 
 `DC_LIMIT` and `FREQUENCY_ORDER` can appear in `Result.diagnostics` as well, when an
@@ -119,8 +120,10 @@ These are raised by the function named in the row; collect them with
 ## Codes of the pre-flight check
 
 `gi.check_network(net, fault=None)` returns these as records of category
-`InputWarning` (the three codes it shares with the solve — `SCALINGS_INCOMPLETE`,
-`SOURCE_FREQUENCY_GAP`, `SOURCE_FREQUENCY_OUTSIDE_NETWORK` — are listed above).
+`InputWarning` (the codes it shares with the solve — `SCALINGS_INCOMPLETE`,
+`SOURCE_FREQUENCY_GAP`, `SOURCE_FREQUENCY_OUTSIDE_NETWORK`, and
+`CHARACTERISTIC_EXTRAPOLATED`, which keeps its category `ModelAssumptionWarning`
+— are listed above).
 An `error` means that `run_fault` would raise or would return an answer that
 does not describe the network; a `warning` that the network solves but part of
 the input has no effect.

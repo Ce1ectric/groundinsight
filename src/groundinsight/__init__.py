@@ -33,6 +33,11 @@ from .database.migration import (
     needs_migration,
 )
 
+from .models.characteristic import (
+    CharacteristicProvenance,
+    CharacteristicValues,
+    EarthingCharacteristic,
+)
 from .models.core_models import (
     Branch,
     BranchType,
@@ -44,6 +49,7 @@ from .models.core_models import (
     NetworkFrequencyOrderWarning,
     Path,
     RES_FAULT_SCHEMA,
+    RES_FAULT_SCHEMA_VERSION,
     Result,
     ResultBranch,
     ResultBus,
@@ -177,6 +183,9 @@ __all__ = [
     "Network",
     "Bus",
     "BusType",
+    "CharacteristicProvenance",
+    "CharacteristicValues",
+    "EarthingCharacteristic",
     "Branch",
     "BranchType",
     "Fault",
@@ -187,6 +196,7 @@ __all__ = [
     "ResultBranch",
     # Column layout of Network.res_fault, the key figures of one fault.
     "RES_FAULT_SCHEMA",
+    "RES_FAULT_SCHEMA_VERSION",
     "ComplexNumber",
     "create_network",
     "create_bus",

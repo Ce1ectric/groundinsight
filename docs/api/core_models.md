@@ -127,6 +127,10 @@ is pinned in `gi.RES_FAULT_SCHEMA`:
 | `Z_E_Ohm` | Float64 | earthing impedance of EN 50522, the driving point at the fault bus (`z_earthing`) |
 | `Z_E_degree` | Float64 | its angle |
 | `n_diagnostics` | Int64 | records in `Result.diagnostics`, the same on every row |
+| `U_vT_max_V` | Float64 | the largest prospective touch voltage `U_vT` of any bus with an earthing characteristic |
+| `U_vT_max_bus` | Utf8 | the bus it occurs at |
+| `U_transfer_max_V` | Float64 | the largest transferred potential of any bus with an earthing characteristic |
+| `U_transfer_max_bus` | Utf8 | the bus it occurs at |
 
 A value the result marks as undefined is null — for example `r_current`
 and `I_E_A` at a frequency without fault current. The RMS row carries the
@@ -373,6 +377,46 @@ duplicate / NaN / negative rejection on `Network.frequencies`,
 int-vs-float key coercion on `Fault.scalings`, …). See the
 mkdocstrings dump below for the authoritative list.
 
+## Earthing characteristics
+
+A bus type describes its electrode with a formula `Z(rho, f)`. An
+`EarthingCharacteristic` carries a table instead -- the impedance over a grid
+of specific earth resistances and frequencies, as a field solver such as
+groundfield computes it -- together with the touch factor `k_touch = U_vT / U_E`
+and the transfer factor `k_transfer = U_transfer / U_E`. It hangs at
+`BusType.characteristic` (shared by every station of one design) or at
+`Bus.characteristic` (one station computed on its own, which wins over its
+type). Without either, a bus uses its type's formula exactly as before.
+
+```python
+import groundinsight as gi
+
+station = gi.EarthingCharacteristic(
+    name="Ortsnetzstation Typ A",
+    rho_Ohm_m=(50.0, 100.0, 200.0, 400.0),
+    frequency_Hz=(50.0, 250.0),
+    impedance_Ohm=[[0.5 * k + 0.02j * k, 0.5 * k + 0.08j * k] for k in (1, 2, 4, 8)],
+    k_touch=[[0.25, 0.27]] * 4,
+)
+bus_type = gi.BusType(name="station", system_type="MV/LV", voltage_level=20.0,
+                      impedance_formula="rho / 200", characteristic=station)
+net = gi.create_network(name="n", frequencies=[50.0, 250.0])
+bus = gi.create_bus(name="S", type=bus_type, network=net, specific_earth_resistance=150.0)
+print(bus.impedance[50.0], bus.k_touch)
+```
+
+`res_buses` then reports `U_vT_V` and `U_transfer_V` for the bus, and
+`res_fault` the largest of each with its bus. The interpolation, the
+extrapolation outside the grid and the diagnostic
+`CHARACTERISTIC_EXTRAPOLATED` are described on the class below.
+
+::: groundinsight.models.characteristic
+    options:
+      members:
+        - EarthingCharacteristic
+        - CharacteristicProvenance
+        - CharacteristicValues
+
 ## API reference
 
 ::: groundinsight.models.core_models
@@ -393,3 +437,4 @@ mkdocstrings dump below for the authoritative list.
         - ResultGroundingImpedance
         - ComplexNumber
         - RES_FAULT_SCHEMA
+        - RES_FAULT_SCHEMA_VERSION
