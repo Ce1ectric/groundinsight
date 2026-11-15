@@ -200,3 +200,8 @@ notebooks/network.json
 projektstand_*.md
 release-plan-*.md
 *.patch
+
+# GUI vendor bundle: build tree of gui/scripts/bundle_vendor.py (the shipped
+# result is gui/groundinsight_gui/static/vueflow/)
+/gui/scripts/vendor/node_modules/
+/gui/scripts/vendor/dist/
