@@ -58,7 +58,7 @@ import math
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .diagnostics import Diagnostic, collecting, unique
-from .models.characteristic import report_extrapolation
+from .models.characteristic import extrapolation_findings
 from .models.core_models import (
     Branch,
     Bus,
@@ -565,10 +565,15 @@ def _check_impedances(report: _Report) -> None:
 def _check_characteristics(report: _Report) -> None:
     """Buses whose earthing characteristic does not cover rho or the frequencies.
 
-    Raises the solve's own ``CHARACTERISTIC_EXTRAPOLATED`` warning, which the
-    report collects with its code.
+    Records the solve's own ``CHARACTERISTIC_EXTRAPOLATED`` with its category,
+    as a record rather than a raised warning, so a strict warnings filter does
+    not turn the finding into a failed check.
     """
-    report_extrapolation(report.buses, report.frequencies)
+    for message, elements in extrapolation_findings(report.buses, report.frequencies):
+        report.records.append(Diagnostic(
+            code="CHARACTERISTIC_EXTRAPOLATED", severity="warning",
+            category="ModelAssumptionWarning", message=message, elements=elements,
+        ))
 
 
 def _check_sources(report: _Report) -> None:

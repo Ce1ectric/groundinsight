@@ -171,8 +171,10 @@ def test_extrapolation_is_a_diagnostic_of_the_run_and_of_the_check():
                for code, elements in codes)
     message = next(d.message for d in result.diagnostics if d.code == "CHARACTERISTIC_EXTRAPOLATED")
     assert "rho = 1200" in message and "station A" in message
-    checked = [d.code for d in gi.check_network(net)]
-    assert "CHARACTERISTIC_EXTRAPOLATED" in checked
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # a finding of the check, not a failed check
+        checked = [d.code for d in gi.check_network(net)]
+    assert "CHARACTERISTIC_EXTRAPOLATED" in checked and "CHECK_FAILED" not in checked
     inside = _network(station_characteristic=_table(), rho=300.0)
     with collecting() as records:
         gi.run_fault(inside, "F")

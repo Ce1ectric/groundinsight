@@ -570,12 +570,13 @@ class EarthingCharacteristic(BaseModel):
         })
 
 
-def report_extrapolation(buses: Dict[str, Any], frequencies: Sequence[float]) -> None:
+def extrapolation_findings(
+    buses: Dict[str, Any], frequencies: Sequence[float]
+) -> List[Tuple[str, List[Tuple[str, str]]]]:
     """
-    Emit ``CHARACTERISTIC_EXTRAPOLATED`` for each bus evaluated outside its grid.
+    The buses whose earthing characteristic is evaluated outside its grid.
 
-    Internal API: called by :func:`groundinsight.run_fault` (so the
-    diagnostic is part of ``Result.diagnostics``) and by
+    Internal API: shared by :func:`report_extrapolation` and
     :func:`groundinsight.check_network`; not exported from ``groundinsight``
     and free to change in any release.
 
@@ -585,7 +586,13 @@ def report_extrapolation(buses: Dict[str, Any], frequencies: Sequence[float]) ->
         The buses of a network; inactive ones are skipped.
     frequencies : sequence of float
         The network frequencies.
+
+    Returns
+    -------
+    list of tuple
+        ``(message, elements)`` per bus concerned, in name order.
     """
+    findings = []
     for name in sorted(buses):
         bus = buses[name]
         if not getattr(bus, "active", True):
@@ -605,12 +612,31 @@ def report_extrapolation(buses: Dict[str, Any], frequencies: Sequence[float]) ->
         if outside:
             parts.append(f"{', '.join(outside)} (table {f0:g}-{f1:g} Hz)")
         label = f" '{characteristic.name}'" if characteristic.name else ""
-        emit(
-            ModelAssumptionWarning,
+        findings.append((
             f"Bus '{name}' is evaluated outside its earthing characteristic"
             f"{label}: {'; '.join(parts)}. Impedance and touch factors are "
             "continued from the edge of the table (a power law in rho and f); "
             "extend the table to cover the network.",
-            code="CHARACTERISTIC_EXTRAPOLATED",
-            elements=[("bus", name)],
-        )
+            [("bus", name)],
+        ))
+    return findings
+
+
+def report_extrapolation(buses: Dict[str, Any], frequencies: Sequence[float]) -> None:
+    """
+    Emit ``CHARACTERISTIC_EXTRAPOLATED`` for each bus evaluated outside its grid.
+
+    Internal API: called by :func:`groundinsight.run_fault`, so the
+    diagnostic is part of ``Result.diagnostics``; not exported from
+    ``groundinsight`` and free to change in any release.
+
+    Parameters
+    ----------
+    buses : dict of str to Bus
+        The buses of a network; inactive ones are skipped.
+    frequencies : sequence of float
+        The network frequencies.
+    """
+    for message, elements in extrapolation_findings(buses, frequencies):
+        emit(ModelAssumptionWarning, message, code="CHARACTERISTIC_EXTRAPOLATED",
+             elements=elements)
