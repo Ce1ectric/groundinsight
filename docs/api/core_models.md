@@ -417,6 +417,14 @@ extrapolation outside the grid and the diagnostic
         - CharacteristicProvenance
         - CharacteristicValues
 
+A characteristic that groundfield computed arrives as its BusType document
+(the JSON of groundfield's `save_bustype_json`).
+`groundinsight.integrations.groundfield.read_bustype_json(path)` reads it
+without groundfield installed: the samples become the table, the formula and
+the provenance are kept.
+
+::: groundinsight.integrations.groundfield
+
 ## API reference
 
 ::: groundinsight.models.core_models

@@ -335,6 +335,79 @@ def load_network_from_json(path: _PathLike) -> Network:
     return _read_project(os.fspath(path)).network
 
 
+def project_to_json(
+    network: Network,
+    diagram: Optional[Diagram] = None,
+    views: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    """
+    The text of a project file, without writing it.
+
+    What :func:`save_project` writes, for a store that keeps projects as text
+    (a database column, a server's object store) rather than as files.
+
+    Parameters
+    ----------
+    network : Network
+        The network, with its stored results.
+    diagram : Diagram, optional
+        Its diagram.
+    views : list of dict, optional
+        The evaluation tabs; JSON objects.
+
+    Returns
+    -------
+    str
+        The JSON text of a project file of :data:`SCHEMA_VERSION`.
+
+    Raises
+    ------
+    TypeError
+        If a view is not a JSON object or holds values JSON cannot store.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> text = gi.project_to_json(gi.create_network(name="n", frequencies=[50.0]))
+    >>> gi.project_from_json(text).network.name
+    'n'
+    """
+    return _project_file_text(network, diagram, views)
+
+
+def project_from_json(text: str, source: str = "<text>") -> Project:
+    """
+    Read the text of a project file of any release.
+
+    Parameters
+    ----------
+    text : str
+        The JSON text, as :func:`project_to_json` or :func:`save_project`
+        produce it, or of an older release.
+    source : str
+        How to name the text in messages.
+
+    Returns
+    -------
+    Project
+        As :func:`load_project` returns it.
+
+    Raises
+    ------
+    ValueError
+        As documented for :func:`load_project`.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> project = gi.project_from_json(gi.project_to_json(
+    ...     gi.create_network(name="n", frequencies=[50.0]), gi.Diagram()))
+    >>> project.schema_version, project.diagram == gi.Diagram()
+    (2, True)
+    """
+    return _parse_project(text, None, source)
+
+
 def _read_project(source: str) -> Project:
     """
     Read and validate a project file.
@@ -359,6 +432,33 @@ def _read_project(source: str) -> Project:
     with open(source, "rb") as handle:
         raw = handle.read()
     text, legacy_encoding = _decode(raw, source)
+    return _parse_project(text, legacy_encoding, source)
+
+
+def _parse_project(text: str, legacy_encoding: Optional[str], source: str) -> Project:
+    """
+    Validate the decoded text of a project file.
+
+    Parameters
+    ----------
+    text : str
+        The JSON text.
+    legacy_encoding : str or None
+        The platform encoding the text was decoded with, or ``None`` for
+        UTF-8.
+    source : str
+        The file (or a name of the text) for messages.
+
+    Returns
+    -------
+    Project
+        Its content.
+
+    Raises
+    ------
+    ValueError
+        As documented for :func:`load_project`.
+    """
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:

@@ -138,6 +138,8 @@ from .io.project_file import (
     Project,
     load_network_from_json,
     load_project,
+    project_from_json,
+    project_to_json,
     save_network_to_json,
     save_project,
 )
@@ -313,6 +315,8 @@ __all__ = [
     "Project",
     "save_project",
     "load_project",
+    "project_to_json",
+    "project_from_json",
     "Diagram",
     "DiagramNode",
     "DiagramEdge",

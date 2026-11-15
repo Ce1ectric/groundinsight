@@ -110,6 +110,19 @@ version section when a release is cut.
   views)` and `gi.load_project(path)` (a `gi.Project`) write and read the
   network together with its diagram and the evaluation tabs of a front end,
   atomically and as UTF-8 like `save_network_to_json`.
+  `gi.project_to_json` / `gi.project_from_json` give and read the same text
+  without a file. `Diagram.with_layout(network)` lays a network out
+  automatically -- columns by graph distance from the infeed, deterministic
+  and on the raster -- either completely or only the elements without an
+  entry (`only_unplaced=True`).
+- **groundfield BusType documents as earthing characteristics
+  (`groundinsight.integrations.groundfield`).**
+  `characteristic_from_bustype_spec(document)` and `read_bustype_json(path)`
+  read the JSON that groundfield's `save_bustype_json` writes (schema
+  `groundfield.bustype`, version 1) without groundfield installed: the
+  samples become the table (they must form a full `rho x f` grid), the
+  formula and the provenance -- groundfield version, date, resistivity
+  preset, electrode, soil, a SHA-256 of the document -- are kept.
 
 ### Changed
 

@@ -311,7 +311,9 @@ setups based on existing distribution-network models.
 file*, and `gi.load_network_from_json(path)` reads it back.
 `gi.save_project(path, network, diagram, views)` and `gi.load_project(path)`
 do the same with the network's diagram and the evaluation tabs of a front
-end (a `gi.Project`). The file holds two header keys and three sections:
+end (a `gi.Project`); `gi.project_to_json` and `gi.project_from_json` give
+and read the same text without a file, for a store that keeps projects as
+text. The file holds two header keys and three sections:
 
 ```json
 {
@@ -363,9 +365,11 @@ instead of computing without them. Read project files with
 
 The diagram (`gi.Diagram` with `gi.DiagramNode`, `gi.DiagramEdge` and
 `gi.DiagramMarker`) refers to buses, branches, faults and sources by name;
-`Diagram.renamed` and `Diagram.without` follow a rename or a removal, and
+`Diagram.renamed` and `Diagram.without` follow a rename or a removal,
 `Diagram.check(network)` reports entries without element and elements
-without entry.
+without entry, and `Diagram.with_layout(network)` lays a network out
+automatically -- all of it, or only what has no entry yet
+(`only_unplaced=True`).
 
 ::: groundinsight.diagram
     options:
