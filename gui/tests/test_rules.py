@@ -95,3 +95,38 @@ def test_the_command_line_options_are_parsed():
     assert options.app.language == "en" and options.app.start_example == "mv_ring"
     defaults = parse_options([])
     assert not defaults.native and defaults.host == "127.0.0.1" and defaults.app.language == "de"
+
+
+def _shown_columns():
+    """Every column name the GUI shows as a header or a property label."""
+    import warnings
+
+    from groundinsight.api import KeyFigureRowDTO, ProjectSession
+    from groundinsight.io import TABLE_SCHEMAS
+
+    names = {column for schema in TABLE_SCHEMAS.values() for column in schema}
+    session = ProjectSession.from_example("mv_ring")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        result = session.solve("F1")
+    names |= {c.name for c in result.buses.columns} | {c.name for c in result.branches.columns}
+    names |= set(KeyFigureRowDTO.model_fields) - {"dto_schema_version"}
+    names |= {"rho_Ohm_m", "frequency_Hz", "Z_Ohm", "Z_degree", "R_Ohm", "X_Ohm", "k_touch", "k_transfer"}
+    session.close()
+    return names
+
+
+def test_people_read_no_underscores():
+    """Identifiers with ``_`` are for code; headers, labels and texts get words."""
+    from groundinsight.api import EXAMPLES
+
+    from groundinsight_gui.i18n import COLUMN_LABELS, LANGUAGES, STRINGS, column_label, template_label
+
+    for language in LANGUAGES:
+        unlabelled = sorted(c for c in _shown_columns() if c not in COLUMN_LABELS[language])
+        assert unlabelled == [], (language, unlabelled)
+        headers = {c: column_label(language, c) for c in _shown_columns()}
+        assert [c for c, h in headers.items() if "_" in h] == []
+        assert [k for k, v in STRINGS[language].items() if "_" in v] == []
+        assert ["_" in template_label(language, name) for name in EXAMPLES] == [False] * len(EXAMPLES)
+    assert column_label("de", "some_new_column") == "some new column"

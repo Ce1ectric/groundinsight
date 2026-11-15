@@ -66,7 +66,7 @@ from groundinsight.api import (
 
 from .colouring import MODES
 from .formatting import DASH, format_number, format_unit, parse_number
-from .i18n import STRINGS, column_label, text
+from .i18n import STRINGS, column_label, template_label, text
 from .plan import PlanView
 
 logger = logging.getLogger(__name__)
@@ -392,7 +392,8 @@ class ProjectPage:
             with ui.button(self.t("new"), icon="note_add").props("flat dense no-caps").mark("new"):
                 with ui.menu():
                     for name in self.templates:
-                        ui.menu_item(name, on_click=lambda _, n=name: self._open_template(n))
+                        ui.menu_item(template_label(self.language, name),
+                                     on_click=lambda _, n=name: self._open_template(n)).mark(f"new-{name}")
             ui.button(self.t("open"), icon="folder_open", on_click=self._open_open_dialog).props(
                 "flat dense no-caps").mark("open")
             if self.session is not None:
@@ -452,7 +453,8 @@ class ProjectPage:
             with ui.row().classes("gap-4 justify-center"):
                 for name in self.templates:
                     with ui.card().classes("w-80 gap-2"):
-                        ui.button(name, icon="hub", on_click=lambda _, n=name: self._open_template(n)).props(
+                        ui.button(template_label(self.language, name), icon="hub",
+                                  on_click=lambda _, n=name: self._open_template(n)).props(
                             "flat no-caps").classes("text-lg").mark(f"template-{name}")
                         key = f"template_{name}"
                         description = self.t(key) if key in STRINGS[self.language] else name

@@ -227,7 +227,7 @@ def test_elk_lays_the_network_out_in_the_browser(page):
 
 def test_a_solved_ring_coloured_by_its_epr(page):
     page.get_by_role("button", name="Neu").click()
-    page.get_by_text("mv_ring", exact=True).click()
+    page.get_by_text("MS-Ring", exact=True).click()
     page.locator(".vue-flow__node[data-id='b20']").wait_for()
     page.get_by_role("tab", name="Ergebnisse").click()
     page.get_by_role("button", name="Rechnen").click()

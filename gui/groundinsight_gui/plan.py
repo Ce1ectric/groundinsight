@@ -621,7 +621,8 @@ class BusDialog(_ElementDialog):
                 "text-sm").mark("char-origin")
             if dto.extrapolated:
                 ui.label(self.t("char_extrapolated")).classes("text-xs text-amber-800")
-            columns = [{"field": c.name, "headerName": c.name} for c in dto.table.columns]
+            language = self.plan.page.language
+            columns = [{"field": c.name, "headerName": column_label(language, c.name)} for c in dto.table.columns]
             ui.aggrid({"columnDefs": columns, "rowData": dto.table.rows,
                        "defaultColDef": {"flex": 1, "minWidth": 80}}, theme="quartz").classes("h-48")
         with ui.row().classes("gap-2 items-center"):
@@ -716,7 +717,7 @@ class BranchDialog(_ElementDialog):
             if value is None or key == "name":
                 continue
             with ui.row().classes("w-full justify-between no-wrap gap-3"):
-                ui.label(key).classes("text-xs text-gray-500")
+                ui.label(column_label(self.plan.page.language, key)).classes("text-xs text-gray-500")
                 ui.label(str(value)).classes("text-xs font-mono text-right break-all").mark(f"type-{key}")
 
     def _tab_switch(self) -> None:
