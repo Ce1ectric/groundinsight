@@ -1,0 +1,2998 @@
+{
+ "groundinsight_version": "2026.11.1",
+ "commit": "8e9443e",
+ "platform": "Darwin-arm64",
+ "python": "3.14.10",
+ "numpy": "2.4.6",
+ "scipy": "1.18.1",
+ "cases": {
+  "quickstart/auto": {
+   "res_buses": [
+    {
+     "bus_name": "bus_source",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 275.4310733536245,
+     "EPR_degree": -38.84526242938844,
+     "I_bus_A": 274.06416132631193,
+     "I_bus_degree": -44.555855566888084,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus_source",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "EPR_V": 17.119673934947514,
+     "EPR_degree": -51.95295746817391,
+     "I_bus_A": 15.312301868469582,
+     "I_bus_degree": -78.51800864525191,
+     "I_inj_A": 200.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus_source",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 350.0,
+     "is_rms": false,
+     "EPR_V": 6.741110287909941,
+     "EPR_degree": -46.752582284128366,
+     "I_bus_A": 5.522532727595123,
+     "I_bus_degree": -81.74460248268703,
+     "I_inj_A": 100.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus_source",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 450.0,
+     "is_rms": false,
+     "EPR_V": 2.901208996235941,
+     "EPR_degree": -41.57435580584662,
+     "I_bus_A": 2.156451663941792,
+     "I_bus_degree": -83.56156830166327,
+     "I_inj_A": 50.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus_source",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 550.0,
+     "is_rms": false,
+     "EPR_V": 1.3141962264165297,
+     "EPR_degree": -36.998551536726914,
+     "I_bus_A": 0.8840240474830173,
+     "I_bus_degree": -84.72486253063319,
+     "I_inj_A": 25.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus_source",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 276.0633008888428,
+     "EPR_degree": null,
+     "I_bus_A": 274.55702734045747,
+     "I_bus_degree": null,
+     "I_inj_A": 1026.2187875886896,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "bus_fault",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 275.4310733536245,
+     "EPR_degree": 141.15473757061156,
+     "I_bus_A": 274.064161326312,
+     "I_bus_degree": 135.44414443311194,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "bus_fault",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "EPR_V": 17.119673934947517,
+     "EPR_degree": 128.0470425318261,
+     "I_bus_A": 15.312301868469588,
+     "I_bus_degree": 101.4819913547481,
+     "I_inj_A": 200.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "bus_fault",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 350.0,
+     "is_rms": false,
+     "EPR_V": 6.741110287909942,
+     "EPR_degree": 133.24741771587165,
+     "I_bus_A": 5.522532727595124,
+     "I_bus_degree": 98.25539751731297,
+     "I_inj_A": 100.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "bus_fault",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 450.0,
+     "is_rms": false,
+     "EPR_V": 2.901208996235941,
+     "EPR_degree": 138.4256441941534,
+     "I_bus_A": 2.156451663941792,
+     "I_bus_degree": 96.43843169833671,
+     "I_inj_A": 50.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "bus_fault",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 550.0,
+     "is_rms": false,
+     "EPR_V": 1.3141962264165297,
+     "EPR_degree": 143.00144846327308,
+     "I_bus_A": 0.8840240474830173,
+     "I_bus_degree": 95.27513746936683,
+     "I_inj_A": 25.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "bus_fault",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 276.0633008888428,
+     "EPR_degree": null,
+     "I_bus_A": 274.55702734045747,
+     "I_bus_degree": null,
+     "I_inj_A": 1026.2187875886896,
+     "I_inj_degree": null
+    }
+   ],
+   "res_branches": [
+    {
+     "branch_name": "cable_1",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 827.3651606161103,
+     "I_branch_degree": -166.56123877497154
+    },
+    {
+     "branch_name": "cable_1",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "I_branch_A": 197.52275901336841,
+     "I_branch_degree": -175.64302499415368
+    },
+    {
+     "branch_name": "cable_1",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 350.0,
+     "is_rms": false,
+     "I_branch_A": 99.35747005406834,
+     "I_branch_degree": -176.84676773504546
+    },
+    {
+     "branch_name": "cable_1",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 450.0,
+     "is_rms": false,
+     "I_branch_A": 49.80430511641084,
+     "I_branch_degree": -177.53406424241402
+    },
+    {
+     "branch_name": "cable_1",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 550.0,
+     "is_rms": false,
+     "I_branch_A": 24.93426770993248,
+     "I_branch_degree": -177.97680813099686
+    },
+    {
+     "branch_name": "cable_1",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 858.2088572716314,
+     "I_branch_degree": null
+    }
+   ],
+   "res_all_impedances": [
+    {
+     "fault_name": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 50.0,
+     "grounding_impedance_Ohm": 0.8440243587331111,
+     "grounding_impedance_deg": 15.182350521326667,
+     "reduction_factor": 0.38461538461538464,
+     "reduction_factor_current": 0.27406416132631195
+    },
+    {
+     "fault_name": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 250.0,
+     "grounding_impedance_Ohm": 1.0725444978567402,
+     "grounding_impedance_deg": 29.787604551947286,
+     "reduction_factor": 0.08304547985373997,
+     "reduction_factor_current": 0.07656150934234791
+    },
+    {
+     "fault_name": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 350.0,
+     "grounding_impedance_Ohm": 1.1765305960826036,
+     "grounding_impedance_deg": 37.32776450907734,
+     "reduction_factor": 0.0594186399842153,
+     "reduction_factor_current": 0.05522532727595124
+    },
+    {
+     "fault_name": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 450.0,
+     "grounding_impedance_Ohm": 1.2993043030978517,
+     "grounding_impedance_deg": 43.81499487549269,
+     "reduction_factor": 0.04624676139488888,
+     "reduction_factor_current": 0.04312903327883584
+    },
+    {
+     "fault_name": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 550.0,
+     "grounding_impedance_Ohm": 1.4371692297066314,
+     "grounding_impedance_deg": 49.226407244023626,
+     "reduction_factor": 0.03785164279505412,
+     "reduction_factor_current": 0.03536096189932069
+    }
+   ],
+   "res_fault[fault_at_remote_bus]": [
+    {
+     "fault": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_F_A": 1000.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 275.4310733536245,
+     "EPR_fault_degree": 141.15473757061156,
+     "EPR_max_V": 275.4310733536245,
+     "EPR_max_bus": "bus_fault",
+     "r_epr": 0.38461538461538464,
+     "r_current": 0.27406416132631195,
+     "I_E_A": 274.06416132631193,
+     "U_E_V": 275.4310733536245,
+     "Z_E_Ohm": 0.8440243587331111,
+     "Z_E_degree": 15.182350521326667,
+     "n_diagnostics": 1
+    },
+    {
+     "fault": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "I_F_A": 200.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 17.119673934947517,
+     "EPR_fault_degree": 128.0470425318261,
+     "EPR_max_V": 17.119673934947517,
+     "EPR_max_bus": "bus_fault",
+     "r_epr": 0.08304547985373997,
+     "r_current": 0.07656150934234791,
+     "I_E_A": 15.312301868469582,
+     "U_E_V": 17.119673934947517,
+     "Z_E_Ohm": 1.0725444978567402,
+     "Z_E_degree": 29.787604551947283,
+     "n_diagnostics": 1
+    },
+    {
+     "fault": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 350.0,
+     "is_rms": false,
+     "I_F_A": 100.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 6.741110287909942,
+     "EPR_fault_degree": 133.24741771587165,
+     "EPR_max_V": 6.741110287909942,
+     "EPR_max_bus": "bus_fault",
+     "r_epr": 0.0594186399842153,
+     "r_current": 0.05522532727595124,
+     "I_E_A": 5.522532727595124,
+     "U_E_V": 6.741110287909942,
+     "Z_E_Ohm": 1.1765305960826036,
+     "Z_E_degree": 37.32776450907733,
+     "n_diagnostics": 1
+    },
+    {
+     "fault": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 450.0,
+     "is_rms": false,
+     "I_F_A": 50.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 2.901208996235941,
+     "EPR_fault_degree": 138.4256441941534,
+     "EPR_max_V": 2.901208996235941,
+     "EPR_max_bus": "bus_fault",
+     "r_epr": 0.04624676139488888,
+     "r_current": 0.04312903327883584,
+     "I_E_A": 2.156451663941792,
+     "U_E_V": 2.901208996235941,
+     "Z_E_Ohm": 1.2993043030978517,
+     "Z_E_degree": 43.81499487549268,
+     "n_diagnostics": 1
+    },
+    {
+     "fault": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 550.0,
+     "is_rms": false,
+     "I_F_A": 25.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 1.3141962264165297,
+     "EPR_fault_degree": 143.00144846327308,
+     "EPR_max_V": 1.3141962264165297,
+     "EPR_max_bus": "bus_fault",
+     "r_epr": 0.03785164279505412,
+     "r_current": 0.03536096189932069,
+     "I_E_A": 0.8840240474830173,
+     "U_E_V": 1.3141962264165297,
+     "Z_E_Ohm": 1.4371692297066314,
+     "Z_E_degree": 49.226407244023626,
+     "n_diagnostics": 1
+    },
+    {
+     "fault": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_F_A": 1026.2187875886896,
+     "I_F_degree": null,
+     "EPR_fault_V": 276.0633008888428,
+     "EPR_fault_degree": null,
+     "EPR_max_V": 276.0633008888428,
+     "EPR_max_bus": "bus_fault",
+     "r_epr": null,
+     "r_current": null,
+     "I_E_A": 274.5570273404574,
+     "U_E_V": 276.0633008888428,
+     "Z_E_Ohm": null,
+     "Z_E_degree": null,
+     "n_diagnostics": 1
+    }
+   ],
+   "bus_impedance": [
+    {
+     "bus": "bus_source",
+     "frequency_Hz": 50.0,
+     "real": 1.0,
+     "imag": 0.1
+    },
+    {
+     "bus": "bus_source",
+     "frequency_Hz": 250.0,
+     "real": 1.0,
+     "imag": 0.5
+    },
+    {
+     "bus": "bus_source",
+     "frequency_Hz": 350.0,
+     "real": 1.0,
+     "imag": 0.7000000000000001
+    },
+    {
+     "bus": "bus_source",
+     "frequency_Hz": 450.0,
+     "real": 1.0,
+     "imag": 0.9
+    },
+    {
+     "bus": "bus_source",
+     "frequency_Hz": 550.0,
+     "real": 1.0,
+     "imag": 1.1
+    },
+    {
+     "bus": "bus_fault",
+     "frequency_Hz": 50.0,
+     "real": 1.0,
+     "imag": 0.1
+    },
+    {
+     "bus": "bus_fault",
+     "frequency_Hz": 250.0,
+     "real": 1.0,
+     "imag": 0.5
+    },
+    {
+     "bus": "bus_fault",
+     "frequency_Hz": 350.0,
+     "real": 1.0,
+     "imag": 0.7000000000000001
+    },
+    {
+     "bus": "bus_fault",
+     "frequency_Hz": 450.0,
+     "real": 1.0,
+     "imag": 0.9
+    },
+    {
+     "bus": "bus_fault",
+     "frequency_Hz": 550.0,
+     "real": 1.0,
+     "imag": 1.1
+    }
+   ]
+  },
+  "quickstart/paths": {
+   "res_buses": [
+    {
+     "bus_name": "bus_source",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 275.4310733536245,
+     "EPR_degree": -38.84526242938844,
+     "I_bus_A": 274.06416132631193,
+     "I_bus_degree": -44.555855566888084,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus_source",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "EPR_V": 17.119673934947517,
+     "EPR_degree": -51.95295746817391,
+     "I_bus_A": 15.312301868469584,
+     "I_bus_degree": -78.51800864525191,
+     "I_inj_A": 200.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus_source",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 350.0,
+     "is_rms": false,
+     "EPR_V": 6.741110287909941,
+     "EPR_degree": -46.7525822841285,
+     "I_bus_A": 5.522532727595124,
+     "I_bus_degree": -81.74460248268717,
+     "I_inj_A": 100.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus_source",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 450.0,
+     "is_rms": false,
+     "EPR_V": 2.901208996235941,
+     "EPR_degree": -41.57435580584662,
+     "I_bus_A": 2.156451663941792,
+     "I_bus_degree": -83.56156830166327,
+     "I_inj_A": 50.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus_source",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 550.0,
+     "is_rms": false,
+     "EPR_V": 1.3141962264165294,
+     "EPR_degree": -36.9985515367267,
+     "I_bus_A": 0.8840240474830173,
+     "I_bus_degree": -84.72486253063296,
+     "I_inj_A": 25.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus_source",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 276.0633008888428,
+     "EPR_degree": null,
+     "I_bus_A": 274.55702734045747,
+     "I_bus_degree": null,
+     "I_inj_A": 1026.2187875886896,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "bus_fault",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 275.4310733536245,
+     "EPR_degree": 141.15473757061156,
+     "I_bus_A": 274.064161326312,
+     "I_bus_degree": 135.44414443311194,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "bus_fault",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "EPR_V": 17.11967393494752,
+     "EPR_degree": 128.0470425318261,
+     "I_bus_A": 15.312301868469591,
+     "I_bus_degree": 101.4819913547481,
+     "I_inj_A": 200.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "bus_fault",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 350.0,
+     "is_rms": false,
+     "EPR_V": 6.741110287909942,
+     "EPR_degree": 133.2474177158715,
+     "I_bus_A": 5.522532727595124,
+     "I_bus_degree": 98.25539751731283,
+     "I_inj_A": 100.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "bus_fault",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 450.0,
+     "is_rms": false,
+     "EPR_V": 2.901208996235941,
+     "EPR_degree": 138.4256441941534,
+     "I_bus_A": 2.156451663941792,
+     "I_bus_degree": 96.43843169833671,
+     "I_inj_A": 50.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "bus_fault",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 550.0,
+     "is_rms": false,
+     "EPR_V": 1.3141962264165297,
+     "EPR_degree": 143.00144846327328,
+     "I_bus_A": 0.8840240474830173,
+     "I_bus_degree": 95.27513746936704,
+     "I_inj_A": 25.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "bus_fault",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 276.0633008888428,
+     "EPR_degree": null,
+     "I_bus_A": 274.55702734045747,
+     "I_bus_degree": null,
+     "I_inj_A": 1026.2187875886896,
+     "I_inj_degree": null
+    }
+   ],
+   "res_branches": [
+    {
+     "branch_name": "cable_1",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 827.3651606161103,
+     "I_branch_degree": -166.56123877497154
+    },
+    {
+     "branch_name": "cable_1",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "I_branch_A": 197.52275901336841,
+     "I_branch_degree": -175.64302499415368
+    },
+    {
+     "branch_name": "cable_1",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 350.0,
+     "is_rms": false,
+     "I_branch_A": 99.35747005406834,
+     "I_branch_degree": -176.84676773504546
+    },
+    {
+     "branch_name": "cable_1",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 450.0,
+     "is_rms": false,
+     "I_branch_A": 49.80430511641084,
+     "I_branch_degree": -177.53406424241402
+    },
+    {
+     "branch_name": "cable_1",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": 550.0,
+     "is_rms": false,
+     "I_branch_A": 24.934267709932474,
+     "I_branch_degree": -177.97680813099686
+    },
+    {
+     "branch_name": "cable_1",
+     "fault": "fault_at_remote_bus",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 858.2088572716314,
+     "I_branch_degree": null
+    }
+   ],
+   "res_all_impedances": [
+    {
+     "fault_name": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 50.0,
+     "grounding_impedance_Ohm": 0.8440243587331111,
+     "grounding_impedance_deg": 15.182350521326667,
+     "reduction_factor": 0.38461538461538464,
+     "reduction_factor_current": 0.27406416132631195
+    },
+    {
+     "fault_name": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 250.0,
+     "grounding_impedance_Ohm": 1.0725444978567402,
+     "grounding_impedance_deg": 29.787604551947286,
+     "reduction_factor": 0.08304547985373999,
+     "reduction_factor_current": 0.07656150934234791
+    },
+    {
+     "fault_name": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 350.0,
+     "grounding_impedance_Ohm": 1.1765305960826036,
+     "grounding_impedance_deg": 37.32776450907734,
+     "reduction_factor": 0.0594186399842153,
+     "reduction_factor_current": 0.05522532727595124
+    },
+    {
+     "fault_name": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 450.0,
+     "grounding_impedance_Ohm": 1.2993043030978517,
+     "grounding_impedance_deg": 43.81499487549269,
+     "reduction_factor": 0.04624676139488888,
+     "reduction_factor_current": 0.04312903327883584
+    },
+    {
+     "fault_name": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 550.0,
+     "grounding_impedance_Ohm": 1.4371692297066314,
+     "grounding_impedance_deg": 49.226407244023626,
+     "reduction_factor": 0.03785164279505412,
+     "reduction_factor_current": 0.03536096189932069
+    }
+   ],
+   "res_fault[fault_at_remote_bus]": [
+    {
+     "fault": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_F_A": 1000.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 275.4310733536245,
+     "EPR_fault_degree": 141.15473757061156,
+     "EPR_max_V": 275.4310733536245,
+     "EPR_max_bus": "bus_fault",
+     "r_epr": 0.38461538461538464,
+     "r_current": 0.27406416132631195,
+     "I_E_A": 274.06416132631193,
+     "U_E_V": 275.4310733536245,
+     "Z_E_Ohm": 0.8440243587331111,
+     "Z_E_degree": 15.182350521326667,
+     "n_diagnostics": 1
+    },
+    {
+     "fault": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "I_F_A": 200.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 17.11967393494752,
+     "EPR_fault_degree": 128.0470425318261,
+     "EPR_max_V": 17.11967393494752,
+     "EPR_max_bus": "bus_fault",
+     "r_epr": 0.08304547985373999,
+     "r_current": 0.07656150934234791,
+     "I_E_A": 15.312301868469584,
+     "U_E_V": 17.11967393494752,
+     "Z_E_Ohm": 1.0725444978567402,
+     "Z_E_degree": 29.787604551947283,
+     "n_diagnostics": 1
+    },
+    {
+     "fault": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 350.0,
+     "is_rms": false,
+     "I_F_A": 100.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 6.741110287909942,
+     "EPR_fault_degree": 133.2474177158715,
+     "EPR_max_V": 6.741110287909942,
+     "EPR_max_bus": "bus_fault",
+     "r_epr": 0.0594186399842153,
+     "r_current": 0.05522532727595124,
+     "I_E_A": 5.522532727595124,
+     "U_E_V": 6.741110287909942,
+     "Z_E_Ohm": 1.1765305960826036,
+     "Z_E_degree": 37.32776450907733,
+     "n_diagnostics": 1
+    },
+    {
+     "fault": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 450.0,
+     "is_rms": false,
+     "I_F_A": 50.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 2.901208996235941,
+     "EPR_fault_degree": 138.4256441941534,
+     "EPR_max_V": 2.901208996235941,
+     "EPR_max_bus": "bus_fault",
+     "r_epr": 0.04624676139488888,
+     "r_current": 0.04312903327883584,
+     "I_E_A": 2.156451663941792,
+     "U_E_V": 2.901208996235941,
+     "Z_E_Ohm": 1.2993043030978517,
+     "Z_E_degree": 43.81499487549268,
+     "n_diagnostics": 1
+    },
+    {
+     "fault": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": 550.0,
+     "is_rms": false,
+     "I_F_A": 25.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 1.3141962264165297,
+     "EPR_fault_degree": 143.00144846327328,
+     "EPR_max_V": 1.3141962264165297,
+     "EPR_max_bus": "bus_fault",
+     "r_epr": 0.03785164279505412,
+     "r_current": 0.03536096189932069,
+     "I_E_A": 0.8840240474830173,
+     "U_E_V": 1.3141962264165297,
+     "Z_E_Ohm": 1.4371692297066314,
+     "Z_E_degree": 49.226407244023626,
+     "n_diagnostics": 1
+    },
+    {
+     "fault": "fault_at_remote_bus",
+     "fault_bus": "bus_fault",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_F_A": 1026.2187875886896,
+     "I_F_degree": null,
+     "EPR_fault_V": 276.0633008888428,
+     "EPR_fault_degree": null,
+     "EPR_max_V": 276.0633008888428,
+     "EPR_max_bus": "bus_fault",
+     "r_epr": null,
+     "r_current": null,
+     "I_E_A": 274.5570273404574,
+     "U_E_V": 276.0633008888428,
+     "Z_E_Ohm": null,
+     "Z_E_degree": null,
+     "n_diagnostics": 1
+    }
+   ],
+   "bus_impedance": [
+    {
+     "bus": "bus_source",
+     "frequency_Hz": 50.0,
+     "real": 1.0,
+     "imag": 0.1
+    },
+    {
+     "bus": "bus_source",
+     "frequency_Hz": 250.0,
+     "real": 1.0,
+     "imag": 0.5
+    },
+    {
+     "bus": "bus_source",
+     "frequency_Hz": 350.0,
+     "real": 1.0,
+     "imag": 0.7000000000000001
+    },
+    {
+     "bus": "bus_source",
+     "frequency_Hz": 450.0,
+     "real": 1.0,
+     "imag": 0.9
+    },
+    {
+     "bus": "bus_source",
+     "frequency_Hz": 550.0,
+     "real": 1.0,
+     "imag": 1.1
+    },
+    {
+     "bus": "bus_fault",
+     "frequency_Hz": 50.0,
+     "real": 1.0,
+     "imag": 0.1
+    },
+    {
+     "bus": "bus_fault",
+     "frequency_Hz": 250.0,
+     "real": 1.0,
+     "imag": 0.5
+    },
+    {
+     "bus": "bus_fault",
+     "frequency_Hz": 350.0,
+     "real": 1.0,
+     "imag": 0.7000000000000001
+    },
+    {
+     "bus": "bus_fault",
+     "frequency_Hz": 450.0,
+     "real": 1.0,
+     "imag": 0.9
+    },
+    {
+     "bus": "bus_fault",
+     "frequency_Hz": 550.0,
+     "real": 1.0,
+     "imag": 1.1
+    }
+   ]
+  },
+  "minimal/auto": {
+   "res_buses": [
+    {
+     "bus_name": "bus1",
+     "fault": "fault",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 18.030461149365472,
+     "EPR_degree": -25.641005824305292,
+     "I_bus_A": 18.030461149365472,
+     "I_bus_degree": -25.641005824305292,
+     "I_inj_A": 100.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus1",
+     "fault": "fault",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 18.030461149365472,
+     "EPR_degree": null,
+     "I_bus_A": 18.030461149365472,
+     "I_bus_degree": null,
+     "I_inj_A": 100.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "bus2",
+     "fault": "fault",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 5.8900423945334126e-15,
+     "EPR_degree": -117.10741756727953,
+     "I_bus_A": 5.8900423945334126e-15,
+     "I_bus_degree": -117.10741756727953,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus2",
+     "fault": "fault",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 5.890042394533412e-15,
+     "EPR_degree": null,
+     "I_bus_A": 5.890042394533412e-15,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "bus3",
+     "fault": "fault",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 18.03046114936547,
+     "EPR_degree": 154.3589941756947,
+     "I_bus_A": 18.03046114936547,
+     "I_bus_degree": 154.3589941756947,
+     "I_inj_A": 100.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "bus3",
+     "fault": "fault",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 18.030461149365465,
+     "EPR_degree": null,
+     "I_bus_A": 18.030461149365465,
+     "I_bus_degree": null,
+     "I_inj_A": 100.0,
+     "I_inj_degree": null
+    }
+   ],
+   "res_branches": [
+    {
+     "branch_name": "b12",
+     "fault": "fault",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 84.10780128306173,
+     "I_branch_degree": -174.67724929223178
+    },
+    {
+     "branch_name": "b12",
+     "fault": "fault",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 84.10780128306173,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "b23",
+     "fault": "fault",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 84.10780128306173,
+     "I_branch_degree": -174.67724929223178
+    },
+    {
+     "branch_name": "b23",
+     "fault": "fault",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 84.10780128306173,
+     "I_branch_degree": null
+    }
+   ],
+   "res_all_impedances": [
+    {
+     "fault_name": "fault",
+     "fault_bus": "bus3",
+     "frequency_Hz": 50.0,
+     "grounding_impedance_Ohm": 0.5572133061456525,
+     "grounding_impedance_deg": 19.228767171785048,
+     "reduction_factor": 0.3846153846153845,
+     "reduction_factor_current": 0.18030461149365473
+    }
+   ],
+   "res_fault[fault]": [
+    {
+     "fault": "fault",
+     "fault_bus": "bus3",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_F_A": 100.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 18.03046114936547,
+     "EPR_fault_degree": 154.3589941756947,
+     "EPR_max_V": 18.030461149365472,
+     "EPR_max_bus": "bus3",
+     "r_epr": 0.3846153846153845,
+     "r_current": 0.18030461149365473,
+     "I_E_A": 18.030461149365472,
+     "U_E_V": 18.03046114936547,
+     "Z_E_Ohm": 0.5572133061456525,
+     "Z_E_degree": 19.228767171785048,
+     "n_diagnostics": 0
+    },
+    {
+     "fault": "fault",
+     "fault_bus": "bus3",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_F_A": 100.0,
+     "I_F_degree": null,
+     "EPR_fault_V": 18.030461149365465,
+     "EPR_fault_degree": null,
+     "EPR_max_V": 18.030461149365472,
+     "EPR_max_bus": "bus3",
+     "r_epr": null,
+     "r_current": null,
+     "I_E_A": 18.030461149365472,
+     "U_E_V": 18.03046114936547,
+     "Z_E_Ohm": null,
+     "Z_E_degree": null,
+     "n_diagnostics": 0
+    }
+   ],
+   "bus_impedance": [
+    {
+     "bus": "bus1",
+     "frequency_Hz": 50.0,
+     "real": 1.0,
+     "imag": 0.0
+    },
+    {
+     "bus": "bus2",
+     "frequency_Hz": 50.0,
+     "real": 1.0,
+     "imag": 0.0
+    },
+    {
+     "bus": "bus3",
+     "frequency_Hz": 50.0,
+     "real": 1.0,
+     "imag": 0.0
+    }
+   ]
+  },
+  "minimal/paths": {
+   "res_buses": [
+    {
+     "bus_name": "bus1",
+     "fault": "fault",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 18.030461149365475,
+     "EPR_degree": -25.6410058243053,
+     "I_bus_A": 18.030461149365475,
+     "I_bus_degree": -25.6410058243053,
+     "I_inj_A": 100.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus1",
+     "fault": "fault",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 18.030461149365472,
+     "EPR_degree": null,
+     "I_bus_A": 18.030461149365472,
+     "I_bus_degree": null,
+     "I_inj_A": 100.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "bus2",
+     "fault": "fault",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 1.6157179197089406e-15,
+     "EPR_degree": -91.4024000989841,
+     "I_bus_A": 1.6157179197089406e-15,
+     "I_bus_degree": -91.4024000989841,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "bus2",
+     "fault": "fault",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 1.6157179197089404e-15,
+     "EPR_degree": null,
+     "I_bus_A": 1.6157179197089404e-15,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "bus3",
+     "fault": "fault",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 18.03046114936547,
+     "EPR_degree": 154.3589941756947,
+     "I_bus_A": 18.03046114936547,
+     "I_bus_degree": 154.3589941756947,
+     "I_inj_A": 100.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "bus3",
+     "fault": "fault",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 18.03046114936547,
+     "EPR_degree": null,
+     "I_bus_A": 18.03046114936547,
+     "I_bus_degree": null,
+     "I_inj_A": 100.0,
+     "I_inj_degree": null
+    }
+   ],
+   "res_branches": [
+    {
+     "branch_name": "b12",
+     "fault": "fault",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 84.10780128306173,
+     "I_branch_degree": -174.67724929223178
+    },
+    {
+     "branch_name": "b12",
+     "fault": "fault",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 84.10780128306173,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "b23",
+     "fault": "fault",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 84.10780128306173,
+     "I_branch_degree": -174.67724929223178
+    },
+    {
+     "branch_name": "b23",
+     "fault": "fault",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 84.10780128306173,
+     "I_branch_degree": null
+    }
+   ],
+   "res_all_impedances": [
+    {
+     "fault_name": "fault",
+     "fault_bus": "bus3",
+     "frequency_Hz": 50.0,
+     "grounding_impedance_Ohm": 0.5572133061456525,
+     "grounding_impedance_deg": 19.228767171785048,
+     "reduction_factor": 0.3846153846153845,
+     "reduction_factor_current": 0.18030461149365476
+    }
+   ],
+   "res_fault[fault]": [
+    {
+     "fault": "fault",
+     "fault_bus": "bus3",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_F_A": 100.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 18.03046114936547,
+     "EPR_fault_degree": 154.3589941756947,
+     "EPR_max_V": 18.030461149365475,
+     "EPR_max_bus": "bus3",
+     "r_epr": 0.3846153846153845,
+     "r_current": 0.18030461149365476,
+     "I_E_A": 18.030461149365475,
+     "U_E_V": 18.03046114936547,
+     "Z_E_Ohm": 0.5572133061456525,
+     "Z_E_degree": 19.228767171785048,
+     "n_diagnostics": 0
+    },
+    {
+     "fault": "fault",
+     "fault_bus": "bus3",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_F_A": 100.0,
+     "I_F_degree": null,
+     "EPR_fault_V": 18.03046114936547,
+     "EPR_fault_degree": null,
+     "EPR_max_V": 18.030461149365472,
+     "EPR_max_bus": "bus3",
+     "r_epr": null,
+     "r_current": null,
+     "I_E_A": 18.030461149365475,
+     "U_E_V": 18.03046114936547,
+     "Z_E_Ohm": null,
+     "Z_E_degree": null,
+     "n_diagnostics": 0
+    }
+   ],
+   "bus_impedance": [
+    {
+     "bus": "bus1",
+     "frequency_Hz": 50.0,
+     "real": 1.0,
+     "imag": 0.0
+    },
+    {
+     "bus": "bus2",
+     "frequency_Hz": 50.0,
+     "real": 1.0,
+     "imag": 0.0
+    },
+    {
+     "bus": "bus3",
+     "frequency_Hz": 50.0,
+     "real": 1.0,
+     "imag": 0.0
+    }
+   ]
+  },
+  "mv_ring/auto": {
+   "res_buses": [
+    {
+     "bus_name": "b01",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 133.45131845860794,
+     "EPR_degree": -4.9057338444235965,
+     "I_bus_A": 26.690264432596916,
+     "I_bus_degree": -4.892233844673421,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b01",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 133.45131845860794,
+     "EPR_degree": null,
+     "I_bus_A": 26.690264432596916,
+     "I_bus_degree": null,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b02",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 78.69390543365762,
+     "EPR_degree": -7.1435447276954385,
+     "I_bus_A": 15.738781523612731,
+     "I_bus_degree": -7.130044727945262,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b02",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 78.69390543365762,
+     "EPR_degree": null,
+     "I_bus_A": 15.738781523612731,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b03",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 26.00957098981731,
+     "EPR_degree": -8.274093320440166,
+     "I_bus_A": 5.201914342359558,
+     "I_bus_degree": -8.260593320689988,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b03",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 26.00957098981731,
+     "EPR_degree": null,
+     "I_bus_A": 5.201914342359558,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b04",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 26.009570989817274,
+     "EPR_degree": 171.72590667956007,
+     "I_bus_A": 5.201914342359551,
+     "I_bus_degree": 171.73940667931026,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b04",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 26.009570989817274,
+     "EPR_degree": null,
+     "I_bus_A": 5.201914342359551,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b05",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 78.69390543365756,
+     "EPR_degree": 172.85645527230466,
+     "I_bus_A": 15.738781523612719,
+     "I_bus_degree": 172.86995527205482,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b05",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 78.69390543365756,
+     "EPR_degree": null,
+     "I_bus_A": 15.738781523612719,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b06",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 133.45131845860791,
+     "EPR_degree": 175.0942661555765,
+     "I_bus_A": 26.690264432596916,
+     "I_bus_degree": 175.10776615532666,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "b06",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 133.45131845860791,
+     "EPR_degree": null,
+     "I_bus_A": 26.690264432596916,
+     "I_bus_degree": null,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b07",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 92.79475975238167,
+     "EPR_degree": 171.79678715441761,
+     "I_bus_A": 18.558952465640576,
+     "I_bus_degree": 171.8102871541678,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b07",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 92.79475975238167,
+     "EPR_degree": null,
+     "I_bus_A": 18.558952465640576,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b08",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 54.719444761108505,
+     "EPR_degree": 169.55897627114578,
+     "I_bus_A": 10.943889256005036,
+     "I_bus_degree": 169.57247627089595,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b08",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 54.719444761108505,
+     "EPR_degree": null,
+     "I_bus_A": 10.943889256005036,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b09",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 18.085635414768973,
+     "EPR_degree": 168.42842767840094,
+     "I_bus_A": 3.617127183358955,
+     "I_bus_degree": 168.44192767815113,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b09",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 18.085635414768973,
+     "EPR_degree": null,
+     "I_bus_A": 3.6171271833589547,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b10",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 18.08563541476898,
+     "EPR_degree": -11.571572321598746,
+     "I_bus_A": 3.617127183358956,
+     "I_bus_degree": -11.55807232184857,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b10",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 18.08563541476898,
+     "EPR_degree": null,
+     "I_bus_A": 3.617127183358956,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b11",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 54.71944476110853,
+     "EPR_degree": -10.441023728854217,
+     "I_bus_A": 10.94388925600504,
+     "I_bus_degree": -10.427523729104045,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b11",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 54.71944476110853,
+     "EPR_degree": null,
+     "I_bus_A": 10.943889256005038,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b12",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 92.7947597523817,
+     "EPR_degree": -8.203212845582424,
+     "I_bus_A": 18.558952465640584,
+     "I_bus_degree": -8.189712845832249,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b12",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 92.79475975238168,
+     "EPR_degree": null,
+     "I_bus_A": 18.558952465640584,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    }
+   ],
+   "res_branches": [
+    {
+     "branch_name": "L_01_02",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 561.5191365150598,
+     "I_branch_degree": -179.75161442330605
+    },
+    {
+     "branch_name": "L_01_02",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 561.5191365150598,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_02_03",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 545.9144204387597,
+     "I_branch_degree": -179.539480328116
+    },
+    {
+     "branch_name": "L_02_03",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 545.9144204387597,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_03_04",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 540.7732254125549,
+     "I_branch_degree": -179.45591198500222
+    },
+    {
+     "branch_name": "L_03_04",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 540.7732254125549,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_04_05",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 545.9144204387597,
+     "I_branch_degree": -179.539480328116
+    },
+    {
+     "branch_name": "L_04_05",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 545.9144204387597,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_05_06",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 561.5191365150598,
+     "I_branch_degree": -179.75161442330605
+    },
+    {
+     "branch_name": "L_05_06",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 561.5191365150599,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_06_07",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 411.8931420652477,
+     "I_branch_degree": -0.02198727781705668
+    },
+    {
+     "branch_name": "L_06_07",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 411.8931420652477,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_07_08",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 393.53127704400123,
+     "I_branch_degree": 0.3619026079442104
+    },
+    {
+     "branch_name": "L_07_08",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 393.53127704400123,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_08_09",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 382.78633830932256,
+     "I_branch_degree": 0.6685546715613858
+    },
+    {
+     "branch_name": "L_08_09",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 382.78633830932256,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_09_10",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 379.25202995841323,
+     "I_branch_degree": 0.7842835383160665
+    },
+    {
+     "branch_name": "L_09_10",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 379.25202995841323,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_10_11",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 382.78633830932256,
+     "I_branch_degree": 0.6685546715613816
+    },
+    {
+     "branch_name": "L_10_11",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 382.7863383093226,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_11_12",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 393.5312770440013,
+     "I_branch_degree": 0.3619026079442
+    },
+    {
+     "branch_name": "L_11_12",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 393.5312770440013,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_12_01",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 411.8931420652477,
+     "I_branch_degree": -0.021987277817036913
+    },
+    {
+     "branch_name": "L_12_01",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 411.8931420652477,
+     "I_branch_degree": null
+    }
+   ],
+   "res_all_impedances": [
+    {
+     "fault_name": "F1",
+     "fault_bus": "b06",
+     "frequency_Hz": 50.0,
+     "grounding_impedance_Ohm": 0.6229414826486275,
+     "grounding_impedance_deg": 24.268311712639544,
+     "reduction_factor": 0.3100029263153868,
+     "reduction_factor_current": 0.08069807648983789
+    }
+   ],
+   "res_fault[F1]": [
+    {
+     "fault": "F1",
+     "fault_bus": "b06",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_F_A": 1000.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 133.45131845860791,
+     "EPR_fault_degree": 175.0942661555765,
+     "EPR_max_V": 133.45131845860794,
+     "EPR_max_bus": "b06",
+     "r_epr": 0.3100029263153868,
+     "r_current": 0.08069807648983789,
+     "I_E_A": 80.69807648983789,
+     "U_E_V": 133.45131845860791,
+     "Z_E_Ohm": 0.6229414826486275,
+     "Z_E_degree": 24.268311712639544,
+     "n_diagnostics": 1
+    },
+    {
+     "fault": "F1",
+     "fault_bus": "b06",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_F_A": 1000.0,
+     "I_F_degree": null,
+     "EPR_fault_V": 133.45131845860791,
+     "EPR_fault_degree": null,
+     "EPR_max_V": 133.45131845860794,
+     "EPR_max_bus": "b06",
+     "r_epr": null,
+     "r_current": null,
+     "I_E_A": 80.69807648983789,
+     "U_E_V": 133.45131845860791,
+     "Z_E_Ohm": null,
+     "Z_E_degree": null,
+     "n_diagnostics": 1
+    }
+   ],
+   "bus_impedance": [
+    {
+     "bus": "b01",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b02",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b03",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b04",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b05",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b06",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b07",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b08",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b09",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b10",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b11",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b12",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    }
+   ]
+  },
+  "mv_ring/paths": {
+   "res_buses": [
+    {
+     "bus_name": "b01",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 389.17525584660865,
+     "EPR_degree": -84.54046390460195,
+     "I_bus_A": 77.83505332988744,
+     "I_bus_degree": -84.52696390485175,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b01",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 389.17525584660865,
+     "EPR_degree": null,
+     "I_bus_A": 77.83505332988744,
+     "I_bus_degree": null,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b02",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 229.4898329551654,
+     "EPR_degree": -86.7782747878738,
+     "I_bus_A": 45.89796786508086,
+     "I_bus_degree": -86.7647747881236,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b02",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 229.48983295516544,
+     "EPR_degree": null,
+     "I_bus_A": 45.89796786508085,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b03",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 75.84999205206257,
+     "EPR_degree": -87.90882338061846,
+     "I_bus_A": 15.1699988315053,
+     "I_bus_degree": -87.89532338086828,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b03",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 75.84999205206257,
+     "EPR_degree": null,
+     "I_bus_A": 15.1699988315053,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b04",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 75.84999205206242,
+     "EPR_degree": 92.09117661938164,
+     "I_bus_A": 15.169998831505271,
+     "I_bus_degree": 92.10467661913184,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b04",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 75.84999205206243,
+     "EPR_degree": null,
+     "I_bus_A": 15.16999883150527,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b05",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 229.48983295516527,
+     "EPR_degree": 93.22172521212624,
+     "I_bus_A": 45.89796786508082,
+     "I_bus_degree": 93.23522521187643,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b05",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 229.48983295516527,
+     "EPR_degree": null,
+     "I_bus_A": 45.89796786508082,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b06",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 389.1752558466084,
+     "EPR_degree": 95.4595360953981,
+     "I_bus_A": 77.83505332988742,
+     "I_bus_degree": 95.47303609514826,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "b06",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 389.1752558466085,
+     "EPR_degree": null,
+     "I_bus_A": 77.8350533298874,
+     "I_bus_degree": null,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b07",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 270.61122201695486,
+     "EPR_degree": 92.16205709423926,
+     "I_bus_A": 54.1222459057304,
+     "I_bus_degree": 92.17555709398944,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b07",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 270.61122201695486,
+     "EPR_degree": null,
+     "I_bus_A": 54.122245905730395,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b08",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 159.57469855416895,
+     "EPR_degree": 89.92424621096742,
+     "I_bus_A": 31.91494059673704,
+     "I_bus_degree": 89.93774621071759,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b08",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 159.57469855416898,
+     "EPR_degree": null,
+     "I_bus_A": 31.914940596737043,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b09",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 52.74194268732005,
+     "EPR_degree": 88.79369761822286,
+     "I_bus_A": 10.548388830268939,
+     "I_bus_degree": 88.80719761797305,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b09",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 52.74194268732005,
+     "EPR_degree": null,
+     "I_bus_A": 10.54838883026894,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b10",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 52.74194268732011,
+     "EPR_degree": -91.20630238177735,
+     "I_bus_A": 10.548388830268953,
+     "I_bus_degree": -91.19280238202715,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b10",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 52.74194268732011,
+     "EPR_degree": null,
+     "I_bus_A": 10.548388830268953,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b11",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 159.57469855416903,
+     "EPR_degree": -90.07575378903263,
+     "I_bus_A": 31.914940596737054,
+     "I_bus_degree": -90.06225378928247,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b11",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 159.57469855416906,
+     "EPR_degree": null,
+     "I_bus_A": 31.914940596737058,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "b12",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 270.611222016955,
+     "EPR_degree": -87.8379429057608,
+     "I_bus_A": 54.12224590573044,
+     "I_bus_degree": -87.8244429060106,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "b12",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 270.6112220169551,
+     "EPR_degree": null,
+     "I_bus_A": 54.12224590573044,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    }
+   ],
+   "res_branches": [
+    {
+     "branch_name": "L_01_02",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 436.19930489622175,
+     "I_branch_degree": -177.64516735824137
+    },
+    {
+     "branch_name": "L_01_02",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 436.1993048962217,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_02_03",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 437.9054878971354,
+     "I_branch_degree": -171.62951636490428
+    },
+    {
+     "branch_name": "L_02_03",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 437.90548789713546,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_03_04",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 439.81973542907326,
+     "I_branch_degree": -169.6647249667305
+    },
+    {
+     "branch_name": "L_03_04",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 439.81973542907326,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_04_05",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 437.90548789713534,
+     "I_branch_degree": -171.62951636490425
+    },
+    {
+     "branch_name": "L_04_05",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 437.9054878971354,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_05_06",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 436.1993048962218,
+     "I_branch_degree": -177.64516735824142
+    },
+    {
+     "branch_name": "L_05_06",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 436.19930489622175,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_06_07",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 559.9218733960374,
+     "I_branch_degree": 6.105976863122705
+    },
+    {
+     "branch_name": "L_06_07",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 559.9218733960375,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_07_08",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 566.2120867616943,
+     "I_branch_degree": 11.578115552591514
+    },
+    {
+     "branch_name": "L_07_08",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 566.2120867616944,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_08_09",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 573.5040021750427,
+     "I_branch_degree": 14.702542418459544
+    },
+    {
+     "branch_name": "L_08_09",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 573.5040021750427,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_09_10",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 576.482280600085,
+     "I_branch_degree": 15.710897611841892
+    },
+    {
+     "branch_name": "L_09_10",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 576.4822806000851,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_10_11",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 573.5040021750427,
+     "I_branch_degree": 14.702542418459535
+    },
+    {
+     "branch_name": "L_10_11",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 573.5040021750427,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_11_12",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 566.2120867616939,
+     "I_branch_degree": 11.578115552591509
+    },
+    {
+     "branch_name": "L_11_12",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 566.212086761694,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "L_12_01",
+     "fault": "F1",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 559.9218733960378,
+     "I_branch_degree": 6.105976863122696
+    },
+    {
+     "branch_name": "L_12_01",
+     "fault": "F1",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 559.9218733960378,
+     "I_branch_degree": null
+    }
+   ],
+   "res_all_impedances": [
+    {
+     "fault_name": "F1",
+     "fault_bus": "b06",
+     "frequency_Hz": 50.0,
+     "grounding_impedance_Ohm": 0.6229414826486275,
+     "grounding_impedance_deg": 24.268311712639544,
+     "reduction_factor": 0.904041035753484,
+     "reduction_factor_current": 0.23533446448491133
+    }
+   ],
+   "res_fault[F1]": [
+    {
+     "fault": "F1",
+     "fault_bus": "b06",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_F_A": 1000.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 389.1752558466084,
+     "EPR_fault_degree": 95.4595360953981,
+     "EPR_max_V": 389.17525584660865,
+     "EPR_max_bus": "b06",
+     "r_epr": 0.904041035753484,
+     "r_current": 0.23533446448491133,
+     "I_E_A": 235.33446448491134,
+     "U_E_V": 389.1752558466084,
+     "Z_E_Ohm": 0.6229414826486275,
+     "Z_E_degree": 24.268311712639544,
+     "n_diagnostics": 1
+    },
+    {
+     "fault": "F1",
+     "fault_bus": "b06",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_F_A": 1000.0,
+     "I_F_degree": null,
+     "EPR_fault_V": 389.1752558466085,
+     "EPR_fault_degree": null,
+     "EPR_max_V": 389.17525584660865,
+     "EPR_max_bus": "b06",
+     "r_epr": null,
+     "r_current": null,
+     "I_E_A": 235.33446448491134,
+     "U_E_V": 389.1752558466084,
+     "Z_E_Ohm": null,
+     "Z_E_degree": null,
+     "n_diagnostics": 1
+    }
+   ],
+   "bus_impedance": [
+    {
+     "bus": "b01",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b02",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b03",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b04",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b05",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b06",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b07",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b08",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b09",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b10",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b11",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    },
+    {
+     "bus": "b12",
+     "frequency_Hz": 50.0,
+     "real": 4.999999722417392,
+     "imag": -0.0011780971796923113
+    }
+   ]
+  },
+  "written_by_0.6.0/auto": {
+   "res_buses": [
+    {
+     "bus_name": "UW S\u00fcd",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 164.0466943137521,
+     "EPR_degree": 14.626788276530649,
+     "I_bus_A": 81.92100981551937,
+     "I_bus_degree": 11.764383050418902,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "UW S\u00fcd",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "EPR_V": 25.413410490049436,
+     "EPR_degree": 29.01083151509221,
+     "I_bus_A": 12.327314795018081,
+     "I_bus_degree": 14.974588047165733,
+     "I_inj_A": 100.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "UW S\u00fcd",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 166.00349197533578,
+     "EPR_degree": null,
+     "I_bus_A": 82.84331318368366,
+     "I_bus_degree": null,
+     "I_inj_A": 1004.987562112089,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "Station \u00d6l",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 31.866122482600414,
+     "EPR_degree": -168.6361784375574,
+     "I_bus_A": 15.913182180232518,
+     "I_bus_degree": -171.49858366366914,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "Station \u00d6l",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "EPR_V": 4.50389707701941,
+     "EPR_degree": -165.17028087171062,
+     "I_bus_A": 2.1847109853484312,
+     "I_bus_degree": -179.20652433963713,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "Station \u00d6l",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 32.18283472530777,
+     "EPR_degree": null,
+     "I_bus_A": 16.06245090858714,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "Ortsnetz Stra\u00dfe",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 132.24467159561254,
+     "EPR_degree": -164.58735654464442,
+     "I_bus_A": 66.03983753012525,
+     "I_bus_degree": -167.44976177075617,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "Ortsnetz Stra\u00dfe",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "EPR_V": 21.075668066618682,
+     "EPR_degree": -147.98812157529073,
+     "I_bus_A": 10.22320065519129,
+     "I_bus_degree": -162.02436504321722,
+     "I_inj_A": 100.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "Ortsnetz Stra\u00dfe",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 133.91354281731816,
+     "EPR_degree": null,
+     "I_bus_A": 66.82644665580868,
+     "I_bus_degree": null,
+     "I_inj_A": 1004.987562112089,
+     "I_inj_degree": null
+    }
+   ],
+   "res_branches": [
+    {
+     "branch_name": "Kabel 1",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 919.9514362555983,
+     "I_branch_degree": 178.95967861550133
+    },
+    {
+     "branch_name": "Kabel 1",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "I_branch_A": 88.14888293676705,
+     "I_branch_degree": 177.92916454972288
+    },
+    {
+     "branch_name": "Kabel 1",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 924.1649585608286,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "Kabel 2",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 935.6481797604853,
+     "I_branch_degree": 179.12121234041894
+    },
+    {
+     "branch_name": "Kabel 2",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "I_branch_A": 90.33093048416174,
+     "I_branch_degree": 177.9984109004681
+    },
+    {
+     "branch_name": "Kabel 2",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 939.9985070686251,
+     "I_branch_degree": null
+    }
+   ],
+   "res_all_impedances": [
+    {
+     "fault_name": "F Stra\u00dfe",
+     "fault_bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "grounding_impedance_Ohm": 0.7961707323504442,
+     "grounding_impedance_deg": 14.36926010716642,
+     "reduction_factor": 0.34401045807689057,
+     "reduction_factor_current": 0.0819210098155194
+    },
+    {
+     "fault_name": "F Stra\u00dfe",
+     "fault_bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "grounding_impedance_Ohm": 1.2369017490468524,
+     "grounding_impedance_deg": 32.86821578834402,
+     "reduction_factor": 0.17888543819998315,
+     "reduction_factor_current": 0.12327314795018082
+    }
+   ],
+   "res_fault[F Stra\u00dfe]": [
+    {
+     "fault": "F Stra\u00dfe",
+     "fault_bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_F_A": 1000.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 132.24467159561254,
+     "EPR_fault_degree": -164.58735654464442,
+     "EPR_max_V": 164.0466943137521,
+     "EPR_max_bus": "UW S\u00fcd",
+     "r_epr": 0.34401045807689057,
+     "r_current": 0.0819210098155194,
+     "I_E_A": 81.92100981551941,
+     "U_E_V": 132.24467159561254,
+     "Z_E_Ohm": 0.7961707323504442,
+     "Z_E_degree": 14.369260107166422,
+     "n_diagnostics": 0
+    },
+    {
+     "fault": "F Stra\u00dfe",
+     "fault_bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "I_F_A": 100.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 21.075668066618682,
+     "EPR_fault_degree": -147.98812157529073,
+     "EPR_max_V": 25.413410490049436,
+     "EPR_max_bus": "UW S\u00fcd",
+     "r_epr": 0.17888543819998315,
+     "r_current": 0.12327314795018082,
+     "I_E_A": 12.327314795018083,
+     "U_E_V": 21.075668066618682,
+     "Z_E_Ohm": 1.2369017490468524,
+     "Z_E_degree": 32.86821578834402,
+     "n_diagnostics": 0
+    },
+    {
+     "fault": "F Stra\u00dfe",
+     "fault_bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_F_A": 1004.987562112089,
+     "I_F_degree": null,
+     "EPR_fault_V": 133.91354281731816,
+     "EPR_fault_degree": null,
+     "EPR_max_V": 166.00349197533578,
+     "EPR_max_bus": "UW S\u00fcd",
+     "r_epr": null,
+     "r_current": null,
+     "I_E_A": 82.84331318368369,
+     "U_E_V": 133.91354281731816,
+     "Z_E_Ohm": null,
+     "Z_E_degree": null,
+     "n_diagnostics": 0
+    }
+   ],
+   "bus_impedance": [
+    {
+     "bus": "UW S\u00fcd",
+     "frequency_Hz": 50.0,
+     "real": 2.0,
+     "imag": 0.1
+    },
+    {
+     "bus": "UW S\u00fcd",
+     "frequency_Hz": 250.0,
+     "real": 2.0,
+     "imag": 0.5
+    },
+    {
+     "bus": "Station \u00d6l",
+     "frequency_Hz": 50.0,
+     "real": 2.0,
+     "imag": 0.1
+    },
+    {
+     "bus": "Station \u00d6l",
+     "frequency_Hz": 250.0,
+     "real": 2.0,
+     "imag": 0.5
+    },
+    {
+     "bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "real": 2.0,
+     "imag": 0.1
+    },
+    {
+     "bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "real": 2.0,
+     "imag": 0.5
+    }
+   ]
+  },
+  "written_by_0.6.0/paths": {
+   "res_buses": [
+    {
+     "bus_name": "UW S\u00fcd",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 164.0466943137521,
+     "EPR_degree": 14.626788276530656,
+     "I_bus_A": 81.92100981551937,
+     "I_bus_degree": 11.764383050418909,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "UW S\u00fcd",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "EPR_V": 25.413410490049436,
+     "EPR_degree": 29.01083151509221,
+     "I_bus_A": 12.327314795018081,
+     "I_bus_degree": 14.974588047165733,
+     "I_inj_A": 100.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "UW S\u00fcd",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 166.00349197533583,
+     "EPR_degree": null,
+     "I_bus_A": 82.84331318368366,
+     "I_bus_degree": null,
+     "I_inj_A": 1004.987562112089,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "Station \u00d6l",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 31.86612248260039,
+     "EPR_degree": -168.6361784375574,
+     "I_bus_A": 15.913182180232504,
+     "I_bus_degree": -171.49858366366914,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "Station \u00d6l",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "EPR_V": 4.503897077019411,
+     "EPR_degree": -165.17028087171062,
+     "I_bus_A": 2.1847109853484317,
+     "I_bus_degree": -179.20652433963713,
+     "I_inj_A": 0.0,
+     "I_inj_degree": 0.0
+    },
+    {
+     "bus_name": "Station \u00d6l",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 32.18283472530775,
+     "EPR_degree": null,
+     "I_bus_A": 16.062450908587127,
+     "I_bus_degree": null,
+     "I_inj_A": 0.0,
+     "I_inj_degree": null
+    },
+    {
+     "bus_name": "Ortsnetz Stra\u00dfe",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "EPR_V": 132.24467159561252,
+     "EPR_degree": -164.58735654464442,
+     "I_bus_A": 66.03983753012524,
+     "I_bus_degree": -167.44976177075617,
+     "I_inj_A": 1000.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "Ortsnetz Stra\u00dfe",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "EPR_V": 21.075668066618682,
+     "EPR_degree": -147.98812157529073,
+     "I_bus_A": 10.22320065519129,
+     "I_bus_degree": -162.02436504321722,
+     "I_inj_A": 100.0,
+     "I_inj_degree": 180.0
+    },
+    {
+     "bus_name": "Ortsnetz Stra\u00dfe",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "EPR_V": 133.91354281731816,
+     "EPR_degree": null,
+     "I_bus_A": 66.82644665580867,
+     "I_bus_degree": null,
+     "I_inj_A": 1004.987562112089,
+     "I_inj_degree": null
+    }
+   ],
+   "res_branches": [
+    {
+     "branch_name": "Kabel 1",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 919.9514362555983,
+     "I_branch_degree": 178.95967861550133
+    },
+    {
+     "branch_name": "Kabel 1",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "I_branch_A": 88.14888293676705,
+     "I_branch_degree": 177.92916454972288
+    },
+    {
+     "branch_name": "Kabel 1",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 924.1649585608286,
+     "I_branch_degree": null
+    },
+    {
+     "branch_name": "Kabel 2",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_branch_A": 935.6481797604853,
+     "I_branch_degree": 179.12121234041894
+    },
+    {
+     "branch_name": "Kabel 2",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "I_branch_A": 90.33093048416174,
+     "I_branch_degree": 177.9984109004681
+    },
+    {
+     "branch_name": "Kabel 2",
+     "fault": "F Stra\u00dfe",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_branch_A": 939.9985070686251,
+     "I_branch_degree": null
+    }
+   ],
+   "res_all_impedances": [
+    {
+     "fault_name": "F Stra\u00dfe",
+     "fault_bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "grounding_impedance_Ohm": 0.7961707323504442,
+     "grounding_impedance_deg": 14.36926010716642,
+     "reduction_factor": 0.3440104580768905,
+     "reduction_factor_current": 0.08192100981551938
+    },
+    {
+     "fault_name": "F Stra\u00dfe",
+     "fault_bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "grounding_impedance_Ohm": 1.2369017490468524,
+     "grounding_impedance_deg": 32.86821578834402,
+     "reduction_factor": 0.17888543819998315,
+     "reduction_factor_current": 0.12327314795018082
+    }
+   ],
+   "res_fault[F Stra\u00dfe]": [
+    {
+     "fault": "F Stra\u00dfe",
+     "fault_bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "is_rms": false,
+     "I_F_A": 1000.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 132.24467159561252,
+     "EPR_fault_degree": -164.58735654464442,
+     "EPR_max_V": 164.0466943137521,
+     "EPR_max_bus": "UW S\u00fcd",
+     "r_epr": 0.3440104580768905,
+     "r_current": 0.08192100981551938,
+     "I_E_A": 81.92100981551938,
+     "U_E_V": 132.24467159561252,
+     "Z_E_Ohm": 0.7961707323504442,
+     "Z_E_degree": 14.369260107166422,
+     "n_diagnostics": 0
+    },
+    {
+     "fault": "F Stra\u00dfe",
+     "fault_bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "is_rms": false,
+     "I_F_A": 100.0,
+     "I_F_degree": 0.0,
+     "EPR_fault_V": 21.075668066618682,
+     "EPR_fault_degree": -147.98812157529073,
+     "EPR_max_V": 25.413410490049436,
+     "EPR_max_bus": "UW S\u00fcd",
+     "r_epr": 0.17888543819998315,
+     "r_current": 0.12327314795018082,
+     "I_E_A": 12.327314795018083,
+     "U_E_V": 21.075668066618682,
+     "Z_E_Ohm": 1.2369017490468524,
+     "Z_E_degree": 32.86821578834402,
+     "n_diagnostics": 0
+    },
+    {
+     "fault": "F Stra\u00dfe",
+     "fault_bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": null,
+     "is_rms": true,
+     "I_F_A": 1004.987562112089,
+     "I_F_degree": null,
+     "EPR_fault_V": 133.91354281731816,
+     "EPR_fault_degree": null,
+     "EPR_max_V": 166.00349197533583,
+     "EPR_max_bus": "UW S\u00fcd",
+     "r_epr": null,
+     "r_current": null,
+     "I_E_A": 82.84331318368366,
+     "U_E_V": 133.9135428173181,
+     "Z_E_Ohm": null,
+     "Z_E_degree": null,
+     "n_diagnostics": 0
+    }
+   ],
+   "bus_impedance": [
+    {
+     "bus": "UW S\u00fcd",
+     "frequency_Hz": 50.0,
+     "real": 2.0,
+     "imag": 0.1
+    },
+    {
+     "bus": "UW S\u00fcd",
+     "frequency_Hz": 250.0,
+     "real": 2.0,
+     "imag": 0.5
+    },
+    {
+     "bus": "Station \u00d6l",
+     "frequency_Hz": 50.0,
+     "real": 2.0,
+     "imag": 0.1
+    },
+    {
+     "bus": "Station \u00d6l",
+     "frequency_Hz": 250.0,
+     "real": 2.0,
+     "imag": 0.5
+    },
+    {
+     "bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": 50.0,
+     "real": 2.0,
+     "imag": 0.1
+    },
+    {
+     "bus": "Ortsnetz Stra\u00dfe",
+     "frequency_Hz": 250.0,
+     "real": 2.0,
+     "imag": 0.5
+    }
+   ]
+  }
+ }
+}
