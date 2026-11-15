@@ -50,6 +50,7 @@ from groundinsight.api import (
     UpdateBranch,
     UpdateBus,
     UpdateSource,
+    groundfield_available,
 )
 
 from .canvas import CANVAS_CSS, TOOLS, NetworkCanvas
@@ -641,6 +642,11 @@ class BusDialog(_ElementDialog):
         with ui.row().classes("gap-2 items-center"):
             ui.upload(label=self.t("char_import"), auto_upload=True, on_upload=self._import).props(
                 "accept=.json flat dense").classes("w-64").mark("char-upload")
+            compute = ui.button(self.t("char_compute"), icon="calculate", on_click=self._compute).props(
+                "dense no-caps").mark("char-compute")
+            if not groundfield_available():
+                compute.disable()
+                compute.tooltip(self.t("char_needs_groundfield"))
             if dto is not None and dto.origin == "bus":
                 ui.button(self.t("char_clear"), on_click=self._clear).props("flat dense no-caps").mark("char-clear")
 
@@ -653,6 +659,13 @@ class BusDialog(_ElementDialog):
             return
         if self.plan.apply(ImportCharacteristic(target="bus", name=self.name, document=document)):
             self.characteristic_view.refresh()
+
+    def _compute(self) -> None:
+        """Compute the characteristic with groundfield as a job (attached when it ends)."""
+        from .studies import StudyDialog
+
+        self.dialog.close()
+        StudyDialog(self.plan.page, "characterize", owner=self.name).open()
 
     def _clear(self) -> None:
         """Remove the bus's own characteristic."""

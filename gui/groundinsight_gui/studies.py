@@ -34,6 +34,7 @@ from nicegui import ui
 
 from groundinsight.api import (
     BusResponseRequestDTO,
+    CharacterizeRequestDTO,
     CutDTO,
     CutsRequestDTO,
     MaxRhoRequestDTO,
@@ -178,9 +179,10 @@ class StudyDialog:
         One of :data:`STUDIES`.
     """
 
-    def __init__(self, page: Any, study: str) -> None:
+    def __init__(self, page: Any, study: str, owner: Optional[str] = None) -> None:
         self.page = page
         self.study = study
+        self.owner = owner
         self.inputs: Dict[str, Any] = {}
 
     def t(self, key: str, **values: Any) -> str:
@@ -328,6 +330,47 @@ class StudyDialog:
 
     def _fields_reference_cases(self) -> None:
         pass
+
+    def _fields_characterize(self) -> None:
+        bus = next(r for r in self.page.session.table("buses").rows if r["name"] == self.owner)
+        self.inputs["target"] = ui.toggle({"bus": self.t("char_for_bus", name=self.owner),
+                                           "bus_type": self.t("char_for_type", name=bus["type"])},
+                                          value="bus").mark("study-target")
+        self.inputs["electrode"] = ui.toggle({"ring": self.t("electrode_ring"),
+                                              "foundation": self.t("electrode_foundation"),
+                                              "rod": self.t("electrode_rod")}, value="ring").mark("study-electrode")
+        self._text("dimension", self.t("electrode_dimension"), "")
+        self.inputs["soil"] = ui.toggle({"homogeneous": self.t("soil_homogeneous"),
+                                         "two_layer": self.t("soil_two_layer")}, value="two_layer").mark("study-soil")
+        with ui.row().classes("w-full no-wrap gap-2"):
+            self._text("rho_1", "ρ1 / Ω·m", "100")
+            self._text("rho_2", "ρ2 / Ω·m", "500")
+            self._text("h_1", "h1 / m", "2")
+        self._text("factors", self.t("char_factors"), "0,5; 1; 2; 4")
+        frequencies = "; ".join(format_number(f, self.page.language, 6)
+                                for f in self.page.session.summary().frequencies)
+        self._text("frequencies", self.t("frequencies") + " / Hz", frequencies)
+        self._text("transfer", self.t("char_transfer"), "")
+        self.inputs["backend"] = ui.toggle({"image": "image", "mom": "mom"}, value="image").mark("study-backend")
+
+    def _request_characterize(self) -> CharacterizeRequestDTO:
+        kind = self.value("electrode")
+        dimension = (self.value("dimension") or "").strip()
+        key = {"ring": "radius_m", "foundation": "size_m", "rod": "length_m"}[kind]
+        transfer = (self.value("transfer") or "").strip()
+        bus = next(r for r in self.page.session.table("buses").rows if r["name"] == self.owner)
+        target = self.value("target")
+        two_layer = self.value("soil") == "two_layer"
+        return CharacterizeRequestDTO(
+            electrode=kind, dimensions={key: parse_number(dimension)} if dimension else {},
+            soil=self.value("soil"), rho_1=parse_number(self.value("rho_1")),
+            rho_2=parse_number(self.value("rho_2")) if two_layer else None,
+            h_1=parse_number(self.value("h_1")) if two_layer else None,
+            factors=parse_numbers(self.value("factors")), frequencies=parse_numbers(self.value("frequencies")),
+            rho_preset=("station" if kind == "ring" else "lv_network") if two_layer else None,
+            backend=self.value("backend"), transfer_distances=parse_numbers(transfer) if transfer else [],
+            target=target, owner=self.owner if target == "bus" else bus["type"],
+            name=f"{self.t('electrode_' + kind)} ({'ρ1/ρ2' if two_layer else 'ρ'})")
 
     def _request_reference_cases(self) -> ReferenceCasesRequestDTO:
         return ReferenceCasesRequestDTO()

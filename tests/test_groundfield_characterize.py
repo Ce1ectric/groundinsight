@@ -224,3 +224,46 @@ def test_invalid_input_is_refused(kwargs, error, message):
     soils = arguments.pop("soils")
     with pytest.raises(error, match=message):
         gfi.characterize(_rod_world, soils, **arguments)
+
+
+def test_the_characteristic_job_is_characterize_of_the_template():
+    import groundinsight.api as api
+
+    session = api.ProjectSession(_station_session_network())
+    request = api.CharacterizeRequestDTO(electrode="foundation", dimensions={"size_m": 8.0},
+                                         soil="two_layer", rho_1=100.0, rho_2=500.0, h_1=2.0,
+                                         factors=[0.5, 1.0, 2.0], frequencies=list(FREQS),
+                                         rho_preset="lv_network", transfer_distances=[20.0],
+                                         target="bus", owner="R", name="house")
+    dto = session.submit(request).result(timeout=300)
+    direct = gfi.characterize(
+        gfi.electrode_world("foundation", size_m=8.0),
+        gfi.scaled_soils(gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0), [0.5, 1.0, 2.0]),
+        electrode="E", engine=gf.create_engine(frequencies=list(FREQS), segment_length=0.5),
+        rho_preset="lv_network", transfer_targets=[(20.0, 0.0, 0.0)], name="house")
+    job = gi.EarthingCharacteristic.model_validate(dto.characteristic)
+    assert job.model_dump(exclude={"provenance"}) == direct.model_dump(exclude={"provenance"})
+    assert job.provenance.input_hash == direct.provenance.input_hash
+    assert (dto.target, dto.owner) == ("bus", "R")
+    session.apply(api.SetCharacteristic(target="bus", name="R", characteristic=dto.characteristic))
+    assert session.network.buses["R"].characteristic == job
+    session.close()
+
+
+def _station_session_network():
+    net = gi.create_network(name="r", frequencies=list(FREQS))
+    gi.create_bus(name="R", type=gi.BusType(name="t", system_type="x", voltage_level=0.4,
+                                            impedance_formula="rho / 10"), network=net)
+    return net
+
+
+def test_the_templates_build_the_same_geometry_alone_and_in_a_larger_world():
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gfi.add_electrode(world, "ring", name="ONS")
+    gfi.add_electrode(world, "foundation", name="H1", position=(25.0, 15.0))
+    names = [e.name for e in world.electrodes]
+    assert names == ["ONS", "ONS_rod0", "ONS_rod1", "ONS_rod2", "ONS_rod3", "H1"]
+    alone = gfi.electrode_world("ring", name="ONS")(gf.HomogeneousSoil(rho=100.0))
+    assert [e.model_dump() for e in alone.electrodes] == [e.model_dump() for e in world.electrodes[:5]]
+    with pytest.raises(ValueError, match="no dimension"):
+        gfi.add_electrode(world, "ring", name="X", size_m=3.0)

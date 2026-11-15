@@ -148,7 +148,7 @@ RMS: I_F = 1026.2 A, EPR at the fault = 276.1 V, I_E = 274.6 A, U_E = 276.1 V
 diagnostics: ['SCALINGS_INCOMPLETE']
 after the edit: revision 1, stale True; after undo: revision 0, stale False
 job: done, same figures: True
-wire format: FaultResultDTO as JSON, 41 schemas
+wire format: FaultResultDTO as JSON, 43 schemas
 ```
 
 The test suite compares the key figures of the session with `res_fault` of a

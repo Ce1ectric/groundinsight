@@ -54,6 +54,8 @@ from groundinsight.api import (
     RemoveBusType,
     RemoveFault,
     RemoveSource,
+    CharacterizeResultDTO,
+    SetCharacteristic,
     SolveAllRequestDTO,
     StudyResultDTO,
     TableDTO,
@@ -968,6 +970,11 @@ class ProjectPage:
         self.handle = None
         if status.state == "done":
             result = handle.result(timeout=0)
+            if isinstance(result, CharacterizeResultDTO):
+                self.progress_label.set_text("")
+                self._update_busy()
+                self._attach_characteristic(result)
+                return
             if isinstance(result, StudyResultDTO):
                 self.study = result
                 self.progress_label.set_text("")
@@ -1060,6 +1067,15 @@ class ProjectPage:
                 ui.aggrid(grid_options(table, self.language, lambda lang: "de-DE" if lang == "de" else "en-US"),
                           theme="quartz").classes("h-64").mark(f"study-table-{name}")
             self._diagnostics_panel(dto.diagnostics, title=self.t("diagnostics"))
+
+    def _attach_characteristic(self, dto: CharacterizeResultDTO) -> None:
+        """Attach a characteristic computed by a job (one undoable command)."""
+        command = SetCharacteristic(target=dto.target, name=dto.owner, characteristic=dto.characteristic)
+        if self.apply(command):
+            ui.notify(self.t("char_attached", name=dto.owner, seconds=format_number(dto.duration_s or 0.0,
+                                                                                     self.language, 3)),
+                      type="positive")
+        self._notify_diagnostics(dto.diagnostics)
 
     def _cell(self, value: Any) -> str:
         """A scalar of a study for the values line."""

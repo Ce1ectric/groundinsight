@@ -432,7 +432,14 @@ soil (a resistivity for homogeneous soil, or layered soils scaled with
 resistivity, `k_touch` as the largest touch voltage 1 m from the electrode
 over its potential, `k_transfer` from the earth-surface potential at given
 target points, and groundfield's k0..k5 fit as the formula. groundfield is
-not a dependency of groundinsight; install it next to it.
+not a dependency of groundinsight; install it next to it. `add_electrode` and
+`electrode_world` build typical electrodes (a station ring with rods, a
+house foundation, a rod), the same geometry alone and inside a larger world.
+Closely spaced electrodes -- a station with the houses on its PEN -- influence
+each other through the soil; characterise them together
+(`characterize(..., quantity="input")`, the impedance seen at the feed) and
+attach that characteristic to the bus where the fault current enters, rather
+than one characteristic per electrode.
 
 ::: groundinsight.integrations.groundfield
 

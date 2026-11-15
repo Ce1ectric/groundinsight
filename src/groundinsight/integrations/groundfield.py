@@ -71,10 +71,14 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "BUSTYPE_SCHEMA",
     "BUSTYPE_SCHEMA_VERSIONS",
+    "ELECTRODES",
     "EXTENSION_KEY",
+    "add_electrode",
+    "available",
     "bustype_document",
     "characteristic_from_bustype_spec",
     "characterize",
+    "electrode_world",
     "read_bustype_json",
     "scaled_soils",
     "write_bustype_json",
@@ -761,9 +765,12 @@ def write_bustype_json(
 _RHO_KEY = re.compile(r"^rho(_\d+)?$")
 
 
-def _require_groundfield() -> Any:
+def require_groundfield() -> Any:
     """
     Import groundfield, or say how to get it.
+
+    Internal API: the service layer's characteristic job uses it; not in
+    ``__all__``, may change in any release.
 
     Returns
     -------
@@ -1029,7 +1036,7 @@ def _evaluation_options(
 
 
 def _tables(gf: Any, runs: List[Tuple[float, Any, Any]], electrode: str,
-            touch: Dict[str, Any], targets: Optional[Any]) -> Tuple[Any, Any, Any]:
+            touch: Dict[str, Any], targets: Optional[Any], quantity: str = "cluster") -> Tuple[Any, Any, Any]:
     """
     The impedance and factor tables of the solved worlds.
 
@@ -1045,6 +1052,8 @@ def _tables(gf: Any, runs: List[Tuple[float, Any, Any]], electrode: str,
         Envelope settings; empty for no ``k_touch``.
     targets : numpy.ndarray, optional
         Target points; ``None`` for no ``k_transfer``.
+    quantity : {"cluster", "input"}
+        Cluster impedance of the electrode, or input impedance of the source.
 
     Returns
     -------
@@ -1054,7 +1063,8 @@ def _tables(gf: Any, runs: List[Tuple[float, Any, Any]], electrode: str,
     """
     impedance, k_touch, k_transfer = [], [], []
     for _, world, result in runs:
-        impedance.append([complex(z) for z in result.cluster_impedance(electrode)])
+        values = result.cluster_impedance(electrode) if quantity == "cluster" else result.input_impedance()
+        impedance.append([complex(z) for z in values])
         factors = [_factors(gf, world, result, electrode, j, touch, targets)
                    for j in range(len(result.frequencies))]
         k_touch.append([k for k, _ in factors])
@@ -1062,7 +1072,7 @@ def _tables(gf: Any, runs: List[Tuple[float, Any, Any]], electrode: str,
     return impedance, (k_touch if touch else None), (k_transfer if targets is not None else None)
 
 
-def _note(electrode: str, touch: Dict[str, Any], targets: Optional[Any]) -> str:
+def _note(electrode: str, touch: Dict[str, Any], targets: Optional[Any], quantity: str = "cluster") -> str:
     """
     The provenance note of :func:`characterize`: how the table was evaluated.
 
@@ -1074,13 +1084,16 @@ def _note(electrode: str, touch: Dict[str, Any], targets: Optional[Any]) -> str:
         Envelope settings; empty for no ``k_touch``.
     targets : numpy.ndarray, optional
         Target points.
+    quantity : {"cluster", "input"}
+        Which impedance the table holds.
 
     Returns
     -------
     str
         One line.
     """
-    parts = [f"cluster impedance of '{electrode}'"]
+    parts = [f"cluster impedance of '{electrode}'" if quantity == "cluster"
+             else f"input impedance of the source at '{electrode}'"]
     if touch:
         parts.append(f"k_touch: envelope at {touch['distance']} m, {touch['n_angles']} "
                      f"directions, interior={touch['interior']!r}")
@@ -1090,7 +1103,7 @@ def _note(electrode: str, touch: Dict[str, Any], targets: Optional[Any]) -> str:
 
 
 def _fitted_formula(gf: Any, runs: List[Tuple[float, Any, Any]], electrode: str,
-                    rho_preset: Optional[str]) -> Optional[str]:
+                    rho_preset: Optional[str], quantity: str = "cluster") -> Optional[str]:
     """
     The k0..k5 standard form fitted by groundfield, as formula text.
 
@@ -1104,18 +1117,22 @@ def _fitted_formula(gf: Any, runs: List[Tuple[float, Any, Any]], electrode: str,
         The electrode whose cluster impedance is fitted.
     rho_preset : str, optional
         Recorded with the fit.
+    quantity : {"cluster", "input"}
+        The impedance fitted, as in :func:`characterize`.
 
     Returns
     -------
     str or None
         The formula as groundfield's exporter prints it; ``None`` for fewer
-        than two resistivities (the standard form needs a spread in rho).
+        than two resistivities (the standard form needs a spread in rho) or
+        fewer than four samples.
     """
-    if len(runs) < 2:
-        return None
+    if len(runs) < 2 or len(runs) * len(runs[0][2].frequencies) < 4:
+        return None  # the standard form has more coefficients than samples
     fit = gf.rho_f_standard_from_results([result for _, _, result in runs],
-                                         [rho for rho, _, _ in runs], electrode,
-                                         quantity="cluster")
+                                         [rho for rho, _, _ in runs],
+                                         electrode if quantity == "cluster" else None,
+                                         quantity=quantity)
     document = gf.to_bustype_dict(fit, name=electrode, system_type="characteristic",
                                   voltage_level=0.0, rho_preset=rho_preset)
     return document["impedance_formula"]
@@ -1182,6 +1199,7 @@ def characterize(
     impedance_source: str = "table",
     name: Optional[str] = None,
     geometry_id: Optional[str] = None,
+    quantity: str = "cluster",
 ) -> EarthingCharacteristic:
     r"""
     Compute the earthing characteristic of an electrode with groundfield.
@@ -1244,6 +1262,13 @@ def characterize(
     geometry_id : str, optional
         An identifier of the geometry for the provenance; default
         ``electrode``.
+    quantity : {"cluster", "input"}
+        The impedance of the table: the cluster impedance of ``electrode``
+        (default; an electrode alone, with what is bonded to it), or the
+        driving-point impedance of the world's source
+        (``FieldResult.input_impedance``) -- for a whole system fed at
+        ``electrode``, such as a station with the houses on its PEN, whose
+        conductors have an impedance and are no galvanic cluster.
 
     Returns
     -------
@@ -1270,16 +1295,18 @@ def characterize(
     >>> characteristic = characterize(station, [50.0, 100.0, 400.0], electrode="ring",
     ...                               frequencies=[50.0, 250.0])  # doctest: +SKIP
     """
-    gf = _require_groundfield()
+    gf = require_groundfield()
     if not soils:
         raise ValueError("characterize needs at least one soil")
     touch, targets = _evaluation_options(touch_distance, n_angles, touch_interior, transfer_targets)
     engine = _engine_for(gf, engine, frequencies, segment_length)
     models = [gf.HomogeneousSoil(rho=float(s)) if isinstance(s, (int, float)) else s for s in soils]
     runs = _solve_all(gf, build_world, models, engine, electrode, rho_preset)
-    impedance, k_touch, k_transfer = _tables(gf, runs, electrode, touch, targets)
+    if quantity not in ("cluster", "input"):
+        raise ValueError(f"quantity must be 'cluster' or 'input', got {quantity!r}")
+    impedance, k_touch, k_transfer = _tables(gf, runs, electrode, touch, targets, quantity)
     settings = {"electrode": electrode, "rho_preset": rho_preset, "touch": touch,
-                "targets": targets, "fit": fit}
+                "targets": targets, "fit": fit, "quantity": quantity}
     provenance = CharacteristicProvenance(
         source="groundfield",
         groundfield_version=str(getattr(gf, "__version__", "unknown")),
@@ -1290,13 +1317,159 @@ def characterize(
         rho_preset=rho_preset,
         created=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         input_hash=_input_hash(runs, engine, settings),
-        note=_note(electrode, touch, targets),
+        note=_note(electrode, touch, targets, quantity),
     )
     logger.debug("characterised '%s' over %d soils", electrode, len(runs))
     return EarthingCharacteristic(
         rho_Ohm_m=tuple(rho for rho, _, _ in runs),
         frequency_Hz=tuple(float(f) for f in engine.frequencies),
         impedance_Ohm=impedance, k_touch=k_touch, k_transfer=k_transfer,
-        impedance_formula=_fitted_formula(gf, runs, electrode, rho_preset) if fit else None,
+        impedance_formula=_fitted_formula(gf, runs, electrode, rho_preset, quantity) if fit else None,
         impedance_source=impedance_source, name=name, provenance=provenance,
     )
+
+
+
+# ---------------------------------------------------------------------------
+# electrode templates
+# ---------------------------------------------------------------------------
+
+#: The electrode kinds of :func:`add_electrode`, with their dimensions and defaults.
+ELECTRODES: Dict[str, Dict[str, float]] = {
+    "ring": {"radius_m": 2.5, "depth_m": 0.6, "rods": 4, "rod_length_m": 2.5, "rod_circle_m": 1.5},
+    "foundation": {"size_m": 10.0, "depth_m": 0.8, "meshes": 2},
+    "rod": {"length_m": 2.5, "depth_m": 0.0},
+}
+
+
+def add_electrode(world: Any, kind: str, *, name: str, position: Tuple[float, float] = (0.0, 0.0),
+                  **dimensions: float) -> str:
+    """
+    Add a typical earth electrode to a groundfield world.
+
+    The same function builds the electrode alone, for its characteristic,
+    and inside a larger world, so that both describe the same geometry.
+
+    Parameters
+    ----------
+    world : groundfield.World
+        The world.
+    kind : {"ring", "foundation", "rod"}
+        A ring electrode (station) with driven rods inside, bonded to it; a
+        square foundation electrode with a mesh (house); a single rod.
+    name : str
+        Name of the main electrode; rods of a ring are ``<name>_rod<k>``.
+    position : tuple of float
+        Centre ``(x, y)`` in m.
+    **dimensions : float
+        Overrides of :data:`ELECTRODES`: ``radius_m``, ``depth_m``,
+        ``rods``, ``rod_length_m``, ``rod_circle_m``; ``size_m``,
+        ``meshes``; ``length_m``.
+
+    Returns
+    -------
+    str
+        ``name``, the electrode to characterise or feed.
+
+    Raises
+    ------
+    ValueError
+        For an unknown kind or dimension.
+
+    Examples
+    --------
+    >>> import groundfield as gf  # doctest: +SKIP
+    >>> world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))  # doctest: +SKIP
+    >>> add_electrode(world, "foundation", name="H1", position=(25.0, 15.0))  # doctest: +SKIP
+    'H1'
+    """
+    gf = require_groundfield()
+    if kind not in ELECTRODES:
+        raise ValueError(f"unknown electrode kind {kind!r}; kinds: {', '.join(ELECTRODES)}")
+    unknown = sorted(set(dimensions) - set(ELECTRODES[kind]))
+    if unknown:
+        raise ValueError(f"electrode '{kind}' has no dimension {', '.join(unknown)}")
+    d = {**ELECTRODES[kind], **dimensions}
+    x, y = float(position[0]), float(position[1])
+    if kind == "foundation":
+        half = d["size_m"] / 2.0
+        n = int(d["meshes"])
+        gf.create_electrode(world, "grid_mesh", name=name, corner=(x - half, y - half, d["depth_m"]),
+                            size=(d["size_m"], d["size_m"]), n_x=n, n_y=n)
+    elif kind == "rod":
+        gf.create_electrode(world, "rod", name=name, position=(x, y, d["depth_m"]), length=d["length_m"])
+    else:
+        gf.create_electrode(world, "ring", name=name, center=(x, y, d["depth_m"]), radius=d["radius_m"])
+        for k in range(int(d["rods"])):
+            angle = math.pi / 4 + 2 * math.pi * k / max(int(d["rods"]), 1)
+            rod = f"{name}_rod{k}"
+            gf.create_electrode(world, "rod", name=rod, length=d["rod_length_m"],
+                                position=(x + d["rod_circle_m"] * math.cos(angle),
+                                          y + d["rod_circle_m"] * math.sin(angle), d["depth_m"]))
+            gf.create_conductor(world, name=f"{name}_bond{k}", start=name, end=rod)
+    return name
+
+
+def electrode_world(kind: str, *, name: str = "E", **dimensions: float) -> Callable[[Any], Any]:
+    """
+    A ``build_world`` for :func:`characterize`: one electrode alone, at the origin.
+
+    Parameters
+    ----------
+    kind : {"ring", "foundation", "rod"}
+        As in :func:`add_electrode`.
+    name : str
+        Name of the electrode.
+    **dimensions : float
+        As in :func:`add_electrode`.
+
+    Returns
+    -------
+    callable
+        ``build_world(soil) -> groundfield.World``.
+
+    Examples
+    --------
+    >>> build = electrode_world("ring", radius_m=3.0)
+    >>> callable(build)
+    True
+    """
+    def build(soil: Any) -> Any:
+        """
+        The world of the electrode in ``soil``.
+
+        Parameters
+        ----------
+        soil : groundfield soil model
+            The soil.
+
+        Returns
+        -------
+        groundfield.World
+            The world.
+        """
+        gf = require_groundfield()
+        world = gf.create_world(soil=soil)
+        add_electrode(world, kind, name=name, **dimensions)
+        return world
+
+    return build
+
+
+def available() -> bool:
+    """
+    Whether groundfield can be imported here.
+
+    Returns
+    -------
+    bool
+        ``True`` when :func:`characterize` can run.
+
+    Examples
+    --------
+    >>> isinstance(available(), bool)
+    True
+    """
+    import importlib.util
+
+    return importlib.util.find_spec("groundfield") is not None

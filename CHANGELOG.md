@@ -203,6 +203,16 @@ version section when a release is cut.
   tables (CSV) and imports a pandapower net. The plan gains the colouring by
   touch-voltage utilisation of the last EN 50522 check, and the chosen
   colouring is kept in the project.
+- **Earthing characteristics of typical electrodes, also from the GUI.**
+  `integrations.groundfield.add_electrode` builds a station ring with rods,
+  a house foundation or a rod in a groundfield world (the same geometry alone
+  and in a larger world), `electrode_world` turns it into a `build_world`,
+  and `characterize(..., quantity="input")` characterises a whole system --
+  a station with the houses on its PEN -- by the driving-point impedance at
+  its feed. The job `CharacterizeRequestDTO` (result `CharacterizeResultDTO`)
+  runs it for the service layer; the bus dialog of the GUI computes a
+  characteristic with groundfield and attaches it to the bus or its type as
+  one undoable command (`groundfield_available()` tells whether it can).
 
 ### Changed
 

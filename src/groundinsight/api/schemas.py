@@ -68,6 +68,8 @@ __all__ = [
     "READABLE_DTO_SCHEMA_VERSIONS",
     "Cell",
     "CharacteristicDTO",
+    "CharacterizeRequestDTO",
+    "CharacterizeResultDTO",
     "BusResponseRequestDTO",
     "ColumnDTO",
     "CheckReportDTO",
@@ -1519,6 +1521,108 @@ class ReferenceCasesRequestDTO(BaseDTO):
     task: Literal["reference_cases"] = "reference_cases"
 
 
+class CharacterizeRequestDTO(BaseDTO):
+    """
+    An earthing characteristic computed with groundfield.
+
+    :func:`groundinsight.integrations.groundfield.characterize` of a typical
+    electrode (:func:`~groundinsight.integrations.groundfield.add_electrode`)
+    over scaled soils. The result is a :class:`CharacterizeResultDTO`; the
+    front end attaches it with ``SetCharacteristic``. Needs groundfield.
+
+    Attributes
+    ----------
+    task : "characterize"
+        Discriminator.
+    electrode : {"ring", "foundation", "rod"}
+        The electrode kind.
+    dimensions : dict of str to float
+        Overrides of its dimensions (``radius_m``, ``size_m``, ...).
+    soil : {"homogeneous", "two_layer"}
+        The soil model.
+    rho_1 : float
+        Resistivity of the (upper) layer in Ohm*m.
+    rho_2, h_1 : float, optional
+        Lower half-space resistivity and upper layer thickness of a
+        two-layer soil.
+    factors : list of float
+        Scale factors applied to every layer, one row of the table each.
+    frequencies : list of float
+        Positive frequencies in Hz.
+    rho_preset : str, optional
+        Preset of the effective resistivity of a layered soil.
+    backend : str
+        groundfield backend; ``"image"`` (fast, impedance-grade surface
+        potential) or ``"mom"`` (field-grade touch voltages).
+    segment_length : float
+        Segment length in m.
+    touch_distance : float, optional
+        Reach of ``k_touch`` in m; ``None`` for none.
+    transfer_distances : list of float
+        Distances in m from the electrode centre (along +x, on the surface)
+        of the target points of ``k_transfer``; empty for none.
+    target : {"bus", "bus_type"}
+        What the result is for (returned unchanged).
+    owner : str
+        The bus or bus type (returned unchanged).
+    name : str, optional
+        Name of the characteristic.
+    """
+
+    task: Literal["characterize"] = "characterize"
+    electrode: Literal["ring", "foundation", "rod"] = "ring"
+    dimensions: Dict[str, float] = Field(default_factory=dict)
+    soil: Literal["homogeneous", "two_layer"] = "homogeneous"
+    rho_1: float = Field(default=100.0, gt=0, allow_inf_nan=False)
+    rho_2: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    h_1: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    factors: List[float] = Field(default_factory=lambda: [0.5, 1.0, 2.0, 4.0], min_length=1)
+    frequencies: List[float] = Field(default_factory=lambda: [50.0], min_length=1)
+    rho_preset: Optional[str] = None
+    backend: str = "image"
+    segment_length: float = Field(default=0.5, gt=0, allow_inf_nan=False)
+    touch_distance: Optional[float] = Field(default=1.0, gt=0, allow_inf_nan=False)
+    transfer_distances: List[float] = Field(default_factory=list)
+    target: Literal["bus", "bus_type"] = "bus"
+    owner: str = ""
+    name: Optional[str] = None
+
+
+class CharacterizeResultDTO(BaseDTO):
+    """
+    An earthing characteristic computed by a job.
+
+    Attributes
+    ----------
+    characteristic : dict
+        The :class:`groundinsight.EarthingCharacteristic` in its JSON form,
+        ready for ``SetCharacteristic``.
+    table : TableDTO
+        Its ``to_frame()``.
+    target : {"bus", "bus_type"}
+        From the request.
+    owner : str
+        From the request.
+    revision : int, optional
+        Session revision when the job was submitted.
+    diagnostics : list of DiagnosticDTO
+        Warnings of the computation (groundfield's included, by class name).
+    groundinsight_version : str
+        Library version.
+    duration_s : float, optional
+        Wall time.
+    """
+
+    characteristic: Dict[str, Any]
+    table: TableDTO
+    target: Literal["bus", "bus_type"] = "bus"
+    owner: str = ""
+    revision: Optional[int] = None
+    diagnostics: List[DiagnosticDTO] = Field(default_factory=list)
+    groundinsight_version: str
+    duration_s: FiniteFloat = None
+
+
 #: Any job request, discriminated by ``task``.
 JobRequest = Annotated[
     Union[
@@ -1533,6 +1637,7 @@ JobRequest = Annotated[
         TouchCheckRequestDTO,
         TransientRequestDTO,
         ReferenceCasesRequestDTO,
+        CharacterizeRequestDTO,
     ],
     Field(discriminator="task"),
 ]
@@ -1550,8 +1655,8 @@ def parse_job_request(data: Any) -> BaseModel:
         A mapping with a ``task`` key (``"solve"``, ``"solve_all"``,
         ``"sweep"``, ``"outage"``, ``"max_rho"``, ``"cuts"``,
         ``"bus_response"``, ``"thermal"``, ``"touch"``, ``"transient"``,
-        ``"reference_cases"``), or a request DTO, which is returned
-        unchanged.
+        ``"reference_cases"``, ``"characterize"``), or a request DTO, which
+        is returned unchanged.
 
     Returns
     -------

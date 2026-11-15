@@ -41,6 +41,8 @@ from groundinsight.diagnostics import collecting, unique
 
 from .schemas import (
     BusResponseRequestDTO,
+    CharacterizeRequestDTO,
+    CharacterizeResultDTO,
     ComplexDTO,
     CutsRequestDTO,
     FaultResultsDTO,
@@ -59,7 +61,7 @@ from .views import diagnostic_dto, fault_result_dto, table_dto
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["TASKS", "TaskContext", "TaskOutcome", "run_task"]
+__all__ = ["TASKS", "TaskContext", "TaskOutcome", "groundfield_available", "run_task"]
 
 
 @dataclass
@@ -516,6 +518,59 @@ def _reference_cases(network: gi.Network, request: ReferenceCasesRequestDTO,
     return _study("reference_cases", request, context, run, convert)
 
 
+def groundfield_available() -> bool:
+    """
+    Whether characteristic jobs (``CharacterizeRequestDTO``) can run here.
+
+    Returns
+    -------
+    bool
+        ``True`` when groundfield is installed.
+
+    Examples
+    --------
+    >>> isinstance(groundfield_available(), bool)
+    True
+    """
+    from groundinsight.integrations import groundfield as integration
+
+    return integration.available()
+
+
+def _characterize(network: gi.Network, request: CharacterizeRequestDTO, context: TaskContext) -> TaskOutcome:
+    """Task ``"characterize"``: an electrode characteristic with groundfield (the network is not used)."""
+    from groundinsight.integrations import groundfield as integration
+
+    started = time.perf_counter()
+    gf = integration.require_groundfield()
+    context.checkpoint(0, 1, "characteristic")
+    if request.soil == "two_layer":
+        if request.rho_2 is None or request.h_1 is None:
+            raise ValueError("a two-layer soil needs rho_2 and h_1")
+        soils = integration.scaled_soils(
+            gf.TwoLayerSoil(rho_1=request.rho_1, rho_2=request.rho_2, h_1=request.h_1), request.factors)
+    else:
+        soils = [request.rho_1 * factor for factor in request.factors]
+    engine = gf.create_engine(backend=request.backend, frequencies=list(request.frequencies),
+                              segment_length=request.segment_length)
+    targets = [(d, 0.0, 0.0) for d in request.transfer_distances] or None
+    with collecting() as records:
+        characteristic = integration.characterize(
+            integration.electrode_world(request.electrode, **request.dimensions), soils,
+            electrode="E", engine=engine, rho_preset=request.rho_preset,
+            touch_distance=request.touch_distance, transfer_targets=targets, name=request.name,
+            geometry_id=f"{request.electrode} {request.dimensions}" if request.dimensions else request.electrode)
+    context.report(1, 1, "characteristic")
+    dto = CharacterizeResultDTO(
+        characteristic=characteristic.model_dump(mode="json"),
+        table=table_dto("characteristic", characteristic.to_frame()),
+        target=request.target, owner=request.owner, revision=context.revision,
+        diagnostics=[diagnostic_dto(d) for d in unique(records)],
+        groundinsight_version=gi.__version__, duration_s=time.perf_counter() - started,
+    )
+    return TaskOutcome(dto=dto)
+
+
 #: Task name (the request's ``task``) to the function that computes it.
 TASKS = {
     "solve": _solve,
@@ -529,6 +584,7 @@ TASKS = {
     "touch": _touch,
     "transient": _transient,
     "reference_cases": _reference_cases,
+    "characterize": _characterize,
 }
 
 

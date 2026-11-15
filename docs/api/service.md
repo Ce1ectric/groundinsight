@@ -498,6 +498,8 @@ every finding of `check_network`, as `table`, `json` (`CheckReportDTO`) or
 
 ::: groundinsight.api.jobs
 
+::: groundinsight.api.tasks.groundfield_available
+
 ::: groundinsight.api.schemas
 
 ::: groundinsight.api.examples

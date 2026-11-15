@@ -59,6 +59,7 @@ testpaths = ["tests"]
 addopts = "-ra -p nicegui.testing.user_plugin"
 markers = [
     "browser: drives the app in Chromium with Playwright (skipped without Playwright or Chromium)",
+    "groundfield: needs groundfield, which is no dependency yet (skipped without it)",
 ]
 # No main file: each test registers the pages it needs through build_app().
 main_file = ""

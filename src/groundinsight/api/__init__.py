@@ -73,11 +73,14 @@ from .commands import (
 )
 from .examples import EXAMPLES
 from .jobs import JobCancelled, JobFailed, JobHandle, JobRunner, JobTimeout, snapshot_network
+from .tasks import groundfield_available
 from .schemas import (
     DTO_SCHEMA_VERSION,
     READABLE_DTO_SCHEMA_VERSIONS,
     BusResponseRequestDTO,
     CharacteristicDTO,
+    CharacterizeRequestDTO,
+    CharacterizeResultDTO,
     CheckReportDTO,
     ColumnDTO,
     CommandResultDTO,
@@ -178,6 +181,7 @@ __all__ = [
     "JobTimeout",
     "JobFailed",
     "snapshot_network",
+    "groundfield_available",
     # DTOs
     "DTO_SCHEMA_VERSION",
     "READABLE_DTO_SCHEMA_VERSIONS",
@@ -221,6 +225,8 @@ __all__ = [
     "TouchCheckRequestDTO",
     "TransientRequestDTO",
     "ReferenceCasesRequestDTO",
+    "CharacterizeRequestDTO",
+    "CharacterizeResultDTO",
     "ViewDTO",
     "ViewBlockDTO",
     # templates
