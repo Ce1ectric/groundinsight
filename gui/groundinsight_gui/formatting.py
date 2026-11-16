@@ -11,9 +11,9 @@ functions, tested on their own.
 """
 
 import math
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
-__all__ = ["DASH", "format_number", "format_unit", "parse_number"]
+__all__ = ["DASH", "format_number", "format_scale", "format_unit", "parse_number"]
 
 #: Shown where a DTO carries ``None`` (an undefined or non-finite value).
 DASH = "–"
@@ -53,6 +53,44 @@ def format_number(value: Optional[float], language: str, digits: int = 4) -> str
         return DASH
     text = f"{number:.{digits}g}"
     return text.replace(".", ",") if language == "de" else text
+
+
+def format_scale(low: float, high: float, language: str) -> Tuple[str, str]:
+    """
+    The two ends of a colour scale, rounded to the same decimal place.
+
+    Four significant digits of the larger end fix the decimal place of both,
+    so a numerical zero of a solve (``5.5e-13`` V next to ``196.5`` V) reads
+    as ``0`` and not in scientific notation.
+
+    Parameters
+    ----------
+    low, high : float
+        The ends of the scale.
+    language : {"de", "en"}
+        ``"de"`` uses a decimal comma.
+
+    Returns
+    -------
+    tuple of str
+        The texts of ``low`` and ``high``.
+
+    Examples
+    --------
+    >>> format_scale(5.505e-13, 196.5, "de")
+    ('0', '196,5')
+    """
+    largest = max(abs(low), abs(high))
+    decimals = max(0, 3 - math.floor(math.log10(largest))) if largest > 0 else 0
+
+    def text(value: float) -> str:
+        fixed = f"{round(value, decimals) + 0.0:.{decimals}f}"
+        if "." in fixed:
+            fixed = fixed.rstrip("0").rstrip(".")
+        fixed = "0" if fixed == "-0" else fixed
+        return fixed.replace(".", ",") if language == "de" else fixed
+
+    return text(low), text(high)
 
 
 def parse_number(value: Any) -> float:

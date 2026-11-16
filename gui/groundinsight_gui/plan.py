@@ -55,8 +55,9 @@ from groundinsight.api import (
 
 from .canvas import CANVAS_CSS, TOOLS, NetworkCanvas
 from .colouring import MODES, RESULT_MODES, Colouring, colour
-from .formatting import DASH, format_number, parse_number
+from .formatting import DASH, format_number, format_scale, parse_number
 from .i18n import column_label
+from .studies import grid_options
 
 logger = logging.getLogger(__name__)
 
@@ -246,11 +247,11 @@ class PlanView:
             ui.label(self.t(f"colour_{self.mode}")).classes("text-sm font-medium").mark("colour-mode")
             if colours.scale is not None:
                 low, high, unit = colours.scale
-                ui.label(f"{format_number(low, self.page.language, 4)} {unit}").classes("text-xs")
+                low_text, high_text = format_scale(low, high, self.page.language)
+                ui.label(f"{low_text} {unit}").classes("text-xs").mark("legend-min")
                 ui.element("div").style(f"width: 160px; height: 10px; border-radius: 3px; "
                                         f"background: {colours.gradient}")
-                ui.label(f"{format_number(high, self.page.language, 4)} {unit}").classes("text-xs").mark(
-                    "legend-max")
+                ui.label(f"{high_text} {unit}").classes("text-xs").mark("legend-max")
             elif self.mode in RESULT_MODES:
                 ui.label(self.t("legend_no_result")).classes("text-xs text-gray-500").mark("legend-empty")
             for entry in colours.entries:
@@ -331,9 +332,12 @@ class PlanView:
             for key, value in (row or {}).items():
                 if key in ("name", "characteristic"):
                     continue
-                text = value if isinstance(value, str) else (
-                    format_number(value, self.page.language, 6) if isinstance(value, (int, float))
-                    and not isinstance(value, bool) else (DASH if value is None else str(value)))
+                if isinstance(value, bool):
+                    text = self.t("yes") if value else self.t("no")
+                elif isinstance(value, (int, float)):
+                    text = format_number(value, self.page.language, 6)
+                else:
+                    text = DASH if value is None else value
                 with ui.row().classes("w-full justify-between no-wrap gap-2"):
                     ui.label(column_label(self.page.language, key)).classes("text-xs text-gray-500")
                     ui.label(str(text)).classes("text-xs text-right truncate").mark(f"prop-{key}")
@@ -597,7 +601,7 @@ class BusDialog(_ElementDialog):
         """The current phasors of a source, by frequency."""
         return {r["frequency_Hz"]: {"real": r["real"], "imag": r["imag"]}
                 for r in self.plan.session.table("source_values").rows
-                if r["source"] == source and r["quantity"] == "values"}
+                if r["source"] == source and r["quantity"] == "current"}
 
     def _tab_source(self) -> None:
         sources = self._sources()
@@ -631,14 +635,14 @@ class BusDialog(_ElementDialog):
             ui.label(self.t("char_none")).classes("text-sm").mark("char-origin")
         else:
             origin = self.t("char_own") if dto.origin == "bus" else self.t("char_type")
-            ui.label(f"{origin}: {dto.name or DASH} · {self.t('char_source')} {dto.impedance_source}").classes(
+            source = self.t(f"char_source_{dto.impedance_source}")
+            ui.label(f"{origin}: {dto.name or DASH} · {self.t('char_source')} {source}").classes(
                 "text-sm").mark("char-origin")
             if dto.extrapolated:
                 ui.label(self.t("char_extrapolated")).classes("text-xs text-amber-800")
             language = self.plan.page.language
-            columns = [{"field": c.name, "headerName": column_label(language, c.name)} for c in dto.table.columns]
-            ui.aggrid({"columnDefs": columns, "rowData": dto.table.rows,
-                       "defaultColDef": {"flex": 1, "minWidth": 80}}, theme="quartz").classes("h-48")
+            ui.aggrid(grid_options(dto.table, language, lambda lang: "de-DE" if lang == "de" else "en-US"),
+                      theme="quartz").classes("h-48").mark("char-table")
         with ui.row().classes("gap-2 items-center"):
             ui.upload(label=self.t("char_import"), auto_upload=True, on_upload=self._import).props(
                 "accept=.json flat dense").classes("w-64").mark("char-upload")

@@ -12,7 +12,7 @@ rounding could be ambiguous.
 
 import pytest
 
-from groundinsight_gui.formatting import format_number, format_unit, parse_number
+from groundinsight_gui.formatting import format_number, format_scale, format_unit, parse_number
 
 
 @pytest.mark.parametrize(
@@ -58,3 +58,17 @@ def test_units_are_shown_with_their_symbols():
     assert format_unit("Ohm") == "Ω"
     assert format_unit("km") == "km"
     assert format_unit(None) == ""
+
+
+@pytest.mark.parametrize(
+    "low, high, language, expected",
+    [
+        (5.505e-13, 196.5, "de", ("0", "196,5")),       # numerical zero of a solve, not 5,505e-13
+        (36.62, 934.0, "de", ("36,6", "934")),          # both ends to the same decimal place
+        (0.0123, 0.5, "en", ("0.0123", "0.5")),
+        (2236.07, 4325.3, "de", ("2236", "4325")),
+        (-3.0, 3.0, "en", ("-3", "3")),
+    ],
+)
+def test_the_two_ends_of_a_colour_scale_share_their_decimal_place(low, high, language, expected):
+    assert format_scale(low, high, language) == expected

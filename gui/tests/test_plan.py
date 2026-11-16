@@ -15,6 +15,7 @@ import json
 import os
 
 import pytest
+from nicegui import ui
 from nicegui.testing import User
 
 import groundinsight as gi
@@ -153,6 +154,32 @@ async def test_the_bus_dialog_adds_a_source_with_its_values(user: User):
     assert {f: complex(v) for f, v in source.values.items()} == {50.0: DEFAULT_SOURCE_A}
 
 
+async def test_the_bus_dialog_keeps_the_values_of_an_existing_source(user: User):
+    page = await _page(user, "quickstart")
+    session = page.session
+    before = {f: complex(v) for f, v in session.network.sources["substation_infeed"].values.items()}
+    _fire(user, "open", kind="bus", name="bus_source")
+    await user.should_see(marker="dlg-source")
+    # The source tab shows the stored phasors, not zeros.
+    shown = [e.value for e in user.find(kind=ui.input).elements if e.props.get("label") == "Re / A"]
+    assert sorted(shown, key=float) == ["25", "50", "100", "200", "1000"]
+    user.find(marker="dlg-name").clear().type("Station 1")
+    user.find(marker="dialog-apply").click()
+    assert len(session.history()) == 1
+    source = session.network.sources["substation_infeed"]
+    assert source.bus == "Station 1"
+    assert {f: complex(v) for f, v in source.values.items()} == before
+    # Second way: the stored values are the template's, read from the library directly.
+    assert before == {f: complex(v) for f, v in EXAMPLES["quickstart"]().sources["substation_infeed"].values.items()}
+
+
+async def test_the_properties_say_yes_and_no(user: User):
+    await _page(user)
+    _fire(user, "select", kind="branch", name="b12")
+    await user.should_see(marker="prop-active")
+    assert [e.text for e in user.find(marker="prop-active").elements] == ["ja"]
+
+
 async def test_the_branch_dialog_opens_the_switch(user: User):
     page = await _page(user)
     session = page.session
@@ -227,6 +254,11 @@ async def test_a_groundfield_document_is_imported_from_the_bus_dialog(user: User
     bus = page.session.network.buses["bus2"]
     assert bus.characteristic is not None and bus.characteristic.name == "ONS A"
     assert complex(bus.impedance[50.0]) == pytest.approx(0.01 * bus.specific_earth_resistance + 0.005j)
+    # Shown in the reader's language: the origin in words, the numbers with a decimal comma.
+    await user.should_see("Eigene Kennlinie: ONS A · Impedanz aus Tabelle")
+    grid = next(iter(user.find(marker="char-table").elements))
+    numeric = [c for c in grid.options["columnDefs"] if c["field"] != "frequency_Hz"]
+    assert numeric and all("de-DE" in c[":valueFormatter"] for c in numeric)
 
 
 def test_free_names():
