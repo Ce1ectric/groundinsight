@@ -3697,8 +3697,10 @@ Carried forward:
   bus electrodes, from groundfield's multi-port solution, would close it --
   a model extension of the nodal kernel, planned as a work package of its own.
 - Recompute the characteristics of the example project
-  `docs/examples/ortsnetzstation_5_haeuser.json` with the released
-  groundfield 2026.11.0; their provenance names the pre-release 0.15.0.
+  `docs/examples/ortsnetzstation_5_haeuser.json` and the electrode presets of
+  the standard library (`scripts/build_standard_bus_types.py`) with the
+  released groundfield 2026.11.0; their provenance names the pre-release
+  0.15.0.
 
 **Graphical interface.**
 

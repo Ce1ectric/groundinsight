@@ -33,10 +33,10 @@ window.MathJax = {
     // other -- MathJax's at startup, then a clear and a new one when
     // document$ fires -- showed the TeX source for a moment and could leave a
     // page half done. pageReady typesets when nothing else has: without
-    // Material (a page of its own), and when document$ announced the page
-    // before MathJax was loaded, so its subscription below had nothing to
-    // queue on. That happens when the page is parsed before the bundle runs
-    // (slow I/O); the page then stayed TeX source.
+    // Material (a page of its own), and as a safeguard when document$
+    // announces the page before MathJax is loaded, so its subscription below
+    // has nothing to queue on (the documentation test builds that order);
+    // the page would otherwise stay TeX source.
     typeset: false,
     pageReady() {
       return MathJax.startup.defaultPageReady().then(() => {

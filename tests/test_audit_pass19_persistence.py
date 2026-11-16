@@ -450,7 +450,7 @@ def test_the_file_carries_schema_and_package_version_first(tmp_path):
     path = tmp_path / "projekt.json"
     gi.save_network_to_json(_network(), str(path))
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert list(payload) == ["schema_version", "groundinsight_version", "network", "diagram", "views"]
+    assert list(payload) == ["schema_version", "groundinsight_version", "network", "diagram", "views", "types"]
     assert payload["schema_version"] == _schema_version() == 2
     assert isinstance(payload["schema_version"], int)
     assert payload["groundinsight_version"] == gi.__version__

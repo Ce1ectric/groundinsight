@@ -88,6 +88,20 @@ class _QuietHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+class _Server(http.server.ThreadingHTTPServer):
+    """
+    The site's server, with a listen queue for a browser's parallel connections.
+
+    ``socketserver``'s default queue of 5 overflowed on a loaded machine:
+    Chromium opens several connections per page, the accept loop lagged, and
+    the request for MathJax itself was reset (``ERR_CONNECTION_RESET``) -- a
+    page without formulas that was the server's fault, not the site's.
+    """
+
+    request_queue_size = 128
+    daemon_threads = True
+
+
 def _unavailable(reason: str):
     if GATE:
         pytest.fail(f"GI_DOCS_GATE=1: {reason}")
@@ -99,7 +113,7 @@ def site_url():
     if not (SITE / "index.html").exists():
         _unavailable("the site is not built (mkdocs build)")
     handler = functools.partial(_QuietHandler, directory=str(SITE))
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    server = _Server(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     yield f"http://127.0.0.1:{server.server_address[1]}"
@@ -143,6 +157,25 @@ def _check(page, path: str) -> "tuple[int, List[str]]":
     return count, problems
 
 
+#: What the page knows about MathJax when it did not typeset: loaded at all, how far it started.
+_MATHJAX_STATE = """
+() => ({version: window.MathJax && window.MathJax.version,
+        typeset: typeof (window.MathJax && window.MathJax.typesetPromise),
+        material: typeof document$ !== "undefined"})
+"""
+
+
+def _check_or_explain(page, path: str, failed: List[str]) -> "tuple[int, List[str]]":
+    """:func:`_check`, and on a page that never typeset, what MathJax and the network said."""
+    from playwright.sync_api import Error
+
+    try:
+        return _check(page, path)
+    except Error as exc:
+        state = page.evaluate(_MATHJAX_STATE)
+        raise AssertionError(f"{path}: {exc}; MathJax state {state}; failed requests {failed[-5:]}") from exc
+
+
 def test_every_formula_of_the_site_is_typeset(site_url, browser):
     pages = _pages()
     assert len(pages) > 50
@@ -150,12 +183,13 @@ def test_every_formula_of_the_site_is_typeset(site_url, browser):
     problems, typeset = [], 0
     context = browser.new_context(viewport={"width": 1280, "height": 900})
     page = context.new_page()
-    requests = []
+    requests, failed = [], []
     page.on("request", lambda r: requests.append(r.url) if "mathjax" in r.url.lower() else None)
+    page.on("requestfailed", lambda r: failed.append(f"{r.url} ({r.failure})"))
     for path in pages:
         url = f"{site_url}/{path}/" if path != "." else f"{site_url}/"
         page.goto(url, wait_until="load")
-        count, found = _check(page, path)
+        count, found = _check_or_explain(page, path, failed)
         typeset += count
         problems += found
         if screens and count:
