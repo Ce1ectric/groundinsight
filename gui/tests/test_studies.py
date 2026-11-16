@@ -227,14 +227,26 @@ async def test_touch_check_and_the_utilisation_colouring(user: User):
 
 async def test_transient(user: User):
     await _page(user, "pulse")
-    await _study(user, "transient", amplitude="100", t_off="0,02", t_end="0,04", dt="0,001")
+    await _study(user, "transient", amplitude="100", t_off="0,02", t_end="0,04", dt="0,001",
+                 observe_branches=["L1"])
     from groundinsight.simulation import waveforms
 
     study = gi.TransientStudy(_transient_network(), "F1")
     study.set_source_waveform("S1", waveforms.step(100.0, t_off=0.02))
-    study.set_observation(buses=["B1", "B2"])
-    assert _shown(user, "series") == _rows(study.solve(t_end=0.04, dt=0.001).to_polars())
-    await user.should_see(marker="study-chart")
+    study.set_observation(buses=["B1", "B2"], branches=["L1"])
+    result = study.solve(t_end=0.04, dt=0.001)
+    assert _shown(user, "series") == _rows(result.to_polars())
+    chart = _element(user, "study-chart")
+    assert [s["name"] for s in chart.options["series"]] == ["B1 [V]", "B2 [V]", "L1 [A]"]
+    # Only the chosen signals are drawn.
+    _element(user, "transient-signals").set_value(["epr:B2"])
+    assert [s["name"] for s in chart.options["series"]] == ["B2 [V]"]
+    # Statistics over a window: the library's own, a second way.
+    _element(user, "transient-t-start").set_value("0,005")
+    _element(user, "transient-t-end").set_value("0,03")
+    user.find(marker="transient-statistics-run").click()
+    shown = _element(user, "transient-statistics").options["rowData"]
+    assert shown == _rows(result.statistics(0.005, 0.03))
 
 
 async def test_reference_cases(user: User):

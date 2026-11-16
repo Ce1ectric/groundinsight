@@ -36,7 +36,7 @@ session (unsaved edits are lost).
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from nicegui import app, run, ui
 
@@ -75,7 +75,17 @@ from .evaluations import EvaluationTabs
 from .formatting import DASH, format_number, format_unit, parse_number
 from .i18n import STRINGS, column_label, template_label, text
 from .plan import PlanView
-from .studies import STUDIES, StudyDialog, grid_options, study_chart, study_tables
+from .studies import (
+    STUDIES,
+    StudyDialog,
+    grid_options,
+    signal_label,
+    study_chart,
+    study_tables,
+    transient_chart,
+    transient_signals,
+    transient_statistics,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1167,15 +1177,59 @@ class ProjectPage:
                     "study-values")
             for name, reason in dto.failures.items():
                 ui.label(f"{name}: {reason}").classes("text-xs text-red-800")
-            chart = study_chart(dto, self.language)
-            if chart is not None:
-                ui.echart(chart).classes("w-full h-72").mark("study-chart")
+            if dto.study == "transient":
+                self._transient_view(dto)
+            else:
+                chart = study_chart(dto, self.language)
+                if chart is not None:
+                    ui.echart(chart).classes("w-full h-72").mark("study-chart")
             for name, table in study_tables(dto):
                 ui.label(self.t(f"study_table_{name}") if f"study_table_{name}" in STRINGS[self.language]
                          else name).classes("text-sm font-medium text-gray-700")
                 ui.aggrid(grid_options(table, self.language, lambda lang: "de-DE" if lang == "de" else "en-US"),
                           theme="quartz").classes("h-64").mark(f"study-table-{name}")
             self._diagnostics_panel(dto.diagnostics, title=self.t("diagnostics"))
+
+    def _transient_view(self, dto: StudyResultDTO) -> None:
+        """The signals of a transient: chosen ones in the chart, statistics over a window."""
+        signals = transient_signals(dto)
+        labels = {f"{kind}:{name}": signal_label(kind, name) for kind, name in signals}
+        chosen = [key for key in labels if not key.startswith("source:")]
+
+        def pairs(keys: List[str]) -> List[Tuple[str, str]]:
+            return [tuple(key.split(":", 1)) for key in keys]  # type: ignore[misc]
+
+        chart = ui.echart(transient_chart(dto, pairs(chosen))).classes("w-full h-72").mark("study-chart")
+
+        def show(event: Any) -> None:
+            chart.options.clear()
+            chart.options.update(transient_chart(dto, pairs(list(event.value or []))))
+            chart.update()
+
+        ui.select(labels, multiple=True, value=chosen, label=self.t("transient_signals"),
+                  on_change=show).props("use-chips").classes("w-full").mark("transient-signals")
+        with ui.row().classes("items-end gap-2"):
+            start = ui.input(self.t("transient_t_start"), value="").classes("w-40").mark("transient-t-start")
+            end = ui.input(self.t("transient_t_end"), value="").classes("w-40").mark("transient-t-end")
+        holder = ui.column().classes("w-full")
+
+        def statistics() -> None:
+            try:
+                t_start = parse_number(start.value) if str(start.value or "").strip() else None
+                t_end = parse_number(end.value) if str(end.value or "").strip() else None
+                table = transient_statistics(dto, t_start, t_end)
+            except ValueError as exc:
+                ui.notify(f"{self.t('edit_rejected')}: {exc}", type="negative")
+                return
+            holder.clear()
+            with holder:
+                ui.aggrid(grid_options(table, self.language, lambda lang: "de-DE" if lang == "de" else "en-US"),
+                          theme="quartz").classes("h-56").mark("transient-statistics")
+
+        with ui.row().classes("items-end gap-2"):
+            ui.button(self.t("transient_statistics"), icon="functions", on_click=statistics).props(
+                "outline no-caps").mark("transient-statistics-run")
+        statistics()
 
     def _attach_characteristic(self, dto: CharacterizeResultDTO) -> None:
         """Attach a characteristic computed by a job (one undoable command)."""

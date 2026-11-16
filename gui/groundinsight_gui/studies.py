@@ -28,7 +28,9 @@ reference cases    ``ReferenceCasesRequestDTO``
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+
+import polars as pl
 
 from nicegui import ui
 
@@ -46,15 +48,19 @@ from groundinsight.api import (
     SweepRequestDTO,
     ThermalRequestDTO,
     TouchCheckRequestDTO,
+    TableDTO,
     TransientRequestDTO,
+    table_dto,
 )
+from groundinsight.simulation.transient import window_statistics
 
 from .formatting import format_number, parse_number
 from .i18n import column_label
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["STUDIES", "StudyDialog", "parse_curve", "parse_numbers", "study_chart"]
+__all__ = ["STUDIES", "StudyDialog", "parse_curve", "parse_numbers", "signal_label", "study_chart",
+           "transient_chart", "transient_signals", "transient_statistics"]
 
 #: The studies of the menu, in menu order.
 STUDIES = ("outage", "sweep", "cuts", "bus_response", "max_rho", "thermal", "touch", "transient",
@@ -116,6 +122,112 @@ def parse_curve(text: str) -> Any:
     return [(parse_number(t), parse_number(u)) for t, u in (p.split(":") for p in text.split(";") if p.strip())]
 
 
+def signal_label(kind: str, name: str) -> str:
+    """
+    The label of a transient signal: its name, the unit of its kind.
+
+    Parameters
+    ----------
+    kind : {"epr", "i_branch", "source"}
+        The signal kind of ``ResultTransient.to_polars``.
+    name : str
+        The bus, branch or source.
+
+    Returns
+    -------
+    str
+        ``"B1 [V]"``, ``"L1 [A]"``, ``"S1 [A]"``.
+
+    Examples
+    --------
+    >>> signal_label("epr", "B1"), signal_label("i_branch", "L1")
+    ('B1 [V]', 'L1 [A]')
+    """
+    return f"{name} [{'V' if kind == 'epr' else 'A'}]"
+
+
+def transient_signals(dto: StudyResultDTO) -> List[Tuple[str, str]]:
+    """
+    The ``(kind, name)`` of every signal of a transient study, in table order.
+
+    Parameters
+    ----------
+    dto : StudyResultDTO
+        A result of the ``transient`` study.
+
+    Returns
+    -------
+    list of (str, str)
+        One entry per signal.
+    """
+    seen: Dict[Tuple[str, str], None] = {}
+    for row in dto.tables["series"].rows:
+        seen.setdefault((row["signal_kind"], row["name"]), None)
+    return list(seen)
+
+
+def transient_chart(dto: StudyResultDTO, signals: Sequence[Tuple[str, str]]) -> Dict[str, Any]:
+    """
+    ECharts options of the chosen signals of a transient study over time.
+
+    Parameters
+    ----------
+    dto : StudyResultDTO
+        A result of the ``transient`` study.
+    signals : sequence of (str, str)
+        ``(kind, name)`` of the signals to draw.
+
+    Returns
+    -------
+    dict
+        A line chart, one series per signal; potentials on the left axis in
+        V, currents on the right one in A.
+    """
+    chosen = set(signals)
+    rows = [r for r in dto.tables["series"].rows if (r["signal_kind"], r["name"]) in chosen]
+    series = []
+    for kind, name in signals:
+        series.append({"type": "line", "name": signal_label(kind, name), "showSymbol": False,
+                       "yAxisIndex": 0 if kind == "epr" else 1,
+                       "data": [[r["time_s"], r["value"]] for r in rows
+                                if r["signal_kind"] == kind and r["name"] == name]})
+    return {"tooltip": {"trigger": "axis"}, "legend": {"type": "scroll"},
+            "xAxis": {"type": "value", "name": "t [s]"},
+            "yAxis": [{"type": "value", "name": "V"}, {"type": "value", "name": "A"}],
+            "series": series}
+
+
+def transient_statistics(dto: StudyResultDTO, t_start: Optional[float], t_end: Optional[float]) -> TableDTO:
+    """
+    Minimum, maximum, peak and RMS of every signal over a window.
+
+    The library's own computation (:meth:`groundinsight.ResultTransient.statistics`)
+    on the rows of the study.
+
+    Parameters
+    ----------
+    dto : StudyResultDTO
+        A result of the ``transient`` study.
+    t_start, t_end : float or None
+        The window in s; ``None`` for the start or the end of the result.
+
+    Returns
+    -------
+    TableDTO
+        Table ``statistics``.
+
+    Raises
+    ------
+    ValueError
+        For an empty or reversed window.
+    """
+    columns = ["time_s", "signal_kind", "name", "value"]
+    frame = pl.DataFrame([{c: r[c] for c in columns} for r in dto.tables["series"].rows],
+                         schema={"time_s": pl.Float64, "signal_kind": pl.Utf8, "name": pl.Utf8,
+                                 "value": pl.Float64})
+    return table_dto("statistics", window_statistics(frame, t_start, t_end))
+
+
 def study_chart(dto: StudyResultDTO, language: str) -> Optional[Dict[str, Any]]:
     """
     ECharts options for the result of a study, where a chart helps.
@@ -139,13 +251,7 @@ def study_chart(dto: StudyResultDTO, language: str) -> Optional[Dict[str, Any]]:
         return _bars([r["bus_name"] for r in rows], {"UvT/Ulimit": [r["utilisation"] for r in rows]},
                      column_label(language, "utilisation"))
     if dto.study == "transient":
-        rows = dto.tables["series"].rows
-        names = sorted({r["name"] for r in rows if r["signal_kind"] != "source"})
-        series = [{"type": "line", "name": n, "showSymbol": False,
-                   "data": [[r["time_s"], r["value"]] for r in rows if r["name"] == n]} for n in names]
-        return {"tooltip": {"trigger": "axis"}, "legend": {"type": "scroll"},
-                "xAxis": {"type": "value", "name": "t [s]"}, "yAxis": {"type": "value", "name": "V"},
-                "series": series}
+        return transient_chart(dto, [s for s in transient_signals(dto) if s[0] != "source"])
     if dto.study == "outage":
         # compare_buses() is long: one row per bus, frequency ("RMS" for the
         # RMS row), metric and scenario.
@@ -320,10 +426,12 @@ class StudyDialog:
         self._text("t_off", self.t("study_t_off"), "0,02")
         self._text("t_end", self.t("study_t_end"), "0,1")
         self._text("dt", self.t("study_dt"), "0,0001")
+        self._multi("observe_branches", "branches", self.t("study_observe_branches"))
 
     def _request_transient(self) -> TransientRequestDTO:
         t_off = (self.value("t_off") or "").strip()
         return TransientRequestDTO(fault=self.value("fault"), waveform=self.value("waveform"),
+                                   observe_branches=list(self.value("observe_branches") or []),
                                    amplitude=parse_number(self.value("amplitude")),
                                    t_off=parse_number(t_off) if t_off else None,
                                    t_end=parse_number(self.value("t_end")), dt=parse_number(self.value("dt")))

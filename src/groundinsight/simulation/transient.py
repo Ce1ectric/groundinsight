@@ -423,6 +423,96 @@ class ResultTransient(BaseModel):
             return pl.DataFrame(schema=schema)
         return pl.concat(frames)
 
+    def statistics(
+        self, t_start: Optional[float] = None, t_end: Optional[float] = None
+    ) -> "pl.DataFrame":  # noqa: F821 -- forward ref
+        """
+        Minimum, maximum, peak and RMS of every signal over a time window.
+
+        Parameters
+        ----------
+        t_start, t_end : float, optional
+            The window in s, both ends included; default the whole result.
+
+        Returns
+        -------
+        polars.DataFrame
+            One row per signal (:func:`window_statistics`).
+
+        Raises
+        ------
+        ValueError
+            If the window is empty or ``t_end`` is before ``t_start``.
+
+        Examples
+        --------
+        >>> import groundinsight as gi
+        >>> result = gi.ResultTransient(time_s=[0.0, 0.5, 1.0], epr_t={"B": [0.0, 3.0, -4.0]}, fault="F")
+        >>> result.statistics().select("name", "min", "max", "peak_abs").row(0)
+        ('B', -4.0, 3.0, 4.0)
+        """
+        return window_statistics(self.to_polars(), t_start, t_end)
+
+
+def window_statistics(
+    frame: "pl.DataFrame", t_start: Optional[float] = None, t_end: Optional[float] = None  # noqa: F821
+) -> "pl.DataFrame":  # noqa: F821
+    """
+    Statistics of the signals of a long-form transient frame over a window.
+
+    Internal API: also used by the GUI on the rows of a transient study; not
+    exported from ``groundinsight`` and free to change in any release.
+
+    The RMS is the root of the mean square of the samples in the window,
+    ``sqrt(mean(x**2))`` -- the RMS over time for the uniform step the
+    solvers use; ``peak_abs`` is the largest magnitude, the value an
+    insulation or a touch-voltage criterion reads.
+
+    Parameters
+    ----------
+    frame : polars.DataFrame
+        :meth:`ResultTransient.to_polars` (columns ``time_s``,
+        ``signal_kind``, ``name``, ``value``).
+    t_start, t_end : float, optional
+        The window in s, both ends included; default every sample.
+
+    Returns
+    -------
+    polars.DataFrame
+        Columns ``signal_kind``, ``name``, ``t_start_s``, ``t_end_s``,
+        ``n_samples``, ``min``, ``max``, ``peak_abs``, ``rms``; one row per
+        signal, in the order of the frame.
+
+    Raises
+    ------
+    ValueError
+        If ``t_end`` is before ``t_start`` or the window holds no sample.
+    """
+    import polars as pl
+
+    if t_start is not None and t_end is not None and t_end < t_start:
+        raise ValueError(f"the window ends at {t_end} s, before it starts at {t_start} s")
+    window = frame
+    if t_start is not None:
+        window = window.filter(pl.col("time_s") >= t_start)
+    if t_end is not None:
+        window = window.filter(pl.col("time_s") <= t_end)
+    if window.height == 0:
+        raise ValueError(f"no sample between {t_start} s and {t_end} s")
+    value = pl.col("value")
+    return (
+        window.group_by(["signal_kind", "name"], maintain_order=True)
+        .agg(
+            pl.col("time_s").min().alias("t_start_s"),
+            pl.col("time_s").max().alias("t_end_s"),
+            pl.len().cast(pl.Int64).alias("n_samples"),
+            value.min().alias("min"),
+            value.max().alias("max"),
+            value.abs().max().alias("peak_abs"),
+            (value * value).mean().sqrt().alias("rms"),
+        )
+    )
+
 
 class TransientStudy:
     """

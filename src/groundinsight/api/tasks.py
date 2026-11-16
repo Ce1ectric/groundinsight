@@ -491,7 +491,8 @@ def _transient(network: gi.Network, request: TransientRequestDTO, context: TaskC
         study = gi.TransientStudy(network, request.fault)
         for source in network.sources:
             study.set_source_waveform(source, _waveform(request))
-        study.set_observation(buses=list(request.observe_buses) or list(network.buses))
+        study.set_observation(buses=list(request.observe_buses) or list(network.buses),
+                              branches=list(request.observe_branches))
         return study.solve(t_end=request.t_end, dt=request.dt, solver=request.solver,
                            zero_pad=request.zero_pad, progress=context.progress,
                            should_cancel=context.should_cancel)

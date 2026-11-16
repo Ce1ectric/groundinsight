@@ -580,6 +580,9 @@ class ProjectSession:
     bus_types, branch_types : sequence of BusType / BranchType, optional
         Catalogue types no element uses yet (the project file's ``types``
         section); saved with the project, so a type survives without users.
+    criteria : dict, optional
+        The assessment criteria (:class:`CriteriaDTO` in its JSON form, the
+        project file's ``criteria`` section); set with ``SetCriteria``.
 
     Raises
     ------

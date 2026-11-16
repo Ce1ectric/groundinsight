@@ -87,6 +87,15 @@ version section when a release is cut.
 
 ### Added
 
+- **Statistics of transient signals over a window.**
+  `ResultTransient.statistics(t_start=None, t_end=None)` gives per signal the
+  minimum, maximum, peak magnitude and RMS over the window (both ends
+  included). The transient request of the service layer can return the
+  shield currents of chosen branches (`TransientRequestDTO.observe_branches`),
+  `api.table_dto` turns a frame into a table DTO, and the GUI's transient
+  result lets the user choose the signals of the chart (potentials on the V
+  axis, currents on the A axis) and shows the statistics of a window.
+
 - **GUI: assessment criteria and utilisation colouring.** *Assessment criteria
   …* on the network tab sets the limits of the project; the plan colours by
   the utilisation of the last result in percent of its limit -- EPR against

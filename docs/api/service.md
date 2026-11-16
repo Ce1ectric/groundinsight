@@ -499,6 +499,12 @@ every finding of `check_network`, as `table`, `json` (`CheckReportDTO`) or
 
 ::: groundinsight.api.schemas
 
+::: groundinsight.api.views.table_dto
+    options:
+      heading_level: 3
+
+::: groundinsight.api.assessment
+
 ::: groundinsight.api.examples
 
 ::: groundinsight.api.examples.EXAMPLES

@@ -1584,6 +1584,8 @@ class TransientRequestDTO(BaseDTO):
         :meth:`groundinsight.TransientStudy.solve`).
     observe_buses : list of str
         Buses whose potential is returned; empty for every bus.
+    observe_branches : list of str
+        Branches whose shield current is returned; empty for none.
     """
 
     task: Literal["transient"] = "transient"
@@ -1598,6 +1600,7 @@ class TransientRequestDTO(BaseDTO):
     t_off: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
     zero_pad: bool = False
     observe_buses: List[str] = Field(default_factory=list)
+    observe_branches: List[str] = Field(default_factory=list)
 
 
 class ReferenceCasesRequestDTO(BaseDTO):
