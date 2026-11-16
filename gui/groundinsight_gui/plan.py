@@ -211,7 +211,7 @@ class PlanView:
 
     def _palette(self, summary: Any) -> None:
         """Tools and the types new elements get."""
-        with ui.column().classes("w-48 gap-1 bg-white rounded border p-2").mark("palette"):
+        with ui.column().classes("w-56 gap-1 bg-white rounded border p-2").mark("palette"):
             ui.label(self.t("palette")).classes("text-xs uppercase tracking-wide text-gray-500")
             ui.toggle({tool: self.t(f"tool_{tool}") for tool in TOOLS}, value=self.tool,
                       on_change=lambda e: self.set_tool(e.value)).props(
