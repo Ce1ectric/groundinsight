@@ -101,7 +101,7 @@ def test_save_and_load_a_project_with_diagram_and_views(tmp_path):
     path = tmp_path / "Projekt Süd.json"
     gi.save_project(path, net, _diagram(), views)
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert list(payload) == ["schema_version", "groundinsight_version", "network", "diagram", "views"]
+    assert list(payload) == ["schema_version", "groundinsight_version", "network", "diagram", "views", "types"]
     assert payload["schema_version"] == gi.io.project_file.SCHEMA_VERSION == 2
     project = gi.load_project(path)
     assert project.network.model_dump_json() == net.model_dump_json()

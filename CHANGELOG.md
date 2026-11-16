@@ -45,7 +45,7 @@ version section when a release is cut.
 ### Breaking
 
 - **Project files are written in schema version 2, an envelope.** The
-  network now sits in a `network` section next to `diagram` and `views`
+  network now sits in a `network` section next to `diagram`, `views` and `types`
   instead of at the top level, so `gi.Network.model_validate_json(text)` no
   longer reads a project file written by this release (it fails on the
   missing network fields), and neither does groundinsight 0.6.0; 2026.11.x
@@ -224,6 +224,24 @@ version section when a release is cut.
   because it ignores the mutual resistance of the electrodes; the
   characteristic of the whole LV network attached to the station reproduces
   the field solution.
+- **Standard library of types** (`gi.standard_branch_types()`,
+  `gi.standard_bus_types()`, module `groundinsight.library`). Sixteen cables
+  from data sheets: 20 kV systems NA2XS(F)2Y 1x95 ... 1x500 and N2XS(F)2Y
+  1x95 ... 1x300 as three single-core cables in trefoil with the screens
+  bonded at both ends, and NAYY 4x50 ... 4x240 with the PEN as earthing
+  conductor and the phase-PEN coupling; every type cites its source. Four
+  earth electrodes (substation ring with rods, house foundation, rods of 2.5
+  and 5 m) with characteristics computed by groundfield in homogeneous soil,
+  stored as data so the library needs no groundfield. The builders
+  `gi.cable_system_type(...)` and `gi.lv_cable_type(...)` make the type of
+  any other cable from its data sheet. Documented on the new reference page
+  "Standard types".
+- **The type catalogue is kept in the project file.** The new `types`
+  section holds the types no element uses (`save_project(...,
+  bus_types=..., branch_types=...)`, `Project.bus_types` /
+  `Project.branch_types`); a session saves and reopens its whole catalogue,
+  so a project can start empty and a type survives deleting its last
+  element. The section is optional when reading.
 
 ### Changed
 

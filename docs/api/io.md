@@ -313,7 +313,7 @@ file*, and `gi.load_network_from_json(path)` reads it back.
 do the same with the network's diagram and the evaluation tabs of a front
 end (a `gi.Project`); `gi.project_to_json` and `gi.project_from_json` give
 and read the same text without a file, for a store that keeps projects as
-text. The file holds two header keys and three sections:
+text. The file holds two header keys and four sections:
 
 ```json
 {
@@ -326,7 +326,8 @@ text. The file holds two header keys and three sections:
         ...
     },
     "diagram": null,
-    "views": []
+    "views": [],
+    "types": {"bus_types": [], "branch_types": []}
 }
 ```
 
@@ -351,7 +352,7 @@ text. The file holds two header keys and three sections:
 |---|---|---|
 | *(absent)* | 0.6.0 and earlier | the model dump only — read unchanged |
 | `1` | 2026.11.x | the two header keys next to the fields of the model dump |
-| `2` | later releases | the two header keys and the sections `network` (the model dump), `diagram` and `views` |
+| `2` | later releases | the two header keys and the sections `network` (the model dump), `diagram`, `views` and `types` (catalogue types no element uses; optional when reading) |
 
 A file with a newer `schema_version` than the running release supports is
 refused with a `ValueError` that names both versions, instead of being read

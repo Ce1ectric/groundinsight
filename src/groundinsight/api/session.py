@@ -56,7 +56,7 @@ import itertools
 import logging
 import os
 import threading
-from typing import Any, Dict, Iterable, List, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
 
 import groundinsight as gi
 from groundinsight.diagnostics import collecting, unique
@@ -311,7 +311,8 @@ class MemoryStore(ProjectStore):
         project : Project
             The project, kept as the text of a project file.
         """
-        text = gi.project_to_json(project.network, project.diagram, project.views)
+        text = gi.project_to_json(project.network, project.diagram, project.views,
+                                  bus_types=project.bus_types, branch_types=project.branch_types)
         with self._lock:
             self._projects[key] = text
 
@@ -484,23 +485,34 @@ def _check_size(network: gi.Network, limits: SessionLimitsDTO) -> None:
             )
 
 
-def _catalogue(elements: Iterable[Any]) -> Dict[str, Any]:
+def _catalogue(elements: Iterable[Any], extra: Iterable[Any] = ()) -> Dict[str, Any]:
     """
-    The types of ``elements`` by name, in order of first use.
+    The types of ``elements`` by name, in order of first use, then ``extra``.
 
     Parameters
     ----------
     elements : iterable of Bus or Branch
         The elements.
+    extra : iterable of BusType or BranchType
+        Catalogue types without users (the project file's ``types``).
 
     Returns
     -------
     dict
         Type name to the first type object of that name.
+
+    Raises
+    ------
+    ValueError
+        If an extra type has the name of a used type but other content.
     """
     catalogue: Dict[str, Any] = {}
     for element in elements:
         catalogue.setdefault(element.type.name, element.type)
+    for typ in extra:
+        known = catalogue.setdefault(typ.name, typ)
+        if known != typ:
+            raise ValueError(f"the catalogue type '{typ.name}' differs from the type of that name the elements use")
     return catalogue
 
 
@@ -560,6 +572,9 @@ class ProjectSession:
         when it is ``None``, are laid out automatically.
     views : list of dict, optional
         The evaluation tabs, kept and saved unchanged.
+    bus_types, branch_types : sequence of BusType / BranchType, optional
+        Catalogue types no element uses yet (the project file's ``types``
+        section); saved with the project, so a type survives without users.
 
     Raises
     ------
@@ -599,6 +614,8 @@ class ProjectSession:
         max_paths: Optional[int] = None,
         diagram: Optional[gi.Diagram] = None,
         views: Optional[List[Dict[str, Any]]] = None,
+        bus_types: Sequence[gi.BusType] = (),
+        branch_types: Sequence[gi.BranchType] = (),
     ) -> None:
         if not isinstance(network, gi.Network):
             raise TypeError(f"a session holds a groundinsight.Network, got {type(network).__name__}")
@@ -626,8 +643,8 @@ class ProjectSession:
         self._path = str(path) if path is not None else None
         self._store = store
         self._key = key
-        self._bus_types = _catalogue(network.buses.values())
-        self._branch_types = _catalogue(network.branches.values())
+        self._bus_types = _catalogue(network.buses.values(), bus_types)
+        self._branch_types = _catalogue(network.branches.values(), branch_types)
         self._diagram = _initial_diagram(network, diagram)
         self._views: List[Dict[str, Any]] = [dict(view) for view in (views or [])]
         self._lock = threading.RLock()
@@ -679,8 +696,8 @@ class ProjectSession:
         except (OSError, ValueError) as exc:
             raise ProjectError(f"cannot open '{path}': {rejection_reason(exc)}") from exc
         try:
-            return cls(project.network, path=path, diagram=project.diagram,
-                       views=project.views, **options)
+            return cls(project.network, path=path, diagram=project.diagram, views=project.views,
+                       bus_types=project.bus_types, branch_types=project.branch_types, **options)
         except ValueError as exc:
             raise ProjectError(f"cannot open '{path}': {rejection_reason(exc)}") from exc
 
@@ -851,8 +868,8 @@ class ProjectSession:
         except (KeyError, OSError, ValueError, RuntimeError) as exc:
             raise ProjectError(f"cannot open '{location}': {rejection_reason(exc)}") from exc
         try:
-            return cls(project.network, store=store, key=key, diagram=project.diagram,
-                       views=project.views, **options)
+            return cls(project.network, store=store, key=key, diagram=project.diagram, views=project.views,
+                       bus_types=project.bus_types, branch_types=project.branch_types, **options)
         except ValueError as exc:
             raise ProjectError(f"cannot open '{location}': {rejection_reason(exc)}") from exc
 
@@ -1124,7 +1141,9 @@ class ProjectSession:
             if path is not None or self._store is None:
                 target = _expand_path(path) if path is not None else self._path
                 try:
-                    gi.save_project(target, view, self._diagram, self._views)
+                    gi.save_project(target, view, self._diagram, self._views,
+                                    bus_types=list(self._bus_types.values()),
+                                    branch_types=list(self._branch_types.values()))
                 except (OSError, ValueError, TypeError) as exc:
                     raise ProjectError(f"cannot save '{target}': {rejection_reason(exc)}") from exc
                 self._path, self._store, self._key = target, None, None
@@ -1163,7 +1182,9 @@ class ProjectSession:
 
     def _project(self, network: gi.Network) -> "gi.Project":
         """The project to store: ``network`` with the session's diagram and views."""
-        return gi.Project(network=network, diagram=self._diagram, views=self._views)
+        return gi.Project(network=network, diagram=self._diagram, views=self._views,
+                          bus_types=list(self._bus_types.values()),
+                          branch_types=list(self._branch_types.values()))
 
     @staticmethod
     def _save_to_store(store: ProjectStore, key: str, project: "gi.Project") -> None:

@@ -27,7 +27,7 @@ frequencies and the stored results — as JSON, and
   then moved over it, so a failure leaves an existing project file intact.
 - **Versioned.** The file starts with `schema_version` (the version of the file
   layout) and `groundinsight_version` (the release that wrote it), followed
-  by three sections: `network`, `diagram` and `views`.
+  by four sections: `network`, `diagram`, `views` and `types`.
 
 ```python
 --8<-- "docs/snippets/persistence.py:json"
@@ -46,13 +46,20 @@ functions add the header, the encoding rules and the atomic write.
     files with `gi.load_network_from_json(path)` (or `gi.load_project`);
     files of version 1 and 0.6.0 still load.
 
-## Diagram and views
+## Diagram, views and types
 
 A front end saves more than the network: where each element is drawn
 (`gi.Diagram`, by element name, kept apart so that moving a bus does not
 change the network) and its evaluation tabs (`views`, JSON objects the
 library stores unchanged). `gi.save_project(path, network, diagram, views)`
-writes all three, `gi.load_project(path)` returns them as a `gi.Project`;
+writes all three, `gi.load_project(path)` returns them as a `gi.Project`.
+A network only knows the types its elements use; the project's other types --
+created for drawing, taken from the [standard library](../reference/standard-types.md),
+or left after the last element of a type was deleted -- go into the `types`
+section with `save_project(..., bus_types=..., branch_types=...)` and come
+back as `Project.bus_types` / `Project.branch_types`. A catalogue type with
+the name of a used type must be identical to it.
+
 `Diagram.check(network)` lists entries whose element is gone
 (`DIAGRAM_UNKNOWN_ELEMENT`) and buses or branches without a place yet
 (`DIAGRAM_ELEMENT_NOT_PLACED`).
@@ -148,7 +155,7 @@ of the [service layer](service-layer.md) also refuses files above its
 ## Output
 
 ```text title="Output of persistence.py"
-project file header: ['schema_version', 'groundinsight_version', 'network', 'diagram', 'views']
+project file header: ['schema_version', 'groundinsight_version', 'network', 'diagram', 'views', 'types']
 JSON round trip identical: True
 project: True [{'title': 'EPR', 'blocks': []}] []
 newer schema: ValueError: 'from_the_future.json' uses project-file schema version 99

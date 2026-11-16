@@ -5,20 +5,28 @@ The JSON project file: one network per file, UTF-8, written atomically.
 
 A project file is what :func:`save_project` (and :func:`save_network_to_json`)
 writes and :func:`load_project` (and :func:`load_network_from_json`) reads:
-two header keys and three sections::
+two header keys and four sections::
 
     {
         "schema_version": 2,
         "groundinsight_version": "2026.12.0",
         "network": { ... the network's model_dump_json ... },
         "diagram": { ... the Diagram, or null ... },
-        "views": [ ... the evaluation tabs of a front end ... ]
+        "views": [ ... the evaluation tabs of a front end ... ],
+        "types": {"bus_types": [ ... ], "branch_types": [ ... ]}
     }
 
 ``network`` is the physical model, ``diagram`` where its elements are drawn
 (:class:`~groundinsight.Diagram`, kept apart so a moved bus does not touch
 the network), ``views`` the evaluation tabs a front end defines -- a list of
-JSON objects the library stores and returns unchanged.
+JSON objects the library stores and returns unchanged. ``types`` holds the
+types of the project's catalogue that **no element uses** (created for
+drawing, taken from the standard library, left after the last element of
+the type was deleted): a network only knows the types of its elements, and
+without this section such a type would vanish on saving. A used type is
+written once, inside the network; a catalogue type of the same name must be
+identical to it, otherwise saving and reading refuse the project. The
+section is optional when reading.
 
 Three properties are guaranteed, because a desktop application and a server
 open and save these files on every platform:
@@ -96,13 +104,13 @@ import logging
 import os
 import secrets
 import stat
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..diagnostics import InputWarning, emit
 from ..diagram import Diagram
-from ..models.core_models import Network
+from ..models.core_models import BranchType, BusType, Network
 
 logger = logging.getLogger(__name__)
 
@@ -116,13 +124,13 @@ they are written."""
 
 _PathLike = Union[str, "os.PathLike[str]"]
 
-SECTIONS: Tuple[str, ...] = ("network", "diagram", "views")
+SECTIONS: Tuple[str, ...] = ("network", "diagram", "views", "types")
 """The sections of a version-2 project file, in the order they are written."""
 
 
 class Project(BaseModel):
     """
-    The content of a project file: a network, its diagram and its views.
+    The content of a project file: a network, its diagram, views and types.
 
     Attributes
     ----------
@@ -134,6 +142,9 @@ class Project(BaseModel):
     views : list of dict
         The evaluation tabs of a front end, as JSON objects; stored and
         returned unchanged.
+    bus_types, branch_types : list of BusType / BranchType
+        The catalogue types no element of the network uses (the ``types``
+        section); empty for a file without one.
     schema_version : int, optional
         The layout version of the file it was read from; ``None`` for a file
         without one (0.6.0 or earlier) and for a project built in memory.
@@ -153,6 +164,8 @@ class Project(BaseModel):
     network: Network
     diagram: Optional[Diagram] = None
     views: List[Dict[str, Any]] = Field(default_factory=list)
+    bus_types: List[BusType] = Field(default_factory=list)
+    branch_types: List[BranchType] = Field(default_factory=list)
     schema_version: Optional[int] = None
     groundinsight_version: Optional[Any] = None
 
@@ -162,9 +175,12 @@ def save_project(
     network: Network,
     diagram: Optional[Diagram] = None,
     views: Optional[List[Dict[str, Any]]] = None,
+    *,
+    bus_types: Sequence[BusType] = (),
+    branch_types: Sequence[BranchType] = (),
 ) -> None:
     """
-    Save a network with its diagram and views, atomically and as UTF-8.
+    Save a network with its diagram, views and type catalogue, atomically and as UTF-8.
 
     Parameters
     ----------
@@ -177,6 +193,9 @@ def save_project(
         Its diagram; ``None`` writes ``null``.
     views : list of dict, optional
         The evaluation tabs; JSON objects. ``None`` writes ``[]``.
+    bus_types, branch_types : sequence of BusType / BranchType, optional
+        The project's catalogue. Types the network's elements use are not
+        written again; the others go to the ``types`` section.
 
     Raises
     ------
@@ -184,6 +203,9 @@ def save_project(
         If the file cannot be written; an existing file is then unchanged.
     TypeError
         If a view is not a JSON object or holds values JSON cannot store.
+    ValueError
+        If a catalogue type has the name of a type an element uses but other
+        content, or two catalogue types share a name; nothing is written.
 
     Examples
     --------
@@ -196,7 +218,7 @@ def save_project(
     >>> gi.load_project(path).diagram == diagram
     True
     """
-    payload = _project_file_text(network, diagram, views).encode("utf-8")
+    payload = _project_file_text(network, diagram, views, bus_types, branch_types).encode("utf-8")
     target = _resolve_target(os.fspath(path))
     _atomic_write(target, payload)
     logger.debug(
@@ -339,6 +361,9 @@ def project_to_json(
     network: Network,
     diagram: Optional[Diagram] = None,
     views: Optional[List[Dict[str, Any]]] = None,
+    *,
+    bus_types: Sequence[BusType] = (),
+    branch_types: Sequence[BranchType] = (),
 ) -> str:
     """
     The text of a project file, without writing it.
@@ -354,6 +379,8 @@ def project_to_json(
         Its diagram.
     views : list of dict, optional
         The evaluation tabs; JSON objects.
+    bus_types, branch_types : sequence of BusType / BranchType, optional
+        The project's catalogue, as for :func:`save_project`.
 
     Returns
     -------
@@ -364,6 +391,8 @@ def project_to_json(
     ------
     TypeError
         If a view is not a JSON object or holds values JSON cannot store.
+    ValueError
+        As for :func:`save_project`.
 
     Examples
     --------
@@ -372,7 +401,7 @@ def project_to_json(
     >>> gi.project_from_json(text).network.name
     'n'
     """
-    return _project_file_text(network, diagram, views)
+    return _project_file_text(network, diagram, views, bus_types, branch_types)
 
 
 def project_from_json(text: str, source: str = "<text>") -> Project:
@@ -477,9 +506,10 @@ def _parse_project(text: str, legacy_encoding: Optional[str], source: str) -> Pr
             "valid UTF-8; project files with a schema version are always "
             "written as UTF-8. Re-encode the file as UTF-8."
         )
-    network_data, diagram_data, views = _sections(payload, schema_version, source)
+    network_data, diagram_data, views, types = _sections(payload, schema_version, source)
     network = Network.model_validate(network_data)
     diagram = None if diagram_data is None else Diagram.model_validate(diagram_data)
+    bus_types, branch_types = _catalogue_types(types, network, source)
     if legacy_encoding is not None:
         emit(
             InputWarning,
@@ -499,13 +529,14 @@ def _parse_project(text: str, legacy_encoding: Optional[str], source: str) -> Pr
         schema_version if schema_version is not None else "none",
         written_by if written_by is not None else "0.6.0 or earlier",
     )
-    return Project(network=network, diagram=diagram, views=views,
-                   schema_version=schema_version, groundinsight_version=written_by)
+    return Project(network=network, diagram=diagram, views=views, bus_types=bus_types,
+                   branch_types=branch_types, schema_version=schema_version,
+                   groundinsight_version=written_by)
 
 
 def _sections(
     payload: Dict[str, Any], schema_version: Optional[int], source: str
-) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     """
     Split a parsed project file (metadata removed) into its sections.
 
@@ -521,18 +552,20 @@ def _sections(
     Returns
     -------
     tuple
-        ``(network data, diagram data or None, views)``. A file before
-        version 2 is the network itself.
+        ``(network data, diagram data or None, views, types)``. A file
+        before version 2 is the network itself; ``types`` is ``{}`` for a
+        file without the section.
 
     Raises
     ------
     ValueError
         If a version-2 file has keys other than :data:`SECTIONS`, no
         ``network`` object, a ``diagram`` that is neither an object nor
-        ``null``, or ``views`` that are not a list of objects.
+        ``null``, ``views`` that are not a list of objects, or ``types``
+        that is not an object of the two type lists.
     """
     if schema_version is None or schema_version < 2:
-        return payload, None, []
+        return payload, None, [], {}
     unknown = sorted(set(payload) - set(SECTIONS))
     if unknown:
         raise ValueError(
@@ -548,7 +581,7 @@ def _sections(
     views = payload.get("views", [])
     if not isinstance(views, list) or not all(isinstance(view, dict) for view in views):
         raise ValueError(f"'{source}': 'views' must be a list of objects.")
-    return network, diagram, views
+    return network, diagram, views, payload.get("types", {})
 
 
 # ---------------------------------------------------------------------------
@@ -556,13 +589,99 @@ def _sections(
 # ---------------------------------------------------------------------------
 
 
+def _catalogue_types(
+    types: Any, network: Network, source: str
+) -> Tuple[List[BusType], List[BranchType]]:
+    """
+    The ``types`` section of a file as models, checked against the network.
+
+    Parameters
+    ----------
+    types : Any
+        The parsed section; ``{}`` for a file without one.
+    network : Network
+        The network read from the same file.
+    source : str
+        File name for the error messages.
+
+    Returns
+    -------
+    tuple of list
+        The bus types and branch types of the section.
+
+    Raises
+    ------
+    ValueError
+        If the section is not an object of the two lists, a type is invalid,
+        or a type contradicts an element's type of the same name.
+    """
+    lists = ("bus_types", "branch_types")
+    if (not isinstance(types, dict) or set(types) - set(lists)
+            or not all(isinstance(v, list) for v in types.values())):
+        raise ValueError(f"'{source}': 'types' must be an object with the lists 'bus_types' and 'branch_types'.")
+    bus_types = [BusType.model_validate(t) for t in types.get("bus_types", [])]
+    branch_types = [BranchType.model_validate(t) for t in types.get("branch_types", [])]
+    try:
+        _unused_types(network, bus_types, branch_types)
+    except ValueError as exc:
+        raise ValueError(f"'{source}': {exc}") from exc
+    return bus_types, branch_types
+
+
+def _unused_types(
+    network: Network, bus_types: Sequence[BusType], branch_types: Sequence[BranchType]
+) -> Tuple[List[BusType], List[BranchType]]:
+    """
+    The catalogue types no element uses; a contradicting one is refused.
+
+    Parameters
+    ----------
+    network : Network
+        The network; its elements' types are the used ones.
+    bus_types, branch_types : sequence of BusType / BranchType
+        The catalogue.
+
+    Returns
+    -------
+    tuple of list
+        The unused bus types and branch types, in catalogue order.
+
+    Raises
+    ------
+    ValueError
+        If a catalogue type has the name of a used type but other content,
+        or two catalogue types of one kind share a name.
+    """
+    unused: List[List[Any]] = []
+    for kind, catalogue, elements in (("bus", bus_types, network.buses.values()),
+                                      ("branch", branch_types, network.branches.values())):
+        used = {e.type.name: e.type for e in elements}
+        seen: Dict[str, Any] = {}
+        kept = []
+        for t in catalogue:
+            if t.name in seen:
+                raise ValueError(f"two {kind} types are called '{t.name}'")
+            seen[t.name] = t
+            if t.name not in used:
+                kept.append(t)
+            elif used[t.name] != t:
+                raise ValueError(
+                    f"the {kind} type '{t.name}' of the catalogue differs from the type of that name "
+                    "the elements use; a project holds one type per name"
+                )
+        unused.append(kept)
+    return unused[0], unused[1]
+
+
 def _project_file_text(
     network: Network,
     diagram: Optional[Diagram] = None,
     views: Optional[List[Dict[str, Any]]] = None,
+    bus_types: Sequence[BusType] = (),
+    branch_types: Sequence[BranchType] = (),
 ) -> str:
     """
-    The text of a project file: the header keys, then the three sections.
+    The text of a project file: the header keys, then the four sections.
 
     Parameters
     ----------
@@ -572,6 +691,8 @@ def _project_file_text(
         Its diagram.
     views : list of dict, optional
         The evaluation tabs.
+    bus_types, branch_types : sequence of BusType / BranchType, optional
+        The catalogue; only the types no element uses are written.
 
     Returns
     -------
@@ -583,6 +704,8 @@ def _project_file_text(
     ------
     TypeError
         If a view is not a JSON object or cannot be serialised.
+    ValueError
+        As for :func:`_unused_types`.
 
     Notes
     -----
@@ -599,6 +722,7 @@ def _project_file_text(
     views = [] if views is None else views
     if not all(isinstance(view, dict) for view in views):
         raise TypeError("every view must be a JSON object (dict)")
+    unused_bus, unused_branch = _unused_types(network, bus_types, branch_types)
 
     def section(text: str) -> str:
         """Indent a JSON text by one level after its first line.
@@ -618,13 +742,17 @@ def _project_file_text(
     network_text = section(network.model_dump_json(indent=4))
     diagram_text = "null" if diagram is None else section(diagram.model_dump_json(indent=4))
     views_text = section(json.dumps(views, indent=4, ensure_ascii=False, allow_nan=False))
+    types = {"bus_types": [json.loads(t.model_dump_json()) for t in unused_bus],
+             "branch_types": [json.loads(t.model_dump_json()) for t in unused_branch]}
+    types_text = section(json.dumps(types, indent=4, ensure_ascii=False, allow_nan=False))
     return (
         "{\n"
         f'    "{METADATA_KEYS[0]}": {SCHEMA_VERSION},\n'
         f'    "{METADATA_KEYS[1]}": {json.dumps(__version__)},\n'
         f'    "network": {network_text},\n'
         f'    "diagram": {diagram_text},\n'
-        f'    "views": {views_text}\n'
+        f'    "views": {views_text},\n'
+        f'    "types": {types_text}\n'
         "}\n"
     )
 
