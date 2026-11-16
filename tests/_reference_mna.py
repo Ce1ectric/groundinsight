@@ -379,6 +379,7 @@ def solve_oneway(
     phase_choice: str = "declared",
     thevenin_phase: str = "actual",
     with_mutual: bool = True,
+    shorted: bool = False,
 ) -> dict:
     """Earth-side solution with the phase currents imposed (documented model).
 
@@ -397,6 +398,10 @@ def solve_oneway(
     with_mutual : bool
         ``False`` drops the coupling EMFs (the reference solution of the
         EPR-based reduction factor).
+    shorted : bool
+        ``True`` holds the earthing node of the fault bus at remote earth
+        (``u_F = 0``, an ideal electrode) and reports the current into that
+        ideal electrode as ``I_short``.
 
     Returns
     -------
@@ -479,7 +484,16 @@ def solve_oneway(
         A[column, bus_index[fault_bus]] += 1.0
         A[column, bus_index[d["bus"]]] -= 1.0
         rhs[column] = scaling * complex(d["E"])
+    if shorted:
+        # The KCL row of the fault node becomes u_F = 0; the current the ideal
+        # electrode takes is what that row then leaves unbalanced.
+        f_row = bus_index[fault_bus]
+        kcl, injected = A[f_row].copy(), rhs[f_row]
+        A[f_row] = 0.0
+        A[f_row, f_row] = 1.0
+        rhs[f_row] = 0.0
     x = np.linalg.solve(A, rhs)
+    i_short = complex(injected - kcl @ x) if shorted else None
     u = {b: complex(x[bus_index[b]]) for b in buses}
     shield_currents = {n: 0j for n in net["branches"]}
     for k, n in enumerate(shields):
@@ -512,6 +526,7 @@ def solve_oneway(
         "I_a": electrode_currents,
         "I_src": source_currents,
         "I_F": sum(source_currents.values(), 0j),
+        "I_short": i_short,
     }
 
 
@@ -915,6 +930,28 @@ def reduction_factor_epr(net: dict, **kwargs) -> float:
     without = solve_oneway(net, with_mutual=False, **kwargs)
     fault_bus = net["fault_bus"]
     return abs(with_coupling["u"][fault_bus]) / abs(without["u"][fault_bus])
+
+
+def reduction_factor_short_circuit(net: dict, **kwargs) -> float:
+    """``|I_short| / |I_F|`` with the fault bus held at remote earth.
+
+    The earth current of EN 50522 as the current into an ideal electrode at
+    the fault bus (Norton's theorem; the one-way model).
+
+    Parameters
+    ----------
+    net : dict
+        Reference network.
+    **kwargs
+        Passed to :func:`solve_oneway`.
+
+    Returns
+    -------
+    float
+        The reduction factor.
+    """
+    solution = solve_oneway(net, shorted=True, **kwargs)
+    return abs(solution["I_short"]) / abs(solution["I_F"])
 
 
 def max_relative_deviation(

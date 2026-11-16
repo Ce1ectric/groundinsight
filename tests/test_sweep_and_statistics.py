@@ -209,16 +209,19 @@ def test_the_sweep_carries_the_cut_decomposition_along():
     assert 9.5 < local[-1] / local[0] < 10.0
 
 
-def test_both_reduction_factors_travel_in_the_impedance_frame():
+def test_the_reduction_factor_travels_in_the_impedance_frame():
     net = _network()
     study = gi.run_sweep(net, fault="F", points=_k_points(net))
     frame = study.impedances().filter(pl.col("frequency_Hz") == 50.0).sort("k1")
-    r_epr = frame["reduction_factor"].to_list()
-    r_current = frame["reduction_factor_current"].to_list()
-    # Blind to the fault bus by construction ...
-    assert r_epr == pytest.approx([r_epr[0]] * len(r_epr), rel=1e-9)
-    # ... while the current-based one is strictly ordered by the electrode.
-    assert all(a > b for a, b in pairwise(r_current))
+    assert "reduction_factor_current" not in frame.columns
+    r = frame["reduction_factor"].to_list()
+    # Blind to the fault-bus electrode by construction (the current into an
+    # ideal electrode there over I_F) ...
+    assert r == pytest.approx([r[0]] * len(r), rel=1e-9)
+    # ... while Z_E, the earthing impedance the electrode is part of, is
+    # strictly ordered by it.
+    z_e = frame["grounding_impedance_Ohm"].to_list()
+    assert all(a < b for a, b in pairwise(z_e))
 
 
 # --- statistics --------------------------------------------------------------

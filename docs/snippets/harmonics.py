@@ -109,7 +109,7 @@ if __name__ == "__main__":
     print(f"{'f / Hz':>6} {'I_F / A':>8} {'U_E / V':>8} {'r':>7}")
     for row in figures.iter_rows(named=True):
         f = "RMS" if row["is_rms"] else f"{row['frequency_Hz']:.0f}"
-        r = "-" if row["r_current"] is None else f"{row['r_current']:.4f}"
+        r = "-" if row["r"] is None else f"{row['r']:.4f}"
         print(f"{f:>6} {row['I_F_A']:8.1f} {row['U_E_V']:8.2f} {r:>7}")
     print(f"50 Hz only (scalings 1/0/0): U_E, total RMS = {u_e_rms_fundamental_only:.2f} V")
     print("scaling missing at 350 Hz:", [d.code for d in missing_scaling.diagnostics])

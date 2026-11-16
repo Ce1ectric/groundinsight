@@ -160,9 +160,10 @@ def test_solve_returns_bit_identical_numbers_to_run_fault(kind, mode):
 
 
 def test_solve_agrees_with_the_closed_form_of_a_two_bus_line():
-    """Second route, independent of the solver: on a two-bus line with finite
-    end electrodes the current reduction factor is
-    ``|(Z_s - Z_m) / (Z_s + Z_A + Z_B)|`` (screen loop, EN 50522)."""
+    """Second route, independent of the solver: on a two-bus line with a
+    source station earthed with ``Z_A`` the reduction factor is
+    ``|(Z_s - Z_m) / (Z_s + Z_A)|`` -- the screen loop with the fault bus
+    held at remote earth (the current into an ideal fault electrode)."""
     z_self, z_mutual, z_electrode = 0.1 + 0.2j, 0.05 + 0.1j, 10.0 + 0.0j
     net = gi.create_network("line", frequencies=[50.0])
     bus_type = gi.BusType(
@@ -182,8 +183,8 @@ def test_solve_agrees_with_the_closed_form_of_a_two_bus_line():
 
     result = gi.solve(net, "EF")
 
-    closed_form = abs((z_self - z_mutual) / (z_self + 2 * z_electrode))
-    assert result.reduction_factor.value_current[50.0] == pytest.approx(
+    closed_form = abs((z_self - z_mutual) / (z_self + z_electrode))
+    assert result.reduction_factor.value[50.0] == pytest.approx(
         closed_form, rel=1e-12
     )
     assert net.results == {}
@@ -389,7 +390,6 @@ RENAMES = [
     ("apply_shortcircuit_characteristics", "fault_name", "fault"),
     ("read_shortcircuit_results", "f", "frequency"),
     ("BusResponse.voltages", "freq", "frequency"),
-    ("BusResponse.voltages_no_mutual", "freq", "frequency"),
     ("BusResponse.driving_point", "freq", "frequency"),
     ("BusResponse.worst_case_electrode", "freq", "frequency"),
 ]
@@ -817,7 +817,6 @@ def test_bus_response_methods_accept_the_old_frequency_name():
     response = gi.bus_response(net, fault="F", bus="A")
     for method, args in (
         ("voltages", (10.0,)),
-        ("voltages_no_mutual", (10.0,)),
         ("driving_point", (10.0,)),
         ("worst_case_electrode", ()),
     ):

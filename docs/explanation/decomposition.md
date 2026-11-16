@@ -45,12 +45,12 @@ the opposite sign to the network's susceptance first *raises* `|Z_dp|` above
 (`arg Z_net` = 50°). `.extremes()` therefore reports it as the `worst_passive`
 row instead of assuming it away.
 
-The closed form also *derives* the invariance of the EPR-based reduction factor
-that the sensitivity work runs into: `u_b(Y_B) = u_{0,b}/(1 + Y_B Z_net)` holds
-with and without mutual coupling alike, so the factor cancels out of the
-quotient exactly. It is algebra, not a numerical accident. The current-based
-factor has no such cancellation and responds to the electrode — see
-[Reduction factors and earthing impedance](reduction-factors.md#reduction-factor-on-a-current-basis).
+The closed form also *derives* why the reduction factor does not depend on the
+electrode of the fault bus: there `u_b(Y_B) = u_{0,b}/(1 + Y_B Z_net)` and the
+earthing impedance `Z_E(Y_B) = Z_net/(1 + Y_B Z_net)` carry the same factor,
+so it cancels out of `r = |u_b| / (|Z_E| |I_F|)` exactly. It is algebra, not a
+numerical accident: `r` is the current into an ideal electrode there — see
+[Reduction factors and earthing impedance](reduction-factors.md#reduction-factor).
 
 ## Splitting the network at the fault
 

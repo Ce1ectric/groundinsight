@@ -49,7 +49,6 @@ from groundinsight.diagnostics import (
     collecting,
 )
 from groundinsight.models.core_models import TransientModelWarning
-from tests import _reference_mna as ref
 from tests._warning_policy import acknowledge
 
 #: The inventory: every test provokes the diagnostics it is named after and
@@ -116,8 +115,6 @@ OPERATIONAL: Dict[Tuple[str, str], Tuple[int, str]] = {
 #: The converted sites: code -> (category, module that raises it).
 CONVERTED: Dict[str, Tuple[type, str]] = {
     "PARALLEL_COEFFICIENT_DEFAULT": (ModelAssumptionWarning, "network_operations.py"),
-    "EARTH_GROUP_SPREAD": (ModelAssumptionWarning, "electrical_network.py"),
-    "REDUCTION_FACTOR_UNDEFINED": (ModelAssumptionWarning, "electrical_network.py"),
     "SC_KAPPA_MIXED": (ModelAssumptionWarning, "analysis/shortcircuit.py"),
     "SC_DATA_INCOMPLETE": (InputWarning, "analysis/shortcircuit.py"),
     "THERMAL_DATA_INCOMPLETE": (InputWarning, "analysis/thermal.py"),
@@ -211,15 +208,17 @@ def test_every_remaining_log_site_is_classified_as_operational():
 
 
 def test_the_inventory_counts_sixty_two_sites_before_and_thirty_eight_after():
-    """62 sites were inventoried; 24 became structured warnings."""
+    """62 sites were inventoried; 24 became structured warnings. Two of them
+    -- EARTH_GROUP_SPREAD and the failed solve without coupling of
+    REDUCTION_FACTOR_UNDEFINED -- went with the reduction factors they
+    qualified, when there became one reduction factor, U_E / (Z_E * I_F)."""
     assert sum(count for count, _ in OPERATIONAL.values()) == 38
     converted_sites = sum(
         len([site for site in sites if site[0] == CONVERTED[code][1]])
         for code, sites in _emitted_codes().items()
-        if code in CONVERTED and code != "REDUCTION_FACTOR_UNDEFINED"
+        if code in CONVERTED
     )
-    # REDUCTION_FACTOR_UNDEFINED existed before (wp1b) and gained one site.
-    assert converted_sites + 1 == 24
+    assert converted_sites + 2 == 24
 
 
 @pytest.mark.parametrize("code", sorted(CONVERTED))
@@ -227,10 +226,6 @@ def test_every_converted_code_is_raised_in_its_module_and_documented_there(code)
     category, module = CONVERTED[code]
     sites = [site for site in _emitted_codes().get(code, []) if site[0] == module]
     assert sites, f"{code} is not raised in {module}"
-    if code == "REDUCTION_FACTOR_UNDEFINED":
-        # Existing code (wp1b); the site converted here is the failed solve.
-        sites = [site for site in sites if site[1] == "compute_reduction_factors"]
-        assert sites
     source = (SRC / module).read_text(encoding="utf-8")
     tree = ast.parse(source)
     for _, function_name in sites:
@@ -248,8 +243,6 @@ def test_codes_are_upper_snake_and_converted_codes_live_in_one_module():
     for code in codes:
         assert re.fullmatch(r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*", code), code
     for code, (_, module) in CONVERTED.items():
-        if code == "REDUCTION_FACTOR_UNDEFINED":
-            continue
         assert {site[0] for site in codes[code]} == {module}, code
 
 
@@ -325,83 +318,6 @@ def test_parallel_coefficient_default_is_a_structured_diagnostic():
     # The default mode splits the ring from the topology: nothing to say.
     clean = gi.run_fault(_ring_in_paths_mode(), "F1")
     assert not _records("PARALLEL_COEFFICIENT_DEFAULT", clean.diagnostics)
-
-
-def _spread_chain():
-    """Three electrodes of very different impedance angle on a short chain:
-    the electrode currents spread in angle (found by a seeded search)."""
-    net = gi.create_network("spread", frequencies=[50.0])
-    for bus, z in (("N0", "(20.0-20.0*j)"), ("N1", "(20.0+1.0*j)"), ("N2", "(5.0-20.0*j)")):
-        gi.create_bus(bus, _bus_type(f"bt{bus}", z), 100.0, network=net)
-    cable = gi.BranchType(name="c", grounding_conductor=True,
-                          self_impedance_formula="(0.3+0.6*j)*l",
-                          mutual_impedance_formula="(0.05+0.55*j)*l")
-    gi.create_branch("L0", cable, "N0", "N1", 0.3, network=net)
-    gi.create_branch("L1", cable, "N1", "N2", 0.3, network=net)
-    gi.create_source("Q", "N0", {50.0: 1000.0}, network=net)
-    gi.create_fault("F", "N1", {50.0: 1.0}, network=net)
-    return net
-
-
-def test_a_spread_earth_group_is_a_structured_diagnostic():
-    net = _spread_chain()
-    restore = _silenced()
-    try:
-        result = gi.run_fault(net, "F")
-    finally:
-        restore()
-    records = _records("EARTH_GROUP_SPREAD", result.diagnostics)
-    assert len(records) == 1
-    assert records[0].elements == [("fault", "F"), ("bus", "N1")]
-    assert "50 Hz" in records[0].message
-    # Second way: the separation from the independent reference solver --
-    # |I_E| over half the summed electrode-current magnitudes -- is below the
-    # threshold of 0.9 the package applies.
-    rd = ref.reference_network(net, 50.0, "F")
-    mapped = ref.to_package_frame(ref.solve_oneway(rd, thevenin_phase="norton"))
-    i_earth, _ = ref.half_plane_split(mapped["ia"], rd["fault_bus"])
-    separation = abs(i_earth) / (0.5 * sum(abs(v) for v in mapped["ia"].values()))
-    assert separation < 0.9
-    assert f"separation {separation:.3f}" in records[0].message
-
-
-def test_a_well_separated_network_raises_no_spread_diagnostic():
-    net = _ring_in_paths_mode()
-    result = gi.run_fault(net, "F1")
-    assert not _records("EARTH_GROUP_SPREAD", result.diagnostics)
-
-
-def test_a_failed_solve_without_coupling_reports_the_undefined_factor(monkeypatch):
-    """The no-coupling solve shares the factorisation of the solve with
-    coupling and does not fail in practice; forced to fail, the EPR-based
-    factor of that frequency is None and the result says why."""
-    from groundinsight import electrical_network as en
-
-    original = en.ElectricalNetwork._construct_vectors_no_mutual
-
-    class Failing:
-        def solve(self, rhs):
-            raise RuntimeError("factor lost")
-
-    def broken(self):
-        original(self)
-        self._lu_factors = {freq: Failing() for freq in self._lu_factors}
-
-    monkeypatch.setattr(en.ElectricalNetwork, "_construct_vectors_no_mutual", broken)
-    net = _ring_in_paths_mode()
-    restore = _silenced()
-    try:
-        result = gi.run_fault(net, "F1")
-    finally:
-        restore()
-    assert result.reduction_factor.value[50.0] is None
-    records = _records("REDUCTION_FACTOR_UNDEFINED", result.diagnostics)
-    assert records and "failed" in records[0].message
-    assert records[0].elements == [("fault", "F1"), ("bus", "B3")]
-    # The EPR is not affected: same as an unbroken run.
-    monkeypatch.undo()
-    reference = gi.run_fault(_ring_in_paths_mode(), "F1")
-    assert [b.uepr for b in result.buses] == [b.uepr for b in reference.buses]
 
 
 # --------------------------------------------------------------------------

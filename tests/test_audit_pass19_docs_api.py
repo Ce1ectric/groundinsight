@@ -51,10 +51,6 @@ from groundinsight.utils import validations
 from tests import _reference_mna as ref
 from tests._warning_policy import acknowledge
 
-#: The line of the page example spreads its electrode currents in angle; the
-#: test sums them three ways.
-SPREAD = acknowledge("EARTH_GROUP_SPREAD")
-
 #: pandapower's example network has a transformer and a closed bus-to-bus
 #: switch, which the importer reports as not imported, and an open line
 #: switch, which it reports as an open phase conductor; the imported network
@@ -381,7 +377,6 @@ def test_plotting_page_states_that_the_bus_currents_sum_to_zero():
     assert "`I_bus_A`" in text and "`I_inj_A`" in text
 
 
-@SPREAD
 def test_electrode_currents_sum_to_zero_three_ways():
     """The statement on the plotting page, by objects, by frame and by the reference solver."""
     net, result = _line_network()
@@ -411,12 +406,12 @@ def test_plotting_page_states_the_branch_sign_frame():
     assert "../reference/conventions.md#signs-and-phase-angles" in text
 
 
-def test_electrical_network_page_names_both_factors_and_the_electrode_symbol():
+def test_electrical_network_page_names_the_factor_and_the_electrode_symbol():
     """DOC7 item 3: the EN 50522 factor is listed, the bus electrode is Z_B, never Z_E."""
     text = _flat(_page("api/electrical_network.md"))
     assert "1/Z_E(f, \\rho)" not in text and "1/Z_E" not in text
     assert "Z_B" in text
-    assert "`value`" in text and "`value_current`" in text
+    assert "`value`" in text and "`value_current`" not in text
     assert "EN 50522" in text
 
 

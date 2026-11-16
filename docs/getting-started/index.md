@@ -8,8 +8,8 @@ every change.
 1. [Installation](installation.md) — a virtual environment, the package,
    Jupyter or VS Code, and a self-test that takes a second.
 2. [Your first fault calculation](first-calculation.md) — two stations and a
-   cable at 50 Hz: earth potential rise, earthing impedance, both reduction
-   factors.
+   cable at 50 Hz: earth potential rise, earthing impedance, earth current
+   and reduction factor.
 3. [From a line to a ring](ring.md) — the same cable as a ring: how the fault
    current divides, the phase impedance, a harmonic.
 4. [Draw and solve a network](gui.md) — the first network in

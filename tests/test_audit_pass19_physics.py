@@ -263,8 +263,12 @@ def test_there_are_seventeen_structural_cases():
 
 @pytest.mark.parametrize("case", sorted(STRUCTURAL_CASES))
 def test_run_fault_matches_the_reference_solver(case):
-    """PQ-REF: EPR, shield and electrode currents, both reduction factors and
-    the earth group agree with the branch-current MNA to <= 1e-12."""
+    """PQ-REF: EPR, shield and electrode currents, the earth current and the
+    reduction factor agree with the branch-current MNA to <= 1e-12. With
+    current sources only, the reference holds the fault bus at remote earth
+    and reads the current into that ideal electrode (Norton); with a
+    Thevenin source, whose loop current a short would change, it forms
+    U_E / Z_E from its own potential and driving point."""
     spec = STRUCTURAL_CASES[case]
     net = build(spec, case.replace(" ", "_"))
     result = solve(net)
@@ -278,14 +282,14 @@ def test_run_fault_matches_the_reference_solver(case):
         assert ref.max_relative_deviation(pkg["ia"], mapped["ia"]) <= TOL, (case, f, "ia")
         assert ref.max_relative_deviation(pkg["i_s"], mapped["i_s"]) <= TOL, (case, f, "i_s")
 
-        r_ref = ref.reduction_factor_epr(rd, thevenin_phase="norton")
-        assert factor.value[f] == pytest.approx(r_ref, rel=TOL), (case, f, "value")
-
-        i_earth, group = ref.half_plane_split(mapped["ia"], rd["fault_bus"])
-        assert sorted(factor.earth_buses[f]) == group, (case, f, "group")
+        if all(d["kind"] == "current" for d in rd["sources"].values()):
+            shorted = ref.solve_oneway(rd, thevenin_phase="norton", shorted=True)
+            i_earth = -shorted["I_short"]  # package frame
+        else:
+            i_earth = mapped["u"][rd["fault_bus"]] / ref.driving_point_impedance(rd, rd["fault_bus"])
         assert abs(complex(factor.i_earth[f]) - i_earth) <= TOL * abs(i_earth), (case, f, "I_E")
-        r_current_ref = abs(i_earth) / abs(solution["I_F"])
-        assert factor.value_current[f] == pytest.approx(r_current_ref, rel=TOL), (case, f, "r_I")
+        r_ref = abs(i_earth) / abs(solution["I_F"])
+        assert factor.value[f] == pytest.approx(r_ref, rel=TOL), (case, f, "r")
 
 
 # ---------------------------------------------------------------------------
@@ -487,32 +491,10 @@ def test_pq_ph4_u_e_and_z_e_are_the_fault_bus_quantities_on_a_long_chain():
     rd = ref.reference_network(net, 50.0, "F1")
     assert abs(z_e - ref.driving_point_impedance(rd, fault_bus)) <= 1e-12 * abs(z_e)
 
-    # The norm's chain with r = |1 - Z_m/Z_s| closes on the reported values
-    # in its ideal case -- not by construction, but by physics.
-    assert abs(u_e) == pytest.approx(factor.value[50.0] * I_FAULT * abs(z_e), rel=1e-5)
+    # In the norm's ideal case the reduction factor is the cable's 1 - k
+    # (physics: the source end is far away and well earthed).
+    assert factor.value[50.0] == pytest.approx(abs(1 - k), rel=1e-5)
     assert complex(factor.i_fault[50.0]) == I_FAULT
-
-
-def test_pq_ph4_the_group_quantities_are_kept_as_diagnostics():
-    """The previous U_E / Z_E -- current-weighted mean potential of the earth
-    group, and that mean over I_E -- move to u_earthing_group /
-    z_earthing_group. On the long chain they are 43 % / 45 % below the
-    fault-bus values (second way: the reference solver's group)."""
-    net = _uniform_chain(64)
-    result = solve(net)
-    factor = result.reduction_factor
-    u_group = complex(factor.u_earthing_group[50.0])
-    z_group = complex(factor.z_earthing_group[50.0])
-    i_earth = complex(factor.i_earth[50.0])
-    assert z_group == pytest.approx(u_group / i_earth, rel=1e-14)
-    rd = ref.reference_network(net, 50.0, "F1")
-    mapped = ref.to_package_frame(ref.solve_oneway(rd, thevenin_phase="norton"))
-    _, group = ref.half_plane_split(mapped["ia"], "N64")
-    weights = {b: abs(mapped["ia"][b]) for b in group}
-    u_ref = sum(mapped["u"][b] * weights[b] for b in group) / sum(weights.values())
-    assert abs(u_group - u_ref) <= 1e-12 * abs(u_ref)
-    assert abs(u_group) / abs(complex(factor.u_earthing[50.0])) == pytest.approx(0.570, abs=0.01)
-    assert abs(z_group) / abs(complex(factor.z_earthing[50.0])) == pytest.approx(0.555, abs=0.01)
 
 
 @pytest.mark.parametrize("case", sorted(STRUCTURAL_CASES))
@@ -569,20 +551,19 @@ LEGACY_RESULT = {
 
 
 def test_a_result_stored_with_the_previous_definition_loads_without_claiming_the_new_one():
-    """Results written before F4 carry the group quantities under the names
-    that now mean U_E = u_F and Z_E = Z_dp(F). They still load; the stored
-    values move to the *_group fields, the redefined fields stay empty, and
+    """Results written before F4 carry group quantities under the names that
+    now mean U_E = u_F and Z_E = Z_dp(F). They still load; the earthing
+    quantities, the earth current and the reduction factor stay empty, and
     the result says so -- a stored number never claims a meaning it was not
     computed with."""
     import json
 
     restored = gi.Result.model_validate_json(json.dumps(LEGACY_RESULT))
     factor = restored.reduction_factor
-    assert complex(factor.u_earthing_group[50.0]) == complex(-120.0, 8.0)
-    assert complex(factor.z_earthing_group[50.0]) == complex(0.4, 0.0)
-    assert factor.u_earthing == {} and factor.z_earthing == {}
+    assert factor.u_earthing == {} and factor.z_earthing == {} and factor.i_earth == {}
     assert restored.grounding_impedance.value == {}
-    assert factor.value[50.0] == 0.35 and factor.value_current[50.0] == 0.36
+    assert factor.value == {50.0: None}
+    assert "value_current" not in json.loads(factor.model_dump_json())
     assert [d.code for d in restored.diagnostics] == ["LEGACY_EARTHING_DEFINITION"]
     # a result written now round-trips unchanged
     net = _uniform_chain(4)
@@ -885,10 +866,12 @@ def test_ph9_a_source_without_phase_path_is_announced_with_what_it_still_does():
     """A source the earthing network connects to the fault while the phase
     conductor between them is open (declared ``"nan"``) induces no coupling
     -- but its current is still injected into the earthing system, as if it
-    returned entirely through soil and shields (r = 1 for its share). That is
-    kept (conservative) and now said once per source and run as a
-    SOURCE_WITHOUT_PHASE_PATH ModelAssumptionWarning. Second way: the
-    reference solver, which drops the open phase conductor the same way."""
+    returned entirely through soil and shields. That is kept (conservative)
+    and said once per source and run as a SOURCE_WITHOUT_PHASE_PATH
+    ModelAssumptionWarning. Without coupling the reduction factor is set by
+    the galvanic paths alone: the current into an ideal fault electrode
+    against what returns through the shields to the source station. Second way: the reference solver, which drops
+    the open phase conductor the same way and shorts the fault bus."""
     spec = dict(
         freqs=[50.0, 150.0],
         buses={"S": ("0.3", 100.0), "A": ("2.0", 100.0), "F": ("1.5", 100.0)},
@@ -904,8 +887,9 @@ def test_ph9_a_source_without_phase_path_is_announced_with_what_it_still_does():
     assert ("source", "src") in notes[0].elements
     assert "50 Hz" in str(notes[0]) and "150 Hz" in str(notes[0])
     for f in spec["freqs"]:
-        assert result.reduction_factor.value[f] == pytest.approx(1.0, rel=1e-12)
         rd = ref.reference_network(net, f, "F1")
+        r_ref = ref.reduction_factor_short_circuit(rd, thevenin_phase="norton")
+        assert result.reduction_factor.value[f] == pytest.approx(r_ref, rel=1e-12)
         mapped = ref.to_package_frame(ref.solve_oneway(rd, thevenin_phase="norton"))
         assert ref.max_relative_deviation(package_vectors(result, f)["u"], mapped["u"]) <= TOL
 

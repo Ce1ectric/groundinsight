@@ -112,21 +112,21 @@ For the project saved by the script, `groundinsight run projekt.json` prints
 after a two-line header (version, network, fault and input digest):
 
 ```text title="Output of groundinsight run projekt.json"
-f [Hz]  I_F [A]  EPR fault [V]  EPR max [V]     at bus    r_epr  r_current  I_E [A]  U_E [V]  Z_E [Ohm]
-------  -------  -------------  -----------  ---------  -------  ---------  -------  -------  ---------
-    50     1000          275.4        275.4  bus_fault   0.3846     0.2741    274.1    275.4      0.844
-   250      200          17.12        17.12  bus_fault  0.08305    0.07656    15.31    17.12      1.073
-   350      100          6.741        6.741  bus_fault  0.05942    0.05523    5.523    6.741      1.177
-   450       50          2.901        2.901  bus_fault  0.04625    0.04313    2.156    2.901      1.299
-   550       25          1.314        1.314  bus_fault  0.03785    0.03536    0.884    1.314      1.437
-   RMS     1026          276.1        276.1  bus_fault        -          -    274.6    276.1          -
+f [Hz]  I_F [A]  EPR fault [V]  EPR max [V]     at bus        r  I_E [A]  U_E [V]  Z_E [Ohm]
+------  -------  -------------  -----------  ---------  -------  -------  -------  ---------
+    50     1000          275.4        275.4  bus_fault   0.3263    326.3    275.4      0.844
+   250      200          17.12        17.12  bus_fault  0.07981    15.96    17.12      1.073
+   350      100          6.741        6.741  bus_fault   0.0573     5.73    6.741      1.177
+   450       50          2.901        2.901  bus_fault  0.04466    2.233    2.901      1.299
+   550       25          1.314        1.314  bus_fault  0.03658   0.9144    1.314      1.437
+   RMS     1026          276.1        276.1  bus_fault        -    326.8    276.1          -
 ```
 
 followed by the diagnostic `SCALINGS_INCOMPLETE`: the quickstart example gives
 its fault a scaling at 50 Hz only, so the harmonics are scaled with 1.0
 ([Harmonics, fault scalings and DC](harmonics.md#fault-scalings)).
-`r_epr` is the EPR-based reduction factor, `r_current` the reduction factor of
-EN 50522 ([Result tables](../reference/results.md#networkres_faultfault)).
+`r` is the reduction factor of EN 50522 and `I_E = U_E/Z_E` the earth current
+([Result tables](../reference/results.md#networkres_faultfault)).
 
 ## The GUI
 
@@ -144,7 +144,7 @@ python -m groundinsight_gui          # opens http://127.0.0.1:8080
 
 ```text title="Output of service_layer.py"
 project 'QuickstartNet': 2 buses, 1 branch, faults ['fault_at_remote_bus'], frequencies [50.0, 250.0, 350.0, 450.0, 550.0]
-RMS: I_F = 1026.2 A, EPR at the fault = 276.1 V, I_E = 274.6 A, U_E = 276.1 V
+RMS: I_F = 1026.2 A, EPR at the fault = 276.1 V, I_E = 326.8 A, U_E = 276.1 V
 diagnostics: ['SCALINGS_INCOMPLETE']
 after the edit: revision 1, stale True; after undo: revision 0, stale False
 job: done, same figures: True

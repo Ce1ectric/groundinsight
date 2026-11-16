@@ -149,16 +149,17 @@ source current peaks.
   `SCALINGS_INCOMPLETE`). Give `0.0: 0.0` to keep a frequency, for example
   DC, out of a fault. `Fault.scaling_at(frequency)` returns the factor used.
 
-## Which reduction factor is which
+## The reduction factor
 
-| Field | Column of `res_all_impedances()` | Definition | Use |
+| Field | Column | Definition | Use |
 |---|---|---|---|
-| `ResultReductionFactor.value` | `reduction_factor` | EPR at the fault bus with coupling over EPR without coupling | a property of the line: $\lvert 1 - Z_m/Z_s \rvert$ for one line, independent of the fault-bus electrode |
-| `ResultReductionFactor.value_current` | `reduction_factor_current` | $\lvert I_E \rvert / \lvert 3I_0 \rvert$, earth current over fault current | the reduction factor `r` of EN 50522 |
+| `ResultReductionFactor.value` | `r` of `res_fault()`, `reduction_factor` of `res_all_impedances()` | $\lvert I_E \rvert / \lvert 3I_0 \rvert$ with $I_E = U_E / Z_E$, the current into an ideal electrode at the fault bus | the reduction factor `r` of EN 50522; $U_E = r \cdot 3I_0 \cdot Z_E$ holds exactly |
+| `ResultReductionFactor.i_earth` | `I_E_A` of `res_fault()` | $I_E = U_E / Z_E$ | the earth current of EN 50522 |
 
-The two coincide only for ideally bonded stations. See
+`r` does not depend on the electrode of the fault bus; on a long line far from
+the infeed it is the cable's $\lvert 1 - Z_m/Z_s \rvert$. See
 [Compare results with EN 50522 limits](../howto/en50522-check.md) and
-[Reduction factors and earthing impedance](../explanation/reduction-factors.md#reduction-factor-on-a-current-basis).
+[Reduction factors and earthing impedance](../explanation/reduction-factors.md#reduction-factor).
 
 ## See also
 

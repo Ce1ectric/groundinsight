@@ -151,10 +151,10 @@ def test_the_schema_is_pinned_and_exported():
     assert list(frame.columns) == list(gi.RES_FAULT_SCHEMA)
     assert list(gi.RES_FAULT_SCHEMA) == [
         "fault", "fault_bus", "frequency_Hz", "is_rms", "I_F_A", "I_F_degree",
-        "EPR_fault_V", "EPR_fault_degree", "EPR_max_V", "EPR_max_bus", "r_epr",
-        "r_current", "I_E_A", "U_E_V", "Z_E_Ohm", "Z_E_degree", "n_diagnostics",
-        # schema version 2 appends the touch-voltage columns; the version-1
-        # columns keep their names and positions
+        "EPR_fault_V", "EPR_fault_degree", "EPR_max_V", "EPR_max_bus", "r",
+        "I_E_A", "U_E_V", "Z_E_Ohm", "Z_E_degree", "n_diagnostics",
+        # schema version 2 appends the touch-voltage columns and has one
+        # reduction factor r in place of r_epr and r_current
         "U_vT_max_V", "U_vT_max_bus", "U_transfer_max_V", "U_transfer_max_bus",
     ]
     assert gi.RES_FAULT_SCHEMA_VERSION == 2
@@ -199,8 +199,7 @@ def test_every_column_is_the_result_field_it_names(kind):
         top = max(magnitudes.values())
         assert row["EPR_max_V"] == top
         assert magnitudes[row["EPR_max_bus"]] == top
-        assert row["r_epr"] == factor.value[f]
-        assert row["r_current"] == factor.value_current[f]
+        assert row["r"] == factor.value[f]
         assert row["I_E_A"] == abs(complex(factor.i_earth[f]))
         assert row["U_E_V"] == abs(complex(factor.u_earthing[f]))
         z_e = complex(factor.z_earthing[f])
@@ -236,12 +235,11 @@ def test_every_column_agrees_with_the_reference_solver(kind):
         top_bus = max(mapped["u"], key=lambda b: abs(mapped["u"][b]))
         assert row["EPR_max_bus"] == top_bus
         assert row["EPR_max_V"] == pytest.approx(abs(mapped["u"][top_bus]), rel=TOL)
-        assert row["r_epr"] == pytest.approx(
-            ref.reduction_factor_epr(rd, thevenin_phase="norton"), rel=TOL
-        )
-        i_earth, _ = ref.half_plane_split(mapped["ia"], rd["fault_bus"])
+        # The earth current as the current into an ideal fault electrode
+        # (the reference shorts the fault bus; current sources only).
+        i_earth = ref.solve_oneway(rd, thevenin_phase="norton", shorted=True)["I_short"]
         assert row["I_E_A"] == pytest.approx(abs(i_earth), rel=TOL)
-        assert row["r_current"] == pytest.approx(abs(i_earth) / abs(i_f), rel=TOL)
+        assert row["r"] == pytest.approx(abs(i_earth) / abs(i_f), rel=TOL)
         assert row["U_E_V"] == pytest.approx(abs(u_f), rel=TOL)
         z_e = ref.driving_point_impedance(rd, rd["fault_bus"])
         assert row["Z_E_Ohm"] == pytest.approx(abs(z_e), rel=TOL)
@@ -279,8 +277,7 @@ def test_the_rms_row_is_the_root_sum_of_squares_and_matches_res_buses(kind):
     assert rms["EPR_fault_V"] == by_bus[net.faults["F1"].bus]
     assert rms["EPR_max_V"] == max(by_bus.values())
     assert by_bus[rms["EPR_max_bus"]] == rms["EPR_max_V"]
-    for column in ("I_F_degree", "EPR_fault_degree", "r_epr", "r_current", "Z_E_Ohm",
-                   "Z_E_degree"):
+    for column in ("I_F_degree", "EPR_fault_degree", "r", "Z_E_Ohm", "Z_E_degree"):
         assert rms[column] is None, column
 
 
@@ -290,7 +287,7 @@ def test_the_rms_row_is_the_root_sum_of_squares_and_matches_res_buses(kind):
 
 
 def test_a_frequency_without_fault_current_has_no_ratio():
-    """Scaling 0 at 250 Hz: no fault current there, so ``r_I`` and ``I_E``
+    """Scaling 0 at 250 Hz: no fault current there, so ``r`` and ``I_E``
     are undefined (``None`` in the result) and null in the table, while the
     EPR of that frequency is a number."""
     net = _ring()
@@ -300,8 +297,8 @@ def test_a_frequency_without_fault_current_has_no_ratio():
         result = gi.run_fault(net, "F1")
     per_frequency, rms = _rows(net.res_fault("F1"))
     row = per_frequency[250.0]
-    assert result.reduction_factor.value_current[250.0] is None
-    assert row["r_current"] is None and row["I_E_A"] is None
+    assert result.reduction_factor.value[250.0] is None
+    assert row["r"] is None and row["I_E_A"] is None
     assert row["I_F_A"] == abs(complex(result.reduction_factor.i_fault[250.0]))
     assert row["EPR_fault_V"] is not None
     # A frequency without an earth current adds nothing to the RMS sum.
@@ -333,15 +330,15 @@ def test_a_result_stored_before_decision_f4_reports_no_earthing_quantities():
     net = _solved("chain")
     stored = json.loads(net.results["F1"].model_dump_json())
     old = stored["reduction_factor"]
-    for key in ("i_fault", "u_earthing_group", "z_earthing_group"):
-        old.pop(key)
+    old.pop("i_fault")
+    old["value_current"] = dict(old["value"])  # the group format carried it
     net.results["F1"] = Result.model_validate(stored)
     assert net.results["F1"].reduction_factor.u_earthing == {}
     per_frequency, rms = _rows(net.res_fault("F1"))
     for row in per_frequency.values():
         assert row["U_E_V"] is None and row["Z_E_Ohm"] is None
-        assert row["I_F_A"] is None
-        assert row["EPR_fault_V"] is not None and row["r_epr"] is not None
+        assert row["I_F_A"] is None and row["r"] is None
+        assert row["EPR_fault_V"] is not None
     assert rms["U_E_V"] is None and rms["I_F_A"] is None
     assert rms["EPR_fault_V"] is not None
 
@@ -354,7 +351,7 @@ def test_a_result_without_reduction_factor_still_has_its_epr_columns():
     frame = net.res_fault("F1")
     assert frame["fault_bus"].to_list() == ["F"] * 4
     assert frame["EPR_fault_V"].null_count() == 0
-    for column in ("I_F_A", "r_epr", "r_current", "I_E_A", "U_E_V", "Z_E_Ohm"):
+    for column in ("I_F_A", "r", "I_E_A", "U_E_V", "Z_E_Ohm"):
         assert frame[column].null_count() == 4, column
 
 
@@ -425,8 +422,7 @@ def test_the_quickstart_network_reads_the_same_numbers_as_the_single_fields():
     assert dict(frame.schema) == gi.RES_FAULT_SCHEMA
     row = frame.filter(pl.col("frequency_Hz") == 50.0).row(0, named=True)
     factor = result.reduction_factor
-    assert row["r_epr"] == factor.value[50.0]
-    assert row["r_current"] == factor.value_current[50.0]
+    assert row["r"] == factor.value[50.0]
     assert row["Z_E_Ohm"] == abs(complex(result.grounding_impedance.value[50.0]))
     assert row["n_diagnostics"] == 1  # SCALINGS_INCOMPLETE, once
 

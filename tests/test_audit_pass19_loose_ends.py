@@ -4,10 +4,9 @@
 * A fault on the bus of every source that feeds it leaves the earthing
   network unexcited: the source puts ``+I`` and the fault ``-I`` on the same
   row, so the fault current closes through that station's own earthing back
-  to the source. The EPR and the earth-return current are exactly zero and
-  both reduction factors are ``None`` -- correct, but the run said nothing,
-  so a reader of ``res_fault`` saw empty ratios without a reason. The run now
-  records the case on the result (``FAULT_AT_FEEDING_BUS``, severity
+  to the source. The EPR, the earth current and the reduction factor are
+  exactly zero -- correct, but a reader of ``res_fault`` needs the reason.
+  The run records the case on the result (``FAULT_AT_FEEDING_BUS``, severity
   ``info``) without raising a warning.
 * ``run_outage_study(auto_parallel_coefficients=...)`` handed the deprecated
   keyword on to ``run_fault``, whose ``DeprecationWarning`` then pointed at a
@@ -48,7 +47,7 @@ def _line(name, *, fault_bus, extra_source_bus=None):
     return net
 
 
-def test_a_fault_on_the_bus_of_its_only_source_says_why_its_ratios_are_empty():
+def test_a_fault_on_the_bus_of_its_only_source_says_why_its_earth_current_is_zero():
     net = _line("feeding_bus", fault_bus="a")
     # Recorded on the result, not raised: nothing about the result is in
     # doubt, and studies place trial faults on the source bus as well.
@@ -56,8 +55,9 @@ def test_a_fault_on_the_bus_of_its_only_source_says_why_its_ratios_are_empty():
         warnings.simplefilter("error", gi.GroundinsightWarning)
         result = gi.run_fault(net, fault="F")
     rf = result.reduction_factor
-    assert rf.value[50.0] is None
-    assert rf.value_current[50.0] is None
+    # r = |U_E / (Z_E * I_F)| is defined here: 0, with I_E = 0.
+    assert rf.value[50.0] == 0.0
+    assert abs(complex(rf.i_earth[50.0])) == 0.0
     codes = {d.code: d for d in result.diagnostics}
     assert "FAULT_AT_FEEDING_BUS" in codes
     assert codes["FAULT_AT_FEEDING_BUS"].severity == "info"
@@ -81,7 +81,7 @@ def test_a_second_source_elsewhere_excites_the_network_and_nothing_is_reported()
         warnings.simplefilter("error", gi.GroundinsightWarning)
         result = gi.run_fault(net, fault="F")
     assert "FAULT_AT_FEEDING_BUS" not in {d.code for d in result.diagnostics}
-    assert result.reduction_factor.value_current[50.0] is not None
+    assert result.reduction_factor.value[50.0] > 0.0
 
 
 def test_a_fault_away_from_the_source_is_unchanged():
@@ -90,7 +90,7 @@ def test_a_fault_away_from_the_source_is_unchanged():
         warnings.simplefilter("error", gi.GroundinsightWarning)
         result = gi.run_fault(net, fault="F")
     assert "FAULT_AT_FEEDING_BUS" not in {d.code for d in result.diagnostics}
-    assert 0.0 < result.reduction_factor.value_current[50.0] < 1.0
+    assert 0.0 < result.reduction_factor.value[50.0] < 1.0
 
 
 def test_the_outage_study_points_its_deprecation_at_the_caller():

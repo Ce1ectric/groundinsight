@@ -39,13 +39,9 @@ from groundinsight.utils.impedance_calculator import (
     is_short_circuit,
 )
 from groundinsight.utils.validations import validate_impedance_formula_value
-from tests._warning_policy import acknowledge
 
 #: Reduction factors computed without a prior solve find no earth-return
 #: group, which the test accepts.
-NO_EARTH_GROUP = acknowledge("EARTH_GROUP_UNDEFINED")
-
-
 _FREQS = [0.0, 50.0, 150.0, 250.0]
 
 
@@ -94,32 +90,31 @@ def test_solve_network_keeps_the_lu_factorisation():
 def test_reduction_factors_match_the_dense_solve_exactly():
     """The reused factorisation must not move the answer.
 
-    The no-mutual system is solved twice on the same network -- once through
-    the kept ``splu`` factors, once through the dense fallback -- and the
-    reduction factors must agree to machine precision.
+    The driving point ``Z_E`` behind ``r = |U_E / (Z_E * I_F)|`` is computed
+    twice on the same network -- once through the kept ``splu`` factors, once
+    through a fresh factorisation of ``Y_sparse`` -- and the reduction
+    factors, earth currents and ``Z_E`` must agree to machine precision.
     """
     net = _chain("p18_lu_equiv")
     gi.run_fault(net, "F1")
     reused = net.results["F1"].reduction_factor
     reused_value = dict(reused.value)
-    reused_current = dict(reused.value_current)
-    u_reused = {f: v.copy() for f, v in
-                net.electrical_network.u_vectors_no_mutual.items()}
+    reused_earth = {f: v for f, v in reused.i_earth.items()}
+    reused_z = {f: v for f, v in reused.z_earthing.items()}
 
-    # Force the dense path by dropping the stored factors.
+    # Force the fresh factorisation by dropping the stored factors.
     en = net.electrical_network
     en._lu_factors = {}
     en.compute_reduction_factors()
     dense = net.results["F1"].reduction_factor
 
     for freq in net.frequencies:
+        if reused_value[freq] is None:
+            assert dense.value[freq] is None
+            continue
         assert dense.value[freq] == pytest.approx(reused_value[freq], rel=1e-12)
-        assert dense.value_current[freq] == pytest.approx(
-            reused_current[freq], rel=1e-12
-        )
-        assert np.allclose(
-            en.u_vectors_no_mutual[freq], u_reused[freq], rtol=1e-12, atol=1e-14
-        )
+        assert complex(dense.i_earth[freq]) == pytest.approx(complex(reused_earth[freq]), rel=1e-12)
+        assert complex(dense.z_earthing[freq]) == pytest.approx(complex(reused_z[freq]), rel=1e-12)
 
 
 def test_stale_factors_are_dropped_when_the_matrices_change():
@@ -134,15 +129,26 @@ def test_stale_factors_are_dropped_when_the_matrices_change():
     assert net.electrical_network._lu_factors[50.0] is not first
 
 
-@NO_EARTH_GROUP
 def test_compute_reduction_factors_still_works_without_a_prior_solve():
-    """The dense fallback stays for a hand-built ElectricalNetwork."""
+    """The fresh factorisation stays for a hand-built ElectricalNetwork.
+
+    Without a solve there are no potentials to speak of, but the driving
+    point ``Z_E`` needs only the assembled matrices: it is factorised afresh
+    and must equal the one of the solved fault.
+    """
     net = _chain("p18_lu_fallback")
     gi.run_fault(net, "F1")
+    expected = dict(net.results["F1"].reduction_factor.z_earthing)
     en = ElectricalNetwork(net, auto_phase_currents=True)
     assert en._lu_factors == {}
     en.compute_reduction_factors()
-    assert set(en.u_vectors_no_mutual) == set(net.frequencies)
+    got = net.results["F1"].reduction_factor
+    assert set(got.value) == set(net.frequencies)
+    for freq, z in expected.items():
+        if z is None:
+            assert got.z_earthing[freq] is None
+        else:
+            assert complex(got.z_earthing[freq]) == pytest.approx(complex(z), rel=1e-12)
 
 
 # ---------------------------------------------------------------------------

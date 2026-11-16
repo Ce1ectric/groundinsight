@@ -61,9 +61,10 @@ where ``I_earth`` is the sum of the electrode currents of every bus on the far
 side and ``I_total`` is the sum of the source injections there. The reduction
 factor of that side is ``r = |I_earth| / |I_total|`` -- the share of the current
 crossing the cut that returns through the earth rather than through the shields.
-Unlike the EPR-based reduction factor on ``Result``, this one **does** respond to
-the impedance at the fault bus, because the split between electrode and shields
-is decided by that impedance.
+Unlike the reduction factor on ``Result`` (the current into an ideal electrode
+at the fault bus over ``I_F``), this per-side share **does** respond to the
+impedance at the fault bus, because the split between electrode and shields is
+decided by that impedance.
 
 A cut whose far side carries no source has ``I_total = 0``: nothing *has* to
 cross it, and whatever does is driven purely by the coupling. ``r`` is then

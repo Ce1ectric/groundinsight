@@ -21,10 +21,8 @@ reports it. The symbols follow EN 50522 where the standard has one.
 | `Z_G` | the name of `Z_E` in the result tables (grounding impedance) | columns `grounding_impedance_Ohm`, `grounding_impedance_deg` of `res_all_impedances()` |
 | `Z_dp` | driving-point impedance: the voltage at a bus per ampere injected there against remote earth | `Z_E` is `Z_dp` at the fault bus; `gi.bus_response`, `gi.analyze_cuts` |
 | `I_F`, `3I_0` | fault current, the earth-fault current `3I_0` of EN 50522: the scaled source currents that reach the fault | `ResultReductionFactor.i_fault` |
-| `I_E` | earth current: the part of the fault current that returns through the soil, summed over the electrodes of the earth group | `ResultReductionFactor.i_earth` |
-| earth group | the buses whose electrodes feed the soil, from the fault outwards up to where the potential profile turns | `ResultReductionFactor.earth_buses` |
-| `r` | reduction factor of EN 50522, the earth current over the fault current | `ResultReductionFactor.value_current`; column `reduction_factor_current` |
-| `value` | EPR ratio at the fault bus with and without the inductive coupling; for a single line the magnitude of `1 − k`, whatever the electrodes | `ResultReductionFactor.value`; column `reduction_factor` |
+| `I_E` | earth current, `U_E / Z_E`: the current an ideal electrode at the fault bus would take, the part of the fault current that does not return to the sources through shields and conductors | `ResultReductionFactor.i_earth`; column `I_E_A` of `res_fault()` |
+| `r` | reduction factor of EN 50522, the earth current over the fault current; on a long line the cable's `|1 − k|` | `ResultReductionFactor.value`; column `r` of `res_fault()`, `reduction_factor` of `res_all_impedances()` |
 | `U_vT` | prospective touch voltage: the potential difference a person bridges between a touched part and the ground 1 m away, before body and additional resistances | `ResultBus.u_touch`, `u_touch_freq`; column `U_vT_V` of `res_buses()`, for a bus with `k_touch` ([explanation](../explanation/touch-and-transfer.md)) |
 | `U_T` | touch voltage, with body and additional resistances | not computed; `U_vT` and `U_E` are upper bounds |
 | `U_transfer` | transferred potential: the largest difference between the electrode potential and the earth surface at a target point that a bonded conductor reaches (EN 50522, Clause 6) | `ResultBus.u_transfer`; column `U_transfer_V` of `res_buses()`, for a bus with `k_transfer` |

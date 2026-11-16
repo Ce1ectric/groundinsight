@@ -92,10 +92,9 @@ network step by step and checks every number by hand.
   through SymPy
 - Sparse LU solver for every frequency (SciPy `splu`)
 - Mutual coupling treated as Norton sources along the path from source to fault
-- **Two reduction factors**, both reported: the EPR ratio with and without
-  mutual coupling at the fault bus (`value`), and the share of the fault
-  current returning through earth (`value_current`) — the EN 50522 quantity,
-  and the one that responds to the electrode at the fault bus, see
+- **One reduction factor**, the one of EN 50522: $r = \lvert U_E/(Z_E I_F)\rvert$
+  (`value`), the current an ideal electrode at the fault bus would take over
+  the fault current, so the chain $U_E = r \cdot I_F \cdot Z_E$ holds exactly, see
   [Reduction factors and earthing impedance](explanation/reduction-factors.md)
 - **Phase currents from a solve on the phase-conductor network**
   (`phase_current_mode="auto"`), so the fault current divides over rings,

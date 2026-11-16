@@ -71,15 +71,18 @@ total RMS of `U_E` against the 50 Hz curve. That is conservative for the body
 current, not shown for the touch voltage; see
 [Compare results with EN 50522 limits](en50522-check.md#harmonics-and-dc).
 
-**Check it by hand.** For one line between two stations the earth current
-has a closed form: with the source at `UW` and the fault at `S`,
-$I_E = I\,(Z_s - Z_m)/(Z_{UW} + Z_S + Z_s)$ and $U_E = Z_S\,I_E$. At 50 Hz the
-cable gives $Z_s - Z_m = 3 \cdot 0.727/3 = 0.727\ \Omega$ (the screens'
-resistance; the earth-return terms cancel) and
-$Z_{UW} + Z_S + Z_s = 7.275 + 1.940j\ \Omega$, so
-$I_E = 1000 \cdot 0.727 / 7.529 = 96.56$ A, $r = 0.0966$ and
-$U_E = 5.900 \cdot 96.56 = 569.67$ V — the first row of the output. The test
-suite recomputes every row this way.
+**Check it by hand.** For one line between two stations the soil current
+has a closed form: with the source at `UW` and the fault at `S`, the two
+electrodes carry $I_a = I\,(Z_s - Z_m)/(Z_{UW} + Z_S + Z_s)$ and
+$U_E = Z_S\,I_a$. The earth current is the current into an ideal electrode at
+`S`, $I_E = I\,(Z_s - Z_m)/(Z_{UW} + Z_s)$, and $r = \lvert I_E\rvert / I$. At
+50 Hz the cable gives $Z_s - Z_m = 3 \cdot 0.727/3 = 0.727\ \Omega$ (the
+screens' resistance; the earth-return terms cancel),
+$Z_{UW} + Z_S + Z_s = 7.275 + 1.940j\ \Omega$ and
+$Z_{UW} + Z_s = 1.375 + 1.940j\ \Omega$, so
+$I_a = 1000 \cdot 0.727 / 7.529 = 96.56$ A,
+$U_E = 5.900 \cdot 96.56 = 569.67$ V and $r = 0.727 / 2.378 = 0.3057$ — the
+first row of the output. The test suite recomputes every row this way.
 
 ## When the input does not cover every frequency
 
@@ -167,9 +170,9 @@ transient study contains a 0 Hz bin as well:
 
 ```text title="Output of harmonics.py"
 f / Hz  I_F / A  U_E / V       r
-    50   1000.0   569.67  0.0966
-   250     60.0    21.61  0.0610
-   350     40.0    11.62  0.0493
+    50   1000.0   569.67  0.3057
+   250     60.0    21.61  0.0794
+   350     40.0    11.62  0.0581
    RMS   1002.6   570.20       -
 50 Hz only (scalings 1/0/0): U_E, total RMS = 569.67 V
 scaling missing at 350 Hz: ['SCALINGS_INCOMPLETE']

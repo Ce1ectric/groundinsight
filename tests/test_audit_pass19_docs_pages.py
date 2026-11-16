@@ -426,12 +426,14 @@ def test_conventions_missing_scaling_is_one():
     assert "SCALINGS_INCOMPLETE" not in codes_full + codes_default
 
 
-def test_conventions_name_both_reduction_factors():
-    """``value`` is the EPR ratio, ``value_current`` the EN 50522 r -- on the
-    conventions page and on the EN 50522 how-to."""
+def test_conventions_name_the_reduction_factor():
+    """``value`` is the EN 50522 r and ``i_earth`` its earth current -- on the
+    conventions page and on the EN 50522 how-to; the deprecated
+    ``value_current`` is not taught."""
     for page in ("reference/conventions.md", "howto/en50522-check.md"):
         flat = _flat(_page(page))
-        assert _names_field(flat, "value_current") and _names_field(flat, "value"), page
+        assert _names_field(flat, "value") and _names_field(flat, "i_earth"), page
+        assert not _names_field(flat, "value_current"), page
         assert "EN 50522" in flat, page
 
 
@@ -460,7 +462,7 @@ def test_glossary_defines_the_symbols_and_resolves_the_collision():
 def test_en50522_page_maps_the_symbols_to_result_fields():
     """The symbol table names the result fields wp1b defined."""
     flat = _flat(_page("howto/en50522-check.md"))
-    for field in ("i_fault", "value_current", "i_earth", "z_earthing", "u_earthing", "uepr_freq"):
+    for field in ("i_fault", "value", "i_earth", "z_earthing", "u_earthing", "uepr_freq"):
         assert _names_field(flat, field), field
     assert "upper bound" in flat and "U_Tp" in flat
     assert "IEC 60479-2" in flat

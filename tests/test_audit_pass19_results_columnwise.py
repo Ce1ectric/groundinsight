@@ -47,7 +47,7 @@ from tests._warning_policy import acknowledge
 #: networks that produce every kind of row: rings, 0 Hz bins, Thevenin
 #: sources, spread electrode currents.
 pytestmark = acknowledge(
-    "DC_LIMIT", "EARTH_GROUP_SPREAD", "PHASE_PROXY", "THEVENIN_COUPLING"
+    "DC_LIMIT", "PHASE_PROXY", "THEVENIN_COUPLING"
 )
 
 

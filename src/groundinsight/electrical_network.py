@@ -118,12 +118,6 @@ from groundinsight.utils.impedance_calculator import (
     short_circuit_mask,
 )
 from groundinsight.diagnostics import InputWarning, ModelAssumptionWarning, emit, note
-from groundinsight.utils.earth_current import (
-    NOISE_REL,
-    earth_current_vanishes,
-    earthing_voltage,
-    split_earth_currents,
-)
 
 
 logger = logging.getLogger(__name__)
@@ -154,29 +148,6 @@ def _shortlist(names, limit: int = 5) -> str:
         return ", ".join(names)
     shown = ", ".join(names[:limit])
     return f"{shown}, ... ({len(names)} in total)"
-
-
-def _render_points(points: List[Tuple[float, float, float]], unit: str) -> str:
-    """Render ``(frequency, value, reference)`` triples for a diagnostic.
-
-    Parameters
-    ----------
-    points : list of tuple of float
-        One ``(frequency in Hz, magnitude, reference magnitude)`` per entry.
-    unit : str
-        Unit of both magnitudes, e.g. ``"A"`` or ``"V"``.
-
-    Returns
-    -------
-    str
-        ``"50 Hz (1.2e-14 A against 884 A), ..."``, shortened like
-        :func:`_shortlist` beyond five entries.
-    """
-    rendered = [
-        f"{freq:g} Hz ({value:.3g} {unit} against {reference:.4g} {unit})"
-        for freq, value, reference in points
-    ]
-    return _shortlist(rendered)
 
 
 def _is_open_circuit(Z_complex: complex) -> bool:
@@ -1234,8 +1205,6 @@ class ElectricalNetwork:
         # :class:`_DenseYView`. Kept for code that reads ``Y_matrices``.
         self.Y_matrices = {}
         self.u_vectors = {}  # Voltage vectors for each frequency
-        self.u_vectors_no_mutual = {}  # Voltage vectors without mutual currents
-        self.i_vectors_no_mutual = {}  # Current vectors without mutual currents
         self.i_vectors = {}  # Current vectors for each frequency
         # Sparse LU factorisation of Y(f), kept per frequency by
         # ``solve_network`` so that ``compute_reduction_factors`` can reuse it
@@ -2294,8 +2263,8 @@ class ElectricalNetwork:
 
         A voltage source's loop current is ``(E - (u_S - u_F)) / Z_src``, but
         the stationary solver uses the Norton current ``E / Z_src`` as the
-        phase current that drives the shield coupling, as the fault current of
-        ``value_current`` and as ``i_inj``. The EPR depends on the difference
+        phase current that drives the shield coupling, as the fault current
+        ``I_F`` of the reduction factor and as ``i_inj``. The EPR depends on the difference
         ``I - k * I_p`` of two nearly equal currents, so a few percent of
         current error become tens of percent of EPR -- too low, i.e.
         unconservative. Until the loop current is solved (planned), every run
@@ -2334,7 +2303,7 @@ class ElectricalNetwork:
             f"branches with mutual coupling carry phase current "
             f"({_shortlist(coupled)}). The stationary solver couples them with "
             f"the Norton current E/Z_src instead of the actual loop current and "
-            f"uses that current as the fault current of value_current and as "
+            f"uses that current as the fault current I_F of the reduction factor and as "
             f"i_inj (a known limitation, not yet corrected). Against a fully "
             f"coupled multi-conductor reference the EPR at the fault came out 6 "
             f"to 38 % too low on cable feeders with Z_src between 5+15j and "
@@ -2452,51 +2421,6 @@ class ElectricalNetwork:
             return None
         u_eff = scaling * complex(u.real, u.imag)
         return u_eff / Z_src_c
-
-    def _construct_vectors_no_mutual(self):
-        """
-        Construct the current vectors for each frequency without mutual currents.
-
-        This method builds current vectors excluding the inductive coupling between
-        phase and shield conductors. It is used for the reference solution from which
-        the reduction factor is computed.
-        """
-        frequencies = self.network.frequencies
-        active_fault = self.network.active_fault
-
-        if not active_fault:
-            raise ValueError("No active fault in the network")
-
-        fault = self.network.faults[active_fault]
-        if fault.bus not in self.bus_indices:
-            raise ValueError(
-                f"Fault bus '{fault.bus}' is inactive or missing; cannot solve."
-            )
-        fault_bus_idx = self.bus_indices[fault.bus]
-
-        sources_with_path = self._sources_with_path_to_active_fault()
-
-        self.i_vectors_no_mutual = {}
-
-        for freq in frequencies:
-            i_vector = np.zeros(self.num_buses, dtype=complex)
-            total_source_current = 0j
-
-            for source_name in sources_with_path:
-                source = self.network.sources[source_name]
-                if source.bus not in self.bus_indices:
-                    continue
-                bus_idx = self.bus_indices[source.bus]
-                scaling = fault.scaling_at(freq)
-                injection = self._source_injection(source, freq, scaling)
-                if injection is None:
-                    continue
-                total_source_current += injection
-                i_vector[bus_idx] += injection
-
-            i_vector[fault_bus_idx] -= total_source_current
-
-            self.i_vectors_no_mutual[freq] = i_vector
 
     def _sources_with_path_to_active_fault(self):
         """
@@ -3829,33 +3753,51 @@ class ElectricalNetwork:
         return rms_value
 
     def compute_reduction_factors(self):
-        """
-        Compute the reduction factors by solving the network with and without mutual currents.
+        r"""
+        The reduction factor, the earth current and the earthing quantities of EN 50522.
 
-        This method calculates how much the presence of mutual currents affects the Earth Potential Rise (EPR).
-        The reduction factors are stored in the network's results object.
+        At the fault bus ``F``, per frequency:
 
-        Warns
-        -----
-        ModelAssumptionWarning
-            ``REDUCTION_FACTOR_UNDEFINED`` (elements: the fault and its bus)
-            for a frequency at which the EPR-based reduction factor is
-            undefined -- the no-mutual EPR of the fault bus is rounding noise,
-            or the solve without mutual coupling failed there.
+        $$
+        U_E = u_F, \qquad Z_E = Z_{dp}(F), \qquad
+        I_E = \frac{U_E}{Z_E}, \qquad r = \frac{|I_E|}{|I_F|}
+        $$
+
+        with ``Z_dp`` the driving-point impedance of the earthing network at
+        the fault bus (:meth:`_earthing_driving_points`) and ``I_F`` the
+        fault current of the sources that reach the fault.
+
+        Why this definition: the network seen from the fault bus is linear,
+        so by Norton's theorem its potential is ``U_E = Z_E * I_N`` with
+        ``I_N`` the current that flows into the fault bus's earthing when
+        that earthing is ideal (``Z -> 0``). ``I_E = I_N`` is the earth
+        current of the norm: the part of the fault current that does not
+        return through shields and conductors -- induced or galvanic -- to
+        the sources. The chain of the norm ``U_E = r * Z_E * I_F`` then holds
+        exactly, with the ``Z_E`` a measurement at the station sees, and
+        ``r`` needs no balanced state far from the fault. It does not depend
+        on the fault-bus electrode, which the short circuit takes out; for a
+        long line it tends to ``|1 - Z_m/Z_s|``, and for one cable from a
+        source earthed with ``Z_A`` it is ``(Z_s - Z_m)/(Z_s + Z_A)``.
+
+        Rejected: the sum of the electrode currents over a group of buses
+        that "feed the soil" (it needs a split of the network that is a
+        modelling choice and changes with the fault location), and the ratio
+        of the fault-bus EPR with and without coupling (it treats the
+        galvanic return of the fault current to a source inside the earthing
+        network as earth current).
+
+        ``r`` and ``I_E`` are ``None`` where the frequency carries no fault
+        current and where ``Z_E`` is undefined (``EARTHING_IMPEDANCE_UNDEFINED``).
+        A fault on the bus of every source that feeds it injects nothing:
+        ``r = 0`` there, said by the info diagnostic ``FAULT_AT_FEEDING_BUS``.
 
         Notes
         -----
-        The no-mutual system uses the *same* ``Y(f)`` that
-        :meth:`solve_network` has already factorised, only with a different
-        right-hand side. The sparse LU factors kept in ``self._lu_factors``
-        are therefore reused and the second solve costs one triangular
-        back-substitution. The earlier ``numpy.linalg.solve`` refactorised
-        the matrix densely -- 2.5 s of a 6.9 s profile on a 200-bus chain
-        over 50 frequencies -- and did so with a *different* singularity
-        treatment than the first solve, so the two paths could disagree
-        about whether the same matrix was solvable. Frequencies without a
-        stored factor (``compute_reduction_factors`` called on its own)
-        factorise :attr:`Y_sparse` afresh with the same sparse LU.
+        Costs nothing beyond ``Z_E``: ``U_E`` is the solved potential, and
+        ``Z_E`` is one triangular solve on the factorisation
+        :meth:`solve_network` kept (with a voltage source, a factorisation of
+        the earthing group alone).
         """
         fault_name = self.network.active_fault
         if fault_name is None:
@@ -3863,146 +3805,9 @@ class ElectricalNetwork:
 
         fault_bus = self.network.faults[fault_name].bus
         fault_bus_idx = self.bus_indices[fault_bus]
-
-        reduction_factors = {}
-        uepr_with_mutual = {}
-        uepr_without_mutual = {}
-
         frequencies = self.network.frequencies
 
-        # Step 1: Solve network with mutual currents (already done)
-        # Voltages are stored in self.u_vectors
-
-        # Store uepr with mutual currents
-        for freq in frequencies:
-            voltage = self.u_vectors[freq][fault_bus_idx]
-            uepr_with_mutual[freq] = voltage
-        # Step 2: Create i_vectors without mutual currents
-        self._construct_vectors_no_mutual()
-        # Step 3: Solve network without mutual currents
-        self.u_vectors_no_mutual = {}
-        for freq in frequencies:
-            i_vector = self.i_vectors_no_mutual[freq]
-            lu = self._lu_factors.get(freq)
-            try:
-                # Solve for u_vector without mutual currents. The LU factors
-                # of Y(f) come from ``solve_network``; only a caller that
-                # skipped it has to pay for a fresh factorisation.
-                if lu is None:
-                    lu = splu(self.Y_sparse[freq])
-                u_vector = lu.solve(i_vector)
-                self.u_vectors_no_mutual[freq] = u_vector
-
-            except (np.linalg.LinAlgError, RuntimeError) as e:
-                # Result-relevant: the EPR-based reduction factor of this
-                # frequency is reported as None, and the reader has to know
-                # why (GUI4). The traceback stays available at DEBUG level.
-                logger.debug(
-                    "Solve without mutual currents failed at %s Hz.",
-                    freq,
-                    exc_info=True,
-                )
-                emit(
-                    ModelAssumptionWarning,
-                    f"Fault '{fault_name}': the solve without mutual coupling "
-                    f"failed at {freq:g} Hz ({type(e).__name__}: {e}), so the "
-                    f"EPR-based reduction factor (ResultReductionFactor.value) "
-                    f"is undefined there and reported as None. The solution "
-                    f"with coupling -- the EPR and every current -- is not "
-                    f"affected.",
-                    code="REDUCTION_FACTOR_UNDEFINED",
-                    elements=[("fault", fault_name), ("bus", fault_bus)],
-                    stacklevel=3,
-                )
-                continue
-
-        # Store uepr without mutual currents. A frequency whose no-mutual solve
-        # failed above is absent from ``u_vectors_no_mutual``; it is skipped here
-        # and reported as ``None`` rather than raising a bare KeyError out of the
-        # solver core.
-        for freq in frequencies:
-            if freq not in self.u_vectors_no_mutual:
-                continue
-            voltage = self.u_vectors_no_mutual[freq][fault_bus_idx]
-            uepr_without_mutual[freq] = voltage
-
-        # Z_E of EN 50522 (F4): the driving-point impedance of the earthing
-        # network at the fault bus. Computed first, because it is also the
-        # yardstick of the noise rule for the EPR-based factor below.
         z_driving_point, z_undefined = self._earthing_driving_points(fault_bus_idx)
-
-        # Step 4: Compute reduction factors
-        epr_undefined: List[Tuple[float, float, float]] = []
-        for freq in frequencies:
-            if freq not in uepr_without_mutual:
-                reduction_factors[freq] = None
-                continue
-            v_with = uepr_with_mutual[freq]
-            v_without = uepr_without_mutual[freq]
-            # Compute magnitudes
-            mag_with = abs(v_with)
-            mag_without = abs(v_without)
-
-            # The quotient means something only while its denominator stands
-            # above rounding noise (P9). A fault bus that is at zero potential
-            # in exact arithmetic -- every source on the fault bus, or a source
-            # behind a dead end that returns all its current through one
-            # shield -- comes out at ~1e-14 V, and the ratio of two such
-            # numbers would be reported as a reduction factor (0.449 =
-            # 5.1e-14 V / 1.1e-13 V for a source behind a dead end, next to
-            # 320 V at the source tower). The yardstick is the EPR the fault
-            # current would raise the fault bus to on its own,
-            # |I_F| * |Z_FF|: an exact zero sits at ~1e-16 of it, while a
-            # near-ideal fault-bus electrode -- a small but accurate EPR --
-            # stays at the order of |1 - k| of it.
-            # (The largest EPR of the solution is no yardstick: it calls the
-            # near-ideal electrode noise.)
-            i_fault = complex(self.total_source_currents.get(freq) or 0)
-            reference = 0.0
-            if i_fault != 0:
-                z_ff = z_driving_point.get(freq)
-                if z_ff is None:
-                    z_ff = self._solved_driving_point(freq, fault_bus_idx)
-                reference = abs(i_fault) * (abs(z_ff) if z_ff is not None else 0.0)
-            if mag_without > NOISE_REL * reference:
-                reduction_factor = mag_with / mag_without
-            else:
-                reduction_factor = None
-                # Said out loud only where the earthing network is excited at
-                # all. Every source on the fault bus injects nothing anywhere:
-                # that null case has no earth current and no factor by
-                # definition, as it always had, and a study that scans every
-                # bus as a fault location would otherwise repeat it per bus.
-                if i_fault != 0 and self._is_excited(freq):
-                    epr_undefined.append((freq, mag_without, reference))
-            reduction_factors[freq] = reduction_factor
-
-        # Step 5: the current-based reduction factor -- see the method docstring.
-        (
-            reduction_factors_current,
-            earth_currents,
-            earth_buses,
-            earthing_voltages,
-            earthing_impedances,
-            group_undefined,
-        ) = self._compute_current_reduction_factors()
-
-        self._report_undefined_reduction_quantities(
-            fault_name, fault_bus, epr_undefined, group_undefined, z_undefined
-        )
-
-        # The two definitions answer different questions and only coincide in
-        # the limit of ideally bonded stations. Saying so where they part
-        # company beats leaving a factor of forty to be discovered later.
-        self._warn_on_reduction_factor_divergence(
-            reduction_factors, reduction_factors_current
-        )
-
-        # The EN 50522 quantities (F4): U_E is the EPR at the fault bus -- the
-        # very number ResultBus reports there -- and Z_E the driving-point
-        # impedance of the earthing network at the fault bus. The group mean
-        # and its quotient by I_E, which carried these names before, stay
-        # available as diagnostics.
         fault_currents = {
             freq: (
                 None
@@ -4014,26 +3819,47 @@ class ElectricalNetwork:
         fault_potentials = {
             freq: complex(self.u_vectors[freq][fault_bus_idx]) for freq in frequencies
         }
+        factors: Dict[float, Optional[float]] = {}
+        earth_currents: Dict[float, Optional[complex]] = {}
+        unexcited: List[float] = []
+        for freq in frequencies:
+            i_fault = fault_currents[freq]
+            z_earthing = z_driving_point.get(freq)
+            if z_earthing is None or i_fault is None or i_fault == 0:
+                factors[freq] = None
+                earth_currents[freq] = None
+                continue
+            i_earth = fault_potentials[freq] / z_earthing
+            earth_currents[freq] = i_earth
+            factors[freq] = abs(i_earth) / abs(i_fault)
+            if not self._is_excited(freq):
+                unexcited.append(freq)
 
-        # Store the reduction factors in the result
+        self._report_undefined_reduction_quantities(fault_name, fault_bus, z_undefined)
+        if unexcited:
+            note(
+                ModelAssumptionWarning,
+                f"Fault '{fault_name}' sits on the bus of every source that "
+                f"feeds it at {render_frequencies(unexcited)}: the fault current "
+                f"closes through that station back to the source, nothing is "
+                f"injected into the earthing network, and U_E, the earth current "
+                f"I_E and the reduction factor r are 0 there; Z_E is still the "
+                f"driving-point impedance of the fault bus.",
+                code="FAULT_AT_FEEDING_BUS",
+                elements=[("fault", fault_name), ("bus", fault_bus)],
+            )
+
         result = self.network.results[fault_name]
-        result_reduction_factor = ResultReductionFactor(
+        result.reduction_factor = ResultReductionFactor(
             fault_bus=fault_bus,
-            value=reduction_factors,
-            value_current=reduction_factors_current,
+            value=factors,
             i_fault=fault_currents,
             i_earth=earth_currents,
-            earth_buses=earth_buses,
             u_earthing=fault_potentials,
             z_earthing=z_driving_point,
-            u_earthing_group=earthing_voltages,
-            z_earthing_group=earthing_impedances,
         )
-        result.reduction_factor = result_reduction_factor
-
-        # Update the result in the network's results dictionary
         self.network.results[fault_name] = result
-        self.results = result  # Update self.results
+        self.results = result
 
     def _is_excited(self, freq: float) -> bool:
         """
@@ -4156,21 +3982,19 @@ class ElectricalNetwork:
         self,
         fault_name: str,
         fault_bus: str,
-        epr_undefined: List[Tuple[float, float, float]],
-        group_undefined: List[Tuple[float, float, float]],
-        z_undefined: Optional[Dict[float, List[str]]] = None,
+        z_undefined: Dict[float, List[str]],
     ) -> None:
         """
-        Say once per run where a reduction quantity was reported as ``None``.
+        Say once per run where ``Z_E`` -- and with it ``r`` and ``I_E`` -- is ``None``.
 
-        The first two conditions are a vanishing reference (P9): the quotient
-        or the group would otherwise be built from rounding noise. The third is a fault bus whose group in the earthing network --
-        the buses connected to it through shields -- holds no electrode, so it
-        reaches remote earth only through the loop closure of a voltage source
-        and the earthing network alone presents an infinite impedance there
-        (F4); decided by structure, see :meth:`_earthing_driving_points`.
-        Collected over all frequencies so that a sweep over fifty harmonics
-        produces one message per condition, not fifty.
+        Either the fault bus's group in the earthing network -- the buses
+        connected to it through shields -- holds no electrode, so it reaches
+        remote earth only through the loop closure of a voltage source and the
+        earthing network alone presents an infinite impedance there (decided
+        by structure, see :meth:`_earthing_driving_points`), or the group's
+        matrix is numerically singular. Collected over all frequencies so
+        that a sweep over fifty harmonics produces one message per condition,
+        not fifty.
 
         Parameters
         ----------
@@ -4178,19 +4002,14 @@ class ElectricalNetwork:
             The active fault.
         fault_bus : str
             Its bus.
-        epr_undefined : list of tuple of float
-            ``(frequency, |u_F,0|, |I_F| * |Z_FF|)`` where the EPR-based factor
-            is undefined.
-        group_undefined : list of tuple of float
-            ``(frequency, max|I_a|, |I_F|)`` where no earth-return group exists.
-        z_undefined : dict of float to list of str, optional
+        z_undefined : dict of float to list of str
             Frequencies at which ``Z_E`` is undefined, with the buses of the
             electrode-less group around the fault bus (an empty list where the
             group holds an electrode but its matrix is numerically singular).
         """
         elements = [("fault", fault_name), ("bus", fault_bus)]
-        floating = {f: buses for f, buses in (z_undefined or {}).items() if buses}
-        singular = sorted(f for f, buses in (z_undefined or {}).items() if not buses)
+        floating = {f: buses for f, buses in z_undefined.items() if buses}
+        singular = sorted(f for f, buses in z_undefined.items() if not buses)
         if floating:
             group: List[str] = []
             for buses in floating.values():
@@ -4209,7 +4028,8 @@ class ElectricalNetwork:
                 f"voltage source. The earthing network alone presents an "
                 f"infinite impedance there, so the earthing impedance Z_E (the "
                 f"driving-point impedance of the earthing network at the fault "
-                f"bus) is reported as None.",
+                f"bus), the earth current and the reduction factor are reported "
+                f"as None.",
                 code="EARTHING_IMPEDANCE_UNDEFINED",
                 elements=elements + [("bus", b) for b in others],
                 stacklevel=4,
@@ -4220,387 +4040,11 @@ class ElectricalNetwork:
                 f"Fault '{fault_name}': at {render_frequencies(singular)} the "
                 f"earthing network around the fault bus '{fault_bus}' is "
                 f"numerically singular although it holds an electrode, so the "
-                f"earthing impedance Z_E is reported as None.",
+                f"earthing impedance Z_E, the earth current and the reduction "
+                f"factor are reported as None.",
                 code="EARTHING_IMPEDANCE_UNDEFINED",
                 elements=elements,
                 stacklevel=4,
-            )
-        if epr_undefined:
-            emit(
-                ModelAssumptionWarning,
-                f"Fault '{fault_name}': the EPR-based reduction factor "
-                f"(ResultReductionFactor.value) is undefined at "
-                f"{_render_points(epr_undefined, 'V')} -- the EPR of the fault "
-                f"bus '{fault_bus}' in the solution without coupling is at "
-                f"rounding-noise level against the EPR the fault current would "
-                f"raise it to on its own, |I_F| * |Z_FF| (ratio below "
-                f"{NOISE_REL:g}). The fault current returns to its source "
-                f"without raising the fault bus at all, e.g. because the source "
-                f"sits behind a dead end without electrode or on the fault bus "
-                f"itself, so |u_F| / |u_F without coupling| would be a ratio of "
-                f"two rounding errors. Reported as None.",
-                code="REDUCTION_FACTOR_UNDEFINED",
-                elements=elements,
-                stacklevel=4,
-            )
-        if group_undefined:
-            emit(
-                ModelAssumptionWarning,
-                f"Fault '{fault_name}': no earth-return group exists at "
-                f"{_render_points(group_undefined, 'A')} -- no electrode carries "
-                f"more than {NOISE_REL:g} of the fault current, so the fault "
-                f"current returns entirely through shields and conductors and "
-                f"the earth-return current I_E is zero to within rounding (for "
-                f"example a fault at the far end of a cable whose end has no "
-                f"electrode). The remaining electrode currents are rounding noise "
-                f"at arbitrary angles; I_E, the current-based reduction factor "
-                f"and the earth group are reported as None instead of being "
-                f"built from them.",
-                code="EARTH_GROUP_UNDEFINED",
-                elements=elements,
-                stacklevel=4,
-            )
-
-    def _compute_current_reduction_factors(
-        self,
-    ) -> Tuple[
-        Dict[float, Optional[float]],
-        Dict[float, Optional[complex]],
-        Dict[float, List[str]],
-        Dict[float, Optional[complex]],
-        Dict[float, Optional[complex]],
-        List[Tuple[float, float, float]],
-    ]:
-        r"""
-        Reduction factor on a current basis: earth-return current over fault current.
-
-        The reduction factor describes the effect of the inductive coupling
-        between the phase conductor and the earth conductor, and as a measured
-        quantity it is
-
-        $$
-        r = \frac{|\underline{I}_E|}{|\underline{I}_F|}
-        $$
-
-        with ``I_E`` the **sum of the electrode currents of every bus that feeds
-        the soil** -- not the electrode current at the faulted station. Where the
-        stations are bonded through continuous cable shields the current spreads
-        along them and leaks into the soil at every one of them, which is exactly
-        what makes the quantity worth reporting. Measured on a six-station
-        feeder, taking only the faulted station understates ``r`` by a factor of
-        1.8 to 4.7 depending on where the fault sits.
-
-        Summing over *all* buses would give zero identically -- whatever enters
-        the soil leaves it again -- so the buses are split into the group that
-        feeds the soil and the group that takes the current back out. The split
-        is made in the complex plane and is threshold-free; see
-        :mod:`groundinsight.utils.earth_current` for why looking for a
-        zero crossing of the potential does not work.
-
-        ``ResultReductionFactor.value``, the EPR-based factor, is left untouched
-        alongside it: that one keeps the closed form ``r = |1 - Z_m/Z_s|`` for a
-        single shielded line.
-
-        Rounding noise: electrode currents at
-        or below ``1e-9`` of the largest one join no group; the group is
-        oriented by the fault bus, or -- when the fault bus has no electrode --
-        by the fault-bus potential; and when no electrode carries more than
-        ``1e-9`` of the fault current there is no group at all. See
-        :mod:`groundinsight.utils.earth_current`.
-
-        Returns
-        -------
-        tuple
-            ``(r, I_E, feeding buses, U_E of the group, Z_E of the group,
-            undefined points)``, the first five per frequency. ``None`` (or an
-            empty list) where the frequency carries no fault current or no
-            earth-return group exists; the last element lists those
-            frequencies of the second kind as ``(frequency, max|I_a|, |I_F|)``.
-
-        Warns
-        -----
-        ModelAssumptionWarning
-            ``EARTH_GROUP_SPREAD`` (elements: the fault and its bus), once per
-            run, when at some frequency the electrode currents are spread in
-            angle (separation below 0.9 -- see
-            :func:`~groundinsight.utils.earth_current.split_earth_currents`):
-            ``I_E`` and ``value_current`` then describe the dominant direction
-            of the earth current only.
-
-        Notes
-        -----
-        A fault on the bus of every source that feeds it leaves the earthing
-        network unexcited: the EPR and the earth-return current are zero and
-        both reduction factors are ``None``. That is recorded on the result
-        as the info diagnostic ``FAULT_AT_FEEDING_BUS`` (elements: the fault
-        and its bus) through :func:`~groundinsight.diagnostics.note`, not
-        raised as a warning.
-        """
-        factors: Dict[float, Optional[float]] = {}
-        earth_currents: Dict[float, Optional[complex]] = {}
-        feeding: Dict[float, List[str]] = {}
-        earthing_voltages: Dict[float, Optional[complex]] = {}
-        earthing_impedances: Dict[float, Optional[complex]] = {}
-        vanished: List[Tuple[float, float, float]] = []
-        spread: List[str] = []
-        fault_name = self.network.active_fault
-        fault_bus = self.network.faults[fault_name].bus
-        tables = self._network_tables()
-        names = sorted(self.bus_indices, key=self.bus_indices.__getitem__)
-
-        for freq in self.network.frequencies:
-            factors[freq] = None
-            earth_currents[freq] = None
-            feeding[freq] = []
-            earthing_voltages[freq] = None
-            earthing_impedances[freq] = None
-
-            u_vector = self.u_vectors.get(freq)
-            if u_vector is None:
-                continue
-
-            # The fault current is the sum of the source injections that reach
-            # this fault, ``Sum(scaling * I_src)``, and it is recorded as such
-            # by ``_construct_vectors``. Reading it off the injection vector at
-            # the fault bus instead gives the *net* nodal injection there, and
-            # those two differ as soon as a source sits on the fault bus:
-            # the entry is then ``I_src,F - Sum(I_src)``. With S1 = 100 A at a
-            # remote bus and S2 = 50 A on the fault bus, the net entry is
-            # -100 A instead of 150 A and the current-based reduction factor
-            # would come out 100x too small.
-            total = self.total_source_currents.get(freq)
-            if total is None:
-                continue
-            i_fault = complex(total)
-            if i_fault == 0:
-                continue
-
-            # The electrode currents exactly as ResultBus.ia reports them --
-            # computed once in solve_network, for every bus with an electrode
-            # (a stored, not open impedance) -- so that I_E is the sum of the
-            # reported currents of its group. Recomputing them here bus by bus
-            # with Python's complex division would differ from the array
-            # division in the last bit.
-            column = tables.column[float(freq)]
-            currents, usable = self._electrode_arrays()
-            rows = np.flatnonzero(usable[:, column])
-            electrode_currents: Dict[str, complex] = dict(
-                zip(
-                    [names[row] for row in rows.tolist()],
-                    currents[rows, column].tolist(),
-                    strict=True,
-                )
-            )
-
-            # No group exists when every electrode current is rounding noise
-            # against the fault current: the current returns through the
-            # shields and I_E is zero to within rounding (P9).
-            if earth_current_vanishes(electrode_currents, i_fault):
-                largest = max(
-                    (abs(v) for v in electrode_currents.values()), default=0.0
-                )
-                vanished.append((freq, largest, abs(i_fault)))
-                continue
-
-            # Anchor for a fault bus without (non-noise) electrode current:
-            # the group in phase with the fault-bus potential feeds the soil.
-            # A fault-bus potential that is itself noise orients nothing.
-            u_fault = complex(u_vector[self.bus_indices[fault_bus]])
-            u_scale = float(np.abs(u_vector).max())
-            anchor = u_fault if abs(u_fault) > NOISE_REL * u_scale else None
-            split = split_earth_currents(
-                electrode_currents,
-                reference_bus=fault_bus,
-                anchor=anchor,
-            )
-            if split is None:
-                continue
-
-            factors[freq] = abs(split.i_earth) / abs(i_fault)
-            earth_currents[freq] = split.i_earth
-            feeding[freq] = split.feeding_buses
-
-            # Diagnostics of the group (u_earthing_group / z_earthing_group):
-            # its current-weighted mean potential and that mean over I_E. The
-            # EN 50522 quantities U_E / Z_E are the fault-bus EPR and the
-            # driving-point impedance (see compute_reduction_factors). The chain
-            # mean = I_F * (mean / I_E) * |I_E| / |I_F| closes on these by
-            # construction, which is why it checks nothing.
-            potentials = {
-                name: complex(u_vector[idx])
-                for name, idx in self.bus_indices.items()
-            }
-            u_e, equipotential = earthing_voltage(
-                potentials, electrode_currents, split.feeding_buses
-            )
-            earthing_voltages[freq] = u_e
-            if split.i_earth != 0:
-                earthing_impedances[freq] = u_e / split.i_earth
-            if equipotential < 0.9 and split.feeding_buses:
-                logger.info(
-                    "The stations counted as one earth group at %s Hz are "
-                    "not at one potential (coherence %.3f), so the group mean "
-                    "u_earthing_group = %.4g V averages genuinely different "
-                    "voltages and z_earthing_group follows it. U_E of EN 50522 "
-                    "is the EPR at the fault bus (u_earthing). Group: "
-                    "%s.",
-                    freq,
-                    equipotential,
-                    abs(u_e),
-                    ", ".join(split.feeding_buses),
-                )
-            if split.separation < 0.9:
-                spread.append(
-                    f"{freq:g} Hz: separation {split.separation:.3f}, "
-                    f"I_E = {abs(split.i_earth):.4g} A, r_I = {factors[freq]:.4f}, "
-                    f"feeding {', '.join(split.feeding_buses)}"
-                )
-        if spread:
-            emit(
-                ModelAssumptionWarning,
-                f"Fault '{fault_name}': the electrode currents are spread in "
-                f"angle, so splitting them into one group that feeds the soil "
-                f"and one that returns it is less sharp than usual. The "
-                f"earth-return current I_E and the current-based reduction "
-                f"factor built from it (value_current) describe the dominant "
-                f"direction only -- {'; '.join(spread)}.",
-                code="EARTH_GROUP_SPREAD",
-                elements=[("fault", fault_name), ("bus", fault_bus)],
-                stacklevel=3,
-            )
-        undefined = self._report_vanished_earth_current(
-            vanished, fault_name, fault_bus
-        )
-        return (
-            factors,
-            earth_currents,
-            feeding,
-            earthing_voltages,
-            earthing_impedances,
-            undefined,
-        )
-
-    def _report_vanished_earth_current(
-        self,
-        vanished: List[Tuple[float, float, float]],
-        fault_name: str,
-        fault_bus: str,
-    ) -> List[Tuple[float, float, float]]:
-        """
-        Sort the frequencies without an earth current into their two causes.
-
-        An electrode current that is rounding noise against the fault current
-        means one of two things. Either the earthing network is excited and
-        the current genuinely returns through the screens -- then the
-        reduction factor is undefined and the caller warns
-        (``REDUCTION_FACTOR_UNDEFINED``). Or nothing is injected at all,
-        because the fault sits on the bus of every source that feeds it: the
-        fault current closes through that station's own earthing back to the
-        source. That second case explains empty ratios without casting doubt
-        on the result, so it is recorded as the info diagnostic
-        ``FAULT_AT_FEEDING_BUS`` and not raised as a warning -- studies place
-        trial faults on every bus, the source bus included.
-
-        Parameters
-        ----------
-        vanished : list of tuple of float
-            ``(frequency, largest electrode current, |I_F|)`` of every
-            frequency whose electrode currents are all noise.
-        fault_name : str
-            The active fault.
-        fault_bus : str
-            Its bus.
-
-        Returns
-        -------
-        list of tuple of float
-            The entries of ``vanished`` at which the earthing network is
-            excited, for the caller's warning.
-        """
-        undefined = [entry for entry in vanished if self._is_excited(entry[0])]
-        unexcited = [entry[0] for entry in vanished if not self._is_excited(entry[0])]
-        if unexcited:
-            note(
-                ModelAssumptionWarning,
-                f"Fault '{fault_name}' sits on the bus of every source that "
-                f"feeds it at {', '.join(f'{freq:g}' for freq in unexcited)} Hz: "
-                f"the fault current closes through that station's own earthing "
-                f"back to the source, nothing is injected into the earthing "
-                f"network, and the EPR and the earth-return current are zero "
-                f"there. Both reduction factors (value, value_current) are "
-                f"undefined for such a fault and reported as None; U_E is 0 V "
-                f"and Z_E is still the driving-point impedance of the fault "
-                f"bus.",
-                code="FAULT_AT_FEEDING_BUS",
-                elements=[("fault", fault_name), ("bus", fault_bus)],
-            )
-        return undefined
-
-    def _warn_on_reduction_factor_divergence(
-        self,
-        coupling: Dict[float, Optional[float]],
-        current: Dict[float, Optional[float]],
-    ) -> None:
-        r"""
-        Point out where the two reduction factors part company, and why.
-
-        They are not two computations of one number. For a route with shield
-        impedance ``Z_s``, mutual impedance ``Z_m`` and station electrodes
-        summing to ``Z_E`` along the earth-return path,
-
-        $$
-        r_\text{coupling} = \frac{Z_s - Z_m}{Z_s}
-        \qquad
-        r_I = \frac{Z_s - Z_m}{Z_s + Z_E}
-        $$
-
-        so their ratio is the current divider ``Z_s / (Z_s + Z_E)`` and nothing
-        else. ``value`` is the **ideally bonded** limit -- the tabulated property
-        of the cable, ``1 - Z_m/Z_s``, independent of the station earths by
-        construction. ``value_current`` is what the earthing system of *this*
-        network actually passes into the soil. Verified against the closed form
-        to machine precision over five decades of electrode impedance: they
-        converge exactly as ``Z_E -> 0`` and differ by a factor of 45 at 10 Ohm
-        electrodes against a 0.45 Ohm shield.
-
-        A large gap is therefore a statement about the network, not a defect:
-        the stations are not bonded well enough for the cable's tabulated
-        reduction factor to describe what the soil sees.
-
-        Parameters
-        ----------
-        coupling : Dict[float, Optional[float]]
-            ``ResultReductionFactor.value`` per frequency.
-        current : Dict[float, Optional[float]]
-            ``ResultReductionFactor.value_current`` per frequency.
-        """
-        for freq in self.network.frequencies:
-            r_c = coupling.get(freq)
-            r_i = current.get(freq)
-            if r_c in (None, 0) or r_i is None:
-                continue
-            divider = r_i / r_c
-            if divider >= 0.5:
-                continue
-            # INFO, not WARNING: a wide gap is a property of the network, not a
-            # defect, and it is the normal case for stations with ordinary
-            # electrodes. Raising it to a warning on every such network is how
-            # a log gets trained out of being read.
-            logger.info(
-                "At %s Hz the coupling-based reduction factor is %.4f while the "
-                "current-based one is %.4f -- a current divider of %.3f between "
-                "the shield path and the earth path. The two are the same "
-                "quantity only when the station electrodes vanish against the "
-                "shield impedance: r_coupling = (Z_s-Z_m)/Z_s is the ideally "
-                "bonded limit and the tabulated cable property, r_current = "
-                "(Z_s-Z_m)/(Z_s+Z_E) is what this earthing system passes into "
-                "the soil. A divider this small says the stations are not bonded "
-                "well enough for the cable value to describe the soil current; "
-                "it is a property of the network, not a numerical artefact.",
-                freq,
-                r_c,
-                r_i,
-                divider,
             )
 
     def compute_grounding_impedance(self):
@@ -4620,15 +4064,10 @@ class ElectricalNetwork:
         measurement at the station sees, the stations bonded to it through
         cable shields included -- and it is computed alongside the reduction
         factors as ``ResultReductionFactor.z_earthing``, which this method
-        copies. With ``U_E`` the EPR at the fault bus and
-        ``r = |1 - Z_m/Z_s|`` the norm's chain ``U_E = r * 3*I_0 * Z_E`` then
-        holds where the norm's assumptions hold (a fault far from the infeed
-        on a long bonded run), as a physical statement rather than by
-        construction.
-
-        The quotient ``U_E / I_E`` over the earth group is not used for
-        ``Z_E`` (it is kept as ``z_earthing_group``): on a long homogeneous
-        chain it comes out 44.5 % below the driving-point impedance.
+        copies. With ``U_E`` the EPR at the fault bus the norm's chain
+        ``U_E = r * I_F * Z_E`` holds exactly, because ``r`` is defined through
+        it (:meth:`compute_reduction_factors`); the check of ``r`` is the
+        short circuit of the fault bus, not this identity.
         ``docs/explanation/reduction-factors.md`` and
         ``docs/api/electrical_network.md`` state the same definition.
 

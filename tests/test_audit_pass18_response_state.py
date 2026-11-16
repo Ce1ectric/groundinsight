@@ -16,9 +16,10 @@ derived from it were the ones the solver itself reports.
 - **A2** -- ``BusResponse.evaluate`` computed ``Z_G = u_b / (r * I_F)``, the
   definition 0.6.0 replaced, and did it with the voltage of the *varied* bus
   rather than the fault bus. Against ``run_fault`` that is a factor of 39.
-- **A1** -- ``r_epr`` was carried through as an invariant. It is one only when
-  the varied bus is the fault bus; away from it the factor moves with the
-  electrode by 18 %.
+- **A1** -- the reduction factor was carried through as an invariant. It is
+  one only when the varied bus is the fault bus (the short circuit that
+  defines ``r`` takes that electrode out); away from it the factor moves with
+  the electrode.
 
 Each test compares against a genuine ``run_fault`` on the same network rather
 than against a stored number, so the assertion is "the closed form and the
@@ -44,7 +45,8 @@ def _network(z_bus=None, *, bus="B1", rho=100.0, bus_formula="10"):
     """
     Four-bus chain, fault in the middle, two branch types with different
     ``Z_m/Z_s``. The asymmetry matters: with one branch type the EPR-based
-    reduction factor comes out invariant by accident and A1 stays invisible.
+    reduction factor of the former EPR-ratio definition came out invariant by
+    accident and A1 stayed invisible.
     """
     bus_type = BusType(
         name="bt", system_type="MV", voltage_level=20.0,
@@ -171,34 +173,35 @@ def test_the_grounding_impedance_is_the_en50522_one(bus, z_bus):
     )
 
 
-# --- A1: r_epr per electrode --------------------------------------------------
+# --- A1: r per electrode -------------------------------------------------------
 
 
 @pytest.mark.parametrize("z_bus", [0.1, 10.0, 1000.0])
-def test_the_epr_reduction_factor_is_evaluated_for_the_electrode(z_bus):
+def test_the_reduction_factor_is_evaluated_for_the_electrode(z_bus):
     """
-    Away from the fault bus the Möbius denominators do not cancel, so ``r``
-    moves with the electrode. Checked against a genuine solve at each value
-    rather than against the spread alone.
+    Away from the fault bus ``u_F`` and ``Z_E`` move with the electrode by
+    different Möbius factors, so ``r = |u_F| / (|Z_E| |I_F|)`` moves with it.
+    Checked against a genuine solve at each value rather than against the
+    spread alone.
     """
     response = gi.bus_response(_network(10.0), fault="F", bus="B1")
     expected = _network(z_bus).results["F"].reduction_factor.value[50.0]
-    assert _row(response, z_bus)["r_epr"][0] == pytest.approx(expected, rel=1e-9)
+    assert _row(response, z_bus)["r"][0] == pytest.approx(expected, rel=1e-9)
 
 
-def test_the_epr_reduction_factor_actually_varies_away_from_the_fault_bus():
+def test_the_reduction_factor_actually_varies_away_from_the_fault_bus():
     """The regression this pins: reporting one constant across the curve."""
     response = gi.bus_response(_network(10.0), fault="F", bus="B1")
-    values = response.sweep([0.1, 10.0, 1000.0])["r_epr"].to_list()
+    values = response.sweep([0.1, 10.0, 1000.0])["r"].to_list()
     assert max(values) - min(values) > 0.05
 
 
-def test_the_epr_reduction_factor_stays_invariant_at_the_fault_bus():
+def test_the_reduction_factor_stays_invariant_at_the_fault_bus():
     """The invariance is real where it was derived -- at the fault bus the
-    denominator cancels exactly -- and the per-electrode evaluation must not
-    disturb it."""
+    factor ``1 + Y_B Z_net`` cancels exactly -- and the per-electrode
+    evaluation must not disturb it."""
     response = gi.bus_response(_network(10.0, bus="B2"), fault="F", bus="B2")
-    values = response.sweep([0.01, 1.0, 100.0, None, 0.0])["r_epr"].to_list()
+    values = response.sweep([0.01, 1.0, 100.0, None, 0.0])["r"].to_list()
     assert values == pytest.approx([values[0]] * len(values), rel=1e-12)
 
 

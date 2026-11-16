@@ -155,7 +155,8 @@ def test_harmonics_explains_every_code_it_shows(harmonics):
 
 
 def test_harmonics_two_bus_line_by_closed_form(harmonics):
-    """U_E and r of the two-station line: I_E = I*(Z_s - Z_m)/(Z_UW + Z_S + Z_s), U_E = Z_S*I_E."""
+    """U_E and r of the two-station line: I_a = I*(Z_s - Z_m)/(Z_UW + Z_S + Z_s), U_E = Z_S*I_a;
+    r from the ideal fault electrode, |Z_s - Z_m|/|Z_UW + Z_s|."""
     ns, _stdout, _records = harmonics
     figures = ns["figures"]
     rho, length = 100.0, ns["LENGTH_KM"]
@@ -163,11 +164,11 @@ def test_harmonics_two_bus_line_by_closed_form(harmonics):
     rms = 0.0
     for f, current in ns["SOURCE_VALUES"].items():
         zs, zm = _carson_trefoil(f, rho, length)
-        i_earth = current * (zs - zm) / (z_uw + z_s + zs)
-        u_e = abs(z_s * i_earth)
+        i_soil = current * (zs - zm) / (z_uw + z_s + zs)
+        u_e = abs(z_s * i_soil)
         row = figures.filter(pl.col("frequency_Hz") == f).row(0, named=True)
         assert row["U_E_V"] == pytest.approx(u_e, rel=1e-9)
-        assert row["r_current"] == pytest.approx(abs(i_earth) / current, rel=1e-9)
+        assert row["r"] == pytest.approx(abs((zs - zm) / (z_uw + zs)), rel=1e-9)
         assert row["I_F_A"] == pytest.approx(current, rel=1e-12)
         rms += u_e ** 2
     rms_row = figures.filter(pl.col("is_rms")).row(0, named=True)
@@ -825,7 +826,7 @@ def test_en50522_key_figures_are_the_stated_ones(en50522):
 
 def test_en50522_page_maps_the_symbols_to_the_res_fault_columns():
     text = _flat(_page("howto/en50522-check.md"))
-    for column in ("U_E_V", "Z_E_Ohm", "r_current", "I_E_A", "I_F_A"):
+    for column in ("U_E_V", "Z_E_Ohm", "r", "I_E_A", "I_F_A"):
         assert f"`{column}` of `res_fault()`" in text or f"`{column}`, " in text, column
     assert "net.res_fault(fault)" in text
 
@@ -836,8 +837,9 @@ def test_en50522_key_figures_by_the_reference_solver(en50522):
 
     ``I_F`` is the sum of the source currents, ``U_E`` the potential of the
     fault bus, ``Z_E`` the driving-point impedance of the earthing network at
-    the fault bus, ``I_E`` the earth-return group of the electrode currents
-    (brute-force half-plane split) and ``r = |I_E| / |I_F|``; the RMS row is
+    the fault bus, ``I_E`` the current into an ideal electrode at the fault
+    bus (the reference holds it at remote earth) and ``r = |I_E| / |I_F|``;
+    the RMS row is
     the root sum of squares, without ratio and impedance.
     """
     ns, _stdout, _records = en50522
@@ -849,13 +851,13 @@ def test_en50522_key_figures_by_the_reference_solver(en50522):
         rd = ref.reference_network(net, f, "F")
         solution = ref.solve_oneway(rd)
         mapped = ref.to_package_frame(solution)
-        i_earth, _group = ref.half_plane_split(mapped["ia"], rd["fault_bus"])
+        i_earth = ref.solve_oneway(rd, shorted=True)["I_short"]
         expected = {
             "I_F_A": abs(solution["I_F"]),
             "U_E_V": abs(mapped["u"][fault_bus]),
             "Z_E_Ohm": abs(ref.driving_point_impedance(rd, fault_bus)),
             "I_E_A": abs(i_earth),
-            "r_current": abs(i_earth) / abs(solution["I_F"]),
+            "r": abs(i_earth) / abs(solution["I_F"]),
         }
         for column, value in expected.items():
             assert rows[f][column] == pytest.approx(value, rel=1e-9), (f, column)
@@ -864,5 +866,5 @@ def test_en50522_key_figures_by_the_reference_solver(en50522):
     rms = frame.filter(pl.col("is_rms")).row(0, named=True)
     for column, total in squares.items():
         assert rms[column] == pytest.approx(math.sqrt(total), rel=1e-9), column
-    assert rms["r_current"] is None and rms["Z_E_Ohm"] is None
+    assert rms["r"] is None and rms["Z_E_Ohm"] is None
     assert rms["U_E_V"] == pytest.approx(ns["U_E_RMS"], rel=1e-12)

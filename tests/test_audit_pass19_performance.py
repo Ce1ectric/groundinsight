@@ -58,11 +58,10 @@ from tests import _dense_oracle as oracle
 from tests._warning_policy import acknowledge
 
 #: The kernel is compared with its dense oracle on random and structured
-#: networks, where rings, Thevenin sources, 0 Hz bins, floating fault sides
-#: and electrode currents spread in angle occur by construction.
+#: networks, where rings, Thevenin sources, 0 Hz bins and floating fault
+#: sides occur by construction.
 pytestmark = acknowledge(
-    "DC_LIMIT", "EARTH_GROUP_SPREAD", "EARTH_GROUP_UNDEFINED",
-    "EARTHING_IMPEDANCE_UNDEFINED", "PHASE_PROXY", "SOURCE_WITHOUT_PHASE_PATH",
+    "DC_LIMIT", "EARTHING_IMPEDANCE_UNDEFINED", "PHASE_PROXY", "SOURCE_WITHOUT_PHASE_PATH",
     "THEVENIN_COUPLING",
 )
 
@@ -1113,9 +1112,7 @@ def test_bus_response_matches_a_dense_solve(name, builder, bus):
             Y[k, k] -= 1.0 / z
         unit = np.zeros(len(reference.bus_names), dtype=complex)
         unit[k] = 1.0
-        rhs = np.column_stack(
-            [reference.i_vector[:, j], unit, reference.i_inj[:, j]]
-        )
+        rhs = np.column_stack([reference.i_vector[:, j], unit])
         solved = np.linalg.solve(Y, rhs)
         # 1e-12, or the forward-error bound where the system is condition-
         # limited (the 0 Hz bin with a DC stand-in, kappa ~ 1e10, see P13)
@@ -1124,12 +1121,8 @@ def test_bus_response_matches_a_dense_solve(name, builder, bus):
         z_scale = np.abs(solved[:, 1]).max()
         got_u = np.array([response.u_open[f][b] for b in reference.bus_names])
         got_z = np.array([response.z_column[f][b] for b in reference.bus_names])
-        got_nm = np.array(
-            [response.u_open_no_mutual[f][b] for b in reference.bus_names]
-        )
         assert np.abs(got_u - solved[:, 0]).max() <= tol * u_scale, (f, tol)
         assert np.abs(got_z - solved[:, 1]).max() <= tol * z_scale, (f, tol)
-        assert np.abs(got_nm - solved[:, 2]).max() <= tol * np.abs(solved[:, 2]).max()
         assert abs(response.z_network[f] - solved[k, 1]) <= tol * abs(solved[k, 1])
 
         earthing = model.nodal(f, "python")[3].dense()

@@ -37,18 +37,12 @@ import pytest
 #: messages, so their names say which message is meant.
 ACKNOWLEDGEABLE: Dict[str, Tuple[str, str]] = {
     # ModelAssumptionWarning
-    "EARTH_GROUP_SPREAD": (
-        "ModelAssumptionWarning", r".*the electrode currents are spread in angle"),
-    "EARTH_GROUP_UNDEFINED": (
-        "ModelAssumptionWarning", r".*no earth-return group exists"),
     "EARTHING_IMPEDANCE_UNDEFINED": (
-        "ModelAssumptionWarning", r".*so the earthing impedance Z_E .* is reported as None"),
+        "ModelAssumptionWarning", r".*so the earthing impedance Z_E .* reported as None"),
     "PARALLEL_COEFFICIENT_DEFAULT": (
         "ModelAssumptionWarning", r"Source\(s\) .* over more than one path while parallel_coefficient"),
     "PHASE_PROXY": (
         "ModelAssumptionWarning", r"The phase network around fault .* carries at least one cycle"),
-    "REDUCTION_FACTOR_UNDEFINED": (
-        "ModelAssumptionWarning", r".*the EPR-based reduction factor"),
     "SOURCE_WITHOUT_PHASE_PATH": (
         "ModelAssumptionWarning", r"Source .* reaches fault .* but has no phase-conductor connection"),
     "SC_KAPPA_MIXED": (

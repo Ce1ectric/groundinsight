@@ -58,6 +58,33 @@ version section when a release is cut.
   `model_validate_json`. Files of version 1 and without a version still
   load unchanged.
 
+- **One reduction factor: `r = |U_E / (Z_E · I_F)|`.** `ResultReductionFactor.value`
+  is now the reduction factor of EN 50522 in the form of the norm's chain
+  `U_E = r · Z_E · I_F`, with `U_E` the EPR and `Z_E` the driving-point
+  impedance of the earthing network at the fault bus. By Norton's theorem
+  `I_E = U_E / Z_E` (`i_earth`) is the current into an ideal electrode at the
+  fault bus: the part of the fault current that does not return through
+  shields and conductors to the sources, induced or galvanic. The chain holds
+  exactly, needs no balanced state far from the fault, and `r` does not depend
+  on the fault-bus electrode; on a long line it is `|1 − Z_m/Z_s|`, for one
+  cable from a source earthed with `Z_A` it is `|(Z_s − Z_m)/(Z_s + Z_A)|`.
+  Before, `value` was the ratio of the fault-bus EPR with and without the
+  coupling (which counted the galvanic return to a source station bonded
+  through the shields as earth current) and `value_current` / `i_earth` a sum
+  of electrode currents over a group of buses (a modelling choice that moved
+  with the fault location). On a meshed 20 kV network with both infeeds bonded
+  through the shields the EPR ratio gave 0.34, the group sum 0.10 and the new
+  `r` 0.23 — the value that reproduces `U_E` with the measured `Z_E`.
+  *Migration:* read `value` (or the column `r`); `value_current` still works
+  as a deprecated alias of `value`. In `res_fault` the columns `r_epr` and
+  `r_current` are replaced by `r` (`RES_FAULT_SCHEMA_VERSION` 2), in
+  `res_all_impedances` `reduction_factor` is `r` and
+  `reduction_factor_current` is gone, in `bus_response` frames `r_epr` and
+  `r_current` are replaced by `r` and `BusResponse.r_epr` by `BusResponse.r`,
+  and the key-figure DTO and the command line carry `r`. Stored results of
+  2026.11 are read with `r` and `I_E` recomputed exactly from their `U_E`,
+  `Z_E` and `I_F` (info diagnostic `LEGACY_REDUCTION_FACTOR`).
+
 ### Added
 
 - **Earthing characteristics (`gi.EarthingCharacteristic`).** A table of the
@@ -258,11 +285,30 @@ version section when a release is cut.
 - **DTO schema version 2 (`groundinsight.api.DTO_SCHEMA_VERSION`).** DTOs
   are written as version 2 and versions 1 and 2 are read
   (`READABLE_DTO_SCHEMA_VERSIONS`): version 2 adds fields with defaults
-  only, so requests written for version 1 still parse.
+  only, so requests written for version 1 still parse; a key-figure row of
+  version 1 is read without its `r_epr` and `r_current`, whose definitions
+  are gone (see *Breaking*).
 - **`MemoryStore` keeps the text of a project file** (diagram and views
   included) instead of the network's JSON; `ProjectStore` gains
   `load_project` / `save_project`, which default to the network alone, as
   `DatabaseStore` keeps it.
+
+### Deprecated
+
+- **`ResultReductionFactor.value_current`.** An alias of `value` with a
+  `DeprecationWarning`; removal no earlier than two releases and six months
+  after this release.
+
+### Removed
+
+- **The group quantities of the earth current**: `ResultReductionFactor.earth_buses`,
+  `u_earthing_group` and `z_earthing_group`, the module
+  `groundinsight.utils.earth_current`, and the diagnostics
+  `EARTH_GROUP_SPREAD`, `EARTH_GROUP_UNDEFINED` and
+  `REDUCTION_FACTOR_UNDEFINED` (see *Breaking*). `BusResponse.voltages_no_mutual`
+  and the solve without coupling behind the EPR ratio
+  (`ElectricalNetwork.u_vectors_no_mutual`, `i_vectors_no_mutual`) went with
+  it; `run_fault` saves that back substitution per frequency.
 
 ### Fixed
 

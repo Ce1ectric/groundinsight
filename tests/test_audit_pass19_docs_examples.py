@@ -32,6 +32,8 @@ import mpmath
 import numpy as np
 import pytest
 
+import groundinsight as gi
+
 from groundinsight.utils.impedance_calculator import DCLimitWarning, compute_impedance
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -143,10 +145,11 @@ def _driving_point(net, bus, f):
 
 
 def test_types_snippet_closed_form_equals_model(types_ns):
-    """(a) closed form = (c) one-branch run_fault, to rounding, at 50 and 250 Hz.
+    """(a) closed form = (c) one-branch run_fault, at 50 and 250 Hz.
 
-    ``value`` reproduces ``|1 - Z_m/Z_s|`` exactly for one line, so the only
-    difference left is floating point. The branch impedances the model
+    ``value`` of one line from an infeed earthed with ``Z_A`` is
+    ``|(Z_s - Z_m)/(Z_s + Z_A)|``; the snippet's ideal infeed earth
+    (1e-12 Ohm) leaves about 5e-13 against ``|1 - Z_m/Z_s|``. The branch impedances the model
     evaluated from the formula strings must equal the closed form as well.
     """
     rows = types_ns["ROWS"]
@@ -420,6 +423,16 @@ def test_en50522_snippet_quantities(en50522_ns):
         if row["bus_name"] == fault_bus and row["is_rms"]
     ]
     assert en50522_ns["U_E_RMS"] == pytest.approx(rms[0], rel=1e-12)
+    # Second way for r: the fault station earthed ideally, the current into
+    # that electrode over 3I_0 (Norton).
+    shorted = net.model_copy(deep=True)
+    shorted.buses[fault_bus].impedance = {
+        f: gi.ComplexNumber(real=1e-9, imag=0.0) for f in shorted.frequencies}
+    gi.run_fault(shorted, "F")
+    for row in rows:
+        epr_short = next(r["EPR_V"] for r in shorted.res_buses("F").iter_rows(named=True)
+                         if r["bus_name"] == fault_bus and r["frequency_Hz"] == row["f"])
+        assert epr_short / 1e-9 / row["I_F"] == pytest.approx(row["r"], rel=1e-6)
 
 
 def test_en50522_snippet_numbers_on_the_page(en50522_ns):
@@ -427,8 +440,8 @@ def test_en50522_snippet_numbers_on_the_page(en50522_ns):
     by_f = {row["f"]: row for row in en50522_ns["ROWS"]}
     assert by_f[50.0]["U_E"] == pytest.approx(384.4, abs=0.05)
     assert by_f[50.0]["Z_E"] == pytest.approx(1.189, abs=5e-4)
-    assert by_f[50.0]["r"] == pytest.approx(0.2165, abs=5e-5)
-    assert by_f[50.0]["chain"] == pytest.approx(257.3, abs=0.05)
+    assert by_f[50.0]["r"] == pytest.approx(0.3234, abs=5e-5)
+    assert by_f[50.0]["chain"] == pytest.approx(384.4, abs=0.05)
     assert by_f[250.0]["U_E"] == pytest.approx(9.10, abs=0.005)
-    assert by_f[250.0]["chain"] == pytest.approx(8.56, abs=0.005)
+    assert by_f[250.0]["chain"] == pytest.approx(9.10, abs=0.005)
     assert en50522_ns["U_E_RMS"] == pytest.approx(384.6, abs=0.05)

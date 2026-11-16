@@ -988,7 +988,6 @@ CANONICAL_NAMES = {
 DEPRECATED_ALIASES: Dict[str, Dict[str, str]] = {
     "groundinsight.BusResponse.driving_point": {"freq": "frequency"},
     "groundinsight.BusResponse.voltages": {"freq": "frequency"},
-    "groundinsight.BusResponse.voltages_no_mutual": {"freq": "frequency"},
     "groundinsight.BusResponse.worst_case_electrode": {"freq": "frequency"},
     "groundinsight.Network.set_active_fault": {"fault_name": "fault"},
     "groundinsight.Network.sources_reaching": {"fault_name": "fault"},

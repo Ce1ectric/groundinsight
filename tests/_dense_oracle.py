@@ -17,9 +17,7 @@ What it shares with the package is deliberately limited to model *rules*
 that are not part of the kernel and are tested on their own:
 :meth:`Network.sources_reaching` (which sources feed the fault),
 :func:`is_short_circuit` / :func:`dc_substitute_impedance` (how a 0 Hz short is
-replaced) and, for the earth-group quantities only,
-:func:`split_earth_currents` / :func:`earthing_voltage` (how the electrode
-currents are split into the group that feeds the soil). Everything the kernel
+replaced). Everything the kernel
 computes -- admittances, stamps, the phase-network solve, the Norton coupling
 terms, the nodal solves, electrode and shield currents -- is recomputed here.
 
@@ -60,7 +58,6 @@ import numpy as np
 import scipy.sparse as sp
 from scipy.sparse.linalg import splu
 
-from groundinsight.utils.earth_current import earthing_voltage, split_earth_currents
 from groundinsight.utils.impedance_calculator import (
     dc_substitute_impedance,
     is_short_circuit,
@@ -892,17 +889,10 @@ def compare(
     the dimensionless reduction factors absolutely, impedances against their
     own maximum. RMS columns are checked as well.
 
-    The earth-group quantities (``I_E``, ``r_current``, feeding buses) are
-    compared only where they are numerically defined (finding P9), with the
-    group oriented as the kernel orients it -- by the fault bus, or by the
-    fault-bus potential when the fault bus carries no electrode current of
-    its own; buses whose electrode current is rounding noise
-    (``|I_a| <= 1e-9 max``) or lies on the half-plane boundary are excluded
-    from the membership check. ``Z_G`` is the driving point ``Z_dp(F)`` of
-    the earthing network (decision F4) and compared at every bin where the
-    oracle has a finite one; before F4 it was the group impedance
-    ``U_E / I_E`` and was compared with the group. ``value`` is compared
-    where ``|u_F,no mutual| > 1e-9 max|U|``.
+    ``Z_G`` is the driving point ``Z_dp(F)`` of the earthing network and
+    compared at every bin where the oracle has a finite one; the earth
+    current ``I_E = U_E / Z_E`` and the reduction factor
+    ``r = |I_E| / |I_F|`` where the bin also carries a fault current.
 
     Parameters
     ----------
@@ -919,8 +909,7 @@ def compare(
     Returns
     -------
     dict
-        Deviation per quantity; ``"earth_buses"`` is 0.0 when the memberships
-        agree and ``inf`` otherwise.
+        Deviation per quantity.
     """
     pkg = package_arrays(network, fault)
     result = network.results[fault]
@@ -960,93 +949,31 @@ def compare(
     rf = result.reduction_factor
     k_fault = oracle.bus_names.index(network.faults[fault].bus)
 
-    # EPR-based reduction factor, where its denominator is not noise.
-    r_dev = 0.0
-    for j, f in zip(cols, freqs, strict=True):
-        u_max = np.abs(oracle.u[:, j]).max() if oracle.u.size else 0.0
-        denom = abs(oracle.u_no_mutual[k_fault, j])
-        if degenerate or not denom > 1e-9 * u_max:
-            continue
-        expected = abs(oracle.u[k_fault, j]) / denom
-        got = rf.value.get(f)
-        r_dev = max(r_dev, float("inf") if got is None else abs(got - expected))
-    dev["r_epr"] = r_dev
-
-    has_group_fields = "z_earthing_group" in type(rf).model_fields
-    ie_dev = ri_dev = zg_dev = 0.0
-    membership_ok = True
+    # The reduction factor r = |U_E / (Z_E I_F)| and the earth current
+    # I_E = U_E / Z_E, from the oracle's own potential and driving point,
+    # wherever Z_E is finite and the frequency carries a fault current.
+    r_dev = ie_dev = zg_dev = 0.0
     z_scale = 0.0
     z_pairs: List[Tuple[complex, complex]] = []
     for j, f in zip(cols, freqs, strict=True):
-        if degenerate:
+        expected_z = complex(oracle.z_dp[j])
+        if not (math.isfinite(expected_z.real) and math.isfinite(expected_z.imag)):
             continue
-        currents = oracle.electrode[j]
-        values = np.array(list(currents.values()), dtype=complex)
-        if values.size == 0:
+        z_pairs.append((_cn(result.grounding_impedance.value.get(f)), expected_z))
+        z_scale = max(z_scale, abs(expected_z))
+        i_f = complex(oracle.i_fault[j])
+        if degenerate or i_f == 0 or expected_z == 0:
             continue
-        mx = float(np.abs(values).max())
-        i_f = abs(oracle.i_fault[j])
-        if not (mx > 1e-9 * max(i_scale, 1e-300)) or i_f == 0:
+        expected_ie = complex(oracle.u[k_fault, j]) / expected_z
+        got_ie, got_r = rf.i_earth.get(f), rf.value.get(f)
+        if got_ie is None or got_r is None:
+            r_dev = ie_dev = float("inf")
             continue
-        # Orientation as in the kernel (P9): the fault-bus potential decides
-        # when the fault bus has no electrode current of its own, unless it
-        # is itself rounding noise.
-        u_fault = complex(oracle.u[k_fault, j])
-        u_max = float(np.abs(oracle.u[:, j]).max())
-        anchor = u_fault if abs(u_fault) > 1e-9 * u_max else None
-        split = split_earth_currents(
-            currents, reference_bus=network.faults[fault].bus, anchor=anchor
-        )
-        if split is None:
-            continue
-        half = 0.5 * float(np.abs(values).sum())
-        if not abs(split.i_earth) > 1e-6 * half:
-            continue  # I_E is cancellation noise (P9)
-        got_ie = rf.i_earth.get(f)
-        if got_ie is None:
-            ie_dev = float("inf")
-            continue
-        got_ie = complex(got_ie)
-        # membership, without noise and boundary buses
-        direction = split.i_earth / abs(split.i_earth)
-        excluded = {
-            name
-            for name, v in currents.items()
-            if abs(v) <= 1e-9 * mx
-            or abs((v * direction.conjugate()).real) <= 1e-9 * mx
-        }
-        want = set(split.feeding_buses) - excluded
-        have = set(rf.earth_buses.get(f, [])) - excluded
-        if want != have:
-            membership_ok = False
-        ie_dev = max(ie_dev, abs(got_ie - split.i_earth) / i_scale)
-        expected_r = abs(split.i_earth) / i_f
-        got_r = rf.value_current.get(f)
-        ri_dev = max(ri_dev, float("inf") if got_r is None else abs(got_r - expected_r))
-        if not has_group_fields:
-            # before decision F4: the current-weighted group impedance
-            potentials = {
-                name: complex(oracle.u[k, j]) for k, name in enumerate(oracle.bus_names)
-            }
-            u_e, _ = earthing_voltage(potentials, currents, split.feeding_buses)
-            expected_z = u_e / split.i_earth
-            z_pairs.append(
-                (_cn(result.grounding_impedance.value.get(f)), complex(expected_z))
-            )
-            z_scale = max(z_scale, abs(expected_z))
-    if has_group_fields:
-        # Z_E = Z_dp(F) (decision F4) is a property of the earthing network
-        # and defined whether or not an earth group exists: every bin.
-        for j, f in zip(cols, freqs, strict=True):
-            expected_z = complex(oracle.z_dp[j])
-            if not (math.isfinite(expected_z.real) and math.isfinite(expected_z.imag)):
-                continue
-            z_pairs.append((_cn(result.grounding_impedance.value.get(f)), expected_z))
-            z_scale = max(z_scale, abs(expected_z))
+        ie_dev = max(ie_dev, abs(complex(got_ie) - expected_ie) / i_scale)
+        r_dev = max(r_dev, abs(got_r - abs(expected_ie) / abs(i_f)))
     for got, want in z_pairs:
         zg_dev = max(zg_dev, abs(got - want) / z_scale if z_scale > 0 else 0.0)
+    dev["r"] = r_dev
     dev["i_earth"] = ie_dev
-    dev["r_current"] = ri_dev
     dev["z_g"] = zg_dev
-    dev["earth_buses"] = 0.0 if membership_ok else float("inf")
     return dev

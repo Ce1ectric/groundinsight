@@ -11,8 +11,8 @@ is [`performance.py`](../snippets/performance.py); its output is at the
 `run_fault` assembles the nodal admittance matrix of the earthing network and
 the reduced matrix of the phase-conductor network straight into sparse form
 and factorises each once per frequency; the factorisation is reused for
-every source and for the second solve without coupling that the EPR-based
-reduction factor needs.
+every source and for the driving-point impedance $Z_E$ that the reduction
+factor needs.
 The cost grows almost linearly with the number of buses (exponent 1.12 from
 1000 to 8000 buses), and so does the memory. Measured on the development
 container (CPU time, median of three interleaved runs, seven frequencies;
@@ -110,7 +110,7 @@ running for hours; set the limit per network with `PathfinderSettings`:
 
 ```text title="Output of performance.py"
 ring: 500 buses, EPR at S250 = 159.44 V, paths enumerated: 0
-ring diagnostics: ['EARTH_GROUP_SPREAD']
+ring diagnostics: []
 2x2 grid: 2 simple paths from corner to corner
 3x3 grid: 12 simple paths from corner to corner
 4x4 grid: 184 simple paths from corner to corner
@@ -119,9 +119,6 @@ capped at 1000 paths: Enumerating the simple paths from bus 'B0_0' to bus 'B4_4'
 ```
 
 The path counts are the known numbers of self-avoiding corner-to-corner
-paths in a square grid (OEIS A007764); the test suite compares them. Along a
-ring of 250 km the electrode currents turn in phase, so the split into the
-stations that feed the soil and those that return the current is less sharp
-than usual — the solve says so with `EARTH_GROUP_SPREAD`, and `I_E` and the
-current-based reduction factor describe the dominant direction
+paths in a square grid (OEIS A007764); the test suite compares them. The
+500-bus ring solves without any diagnostic
 ([Warnings and diagnostics](../reference/warnings.md#codes-raised-during-a-solve)).

@@ -196,8 +196,8 @@ def _result_table(dto: FaultResultDTO, network: str) -> str:
     str
         Title, key-figure table, diagnostics.
     """
-    header = ["f [Hz]", "I_F [A]", "EPR fault [V]", "EPR max [V]", "at bus", "r_epr",
-              "r_current", "I_E [A]", "U_E [V]", "Z_E [Ohm]"]
+    header = ["f [Hz]", "I_F [A]", "EPR fault [V]", "EPR max [V]", "at bus", "r",
+              "I_E [A]", "U_E [V]", "Z_E [Ohm]"]
     rows = [header]
     for row in dto.key_figures.rows:
         rows.append([
@@ -206,8 +206,7 @@ def _result_table(dto: FaultResultDTO, network: str) -> str:
             _number(row.EPR_fault_V),
             _number(row.EPR_max_V),
             row.EPR_max_bus or "-",
-            _number(row.r_epr),
-            _number(row.r_current),
+            _number(row.r),
             _number(row.I_E_A),
             _number(row.U_E_V),
             _number(row.Z_E_Ohm),

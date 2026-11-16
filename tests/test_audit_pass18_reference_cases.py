@@ -31,10 +31,6 @@ import pytest
 import groundinsight as gi
 from groundinsight.analysis import reference
 from groundinsight.analysis.reference import REFERENCE_CASES
-from groundinsight.utils.earth_current import (
-    EarthCurrentSplit,
-    split_earth_currents as real_split,
-)
 
 
 def _case(name):
@@ -56,23 +52,19 @@ def test_en50522_chain_agrees_on_the_untouched_model():
 
 def test_en50522_chain_detects_a_falsified_earth_return_current(monkeypatch):
     """
-    The mutation from the review: every electrode current tripled on the way
-    into ``I_E``. The old case reported a *smaller* deviation for it; the new
-    one has to report a factor of three.
+    The mutation from the review, carried to the current definition: the earth
+    current tripled on its way into ``r`` -- here through a driving point a
+    third of the true one, so ``I_E = U_E / Z_E`` triples. The case shorts the
+    fault bus of its own nodal system and has to report a factor of three.
     """
-    def tripled(currents, **kwargs):
-        split = real_split(currents, **kwargs)
-        if split is None:
-            return None
-        return EarthCurrentSplit(
-            i_earth=split.i_earth * 3.0,
-            feeding_buses=split.feeding_buses,
-            returning_buses=split.returning_buses,
-            separation=split.separation,
-        )
+    real = gi.electrical_network.ElectricalNetwork._earthing_driving_points
+
+    def falsified(self, bus_idx):
+        values, undefined = real(self, bus_idx)
+        return {f: None if z is None else z / 3.0 for f, z in values.items()}, undefined
 
     monkeypatch.setattr(
-        "groundinsight.electrical_network.split_earth_currents", tripled
+        gi.electrical_network.ElectricalNetwork, "_earthing_driving_points", falsified
     )
     row = _case("en50522_chain").evaluate()
     assert not row["agrees"]

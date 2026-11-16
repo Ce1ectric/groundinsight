@@ -235,7 +235,6 @@ RES_ALL_IMPEDANCES_SCHEMA: Dict[str, Any] = {
     "grounding_impedance_Ohm": pl.Float64,
     "grounding_impedance_deg": pl.Float64,
     "reduction_factor": pl.Float64,
-    "reduction_factor_current": pl.Float64,
 }
 
 
@@ -250,8 +249,7 @@ RES_FAULT_SCHEMA: Dict[str, Any] = {
     "EPR_fault_degree": pl.Float64,
     "EPR_max_V": pl.Float64,
     "EPR_max_bus": pl.Utf8,
-    "r_epr": pl.Float64,
-    "r_current": pl.Float64,
+    "r": pl.Float64,
     "I_E_A": pl.Float64,
     "U_E_V": pl.Float64,
     "Z_E_Ohm": pl.Float64,
@@ -269,23 +267,25 @@ frequency plus one RMS row (``is_rms`` true, ``frequency_Hz`` null). Pinned
 for the same reason as the other result tables, and because a GUI or a report
 template binds to the names: ``I_F`` the fault current, ``EPR_fault`` the
 earth potential rise at the fault bus, ``EPR_max`` the largest one in the
-network and its bus, ``r_epr`` and ``r_current`` the EPR-based and the
-current-based reduction factor, ``I_E`` the earth-return current, ``U_E`` and
+network and its bus, ``r`` the reduction factor, ``I_E`` the earth
+current, ``U_E`` and
 ``Z_E`` the earthing voltage and impedance of EN 50522, ``n_diagnostics`` the
 number of records in ``Result.diagnostics``, ``U_vT_max`` and
 ``U_transfer_max`` the largest prospective touch voltage and transferred
 potential over the buses with an earthing characteristic, and their buses
 (null when no bus has one).
 
-The four touch-voltage columns came with :data:`RES_FAULT_SCHEMA_VERSION` 2.
-They are appended, so a consumer that selects columns by name -- the only
-supported way -- reads version 1 and version 2 tables alike.
+:data:`RES_FAULT_SCHEMA_VERSION` 2 appended the four touch-voltage columns
+and replaced the two reduction factors ``r_epr`` and ``r_current`` of
+version 1 by the one ``r``; a consumer that selects columns by name -- the
+only supported way -- reads every other column of version 1 unchanged.
 """
 
 RES_FAULT_SCHEMA_VERSION: int = 2
 """Version of :data:`RES_FAULT_SCHEMA`; raised when a column is added,
 removed or changes its meaning. 1: the columns up to ``n_diagnostics``;
-2: the touch-voltage columns ``U_vT_max_V`` to ``U_transfer_max_bus``."""
+2: the touch-voltage columns ``U_vT_max_V`` to ``U_transfer_max_bus``, and
+``r`` in place of ``r_epr`` and ``r_current``."""
 
 def _magnitude_angle(
     value: Optional["ComplexNumber"], magnitude_key: str, angle_key: str
@@ -621,8 +621,7 @@ def _fault_key_figures(network: "Network", fault: str, result: "Result") -> pl.D
                 **_magnitude_angle(u_fault, "EPR_fault_V", "EPR_fault_degree"),
                 "EPR_max_V": top,
                 "EPR_max_bus": top_bus,
-                "r_epr": ratio("value", frequency),
-                "r_current": ratio("value_current", frequency),
+                "r": ratio("value", frequency),
                 "I_E_A": None if i_earth is None else abs(i_earth),
                 "U_E_V": None if u_earthing is None else abs(u_earthing),
                 **_magnitude_angle(from_factor("z_earthing", frequency), "Z_E_Ohm",
@@ -646,8 +645,7 @@ def _fault_key_figures(network: "Network", fault: str, result: "Result") -> pl.D
             "EPR_fault_degree": None,
             "EPR_max_V": top_rms,
             "EPR_max_bus": top_rms_bus,
-            "r_epr": None,
-            "r_current": None,
+            "r": None,
             "I_E_A": _root_sum_of_squares(earth_currents),
             "U_E_V": _root_sum_of_squares(earthing_voltages),
             "Z_E_Ohm": None,
@@ -2914,8 +2912,19 @@ class ResultBranch(BaseModel):
 
 
 class ResultReductionFactor(BaseModel):
-    """
-    Reduction-factor result at the fault bus.
+    r"""
+    Reduction factor, earth current and earthing quantities at the fault bus.
+
+    One definition, the one of the norm's chain ``U_E = r * Z_E * I_F``:
+
+    $$
+    I_E = \frac{U_E}{Z_E}, \qquad r = \frac{|I_E|}{|I_F|}
+    $$
+
+    By Norton's theorem ``I_E`` is the current into the fault bus's earthing
+    when that earthing is ideal (``Z -> 0``): the part of the fault current
+    that does not return to the sources through shields and conductors. See
+    :meth:`groundinsight.electrical_network.ElectricalNetwork.compute_reduction_factors`.
 
     Attributes
     ----------
@@ -2924,54 +2933,24 @@ class ResultReductionFactor(BaseModel):
     fault_bus : str
         The bus where the fault occurred.
     value : dict of float to float, optional
-        Mapping from frequency to the **EPR-based** reduction factor
-        ``r(f) = |u_fault with mutual| / |u_fault without mutual|``. This is
-        the quantity that reproduces the familiar closed form
-        ``r = |1 - Z_mutual / Z_self|`` for a single shielded line. It is
-        structurally independent of the impedance *at* the fault bus. ``None``
-        where the denominator is rounding noise -- below ``1e-9`` of the EPR
-        the fault current alone would cause at the fault bus,
-        ``|I_F| * |Z_FF|`` -- with a ``ModelAssumptionWarning``
-        ``REDUCTION_FACTOR_UNDEFINED`` (P9).
-    value_current : dict of float to float, optional
-        Mapping from frequency to the **current-based** reduction factor
-        ``r_I(f) = |I_E| / |I_F|`` -- the measured definition. ``I_E`` is the
-        **sum of the electrode currents of every bus that feeds the soil**, not
-        the electrode current at the faulted station: where the stations are
-        bonded through continuous cable shields the current spreads along them
-        and leaks into the soil at every one of them. Taking only the faulted
-        station understates it by a factor of 1.8 to 4.7 on the verification
-        feeder, depending on where the fault sits. Unlike ``value`` this factor
-        responds to the fault-bus characteristic, which is what makes it usable
-        as the ordinate of a rho-f sensitivity study. ``None`` per frequency
-        where the frequency carries no fault current, and where no electrode
-        carries more than ``1e-9`` of the fault current -- the current then
-        returns through the shields and ``I_E`` is zero to within rounding;
-        the latter comes with a ``ModelAssumptionWarning``
-        ``EARTH_GROUP_UNDEFINED`` (P9).
-    i_earth : dict of float to complex, optional
-        The earth-return current ``I_E`` itself, per frequency, so a study can
-        read the ampere value rather than only the ratio. Electrode currents
-        at or below ``1e-9`` of the largest one are rounding noise and join
-        neither group; ``None`` where ``value_current`` is ``None``.
-    earth_buses : dict of float to list of str, optional
-        The buses counted as feeding the soil at each frequency -- from the
-        fault outwards, in every direction, up to where the potential profile
-        turns. Reported because the split is a modelling statement and should
-        be inspectable; see :mod:`groundinsight.utils.earth_current`.
+        The reduction factor ``r(f) = |I_E| / |I_F|`` per frequency. It does
+        not depend on the electrode of the fault bus; for a long line it
+        tends to ``|1 - Z_m/Z_s|``, for one cable from a source earthed with
+        ``Z_A`` it is ``|(Z_s - Z_m)/(Z_s + Z_A)|``. ``None`` where the
+        frequency carries no fault current or ``Z_E`` is undefined; ``0``
+        for a fault on the bus of every source that feeds it.
     i_fault : dict of float to complex, optional
-        The fault current ``I_F = 3*I_0`` the current-based factor divides by:
-        ``sum(scaling * I_src)`` over the sources that reach the fault, a
-        source on the fault bus included. For a Thevenin source this is its
-        Norton current ``E / Z_src``. ``None`` where no
-        source has a value.
+        The fault current ``I_F = 3*I_0``: ``sum(scaling * I_src)`` over the
+        sources that reach the fault, a source on the fault bus included. For
+        a Thevenin source this is its Norton current ``E / Z_src``. ``None``
+        where no source has a value.
+    i_earth : dict of float to complex, optional
+        The earth current ``I_E = U_E / Z_E`` per frequency, in the package's
+        sign convention (that of ``u_earthing``). ``None`` where ``value``
+        is ``None``.
     u_earthing : dict of float to complex, optional
         The earthing voltage ``U_E`` of EN 50522: the **EPR at the fault bus**,
-        in the package's sign convention -- the same complex number as
-        ``ResultBus.uepr_freq`` of the fault bus. This is the voltage the
-        touch-voltage assessment starts from; in the norm's ideal case (a
-        fault far from the infeed on a long bonded run) it equals
-        ``r * |I_F| * |Z_E|`` with ``r = |1 - Z_m/Z_s|`` (``value``).
+        the same complex number as ``ResultBus.uepr_freq`` of the fault bus.
     z_earthing : dict of float to complex, optional
         The earthing impedance ``Z_E`` of EN 50522: the **driving-point
         impedance of the earthing network at the fault bus** -- the voltage one
@@ -2988,31 +2967,19 @@ class ResultReductionFactor(BaseModel):
         connected to it through shields carries an electrode -- which is
         decided by that structure, not by the solver
         (``EARTHING_IMPEDANCE_UNDEFINED``).
-    u_earthing_group : dict of float to complex, optional
-        Diagnostic: the current-weighted mean potential of the earth group
-        ``earth_buses``. On a long bonded run it lies 43 % below the fault-bus
-        EPR, because the group reaches into the decaying tail of the potential
-        profile.
-    z_earthing_group : dict of float to complex, optional
-        Diagnostic: ``u_earthing_group / i_earth``. The chain
-        ``u_earthing_group = I_F * z_earthing_group * value_current`` closes
-        on it by construction, which is why it is no check of anything.
 
     Notes
     -----
-    **Fault-bus quantities, not group means.** ``u_earthing`` and
-    ``z_earthing`` are taken at the fault bus. The group means come out
-    43 % / 45 % below the EPR and the driving-point impedance at the fault in
-    the norm's ideal case -- unconservative if taken as ``U_E`` for a
-    touch-voltage assessment -- and are kept as the ``*_group`` diagnostics
-    only.
-
-    **Stored results in the group format.** A record without ``i_fault``,
-    ``u_earthing_group`` and ``z_earthing_group`` holds the group means in
-    ``u_earthing`` / ``z_earthing``. It still loads: its values are moved to
-    the ``*_group`` fields and ``u_earthing`` / ``z_earthing`` stay empty
-    until the fault is solved again, so no stored number claims a meaning it
-    was not computed with.
+    **Stored results of earlier versions.** A record that still carries
+    ``value_current`` was computed with the earlier definitions (``value`` the
+    ratio of the fault-bus EPR with and without coupling, ``i_earth`` a sum of
+    electrode currents over a group of buses). Where it holds ``U_E``, ``Z_E``
+    and ``I_F`` -- every record of 2026.11 -- ``value`` and ``i_earth`` are
+    recomputed from them on reading, exactly; the group quantities are
+    dropped. A record in the group format of 0.6.0, whose ``u_earthing`` /
+    ``z_earthing`` held group means, keeps no earthing quantities and no
+    reduction factor until the fault is solved again. :class:`Result` records
+    which case applied as an ``info`` diagnostic.
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -3020,41 +2987,66 @@ class ResultReductionFactor(BaseModel):
     name: Optional[str] = None  # Make name optional with a default value
     fault_bus: str
     value: Dict[float, Optional[float]]  # Mapping from frequency to reduction factor
-    value_current: Dict[float, Optional[float]] = {}
     i_fault: Dict[float, Optional[ComplexNumber]] = {}
     i_earth: Dict[float, Optional[ComplexNumber]] = {}
-    earth_buses: Dict[float, List[str]] = {}
     u_earthing: Dict[float, Optional[ComplexNumber]] = {}
     z_earthing: Dict[float, Optional[ComplexNumber]] = {}
-    u_earthing_group: Dict[float, Optional[ComplexNumber]] = {}
-    z_earthing_group: Dict[float, Optional[ComplexNumber]] = {}
 
     @model_validator(mode="before")
     @classmethod
-    def _relocate_pre_f4_earthing(cls, data):
+    def _read_earlier_definitions(cls, data):
         """
-        Move the group quantities of a group-format record to the ``*_group`` fields.
+        Bring a record of the earlier definitions to the current one.
 
         Parameters
         ----------
         data : Any
-            The raw input. Only a mapping without any of ``i_fault``,
-            ``u_earthing_group`` and ``z_earthing_group`` is touched: the group
-            format, in which ``u_earthing`` / ``z_earthing`` held the group
-            mean. A model dump of this version always carries all three.
+            The raw input. Only a mapping that carries one of the keys of
+            the earlier format (:data:`_EARLIER_REDUCTION_KEYS`) is touched.
 
         Returns
         -------
         Any
-            The input, with ``u_earthing`` / ``z_earthing`` renamed to
-            ``u_earthing_group`` / ``z_earthing_group`` for a group-format
-            record.
+            The input without the earlier keys; ``value`` and ``i_earth``
+            recomputed from ``u_earthing``, ``z_earthing`` and ``i_fault``, or
+            emptied for a record in the group format.
         """
-        if isinstance(data, dict) and _is_pre_f4_reduction_factor(data):
-            data = dict(data)
-            data["u_earthing_group"] = data.pop("u_earthing", None) or {}
-            data["z_earthing_group"] = data.pop("z_earthing", None) or {}
+        if not (isinstance(data, dict) and _is_earlier_reduction_factor(data)):
+            return data
+        group_format = _is_pre_f4_reduction_factor(data)
+        data = {k: v for k, v in data.items() if k not in _EARLIER_REDUCTION_KEYS}
+        if group_format:
+            frequencies = list(data.get("value") or {})
+            data.update(u_earthing={}, z_earthing={}, i_earth={}, value=dict.fromkeys(frequencies))
+            return data
+        data["i_earth"], data["value"] = _recomputed_factor(data)
         return data
+
+    @property
+    def value_current(self) -> Dict[float, Optional[float]]:
+        """
+        Deprecated: the reduction factor, now the same as :attr:`value`.
+
+        Returns
+        -------
+        dict of float to float
+            :attr:`value`.
+
+        Warns
+        -----
+        DeprecationWarning
+            On every access; the name goes no earlier than two releases and
+            six months after the release that deprecated it.
+        """
+        warnings.warn(
+            "ResultReductionFactor.value_current is deprecated: there is one "
+            "reduction factor, r = |U_E / (Z_E * I_F)|, in "
+            "ResultReductionFactor.value. The group sum of electrode currents "
+            "it used to hold is no longer computed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.value
 
     def __str__(self):
         # The field is called ``value``. A wrong attribute name here would
@@ -3063,9 +3055,99 @@ class ResultReductionFactor(BaseModel):
         # would look fine.
         return (
             f"ResultReductionFactor(name={self.name}, "
-            f"fault_bus={self.fault_bus}, value={self.value}, "
-            f"value_current={self.value_current})"
+            f"fault_bus={self.fault_bus}, value={self.value})"
         )
+
+
+#: Keys only a record of the earlier reduction-factor definitions carries.
+_EARLIER_REDUCTION_KEYS = ("value_current", "earth_buses", "u_earthing_group", "z_earthing_group")
+
+
+def _is_earlier_reduction_factor(data: dict) -> bool:
+    """
+    Recognise a stored reduction-factor record of the earlier definitions.
+
+    Parameters
+    ----------
+    data : dict
+        Raw input of :class:`ResultReductionFactor`.
+
+    Returns
+    -------
+    bool
+        ``True`` if one of :data:`_EARLIER_REDUCTION_KEYS` is present; every
+        dump of an earlier version carries ``value_current``.
+    """
+    return any(key in data for key in _EARLIER_REDUCTION_KEYS)
+
+
+def _recomputed_factor(data: dict) -> Tuple[Dict[Any, Optional[complex]], Dict[Any, Optional[float]]]:
+    """
+    ``I_E`` and ``r`` of a stored record from its ``U_E``, ``Z_E`` and ``I_F``.
+
+    Parameters
+    ----------
+    data : dict
+        Raw input of :class:`ResultReductionFactor` with ``u_earthing``,
+        ``z_earthing`` and ``i_fault``.
+
+    Returns
+    -------
+    tuple of (dict, dict)
+        ``i_earth`` and ``value`` per stored frequency key; ``None`` where a
+        quantity is missing, ``Z_E`` is zero or there is no fault current.
+    """
+    earth_currents: Dict[Any, Optional[complex]] = {}
+    factors: Dict[Any, Optional[float]] = {}
+    z_map = data.get("z_earthing") or {}
+    i_map = data.get("i_fault") or {}
+    for f, raw_u in (data.get("u_earthing") or {}).items():
+        earth = _earth_current(raw_u, z_map.get(f))
+        i_fault = _stored_complex(i_map.get(f))
+        defined = earth is not None and bool(i_fault)
+        earth_currents[f] = earth if defined else None
+        factors[f] = abs(earth) / abs(i_fault) if defined else None
+    return earth_currents, factors
+
+
+def _earth_current(raw_u: Any, raw_z: Any) -> Optional[complex]:
+    """
+    ``U_E / Z_E`` of two stored phasors.
+
+    Parameters
+    ----------
+    raw_u, raw_z : Any
+        The stored ``U_E`` and ``Z_E`` (see :func:`_stored_complex`).
+
+    Returns
+    -------
+    complex or None
+        ``None`` where either is missing or ``Z_E`` is zero.
+    """
+    u, z = _stored_complex(raw_u), _stored_complex(raw_z)
+    if u is None or not z:
+        return None
+    return u / z
+
+
+def _stored_complex(raw: Any) -> Optional[complex]:
+    """
+    A stored phasor as ``complex``.
+
+    Parameters
+    ----------
+    raw : Any
+        ``None``, a ``ComplexNumber``, a mapping with ``real``/``imag`` or
+        anything ``ComplexNumber`` reads.
+
+    Returns
+    -------
+    complex or None
+        ``None`` for ``None``.
+    """
+    if raw is None:
+        return None
+    return complex(ComplexNumber.model_validate(raw))
 
 
 class ResultGroundingImpedance(BaseModel):
@@ -3141,8 +3223,8 @@ class Result(BaseModel):
     >>> result = gi.run_fault(build_minimal(), "fault")
     >>> [bus.name for bus in result.buses], result.diagnostics
     (['bus1', 'bus2', 'bus3'], [])
-    >>> round(result.reduction_factor.value_current[50.0], 4)
-    0.1803
+    >>> round(result.reduction_factor.value[50.0], 4)
+    0.3236
     """
 
     model_config = ConfigDict(ser_json_inf_nan="constants")
@@ -3157,19 +3239,18 @@ class Result(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _flag_pre_f4_result(cls, data):
+    def _flag_earlier_definitions(cls, data):
         """
-        Keep a result in the group format from claiming the fault-bus meaning.
+        Say how a result of the earlier reduction-factor definitions was read.
 
-        In that format the grounding impedance is the group quantity that
-        :class:`ResultReductionFactor` reports as ``z_earthing_group``. For
-        such a record --
-        recognised on its stored reduction factor, see
-        :meth:`ResultReductionFactor._relocate_pre_f4_earthing` -- the stored
-        grounding impedance is dropped (its value survives in
-        ``z_earthing_group``) and an ``info`` diagnostic
-        ``LEGACY_EARTHING_DEFINITION`` says why ``U_E``, ``Z_E`` and ``Z_G``
-        are empty until the fault is solved again.
+        Recognised on its stored reduction factor
+        (:meth:`ResultReductionFactor._read_earlier_definitions`). A record of
+        2026.11 gets the ``info`` diagnostic ``LEGACY_REDUCTION_FACTOR``: its
+        ``r`` and ``I_E`` were recomputed from the stored ``U_E``, ``Z_E`` and
+        ``I_F``. A record in the group format of 0.6.0, whose grounding
+        impedance was the group quantity, loses that impedance as well and
+        gets ``LEGACY_EARTHING_DEFINITION``: ``U_E``, ``Z_E``, ``Z_G`` and
+        ``r`` are empty until the fault is solved again.
 
         Parameters
         ----------
@@ -3179,42 +3260,49 @@ class Result(BaseModel):
         Returns
         -------
         Any
-            The input, adjusted for a group-format record.
+            The input, with the diagnostic added and, for a group-format
+            record, without the stored grounding impedance.
         """
         if not isinstance(data, dict):
             return data
         factor = data.get("reduction_factor")
-        if not (isinstance(factor, dict) and _is_pre_f4_reduction_factor(factor)):
-            return data
-        grounding = data.get("grounding_impedance")
-        stored_group = bool(factor.get("u_earthing") or factor.get("z_earthing"))
-        stored_impedance = isinstance(grounding, dict) and bool(grounding.get("value"))
-        if not (stored_group or stored_impedance):
+        if not (isinstance(factor, dict) and _is_earlier_reduction_factor(factor)):
             return data
         data = dict(data)
-        if stored_impedance:
-            grounding = dict(grounding)
-            grounding["value"] = {}
-            data["grounding_impedance"] = grounding
-        diagnostics = list(data.get("diagnostics") or [])
-        diagnostics.append(
-            {
+        elements = [("fault", str(data.get("fault") or ""))]
+        if _is_pre_f4_reduction_factor(factor):
+            grounding = data.get("grounding_impedance")
+            if isinstance(grounding, dict) and grounding.get("value"):
+                data["grounding_impedance"] = dict(grounding, value={})
+            diagnostic = {
                 "code": "LEGACY_EARTHING_DEFINITION",
                 "severity": "info",
                 "category": "InputWarning",
                 "message": (
-                    "This result was stored before U_E and Z_E were redefined "
-                    "as the EN 50522 quantities at the fault bus (U_E = EPR of "
-                    "the fault bus, Z_E = driving-point impedance of the "
-                    "earthing network there). Its stored group quantities were "
-                    "moved to u_earthing_group / z_earthing_group; u_earthing, "
-                    "z_earthing and the grounding impedance stay empty until "
-                    "the fault is solved again with run_fault."
+                    "This result was stored before U_E and Z_E were defined "
+                    "as the EN 50522 quantities at the fault bus; its stored "
+                    "values were group means. U_E, Z_E, the grounding "
+                    "impedance, the earth current and the reduction factor "
+                    "stay empty until the fault is solved again with run_fault."
                 ),
-                "elements": [("fault", str(data.get("fault") or ""))],
+                "elements": elements,
             }
-        )
-        data["diagnostics"] = diagnostics
+        else:
+            diagnostic = {
+                "code": "LEGACY_REDUCTION_FACTOR",
+                "severity": "info",
+                "category": "InputWarning",
+                "message": (
+                    "This result was stored with the earlier reduction factors "
+                    "(the EPR ratio with and without coupling, and a group sum "
+                    "of electrode currents). Its reduction factor and earth "
+                    "current were recomputed from the stored U_E, Z_E and I_F "
+                    "as r = |U_E / (Z_E * I_F)|; the group quantities were "
+                    "dropped."
+                ),
+                "elements": elements,
+            }
+        data["diagnostics"] = list(data.get("diagnostics") or []) + [diagnostic]
         return data
 
     def __str__(self):
@@ -3234,8 +3322,8 @@ def _is_pre_f4_reduction_factor(data: dict) -> bool:
     -------
     bool
         ``True`` if none of ``i_fault``, ``u_earthing_group`` and
-        ``z_earthing_group`` is present -- a model dump of this version always
-        carries all three.
+        ``z_earthing_group`` is present -- every dump of 2026.11 carries all
+        three.
     """
     return not any(
         key in data for key in ("i_fault", "u_earthing_group", "z_earthing_group")
@@ -4971,8 +5059,8 @@ class Network(ValidatedAssignmentModel):
         Reads the stored result of ``fault`` -- nothing is solved -- and puts
         the numbers an assessment starts from side by side: the fault current,
         the earth potential rise at the fault bus and the largest one in the
-        network, both reduction factors, the earth-return current and the
-        earthing voltage and impedance of EN 50522. Without it they are spread
+        network, the reduction factor, the earth current and the earthing
+        voltage and impedance of EN 50522. Without it they are spread
         over ``ResultBus``, ``ResultReductionFactor``,
         ``ResultGroundingImpedance`` and ``Network.faults``.
 
@@ -4997,11 +5085,10 @@ class Network(ValidatedAssignmentModel):
             ``EPR_max_V``, ``EPR_max_bus``
                 The largest EPR in the network and its bus (the first one in
                 result order on a tie).
-            ``r_epr``, ``r_current``
-                The EPR-based reduction factor ``value`` and the
-                current-based one ``value_current`` (``|I_E| / |I_F|``).
+            ``r``
+                The reduction factor ``|I_E| / |I_F|`` (``value``).
             ``I_E_A``
-                The earth-return current ``|I_E|`` (``i_earth``).
+                The earth current ``|I_E| = |U_E / Z_E|`` (``i_earth``).
             ``U_E_V``
                 The earthing voltage ``|U_E|`` of EN 50522, the EPR at the
                 fault bus (``u_earthing``).
@@ -5064,7 +5151,7 @@ class Network(ValidatedAssignmentModel):
         >>> _ = gi.run_fault(net, "ef")
         >>> table = net.res_fault("ef")
         >>> table.shape, table["is_rms"].to_list()
-        ((3, 21), [False, False, True])
+        ((3, 20), [False, False, True])
         """
         if fault not in self.faults:
             raise ValueError(
@@ -5097,7 +5184,7 @@ class Network(ValidatedAssignmentModel):
             ``grounding_impedance_Ohm`` / ``_deg`` are ``Z_E``, the
             driving-point impedance of the earthing network at the fault bus
             (``ResultReductionFactor.z_earthing``); ``reduction_factor`` is
-            ``value`` and ``reduction_factor_current`` is ``value_current``.
+            ``r = |U_E / (Z_E * I_F)|`` (``ResultReductionFactor.value``).
 
         Notes
         -----
@@ -5140,7 +5227,6 @@ class Network(ValidatedAssignmentModel):
             for freq in self.frequencies:
                 gi = grounding_impedance.value.get(freq)
                 rf = reduction_factor.value.get(freq)
-                rf_current = reduction_factor.value_current.get(freq)
                 if gi:
                     gi_magnitude = abs(complex(gi.real, gi.imag))
                     gi_angle = np.degrees(np.angle(complex(gi.real, gi.imag)))
@@ -5156,7 +5242,6 @@ class Network(ValidatedAssignmentModel):
                         "grounding_impedance_Ohm": gi_magnitude,
                         "grounding_impedance_deg": gi_angle,
                         "reduction_factor": rf,
-                        "reduction_factor_current": rf_current,
                     }
                 )
         return pl.DataFrame(data, schema=RES_ALL_IMPEDANCES_SCHEMA)

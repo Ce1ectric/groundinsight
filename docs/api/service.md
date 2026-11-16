@@ -193,8 +193,6 @@ category and the function whose docstring describes the condition:
 |---|---|---|
 | `CHARACTERISTIC_EXTRAPOLATED` | `ModelAssumptionWarning` | `run_fault`, `check_network`: a bus evaluated outside the grid of its earthing characteristic |
 | `DC_LIMIT` | `DCLimitWarning` | impedance evaluation at 0 Hz |
-| `EARTH_GROUP_SPREAD` | `ModelAssumptionWarning` | `run_fault`: electrode currents spread in angle, `I_E` and `r_current` describe the dominant direction only |
-| `EARTH_GROUP_UNDEFINED` | `ModelAssumptionWarning` | `run_fault`: no electrode carries a non-noise share of the fault current |
 | `EARTHING_IMPEDANCE_UNDEFINED` | `ModelAssumptionWarning` | `run_fault`: `Z_E` undefined at a frequency |
 | `FREQUENCY_ORDER` | `NetworkFrequencyOrderWarning` | `Network.frequencies` not strictly increasing |
 | `IMPORT_BUS_SKIPPED` | `InputWarning` | `from_pandapower` / preview: a bus with an unparsable `vn_kv` |
@@ -208,7 +206,6 @@ category and the function whose docstring describes the condition:
 | `PARALLEL_COEFFICIENT_DEFAULT` | `ModelAssumptionWarning` | `run_fault(phase_current_mode="paths")`: parallel routes with default coefficients |
 | `PHASE_PROXY` | `ModelAssumptionWarning` | `run_fault`: a meshed phase network split with proxy impedances |
 | `PROJECT_FILE_LEGACY_ENCODING` | `InputWarning` | `load_network_from_json`: a file that is not UTF-8 |
-| `REDUCTION_FACTOR_UNDEFINED` | `ModelAssumptionWarning` | `run_fault`: `r_epr` undefined at a frequency |
 | `SC_DATA_INCOMPLETE` | `InputWarning` | `resolve_fault_sc_characteristics`: sources without IEC 60909 data |
 | `SC_KAPPA_MISSING` | `InputWarning` | `read_shortcircuit_results`: no `kappa` derivable for a bus |
 | `SC_KAPPA_MIXED` | `ModelAssumptionWarning` | `resolve_fault_sc_characteristics`: sources of different R/X |
@@ -251,7 +248,7 @@ six months after the release that deprecated it.
 | EPR limit | `u_limit` | `u_max` | `find_max_rho_scaling` |
 | fault duration | `t_k_s` | `t_k` | `check_conductor_limits`, `check_node_limits`, `admissible_short_circuit_current`, `iec60909_m` |
 | AC heat factor | `n_factor` | `n` | `check_conductor_limits`, `check_node_limits`, `thermal_equivalent_current` |
-| frequency | `frequency` | `f`, `freq` | `check_conductor_limits`, `check_node_limits`, `iec60909_m`, `read_shortcircuit_results`, `BusResponse.voltages`, `.voltages_no_mutual`, `.driving_point`, `.worst_case_electrode` |
+| frequency | `frequency` | `f`, `freq` | `check_conductor_limits`, `check_node_limits`, `iec60909_m`, `read_shortcircuit_results`, `BusResponse.voltages`, `.driving_point`, `.worst_case_electrode` |
 
 ```python
 # fragment: assumes a network `net` with the fault "F1"

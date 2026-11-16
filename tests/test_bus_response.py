@@ -26,17 +26,6 @@ import pytest
 
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType, ComplexNumber
-from tests._warning_policy import acknowledge
-
-#: The genuine solve the closed form is compared with spreads its electrode
-#: currents in angle.
-SPREAD = acknowledge("EARTH_GROUP_SPREAD")
-
-#: A location whose earth reference is its own electrode leaves the group and
-#: the factor undefined, which is the case under test.
-OWN_ELECTRODE = acknowledge(
-    "EARTH_GROUP_UNDEFINED", "REDUCTION_FACTOR_UNDEFINED"
-)
 
 
 FREQ = [50.0, 250.0]
@@ -75,17 +64,16 @@ def _network(z_bus=None, *, bus_formula="10", solve=True):
 
 
 def _solved_values(z_bus, freq=50.0):
-    """EPR and current-based reduction factor from a genuine solve."""
+    """EPR and reduction factor from a genuine solve."""
     net = _network(z_bus)
     result = net.results["F"]
     epr = abs(complex(next(b.uepr_freq[freq] for b in result.buses if b.name == "F")))
-    return epr, result.reduction_factor.value_current[freq]
+    return epr, result.reduction_factor.value[freq]
 
 
 # --- the closed form against real solves -------------------------------------
 
 
-@SPREAD
 @pytest.mark.parametrize(
     "z_bus", [0.05, 1.0, 10.0, 100.0, 500.0, complex(4.0, 9.0)]
 )
@@ -98,9 +86,9 @@ def test_the_closed_form_reproduces_a_genuine_solve(z_bus):
     """
     response = gi.bus_response(_network(10.0), fault="F")
     predicted = response.evaluate(z_bus).filter(pl.col("frequency_Hz") == 50.0)
-    epr, r_current = _solved_values(z_bus)
+    epr, r = _solved_values(z_bus)
     assert predicted["EPR_V"][0] == pytest.approx(epr, rel=1e-12)
-    assert predicted["r_current"][0] == pytest.approx(r_current, rel=1e-9)
+    assert predicted["r"][0] == pytest.approx(r, rel=1e-9)
 
 
 def test_every_bus_is_reproduced_not_just_the_one_being_varied():
@@ -214,26 +202,32 @@ def test_the_extremes_frame_carries_all_three_cases():
 # --- what is and is not invariant --------------------------------------------
 
 
-def test_the_epr_reduction_factor_is_constant_along_the_whole_curve():
+def test_the_reduction_factor_is_constant_along_the_whole_curve():
     """
-    Derived, not just observed: ``u_b(Y_B) = u_0b / (1 + Y_B Z_net)`` holds with
-    and without mutual coupling alike, so the quotient that defines ``r`` has
-    the same denominator top and bottom and cancels exactly.
+    Derived, not just observed: at the fault bus ``u_F = u_0 / (1 + Y_B Z_net)``
+    and ``Z_E = Z_net / (1 + Y_B Z_net)``, so ``r = |u_F| / (|Z_E| |I_F|)`` has
+    the same factor top and bottom and cancels exactly -- the short circuit
+    that defines ``r`` takes the fault-bus electrode out.
     """
     response = gi.bus_response(_network(10.0), fault="F")
-    values = response.sweep([0.01, 1.0, 100.0, None, 0.0])["r_epr"].to_list()
+    values = response.sweep([0.01, 1.0, 100.0, None, 0.0])["r"].to_list()
     assert values == pytest.approx([values[0]] * len(values), rel=1e-12)
 
 
-def test_the_current_reduction_factor_is_ordered_by_the_electrode():
-    """A better electrode takes more of the fault current out of the earth-return
-    path, so the current-based factor grows as the electrode improves."""
+def test_the_reduction_factor_is_the_current_into_an_ideal_electrode():
+    """Norton: whatever electrode the curve is evaluated for, ``r`` is the
+    current a genuinely solved, near-ideal electrode (1e-9 Ohm) at the fault
+    bus takes, over ``I_F``. The EPR meanwhile falls as the electrode improves."""
     response = gi.bus_response(_network(10.0), fault="F")
     frame = response.sweep([1000.0, 100.0, 10.0, 1.0, 0.1]).filter(
         pl.col("frequency_Hz") == 50.0
     )
-    values = frame["r_current"].to_list()
-    assert all(a < b for a, b in pairwise(values))
+    epr_short, _ = _solved_values(1e-9)
+    i_short = epr_short / 1e-9
+    # 1e-9 Ohm against a few Ohm of network: the shorted solve is accurate to
+    # about 1e-6 relative (rounding of a potential of order 1e-6 V).
+    assert frame["r"].to_list() == pytest.approx([i_short / 1000.0] * 5, rel=1e-6)
+    assert all(a > b for a, b in pairwise(frame["EPR_V"].to_list()))
 
 
 def test_an_ideal_electrode_at_the_fault_raises_the_potential_elsewhere():
@@ -264,7 +258,6 @@ def test_an_unknown_bus_is_named_with_the_alternatives():
         gi.bus_response(net, fault="F", bus="nowhere")
 
 
-@OWN_ELECTRODE
 def test_a_location_whose_earth_reference_is_its_own_electrode_is_refused():
     """
     Removing the electrode has to leave the network with a path to earth,

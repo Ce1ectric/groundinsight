@@ -31,7 +31,7 @@ written in NumPy, or a second solver.
 ## Analysis
 
 - **[Fault decomposition](fault_decomposition.ipynb)** — the analysis layer
-  on top of a solve: the two reduction factors, `analyze_cuts`,
+  on top of a solve: the reduction factor, `analyze_cuts`,
   `bus_response`, `run_sweep` with `summarize` and `classify`, and the
   closed-form reference cases.
 - **[Electrode at the fault location](cuts_and_rho_f_sweep.ipynb)** — which

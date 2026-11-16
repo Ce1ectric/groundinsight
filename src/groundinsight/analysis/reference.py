@@ -25,17 +25,17 @@ The cases
     The textbook reduction factor ``r = |1 - Z_m/Z_s|``, valid where the station
     earths vanish against the shield impedance.
 ``line_finite_earthing``
-    The same line with real electrodes: ``r = |(Z_s - Z_m)/(Z_s + Z_E)|``. The
-    first case is its ``Z_E -> 0`` limit, which is why the two must converge.
+    The same line with a real electrode at the source station:
+    ``r = |(Z_s - Z_m)/(Z_s + Z_A)|``. The first case is its ``Z_A -> 0``
+    limit, which is why the two must converge.
 ``en50522_chain``
-    The earth-return current ``I_E`` of a six-station chain, re-derived from a
-    nodal system assembled here from the model's own impedances. The case
-    does not check ``U_E = 3*I_0 * Z_E * r`` with all factors read out of one
-    result: with ``Z_E`` the driving-point impedance at the fault bus that
-    relation is a physical statement (pinned on a long chain by the test
-    suite), but for the group pair ``u_earthing_group`` /
-    ``z_earthing_group`` it is closed by construction, and a case built on it
-    would agree to 1e-16 whatever the model did.
+    The reduction factor of a six-station chain as the current into an ideal
+    electrode at the fault bus over ``I_F``, re-derived from a nodal system
+    assembled here from the model's own impedances with the fault bus held
+    at remote earth. The case does not check ``U_E = r * Z_E * I_F`` with
+    all factors read out of one result: ``r`` is defined through that
+    relation, and a case built on it would agree to 1e-16 whatever the model
+    did.
 ``ladder_input_impedance``
     A chain of bonded stations is a ladder network, and a long one presents
     ``Z_in = -Z'/2 + sqrt(Z'^2/4 + Z_e*Z')`` at its end.
@@ -273,52 +273,54 @@ def _line_ideal_bonding() -> Tuple[float, float]:
     z_electrode = complex(1e-6, 0.0)  # ideal bonding
     net, _ = _chain(3, z_electrode, z_self, z_mutual)
     closed_form = abs(1.0 - z_mutual / z_self)
-    model = net.results["EF"].reduction_factor.value_current[_FREQ]
+    model = net.results["EF"].reduction_factor.value[_FREQ]
     return closed_form, model
 
 
 def _line_finite_earthing() -> Tuple[float, float]:
     """
-    ``r = |(Z_s - Z_m)/(Z_s + Z_A + Z_B)|``.
+    ``r = |(Z_s - Z_m)/(Z_s + Z_A)|``.
 
-    The same loop with the end electrodes kept: the screen now sees
-    ``(Z_A + Z_B)*I_E`` across it instead of zero, and
-    ``(Z_A+Z_B)*I_E = Z_s*(I_F - I_E) - Z_m*I_F`` rearranges to the factor above.
-    Setting ``Z_A = Z_B = 0`` recovers the previous case, which is the reason the
-    two have to converge as the earthing improves.
+    One cable from the source station ``A`` (electrode ``Z_A``) to the fault
+    station ``B``. The reduction factor is the current into an ideal
+    electrode at ``B`` over ``I_F`` (Norton), so ``B`` is held at remote
+    earth: the screen sees ``u_A`` across it, ``u_A = Z_s*I_s + Z_m*I_F``
+    with the screen current ``I_s`` from ``A`` to ``B``, and the current
+    balance at ``A``, where the source takes ``I_F`` out,
+    ``u_A/Z_A + I_s = -I_F``, gives ``I_s = -I_F (Z_A + Z_m)/(Z_A + Z_s)``.
+    The ideal electrode at ``B`` takes ``I_F + I_s``, which rearranges to the
+    factor above. The electrode at ``B`` does not enter; setting ``Z_A = 0``
+    recovers the previous case, which is the reason the two have to converge
+    as the earthing improves.
     """
     z_self, z_mutual = complex(0.1, 0.2), complex(0.05, 0.1)
     z_electrode = complex(10.0, 0.0)
-    # Two sections between the two earthed ends would put a third electrode in
-    # parallel with the loop, and the closed form is taken over the two end
-    # electrodes -- so the case runs on the two-bus line.
     net2, _ = _chain(2, z_electrode, z_self, z_mutual)
     z_loop = z_self * 1.0  # one section of 1 km
-    closed_form = abs((z_loop - z_mutual) / (z_loop + 2 * z_electrode))
-    model = net2.results["EF"].reduction_factor.value_current[_FREQ]
+    closed_form = abs((z_loop - z_mutual) / (z_loop + z_electrode))
+    model = net2.results["EF"].reduction_factor.value[_FREQ]
     return closed_form, model
 
 
 def _en50522_chain() -> Tuple[float, float]:
     """
-    ``I_E = sum of the electrode currents that feed the soil``.
+    ``r = |I_short| / |I_F|`` with the fault bus held at remote earth.
 
-    The earth-return current of a six-station chain, computed twice. The model
-    value is ``ResultReductionFactor.i_earth``; the reference is the same sum
-    taken from a nodal system assembled here from ``bus.impedance`` and
-    ``branch.self_impedance`` and solved against the injection vector of the
-    solved fault -- so the matrix, the solve, the electrode currents and the
-    group sum are all done a second way.
+    The reduction factor of a six-station chain, computed twice. The model
+    value is ``ResultReductionFactor.value``, which the solver forms as
+    ``|U_E / Z_E| / |I_F|``. The reference shorts the fault bus instead: a
+    nodal system assembled here from ``bus.impedance`` and
+    ``branch.self_impedance``, solved against the injection vector of the
+    solved fault with the fault bus's potential held at zero, and the
+    current the ideal electrode takes read from the current balance of
+    that bus. By Norton's theorem the two agree; the matrix, the solve and
+    the short circuit are all done a second way.
 
-    What this case does *not* do: check ``U_E = 3*I_0 * Z_E * r`` with all
-    three factors read out of one result. For the group pair that identity is
-    closed by construction -- ``z_earthing_group`` is
-    ``u_earthing_group / I_E`` and ``r`` is ``|I_E| / |I_F|``, so the product
-    reduces to ``u_earthing_group`` algebraically -- and such a case would
-    agree to machine precision whatever the model did; multiplying every
-    electrode current by three would make the reported deviation *smaller*.
-    A tautology that reports 1e-16 is worse than no case at all, because the
-    row it writes says "agrees".
+    What this case does *not* do: check ``U_E = r * Z_E * I_F`` with all
+    three factors read out of one result. ``r`` is defined through that
+    relation, so such a case would agree to machine precision whatever the
+    model did. A tautology that reports 1e-16 is worse than no case at all,
+    because the row it writes says "agrees".
 
     The mutual injection vector is taken from the solved fault rather than
     rebuilt: ``line_ideal_bonding`` and ``line_finite_earthing`` are the cases
@@ -332,22 +334,21 @@ def _en50522_chain() -> Tuple[float, float]:
         fault_index=3,
     )
     factor = net.results["EF"].reduction_factor
-    model = abs(complex(factor.i_earth[_FREQ]))
+    model = factor.value[_FREQ]
 
     electrical = net.electrical_network
     Y, index, bus_names = _assemble_from_model(net)
-    injection = np.zeros(len(bus_names), dtype=complex)
-    for name in bus_names:
-        injection[index[name]] = complex(
-            electrical.i_vectors[_FREQ][electrical.bus_indices[name]]
-        )
-    u = np.linalg.solve(Y, injection)
-    reference = abs(
-        sum(
-            complex(u[index[name]]) / complex(net.buses[name].impedance[_FREQ])
-            for name in factor.earth_buses[_FREQ]
-        )
+    injection = np.array(
+        [complex(electrical.i_vectors[_FREQ][electrical.bus_indices[name]]) for name in bus_names]
     )
+    fault = index[names[3]]
+    keep = [i for i in range(len(bus_names)) if i != fault]
+    u = np.zeros(len(bus_names), dtype=complex)
+    u[keep] = np.linalg.solve(Y[np.ix_(keep, keep)], injection[keep])
+    # KCL of the shorted bus: what the injection leaves over after the
+    # branches is the current into the ideal electrode.
+    i_short = injection[fault] - Y[fault] @ u
+    reference = abs(i_short) / abs(complex(factor.i_fault[_FREQ]))
     return reference, model
 
 
@@ -441,15 +442,15 @@ REFERENCE_CASES: List[ReferenceCase] = [
     ReferenceCase(
         "line_finite_earthing",
         "reduction factor r [-]",
-        "single line, both ends earthed with a finite electrode",
+        "single line, source station earthed with a finite electrode",
         1e-9,
         _line_finite_earthing,
     ),
     ReferenceCase(
         "en50522_chain",
-        "earth-return current I_E [A]",
-        "six-station chain, I_E re-derived from an independently assembled "
-        "nodal system",
+        "reduction factor r [-]",
+        "six-station chain, r re-derived as the current into an ideal fault "
+        "electrode of an independently assembled nodal system",
         1e-9,
         _en50522_chain,
     ),

@@ -282,7 +282,8 @@ def test_a_fault_without_scalings_keeps_a_fresh_result_fresh(tmp_path):
         before, after = result.reduction_factor, loaded.results["F1"].reduction_factor
         for f in FREQS:
             assert complex(after.u_earthing[f]) == complex(before.u_earthing[f])
-            assert complex(after.u_earthing_group[f]) == complex(before.u_earthing_group[f])
+            assert complex(after.i_earth[f]) == complex(before.i_earth[f])
+            assert after.value[f] == before.value[f]
             assert complex(after.i_fault[f]) == complex(before.i_fault[f])
         # Changing the scalings is a change of the input.
         net.faults["F1"].scalings = {50.0: 0.5}

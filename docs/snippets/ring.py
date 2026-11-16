@@ -71,7 +71,7 @@ key = net.res_fault("fault_at_remote_bus").row(0, named=True)  # the 50 Hz row
 print(f"U_E  = {key['U_E_V']:.2f} V")
 print(f"Z_E  = {key['Z_E_Ohm']:.4f} Ohm at {key['Z_E_degree']:.2f} deg")
 print(f"I_E  = {key['I_E_A']:.2f} A")
-print(f"r    = {key['r_current']:.6f}   EPR ratio = {key['r_epr']:.6f}")
+print(f"r    = {key['r']:.6f}")
 # --8<-- [end:phase_impedance]
 
 # --8<-- [start:electrodes]
@@ -98,9 +98,16 @@ def parallel(a, b):
 # (1 - k) * current between them.
 k = z_m / z_s
 u_e = abs(1 - k) * current * abs(parallel(z_b, z_s / 2))
-r = abs(z_s / 2 - z_m / 2) / abs(z_b + z_s / 2)
 z_e = parallel(z_b, z_s / 2 + parallel(z_b / 2, z_s / 2 + z_b))
-print(f"by hand: U_E = {u_e:.2f} V, r = {r:.6f}, EPR ratio = {abs(1 - k):.6f}, "
+
+# r: bus_fault earthed ideally. bus_a and bus_b stay equal and act as one
+# node M with z_b / 2; the ring becomes bus_source -(z_s/2)- M -(z_s/2)-
+# bus_fault, the Norton current (1 - k) * current is taken out at bus_source
+# and put in at bus_fault, and r is what the ideal electrode takes.
+alpha = z_b / (z_s + 2 * z_b)                                 # u_M / u_source
+u_source = -(1 - k) * current / (1 / z_b + 2 * (1 - alpha) / z_s)
+r = abs((1 - k) * current + 2 * alpha * u_source / z_s) / current
+print(f"by hand: U_E = {u_e:.2f} V, r = {r:.6f}, "
       f"Z_E = {abs(z_e):.4f} Ohm at {cmath.phase(z_e) * 180 / cmath.pi:.2f} deg")
 # --8<-- [end:by_hand]
 
@@ -110,7 +117,7 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore", gi.ModelAssumptionWarning)
     gi.run_fault(legacy, fault="fault_at_remote_bus", phase_current_mode="paths")
 old = legacy.res_fault("fault_at_remote_bus").row(0, named=True)
-print(f"paths mode: U_E = {old['U_E_V']:.2f} V, EPR ratio = {old['r_epr']:.6f}")
+print(f"paths mode: U_E = {old['U_E_V']:.2f} V, r = {old['r']:.6f}")
 # --8<-- [end:legacy]
 
 # --8<-- [start:harmonics]
@@ -119,7 +126,6 @@ net = build_ring([50.0, 250.0], {50.0: 1000.0, 250.0: 200.0},
 gi.run_fault(net, fault="fault_at_remote_bus")
 for row in net.res_fault("fault_at_remote_bus").iter_rows(named=True):
     label = "RMS" if row["is_rms"] else f"{row['frequency_Hz']:.0f} Hz"
-    ratios = ("" if row["is_rms"] else
-              f"   r = {row['r_current']:.6f}   EPR ratio = {row['r_epr']:.6f}")
+    ratios = "" if row["is_rms"] else f"   r = {row['r']:.6f}"
     print(f"{label:>6}: I_F = {row['I_F_A']:7.2f} A   U_E = {row['U_E_V']:7.2f} V{ratios}")
 # --8<-- [end:harmonics]

@@ -84,7 +84,8 @@ def test_a_network_reproduces_the_reduction_factor_of_every_cable(name):
         result = gi.run_fault(net, "F")
     for f in (50.0, 250.0):
         z_s, z_m = (_per_km(cable, "self_impedance_formula", 100.0, f), _per_km(cable, "mutual_impedance_formula", 100.0, f))
-        assert result.reduction_factor.value[f] == pytest.approx(abs(1 - z_m / z_s), rel=1e-9)
+        # One cable from a source earthed with Z_A = 2 Ohm: r = (Z_s - Z_m) / (Z_s + Z_A).
+        assert result.reduction_factor.value[f] == pytest.approx(abs((z_s - z_m) / (z_s + 2.0)), rel=1e-9)
 
 
 @pytest.mark.parametrize("row", LV_CABLES, ids=lambda r: r.designation)

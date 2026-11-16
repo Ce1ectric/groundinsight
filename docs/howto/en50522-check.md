@@ -47,8 +47,8 @@ it, neither. The package does **not** compute:
 | EN 50522 | Meaning | groundinsight | In the tables |
 |---|---|---|---|
 | `3I_0` | earth-fault current at the fault location | `ResultReductionFactor.i_fault` — the source currents that reach the fault, times the fault scalings | `I_F_A` of `res_fault()` |
-| `r` | reduction factor | `ResultReductionFactor.value_current` | `r_current` of `res_fault()`; `reduction_factor_current` of `res_all_impedances()` |
-| `I_E` | earth current, `r·3I_0` | `ResultReductionFactor.i_earth` | `I_E_A` of `res_fault()` |
+| `r` | reduction factor | `ResultReductionFactor.value` | `r` of `res_fault()`; `reduction_factor` of `res_all_impedances()` |
+| `I_E` | earth current, `r·3I_0` = `U_E/Z_E` | `ResultReductionFactor.i_earth` | `I_E_A` of `res_fault()` |
 | `Z_E` | earthing impedance | `ResultReductionFactor.z_earthing`, equal to `ResultGroundingImpedance.value` | `Z_E_Ohm`, `Z_E_degree` of `res_fault()`; `grounding_impedance_Ohm` of `res_all_impedances()` |
 | `U_E` | earth potential rise | `ResultReductionFactor.u_earthing`, equal to the `uepr_freq` of the fault bus | `U_E_V` of `res_fault()`; `EPR_V` of the fault bus in `res_buses()` |
 | `U_vT` | prospective touch voltage | `ResultBus.u_touch` (RMS) and `u_touch_freq`, for a bus whose earthing characteristic has `k_touch` | `U_vT_V` of `res_buses()`; `U_vT_max_V`, `U_vT_max_bus` of `res_fault()` |
@@ -57,9 +57,10 @@ it, neither. The package does **not** compute:
 | `U_Tp` | permissible touch voltage | not part of the package | EN 50522:2022, 5.4.1 and Annexes A, B |
 | `t_F` | fault duration | not used by the solve | from the protection |
 
-- `value`, the column `reduction_factor`, is **not** the `r` of EN 50522. It
-  is the EPR ratio with and without the inductive coupling — a property of the
-  line, blind to the electrodes ([conventions](../reference/conventions.md#which-reduction-factor-is-which)).
+- `r` is the current an ideal electrode at the fault bus would take, over
+  `3I_0` (Norton's theorem). With it the chain `U_E = r·3I_0·Z_E` holds
+  exactly; `r` does not depend on the electrode of the fault station
+  ([Reduction factors and earthing impedance](../explanation/reduction-factors.md#reduction-factor)).
 - `Z_E` is the driving-point impedance of the whole earthing network at the
   fault bus, the stations bonded through screens and earth wires included —
   what an earthing-impedance measurement at the station sees. It is not the
@@ -127,8 +128,8 @@ Output of [`en50522_check.py`](../snippets/en50522_check.py):
 
 | f | 3I<sub>0</sub> | r | I<sub>E</sub> | \|Z<sub>E</sub>\| | \|U<sub>E</sub>\| | r·3I<sub>0</sub>·\|Z<sub>E</sub>\| |
 |---|---|---|---|---|---|---|
-| 50 Hz | 1000.0 A | 0.2165 | 216.5 A | 1.189 Ω | 384.4 V | 257.3 V |
-| 250 Hz | 50.0 A | 0.0766 | 3.8 A | 2.232 Ω | 9.10 V | 8.56 V |
+| 50 Hz | 1000.0 A | 0.3234 | 323.4 A | 1.189 Ω | 384.4 V | 384.4 V |
+| 250 Hz | 50.0 A | 0.0815 | 4.1 A | 2.232 Ω | 9.10 V | 9.10 V |
 
 `U_E` as total RMS: 384.6 V — the value to compare with `U_Tp(t_F)`.
 
@@ -141,9 +142,8 @@ and screens gives; the test suite checks both.
 The script reads the quantities from the result objects to show where each one
 lives. `net.res_fault(fault)` puts them side by side in one frame — one row per
 frequency and an RMS row, read from the stored result without solving again:
-`I_F_A` is `3I_0`, `r_current` is `r`, `I_E_A` is `I_E`, `Z_E_Ohm` (with
-`Z_E_degree`) is `Z_E` and `U_E_V` is `U_E`. The column `r_epr` of the same
-frame is the EPR-based factor, not the `r` of EN 50522
+`I_F_A` is `3I_0`, `r` is `r`, `I_E_A` is `I_E`, `Z_E_Ohm` (with
+`Z_E_degree`) is `Z_E` and `U_E_V` is `U_E`
 ([Result tables](../reference/results.md#networkres_faultfault)).
 
 ```python
@@ -151,10 +151,10 @@ frame is the EPR-based factor, not the `r` of EN 50522
 ```
 
 ```text title="Output of en50522_check.py, last lines"
-res_fault    I_F_A r_current   I_E_A  Z_E_Ohm    U_E_V
-    50 Hz   1000.0    0.2165   216.5    1.189   384.45
-   250 Hz     50.0    0.0766     3.8    2.232     9.10
-      RMS   1001.2         -   216.5        -   384.56
+res_fault    I_F_A         r   I_E_A  Z_E_Ohm    U_E_V
+    50 Hz   1000.0    0.3234   323.4    1.189   384.45
+   250 Hz     50.0    0.0815     4.1    2.232     9.10
+      RMS   1001.2         -   323.4        -   384.56
 ```
 
 On the RMS row the ratio and the impedance are empty (`null`); `U_E_V` there is
@@ -162,13 +162,13 @@ the total RMS of `U_E` over the frequencies, the value to compare with
 `U_Tp(t_F)`. The test suite recomputes every figure of the frame with an
 independent nodal solver.
 
-The chain $U_E = r \cdot 3I_0 \cdot Z_E$ of the standard is a hand formula. It
-holds where the standard's lumped picture holds — a long, homogeneous cable run
-with the fault far from the infeed — and there the model reproduces it. On this
-short feeder, with the fault two stations from either end, it gives 257 V at
-50 Hz instead of the 384 V the model computes, 33 % low. Compare `U_E` itself
-with the permissible value; the difference to the chain shows how far the
-installation is from the lumped picture.
+The chain $U_E = r \cdot 3I_0 \cdot Z_E$ of the standard holds exactly in the
+last column, on this short feeder as well: $r$ is defined as the current into
+an ideal electrode at the fault, and by Norton's theorem that current times
+$Z_E$ is $U_E$. What the chain does not give is a shortcut: $r$ here, 0.3234,
+is not the cable's value of a long run, because it contains the earthing of
+the neighbouring stations and of the infeed. Compare `U_E` itself with the
+permissible value.
 
 ## Harmonics and DC
 

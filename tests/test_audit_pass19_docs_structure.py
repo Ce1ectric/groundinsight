@@ -541,11 +541,12 @@ def test_first_calculation_reproduces_its_numbers_two_ways(monkeypatch, tmp_path
     assert "diagnostics: []" in printed
     key = ns["key"]
     z_b, z_s, z_m, current = 1.0 + 0.1j, (0.25 + 0.6j) * 5.0, 0.6j * 5.0, 1000.0
-    i_earth = current * (z_s - z_m) / (z_s + 2 * z_b)
+    i_soil = current * (z_s - z_m) / (z_s + 2 * z_b)
     z_e = z_b * (z_s + z_b) / (z_s + 2 * z_b)
-    assert key["r_epr"] == pytest.approx(1.25 / 3.25, rel=1e-12)
-    assert key["r_current"] == pytest.approx(abs(i_earth) / current, rel=1e-12)
-    assert key["U_E_V"] == pytest.approx(abs(z_b * i_earth), rel=1e-12)
+    # r: the current into an ideal electrode at the fault bus (closed form).
+    assert key["r"] == pytest.approx(abs((z_s - z_m) / (z_s + z_b)), rel=1e-12)
+    assert key["I_E_A"] == pytest.approx(key["r"] * current, rel=1e-12)
+    assert key["U_E_V"] == pytest.approx(abs(z_b * i_soil), rel=1e-12)
     assert key["Z_E_Ohm"] == pytest.approx(abs(z_e), rel=1e-12)
     assert key["Z_E_degree"] == pytest.approx(math.degrees(cmath.phase(z_e)), abs=1e-9)
     u_ref, z_ref = _reference_solution(ns["net"], "fault_at_remote_bus", "bus_fault")
@@ -555,21 +556,28 @@ def test_first_calculation_reproduces_its_numbers_two_ways(monkeypatch, tmp_path
 
 
 def test_first_calculation_chain_closes_with_an_ideal_infeed_earth(monkeypatch, tmp_path, capsys):
-    """The page says: make the infeed electrode ideal and U_E = |1-k| I |Z_E|."""
+    """The page says: the chain closes, and an ideal infeed electrode gives the
+    cable's own value |1 - k|. Second way for r: the fault station earthed
+    ideally, and the current into that electrode read off."""
     import groundinsight as gi
     from groundinsight.models.core_models import ComplexNumber
 
     ns, _ = _run_snippet("first_calculation.py", monkeypatch, tmp_path, capsys)
-    net = ns["net"]
-    net.buses["bus_source"].impedance = {50.0: ComplexNumber(real=1e-9, imag=0.0)}
-    gi.run_fault(net, fault="fault_at_remote_bus")
-    key = net.res_fault("fault_at_remote_bus").row(0, named=True)
-    assert key["U_E_V"] == pytest.approx(key["r_epr"] * 1000.0 * key["Z_E_Ohm"], rel=1e-8)
+    key = ns["key"]
     text = " ".join((DOCS / "getting-started" / "first-calculation.md").read_text(
         encoding="utf-8").split())
-    assert "= 231.3 V" in text and "it is 324.6 V" in text
-    assert f"{ns['key']['r_current'] * 1000 * ns['key']['Z_E_Ohm']:.1f}" == "231.3"
-    assert f"{ns['key']['r_epr'] * 1000 * ns['key']['Z_E_Ohm']:.1f}" == "324.6"
+    assert f"{key['r'] * 1000 * key['Z_E_Ohm']:.1f}" == f"{key['U_E_V']:.1f}" == "275.4"
+    assert "= 275.4 V" in text and "= 0.384615" in text
+    shorted = ns["net"]
+    shorted.buses["bus_fault"].impedance = {50.0: ComplexNumber(real=1e-9, imag=0.0)}
+    gi.run_fault(shorted, fault="fault_at_remote_bus")
+    i_short = shorted.res_fault("fault_at_remote_bus").row(0, named=True)["EPR_fault_V"] / 1e-9
+    assert i_short / 1000.0 == pytest.approx(key["r"], rel=1e-6)
+    net = _run_snippet("first_calculation.py", monkeypatch, tmp_path, capsys)[0]["net"]
+    net.buses["bus_source"].impedance = {50.0: ComplexNumber(real=1e-9, imag=0.0)}
+    gi.run_fault(net, fault="fault_at_remote_bus")
+    assert net.res_fault("fault_at_remote_bus").row(0, named=True)["r"] == pytest.approx(
+        1.25 / 3.25, rel=1e-8)
 
 
 def test_ring_reproduces_its_numbers_two_ways(monkeypatch, tmp_path, capsys):
@@ -591,7 +599,11 @@ def test_ring_reproduces_its_numbers_two_ways(monkeypatch, tmp_path, capsys):
             for row in ns["net"].res_fault("fault_at_remote_bus").iter_rows(named=True)}
     key = rows[50.0]
     assert key["U_E_V"] == pytest.approx(abs(1 - k) * current * abs(parallel(z_b, z_s / 2)), rel=1e-12)
-    assert key["r_current"] == pytest.approx(abs(z_s - z_m) / 2 / abs(z_b + z_s / 2), rel=1e-12)
+    # r: the ideal fault electrode on the reduced ring S -(Z_s/2)- M -(Z_s/2)- F.
+    alpha = z_b / (z_s + 2 * z_b)
+    u_source = -(1 - k) * current / (1 / z_b + 2 * (1 - alpha) / z_s)
+    r_closed = abs((1 - k) * current + 2 * alpha * u_source / z_s) / current
+    assert key["r"] == pytest.approx(r_closed, rel=1e-12)
     z_e = parallel(z_b, z_s / 2 + parallel(z_b / 2, z_s / 2 + z_b))
     assert key["Z_E_Ohm"] == pytest.approx(abs(z_e), rel=1e-12)
     u_ref, z_ref = _reference_solution(ns["net"], "fault_at_remote_bus", "bus_fault")
@@ -600,11 +612,13 @@ def test_ring_reproduces_its_numbers_two_ways(monkeypatch, tmp_path, capsys):
     phase = ns["net"].electrical_network.phase_currents[50.0]
     assert all(abs(complex(phase[name])) == pytest.approx(500.0, rel=1e-12) for name in phase)
     legacy = ns["old"]
-    assert legacy["r_epr"] == pytest.approx(abs(1 - 2 * k), rel=1e-12) == pytest.approx(1.0)
+    # One k everywhere: every potential scales with (1 - k) or (1 - 2k).
+    assert abs(1 - 2 * k) == pytest.approx(1.0)
+    assert legacy["r"] * abs(1 - k) == pytest.approx(key["r"] * abs(1 - 2 * k), rel=1e-12)
     assert legacy["U_E_V"] == pytest.approx(abs(1 - 2 * k) * current * abs(parallel(z_b, z_s / 2)),
                                             rel=1e-12)
-    z_s250, z_m250 = (0.25 + 3.0j), 3.0j
-    assert rows[250.0]["r_epr"] == pytest.approx(abs(1 - z_m250 / z_s250), rel=1e-12)
+    assert rows[250.0]["r"] == pytest.approx(
+        rows[250.0]["U_E_V"] / (rows[250.0]["Z_E_Ohm"] * rows[250.0]["I_F_A"]), rel=1e-12)
     rms = [row for row in ns["net"].res_fault("fault_at_remote_bus").iter_rows(named=True)
            if row["is_rms"]][0]
     assert rms["U_E_V"] == pytest.approx(math.hypot(rows[50.0]["U_E_V"], rows[250.0]["U_E_V"]),
@@ -1125,11 +1139,12 @@ def test_readme_quickstart_prints_what_the_readme_shows(monkeypatch, tmp_path, c
     assert printed == shown
 
     z_b, z_s, z_m, current = 1.0 + 0.1j, (0.25 + 0.6j) * 5.0, 0.6j * 5.0, 1000.0
-    i_earth = current * (z_s - z_m) / (z_s + 2 * z_b)
+    i_soil = current * (z_s - z_m) / (z_s + 2 * z_b)
     z_e = z_b * (z_s + z_b) / (2 * z_b + z_s)
+    r = abs((z_s - z_m) / (z_s + z_b))  # ideal electrode at the fault bus
     assert shown[0] == (
-        f"U_E = {abs(z_b * i_earth):.2f} V, Z_E = {abs(z_e):.4f} Ohm, "
-        f"r = {abs(i_earth) / current:.6f}, EPR ratio = {abs(1 - z_m / z_s):.6f}"
+        f"U_E = {abs(z_b * i_soil):.2f} V, Z_E = {abs(z_e):.4f} Ohm, "
+        f"I_E = {r * current:.2f} A, r = {r:.6f}"
     )
 
 

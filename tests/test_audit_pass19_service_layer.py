@@ -287,10 +287,10 @@ def test_non_finite_numbers_become_null():
     api = _api()
     row = api.KeyFigureRowDTO(
         fault="F", fault_bus="b", frequency_Hz=50.0, is_rms=False,
-        I_F_A=float("inf"), EPR_fault_V=float("nan"), r_epr=-float("inf"),
+        I_F_A=float("inf"), EPR_fault_V=float("nan"), r=-float("inf"),
         n_diagnostics=0,
     )
-    assert row.I_F_A is None and row.EPR_fault_V is None and row.r_epr is None
+    assert row.I_F_A is None and row.EPR_fault_V is None and row.r is None
     table = api.TableDTO(
         name="t",
         columns=[api.ColumnDTO(name="x", dtype="float")],
@@ -451,10 +451,11 @@ def test_key_figures_agree_with_the_reference_solver(example):
         top_value = max(abs(u) for u in mapped["u"].values())
         assert row.EPR_max_V == pytest.approx(top_value, rel=tol)
         assert abs(mapped["u"][row.EPR_max_bus]) == pytest.approx(top_value, rel=tol)
-        assert row.r_epr == pytest.approx(ref.reduction_factor_epr(rd, thevenin_phase="norton"), rel=tol)
-        i_earth, _ = ref.half_plane_split(mapped["ia"], fault_bus)
+        # The earth current as the current into an ideal fault electrode: the
+        # reference holds the fault bus at remote earth (current sources only).
+        i_earth = ref.solve_oneway(rd, thevenin_phase="norton", shorted=True)["I_short"]
         assert row.I_E_A == pytest.approx(abs(i_earth), rel=tol)
-        assert row.r_current == pytest.approx(abs(i_earth) / abs(solution["I_F"]), rel=tol)
+        assert row.r == pytest.approx(abs(i_earth) / abs(solution["I_F"]), rel=tol)
         assert row.U_E_V == pytest.approx(abs(mapped["u"][fault_bus]), rel=tol)
         assert row.Z_E_Ohm == pytest.approx(abs(ref.driving_point_impedance(rd, fault_bus)), rel=tol)
         for bus, u in mapped["u"].items():

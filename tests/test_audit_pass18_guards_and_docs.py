@@ -184,7 +184,7 @@ def test_fault_current_is_the_sum_of_the_feeding_sources():
     i_earth = reduction.i_earth[50.0]
     assert i_earth is not None
     expected = abs(complex(i_earth.real, i_earth.imag)) / 150.0
-    assert reduction.value_current[50.0] == pytest.approx(expected, rel=1e-12)
+    assert reduction.value[50.0] == pytest.approx(expected, rel=1e-12)
 
 
 def test_the_factor_scales_with_the_total_infeed_not_the_net_entry():
@@ -194,34 +194,38 @@ def test_the_factor_scales_with_the_total_infeed_not_the_net_entry():
     large = _network_with_source_at_fault("p18_k5_large", 100.0, 200.0)
     gi.run_fault(small, "F1")
     gi.run_fault(large, "F1")
-    r_small = small.results["F1"].reduction_factor.value_current[50.0]
-    r_large = large.results["F1"].reduction_factor.value_current[50.0]
+    r_small = small.results["F1"].reduction_factor.value[50.0]
+    r_large = large.results["F1"].reduction_factor.value[50.0]
     assert r_large < r_small
 
 
 def test_a_source_only_at_the_fault_bus_stays_the_degenerate_case():
     """Injecting at the fault bus and faulting there is a null case.
 
-    Nothing flows anywhere, so there is no earth current and no factor. That
-    was true before and stays true -- the fix must not invent a number here.
+    Nothing flows anywhere: the fault current closes through the station
+    back to its source, so the earth current is zero and so is r -- a
+    defined value, not a ratio of rounding errors, because the divisor is
+    Z_E * I_F. The info diagnostic FAULT_AT_FEEDING_BUS says why.
     """
     net = _chain("p18_k5_only", freqs=[50.0])
     del net.sources["S1"]
     gi.create_source(name="S2", bus="b3", values={50.0: 100.0}, network=net)
     net.invalidate_paths()
     gi.run_fault(net, "F1")
-    assert net.results["F1"].reduction_factor.value_current[50.0] is None
+    reduction = net.results["F1"].reduction_factor
+    assert reduction.value[50.0] == 0.0
+    assert abs(complex(reduction.i_earth[50.0])) == 0.0
+    assert "FAULT_AT_FEEDING_BUS" in {d.code for d in net.results["F1"].diagnostics}
 
 
 def test_the_remote_source_case_is_unchanged():
-    """No source on the fault bus: the two readings coincide, so the value
-    must not have moved."""
+    """No source on the fault bus: the divisor is the remote infeed alone."""
     net = _chain("p18_k5_remote", freqs=[50.0])
     gi.run_fault(net, "F1")
     reduction = net.results["F1"].reduction_factor
     i_earth = reduction.i_earth[50.0]
     expected = abs(complex(i_earth.real, i_earth.imag)) / 100.0
-    assert reduction.value_current[50.0] == pytest.approx(expected, rel=1e-12)
+    assert reduction.value[50.0] == pytest.approx(expected, rel=1e-12)
 
 
 # ---------------------------------------------------------------------------
@@ -231,13 +235,13 @@ def test_the_remote_source_case_is_unchanged():
 
 def test_grounding_impedance_docstring_names_the_current_definition():
     # Audit pass 19, decision F4: Z_G = Z_E is the driving-point impedance of
-    # the earthing network at the fault bus; the group quotient U_E / I_E it
-    # named before is kept as z_earthing_group (see PQ-PH4). The docstring
-    # states the definition and why the group quotient is not it; which
-    # release changed the definition is CHANGELOG material (decision D4).
-    doc = ElectricalNetwork.compute_grounding_impedance.__doc__
+    # the earthing network at the fault bus. The docstring states the
+    # definition, and that U_E = r * I_F * Z_E holds by construction, so the
+    # check of r is the short circuit of the fault bus; which release changed
+    # a definition is CHANGELOG material (decision D4).
+    doc = " ".join(ElectricalNetwork.compute_grounding_impedance.__doc__.split())
     assert "Z_G = Z_E = Z_dp(F)" in doc
-    assert "z_earthing_group" in doc and "44.5 %" in doc
+    assert "the check of ``r`` is the short circuit of the fault bus" in doc
 
 
 def test_the_rms_convention_is_written_down_where_it_is_defined():

@@ -12,7 +12,7 @@ procedures.
 | [Model and assumptions](theory.md) | the network model, the nodal solve, the derived quantities, and the assumptions every result rests on |
 | [Impedance formulas and where they come from](formulas.md) | what a formula means to the model, which values it may produce, how it is evaluated |
 | [Phase currents in rings and meshes](phase-currents.md) | how the fault current divides between routes, what `phase_impedance_formula` must describe, when the one-way coupling is exact |
-| [Reduction factors and earthing impedance](reduction-factors.md) | the EPR ratio and the reduction factor of EN 50522, $U_E$, $Z_E$ and $I_E$ at the fault bus |
+| [Reduction factors and earthing impedance](reduction-factors.md) | the reduction factor of EN 50522, $U_E$, $Z_E$ and $I_E$ at the fault bus |
 | [Touch voltage and transferred potential](touch-and-transfer.md) | why a factor of the electrode gives the touch voltage, how it is formed, and why closely spaced electrodes need one characteristic |
 | [Splitting the network, location response](decomposition.md) | what each direction contributes at the fault, and the response to any electrode at a bus |
 | [Direct current (`f = 0`)](dc.md) | what a formula means at zero frequency, the stand-in for ideal bonds, what a DC study needs |
@@ -43,10 +43,10 @@ and each of its section links lands on the matching row below.
 | [Earth potential rise (EPR)](theory.md#earth-potential-rise-epr){ #earth-potential-rise-epr } | Model and assumptions |
 | [Branch currents](theory.md#branch-currents){ #branch-currents } | Model and assumptions |
 | [Reduction factor](reduction-factors.md#reduction-factor){ #reduction-factor } | Reduction factors and earthing impedance |
-| [Reduction factor on a current basis](reduction-factors.md#reduction-factor-on-a-current-basis){ #reduction-factor-on-a-current-basis } | Reduction factors and earthing impedance |
+| [Reduction factor on a current basis](reduction-factors.md#reduction-factor){ #reduction-factor-on-a-current-basis } | Reduction factors and earthing impedance |
 | [Characterising a location without its electrode](decomposition.md#characterising-a-location-without-its-electrode){ #characterising-a-location-without-its-electrode } | Splitting the network, location response |
-| [Which one is the EN 50522 reduction factor](reduction-factors.md#which-one-is-the-en-50522-reduction-factor){ #which-one-is-the-en-50522-reduction-factor } | Reduction factors and earthing impedance |
-| [The two factors are not two computations of one number](reduction-factors.md#the-two-factors-are-not-two-computations-of-one-number){ #the-two-factors-are-not-two-computations-of-one-number } | Reduction factors and earthing impedance |
+| [Which one is the EN 50522 reduction factor](reduction-factors.md#reduction-factor){ #which-one-is-the-en-50522-reduction-factor } | Reduction factors and earthing impedance |
+| [The two factors are not two computations of one number](reduction-factors.md#checked-a-second-way){ #the-two-factors-are-not-two-computations-of-one-number } | Reduction factors and earthing impedance |
 | [Splitting the network at the fault](decomposition.md#splitting-the-network-at-the-fault){ #splitting-the-network-at-the-fault } | Splitting the network, location response |
 | [Frequency dependence of the reduction factor](reduction-factors.md#frequency-dependence-of-the-reduction-factor){ #frequency-dependence-of-the-reduction-factor } | Reduction factors and earthing impedance |
 | [Grounding impedance](reduction-factors.md#grounding-impedance){ #grounding-impedance } | Reduction factors and earthing impedance |

@@ -1,7 +1,7 @@
 # tests/test_decomposition.py
 """
-Splitting the network at the fault location, and the current-based reduction
-factor that goes with it.
+Splitting the network at the fault location, and the earth-return share of
+each side that goes with it.
 
 Two claims carry this module and both are checked numerically rather than
 argued:
@@ -9,9 +9,11 @@ argued:
 1. The parallel decomposition closes. ``Z_local`` in parallel with every
    ``Z_side`` reproduces the driving-point impedance of the whole network at the
    fault bus, to machine precision, in a radial network *and* in a ring.
-2. The current-based reduction factor responds to the fault-bus characteristic
-   while the EPR-based one does not. That is the whole reason both are kept: a
-   rho-f sensitivity study plotted against ``value`` would be a flat line.
+2. The reduction factor of the result, ``r = |U_E / (Z_E * I_F)|``, does not
+   respond to the fault-bus characteristic -- it is the current into an ideal
+   electrode there, which the short circuit takes out -- while the
+   earth-return share of each side of a cut does. A rho-f sensitivity study of
+   the fault-bus electrode reads ``U_E`` and the side shares, not ``r``.
 """
 
 from __future__ import annotations
@@ -183,34 +185,34 @@ def test_a_passive_spur_has_no_reduction_factor_but_has_an_impedance():
 # --- the sensitivity the whole feature exists for ----------------------------
 
 
-def test_r_epr_is_blind_to_the_fault_bus_while_r_current_is_not():
+def test_r_is_blind_to_the_fault_bus_while_the_side_share_is_not():
     """
-    The reason both definitions are kept.
-
-    Over four decades of fault-bus impedance the EPR-based factor does not move
-    at all -- it is a rank-1 update that cancels in its own quotient -- while the
-    potential rise moves by a factor of fifty.
+    Over four decades of fault-bus impedance the reduction factor does not
+    move -- by Norton it is the current into an ideal electrode at the fault
+    bus over I_F, and the short circuit takes that electrode out -- while the
+    potential rise moves by a factor of fifty. Second way: a genuine solve with
+    a 1e-9 Ohm electrode at the fault bus, the current into it read off. The
+    earth-return share of the source side of a cut does respond: a better
+    electrode at the faulted station keeps more current out of the shields
+    behind it.
     """
-    r_epr, r_current, eprs = [], [], []
+    r, eprs, side = [], [], []
     for z_fault in (0.05, 0.5, 5.0, 50.0):
         net = _network(z_fault=z_fault)
         factor = net.results["F"].reduction_factor
-        r_epr.append(factor.value[50.0])
-        r_current.append(factor.value_current[50.0])
+        r.append(factor.value[50.0])
         eprs.append(next(b.uepr for b in net.results["F"].buses if b.name == "F"))
+        side.append(gi.analyze_cuts(net, fault="F", cuts=_cuts()).r_side["left"][50.0])
 
-    assert r_epr == pytest.approx([0.5] * 4, rel=1e-9)
+    assert r == pytest.approx([r[0]] * 4, rel=1e-9)
+    shorted = _network(z_fault=1e-9)
+    i_short = next(b.uepr for b in shorted.results["F"].buses if b.name == "F") / 1e-9
+    # 1e-9 Ohm against an earthing network of a few Ohm: the potential of the
+    # shorted bus is ~3e-8 V, good to about 1e-6 relative.
+    assert r[0] == pytest.approx(i_short / 1000.0, rel=1e-6)
     assert eprs[-1] / eprs[0] > 40.0
-    # Strictly decreasing: a better electrode at the faulted station takes a
-    # larger share of the current straight into the local soil, so more of the
-    # fault current returns through earth.
-    assert all(a > b for a, b in pairwise(r_current))
-    assert r_current[0] / r_current[-1] > 1.5
-    # I_E is a sum over every bus that feeds the soil, so it stays finite even
-    # when the faulted station has no electrode at all -- the neighbours carry
-    # it. A definition built on the fault bus alone would collapse here, and
-    # that is exactly the error this range guards against.
-    assert min(r_current) > 0.005
+    assert all(a > b for a, b in pairwise(side))
+    assert side[0] / side[-1] > 1.5
 
 
 def test_the_side_impedances_are_a_property_of_the_network_alone():
@@ -312,24 +314,25 @@ def test_the_frame_is_long_format_and_typed_for_grouping():
     assert frame.filter(pl.col("frequency_Hz") == 50.0).height == 2
 
 
-def test_res_all_impedances_carries_both_reduction_factors():
+def test_res_all_impedances_carries_the_reduction_factor():
     net = _network()
     frame = net.res_all_impedances()
     assert "reduction_factor" in frame.columns
-    assert "reduction_factor_current" in frame.columns
+    assert "reduction_factor_current" not in frame.columns
     row = frame.filter(pl.col("frequency_Hz") == 50.0)
-    assert row["reduction_factor"][0] == pytest.approx(0.5, rel=1e-9)
-    assert 0.0 < row["reduction_factor_current"][0] < 1.0
+    assert row["reduction_factor"][0] == pytest.approx(
+        net.results["F"].reduction_factor.value[50.0], rel=1e-12)
+    assert 0.0 < row["reduction_factor"][0] < 1.0
 
 
 def test_the_result_survives_a_json_round_trip():
     net = _network()
     restored = type(net).model_validate_json(net.model_dump_json())
     factor = restored.results["F"].reduction_factor
-    assert factor.value[50.0] == pytest.approx(0.5, rel=1e-9)
-    assert factor.value_current[50.0] == pytest.approx(
-        net.results["F"].reduction_factor.value_current[50.0], rel=1e-12
-    )
+    original = net.results["F"].reduction_factor
+    assert factor.value[50.0] == original.value[50.0]
+    assert complex(factor.i_earth[50.0]) == complex(original.i_earth[50.0])
+    assert restored.results["F"].diagnostics == net.results["F"].diagnostics
 
 
 @RING

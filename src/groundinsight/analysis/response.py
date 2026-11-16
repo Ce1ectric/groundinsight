@@ -59,27 +59,21 @@ The largest magnitude over all passive electrodes is reached at
 (``arg Z_net`` = 50°), so it is reported next to the two endpoints rather than
 assumed to be negligible.
 
-The EPR-based reduction factor
-------------------------------
-``ResultReductionFactor.value`` is ``|u_F|/|u_F^{\,\text{no mutual}}|`` at the
-**fault** bus. When the bus being varied *is* the fault bus, the closed form
-makes it constant along the whole curve: the voltage there is
-``u_b(Y_B) = u_{0,b} / (1 + Y_B Z_\text{net})`` with and without mutual coupling
-alike, so the denominator cancels out of the quotient exactly. That is the same
-invariance the sensitivity study runs into, here derived rather than measured.
-
-Away from the fault bus it does **not** cancel: the fault-bus voltage is
-``u_F(Y_B) = u_{0,F} - Y_B z_F u_{0,b} / (1 + Y_B Z_\text{net})``, a difference
-whose two terms scale differently, and the quotient moves with the electrode
-(1.147 / 1.056 / 0.973 over ``Z_B`` = 0.1 / 10 / 1000 Ω on the four-bus chain of
-the review). It is therefore evaluated per electrode, from a **third** right-hand
-side of the same factorisation -- the mutual-free injection vector -- rather than
-carried through as an invariant.
+The reduction factor
+--------------------
+``ResultReductionFactor.value`` is ``r = |u_F| / (|Z_E| |I_F|)`` at the
+**fault** bus. Both factors move with the electrode at ``bus`` -- ``u_F`` and
+the fault-bus driving point ``Z_E`` are Möbius in ``Y_B`` -- so ``r`` is
+evaluated per electrode from the two (:meth:`BusResponse.fault_driving_point`).
+When the bus being varied *is* the fault bus, ``r`` is the current into an
+ideal electrode there over ``I_F`` and does not depend on the electrode at
+all: ``u_F = u_0 / (1 + Y_B Z_net)`` and ``Z_E = Z_net / (1 + Y_B Z_net)``,
+and the factor cancels.
 
 The three cases are extremes of the **local** quantities only -- the potential
 rise at the bus itself and its driving-point impedance. Quantities transferred
 to *other* buses are not bounded by them: the EPR at a remote bus and the
-current-based reduction factor can both exceed the ``ideal`` value for a
+reduction factor for a fault elsewhere can both exceed the ``ideal`` value for a
 passive, purely capacitive ``Z_B``, because the phase of ``Y_B`` enters those
 through a different combination than through ``1 + Y_B Z_net`` alone. Use
 :meth:`BusResponse.sweep` -- which costs no solve -- when the worst case of a
@@ -100,11 +94,6 @@ from scipy.sparse.linalg import splu
 from groundinsight.electrical_network import component_labels, restricted_columns
 from groundinsight.models.core_models import Network
 from groundinsight.utils.compat import renamed_parameters
-from groundinsight.utils.earth_current import (
-    NOISE_REL,
-    earth_current_vanishes,
-    split_earth_currents,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -130,8 +119,7 @@ class BusResponse(BaseModel):
     bus : str
         Bus whose electrode is the free parameter.
     fault_bus : str
-        Bus the fault sits on. Used to anchor which group of buses is named as
-        feeding the soil when the earth-return current is split.
+        Bus the fault sits on.
     frequencies : list of float
         Frequencies covered.
     bus_names : list of str
@@ -143,24 +131,14 @@ class BusResponse(BaseModel):
         Independent of anything installed at ``bus``.
     u_open : dict of float to dict of str to complex
         Nodal voltages with the local electrode removed.
-    u_open_no_mutual : dict of float to dict of str to complex
-        The same, for the injection vector *without* the mutual Norton
-        equivalents -- the third right-hand side of the same factorisation.
-        It is what makes the EPR-based reduction factor evaluable per electrode
-        instead of assumed invariant. Empty when the solve carried no mutual-free
-        vector, in which case :meth:`evaluate` falls back to :attr:`r_epr`.
-    other_impedance : dict of float to dict of str to complex
-        Per frequency, the electrode impedance of every bus that carries one,
-        the response bus included; what splits the earth-return current
-        between the electrodes.
     z_column : dict of float to dict of str to complex
         Voltage at every bus per ampere injected at ``bus``, source-free.
-    r_epr : dict of float to float or None
-        The EPR-based reduction factor of the **solved** fault, i.e. for the
-        electrode that was installed at ``bus`` when :func:`bus_response` ran.
-        It is constant along the curve only for ``bus == fault_bus``; elsewhere
-        use the ``r_epr`` column of :meth:`evaluate`, which is evaluated for the
-        electrode in hand.
+    r : dict of float to float or None
+        The reduction factor of the **solved** fault, i.e. for the electrode
+        that was installed at ``bus`` when :func:`bus_response` ran. It is
+        constant along the curve for ``bus == fault_bus``; elsewhere use the
+        ``r`` column of :meth:`evaluate`, which is evaluated for the electrode
+        in hand.
     i_fault : dict of float to complex
         Fault current, the negated sum of source injections. Constant.
     z_fault_open : dict of float to complex
@@ -205,10 +183,8 @@ class BusResponse(BaseModel):
     bus_names: List[str]
     z_network: Dict[float, complex]
     u_open: Dict[float, Dict[str, complex]]
-    u_open_no_mutual: Dict[float, Dict[str, complex]] = Field(default_factory=dict)
     z_column: Dict[float, Dict[str, complex]]
-    other_impedance: Dict[float, Dict[str, complex]] = Field(default_factory=dict)
-    r_epr: Dict[float, Optional[float]] = Field(default_factory=dict)
+    r: Dict[float, Optional[float]] = Field(default_factory=dict)
     i_fault: Dict[float, complex] = Field(default_factory=dict)
     z_fault_open: Dict[float, complex] = Field(default_factory=dict)
     z_fault_transfer: Dict[float, complex] = Field(default_factory=dict)
@@ -260,9 +236,7 @@ class BusResponse(BaseModel):
         """
         Apply the Möbius form to one open-circuit voltage vector.
 
-        Shared by :meth:`voltages` and :meth:`voltages_no_mutual`: the electrode
-        enters both the same way -- it is a shunt in the same matrix -- and only
-        the right-hand side behind ``u0`` differs.
+        The electrode is one shunt in the matrix behind ``u0``.
         """
         z_col = self.z_column[freq]
         u0_b = u0[self.bus]
@@ -320,35 +294,6 @@ class BusResponse(BaseModel):
             The EPR phasor per bus.
         """
         return self._with_electrode(self.u_open[frequency], z_bus, frequency)
-
-    @renamed_parameters(freq="frequency")
-    def voltages_no_mutual(
-        self, z_bus: ElectrodeSpec, frequency: float
-    ) -> Optional[Dict[str, complex]]:
-        """
-        The same, for the injection vector without the mutual Norton sources.
-
-        This is the denominator of the EPR-based reduction factor. ``None`` when
-        the response was built without that right-hand side.
-
-        Parameters
-        ----------
-        z_bus : complex, float or None
-            The electrode at ``bus`` in Ohm: ``None`` or an infinite value
-            for no electrode, ``0`` for an ideal one (see :meth:`admittance`).
-        frequency : float
-            One of the frequencies of the response, in Hz. The former
-            keyword ``freq`` is accepted as a deprecated alias.
-
-        Returns
-        -------
-        dict of str to complex or None
-            The EPR phasor per bus without mutual coupling.
-        """
-        u0 = self.u_open_no_mutual.get(frequency)
-        if u0 is None:
-            return None
-        return self._with_electrode(u0, z_bus, frequency)
 
     @renamed_parameters(freq="frequency")
     def driving_point(self, z_bus: ElectrodeSpec, frequency: float) -> complex:
@@ -509,56 +454,23 @@ class BusResponse(BaseModel):
             return self.u_open[freq][self.bus] / z_net
         return y * u[self.bus]
 
-    def _epr_reduction_factor(
+    def _reduction_factor(
         self, z_bus: ElectrodeSpec, freq: float, u: Dict[str, complex]
     ) -> Optional[float]:
         """
-        ``r = |u_F| / |u_F^{no mutual}|`` at the **fault** bus, for one electrode.
+        ``r = |u_F| / (|Z_E| |I_F|)`` at the **fault** bus, for one electrode.
 
-        Both voltages follow the same Möbius form in ``Y_B``; what differs is
-        the right-hand side behind them, which is why the third solve is needed
-        and why the factor does not cancel unless ``bus`` is the fault bus.
-
-        Falls back to the value of the solved fault (:attr:`r_epr`) when the
-        mutual-free vector is absent -- and that value is exact in the one case
-        where it is invariant.
-        """
-        if self.bus == self.fault_bus or not self.u_open_no_mutual:
-            return self.r_epr.get(freq)
-        u_nm = self.voltages_no_mutual(z_bus, freq)
-        if u_nm is None or self.fault_bus not in u_nm:
-            return self.r_epr.get(freq)
-        denominator = abs(u_nm[self.fault_bus])
-        # The noise rule of run_fault (P9): the denominator must stand above
-        # 1e-9 of the EPR the fault current alone raises the fault bus to.
-        z_ff = self.fault_driving_point(z_bus, freq)
-        i_fault = self.i_fault.get(freq)
-        reference = 0.0
-        if z_ff is not None and i_fault is not None:
-            reference = abs(i_fault) * abs(z_ff)
-        if not denominator > NOISE_REL * reference:
-            return None
-        return float(abs(u[self.fault_bus]) / denominator)
-
-    def _earth_quantities(
-        self, z_bus: ElectrodeSpec, freq: float, u: Dict[str, complex]
-    ) -> Dict[str, Optional[complex]]:
-        """
-        The current-based reduction factor of the bonded earthing system.
-
-        ``r_I = |I_E| / |I_F|`` with ``I_E`` summed over every bus that feeds the
-        soil, matching ``ResultReductionFactor.value_current``, under the same
-        noise rules. The earthing impedance is not derived from the group: it
-        is the fault-bus driving point, :meth:`fault_driving_point`.
-
-        The bus being varied is included like any other -- its electrode is part
-        of the earthing system, and leaving it out would reduce the whole sum to
-        the electrode current of one station.
+        ``u_F`` comes from :meth:`voltages`, ``Z_E`` from
+        :meth:`fault_driving_point`, both for the electrode in hand; the same
+        definition as ``ResultReductionFactor.value``. At the fault bus itself
+        ``r`` does not depend on the electrode (module docstring), and the
+        value of the solved fault is returned -- also for the ideal electrode,
+        where ``u_F`` and ``Z_E`` are both zero.
 
         Parameters
         ----------
         z_bus : complex, float or None
-            The electrode under test.
+            The electrode at ``bus``.
         freq : float
             Frequency in Hz.
         u : dict of str to complex
@@ -566,41 +478,17 @@ class BusResponse(BaseModel):
 
         Returns
         -------
-        dict
-            ``r_current`` (float or None).
+        float or None
+            ``None`` where ``Z_E`` is undefined or the frequency carries no
+            fault current.
         """
-        empty: Dict[str, Optional[complex]] = {"r_current": None}
-        impedances = self.other_impedance.get(freq, {})
-        electrode_currents = {
-            name: u[name] / z for name, z in impedances.items() if name != self.bus
-        }
-        # The varied bus carries the electrode being evaluated, not the one the
-        # response happened to be built with, so its current comes from the
-        # electrode under test -- including as a limit at the two extremes.
-        own = self._electrode_current(z_bus, freq, u)
-        if own != 0 and np.isfinite(own):
-            electrode_currents[self.bus] = own
+        if self.bus == self.fault_bus:
+            return self.r.get(freq)
+        z_e = self.fault_driving_point(z_bus, freq)
         i_fault = self.i_fault.get(freq)
-        # The noise rules of run_fault (P9): no group when every electrode
-        # current is rounding noise against the fault current, and the
-        # fault-bus potential orients a split without a fault-bus electrode.
-        if i_fault is not None and earth_current_vanishes(electrode_currents, i_fault):
-            return empty
-        u_fault = u.get(self.fault_bus, 0j)
-        u_scale = max((abs(v) for v in u.values()), default=0.0)
-        anchor = u_fault if abs(u_fault) > NOISE_REL * u_scale else None
-        split = split_earth_currents(
-            electrode_currents, reference_bus=self.fault_bus, anchor=anchor
-        )
-        if split is None:
-            return empty
-
-        r_current = (
-            abs(split.i_earth) / abs(i_fault)
-            if i_fault is not None and i_fault != 0
-            else None
-        )
-        return {"r_current": r_current}
+        if z_e is None or z_e == 0 or not np.isfinite(z_e) or i_fault is None or i_fault == 0:
+            return None
+        return float(abs(u[self.fault_bus]) / (abs(z_e) * abs(i_fault)))
 
     def evaluate(
         self, z_bus: ElectrodeSpec, *, label: Optional[str] = None
@@ -623,13 +511,12 @@ class BusResponse(BaseModel):
             One row per frequency: ``case``, ``bus``, ``fault``,
             ``frequency_Hz``, ``Z_bus_Ohm``, ``Z_network_Ohm``,
             ``Z_driving_point_Ohm``, ``EPR_V``, ``EPR_deg``, ``I_electrode_A``,
-            ``r_epr``, ``r_current``, ``Z_G_Ohm``, plus ``EPR_<bus>_V`` for
-            every other bus.
+            ``r``, ``Z_G_Ohm``, plus ``EPR_<bus>_V`` for every other bus.
 
         Notes
         -----
-        ``r_epr`` is evaluated **for this electrode** at the fault bus (see the
-        module docstring); it is constant across electrodes only when ``bus`` is
+        ``r`` is evaluated **for this electrode** at the fault bus (see the
+        module docstring); it is constant across electrodes when ``bus`` is
         the fault bus. ``Z_G_Ohm`` is the EN 50522 earthing impedance
         ``|Z_E|``: the driving-point impedance of the earthing network at the
         **fault** bus for this electrode (:meth:`fault_driving_point`), the same
@@ -658,8 +545,7 @@ class BusResponse(BaseModel):
             u = self.voltages(z_bus, freq)
             z_dp = self.driving_point(z_bus, freq)
             u_b = u[self.bus]
-            r_epr = self._epr_reduction_factor(z_bus, freq, u)
-            earth = self._earth_quantities(z_bus, freq, u)
+            r = self._reduction_factor(z_bus, freq, u)
             z_g = self.fault_driving_point(z_bus, freq)
             row = {
                 "case": label if label is not None else _render(z_bus),
@@ -674,8 +560,7 @@ class BusResponse(BaseModel):
                 "I_electrode_A": float(
                     abs(self._electrode_current(z_bus, freq, u))
                 ),
-                "r_epr": r_epr,
-                "r_current": earth["r_current"],
+                "r": r,
                 "Z_G_Ohm": None if z_g is None else float(abs(z_g)),
             }
             for name in self.bus_names:
@@ -771,7 +656,7 @@ def _frame(rows: List[Dict[str, object]]) -> pl.DataFrame:
     electrode impedance) would otherwise come out as ``Null`` dtype and refuse
     to stack with the other cases.
     """
-    nullable = ["Z_bus_Ohm", "r_epr", "r_current", "Z_G_Ohm"]
+    nullable = ["Z_bus_Ohm", "r", "Z_G_Ohm"]
     return pl.DataFrame(rows).with_columns(
         [pl.col(name).cast(pl.Float64) for name in nullable]
     )
@@ -934,13 +819,11 @@ def bus_response(
 
     result = network.results[fault]
     reduction = result.reduction_factor
-    r_epr = dict(reduction.value) if reduction is not None else {}
+    r = dict(reduction.value) if reduction is not None else {}
 
     z_network: Dict[float, complex] = {}
     u_open: Dict[float, Dict[str, complex]] = {}
-    u_open_no_mutual: Dict[float, Dict[str, complex]] = {}
     z_column: Dict[float, Dict[str, complex]] = {}
-    other_impedance: Dict[float, Dict[str, complex]] = {}
     i_fault: Dict[float, complex] = {}
     z_fault_open: Dict[float, complex] = {}
     z_fault_transfer: Dict[float, complex] = {}
@@ -995,24 +878,17 @@ def bus_response(
 
         unit = np.zeros(len(order), dtype=complex)
         unit[k] = 1.0
-        # Three right-hand sides, one factorisation: the fault injection, the
-        # unit injection at the bus, and -- when the solve carried it -- the
-        # same fault injection without the mutual Norton equivalents. The third
-        # is what makes ``r_epr`` evaluable per electrode (it is the denominator
-        # of the reduction factor). The factorisation is a sparse LU of the
+        # Two right-hand sides, one factorisation: the fault injection and the
+        # unit injection at the bus. The factorisation is a sparse LU of the
         # assembled matrix: a dense solve on a copy of a dense ``Y`` is cubic in
         # the number of buses -- 5.6 s on a 2000-bus ring at seven frequencies,
         # the dense earthing columns included.
-        i_no_mutual = electrical.i_vectors_no_mutual.get(freq)
         rhs = [np.asarray(i_vector, dtype=complex), unit]
-        if i_no_mutual is not None:
-            rhs.append(np.asarray(i_no_mutual, dtype=complex))
         try:
             factor = splu(Y0)
             solved = factor.solve(np.column_stack(rhs))
             u0 = solved[:, 0]
             z_col = solved[:, 1]
-            u0_nm = solved[:, 2] if i_no_mutual is not None else None
         except (np.linalg.LinAlgError, RuntimeError) as exc:
             raise ValueError(
                 f"The nodal system of network '{network.name}' is singular at "
@@ -1031,12 +907,6 @@ def bus_response(
         z_network[freq] = complex(z_col[k])
         u_open[freq] = dict(zip(order, u0.tolist(), strict=True))
         z_column[freq] = dict(zip(order, z_col.tolist(), strict=True))
-        if u0_nm is not None:
-            u_open_no_mutual[freq] = dict(zip(order, u0_nm.tolist(), strict=True))
-
-        other_impedance[freq] = {
-            order[i]: complex(impedances[i]) for i in np.flatnonzero(electrode)
-        }
 
         # The earthing network without the electrode at ``target`` and without
         # the Thevenin loop closures: three numbers make the fault-bus driving
@@ -1069,10 +939,8 @@ def bus_response(
         bus_names=order,
         z_network=z_network,
         u_open=u_open,
-        u_open_no_mutual=u_open_no_mutual,
         z_column=z_column,
-        other_impedance=other_impedance,
-        r_epr=r_epr,
+        r=r,
         i_fault=i_fault,
         z_fault_open=z_fault_open,
         z_fault_transfer=z_fault_transfer,

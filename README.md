@@ -11,7 +11,7 @@
 systems during single-phase-to-ground faults. For arbitrary bus/branch
 topologies — lines, rings, meshes — it computes the earth potential rise
 (EPR) of every station, the currents in cable shields and earth wires, the
-earthing impedance and both reduction factors at the fault location, per
+earthing impedance and the reduction factor at the fault location, per
 frequency, from impedance formulas you define.
 
 - **Documentation**: <https://ce1ectric.github.io/groundinsight/>
@@ -52,7 +52,7 @@ it for every frequency of interest.
   on the network; `gi.solve` returns it and leaves the network untouched;
   `gi.check_network` reports every problem of a network as structured
   diagnostics instead of raising. `Network.res_fault` gives the key figures
-  of a fault — EPR, $U_E$, $Z_E$, $I_E$, both reduction factors — one row per
+  of a fault — EPR, $U_E$, $Z_E$, $I_E$, the reduction factor — one row per
   frequency and an RMS row, with the schema `gi.RES_FAULT_SCHEMA`;
   `res_buses`, `res_branches` and `res_all_impedances` give the rest, all as
   Polars DataFrames.
@@ -65,10 +65,10 @@ it for every frequency of interest.
   parallel cables as a solve of the phase-conductor network says
   (`phase_current_mode="auto"`, the default);
   `BranchType.phase_impedance_formula` describes the faulted conductor.
-- **Two reduction factors.** `value_current` (`r_current`) is the share of
-  the fault current returning through the soil, the reduction factor of
-  EN 50522; `value` (`r_epr`) is the EPR ratio with and without coupling,
-  $|1 - Z_m/Z_s|$ for a homogeneous run.
+- **One reduction factor.** `value` (column `r`) is $|I_E|/|3I_0|$ with
+  $I_E = U_E/Z_E$, the current into an ideal electrode at the fault (Norton's
+  theorem), so the chain $U_E = r \cdot 3I_0 \cdot Z_E$ of EN 50522 holds
+  exactly; on a long homogeneous run it is the cable's $|1 - Z_m/Z_s|$.
 - **A sparse kernel.** The nodal matrices are assembled and factorised
   sparse. Measured for the changelog (CPU time, seven frequencies): a
   2000-bus ring in 0.22 s instead of 4.04 s, a 4000-bus ring in 0.53 s where
@@ -139,12 +139,12 @@ gi.create_fault(name="earth_fault", bus="bus_fault", network=net)
 result = gi.run_fault(net, fault="earth_fault")
 key = net.res_fault("earth_fault").row(0, named=True)   # the 50 Hz row
 print(f"U_E = {key['U_E_V']:.2f} V, Z_E = {key['Z_E_Ohm']:.4f} Ohm, "
-      f"r = {key['r_current']:.6f}, EPR ratio = {key['r_epr']:.6f}")
+      f"I_E = {key['I_E_A']:.2f} A, r = {key['r']:.6f}")
 print("diagnostics:", [d.code for d in result.diagnostics])
 ```
 
 ```text
-U_E = 275.43 V, Z_E = 0.8440 Ohm, r = 0.274064, EPR ratio = 0.384615
+U_E = 275.43 V, Z_E = 0.8440 Ohm, I_E = 326.33 A, r = 0.326331
 diagnostics: []
 ```
 
@@ -173,13 +173,13 @@ EN 50522 quantities:
 |---|---|
 | $U_E$ | the earth potential rise of the fault bus |
 | $Z_E$ | the driving-point impedance of the grounding system at the fault bus: what a measurement there against remote earth would see, with everything bonded to the station |
-| $I_E$ | the earth current: the part of the fault current that returns through the soil |
-| $r$ | $\lvert I_E\rvert / \lvert 3I_0\rvert$ (`value_current`), the reduction factor of EN 50522 |
-| EPR ratio | EPR at the fault with the coupling over EPR without (`value`), the reduction factor of a cable |
+| $I_E$ | the earth current $U_E / Z_E$: the current an ideal electrode at the fault bus would take, the part of the fault current that does not return to the sources through shields and conductors |
+| $r$ | $\lvert I_E\rvert / \lvert 3I_0\rvert$ (`value`), the reduction factor of EN 50522 |
 
-EN 50522 writes the chain $U_E = r \cdot 3I_0 \cdot Z_E$. `groundinsight`
-computes the three quantities independently, and the chain holds where the
-standard's picture of a long bonded run applies. The model, its assumptions
+EN 50522 writes the chain $U_E = r \cdot 3I_0 \cdot Z_E$. By Norton's theorem
+it holds exactly with these definitions, without the standard's picture of a
+balanced state far down a long bonded run; the check of $r$ is the fault bus
+earthed ideally. The model, its assumptions
 and their limits are described under
 [Understanding the model](https://ce1ectric.github.io/groundinsight/explanation/).
 

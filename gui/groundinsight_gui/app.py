@@ -1200,12 +1200,11 @@ class ProjectPage:
             ("epr_max", rms.EPR_max_V if rms else None, "V",
              f"{self.t('at_bus')} {rms.EPR_max_bus if rms else DASH} · {self.t('rms')}"),
             ("i_f", row.I_F_A if row else None, "A", at),
-            ("r_epr", row.r_epr if row else None, "", at),
-            ("r_current", row.r_current if row else None, "", at),
+            ("r", row.r if row else None, "", at),
             ("i_e", row.I_E_A if row else None, "A", at),
             ("z_e", row.Z_E_Ohm if row else None, "Ω", at),
         ]
-        with ui.element("div").classes("grid gap-3 w-full grid-cols-2 md:grid-cols-4 xl:grid-cols-7"):
+        with ui.element("div").classes("grid gap-3 w-full grid-cols-2 md:grid-cols-3 xl:grid-cols-6"):
             for key, value, unit, note in tiles:
                 with ui.card().classes("gi-tile p-3 gap-0").props("flat bordered"):
                     ui.label(self.t(f"tile_{key}")).classes("text-xs uppercase tracking-wide text-gray-500")

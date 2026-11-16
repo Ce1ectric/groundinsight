@@ -555,11 +555,10 @@ class KeyFigureRowDTO(BaseDTO):
         The largest EPR in the network, in V.
     EPR_max_bus : str or None
         The bus it occurs at.
-    r_epr, r_current : float or None
-        The EPR-based reduction factor and the current-based one,
-        ``|I_E| / |I_F|``.
+    r : float or None
+        The reduction factor ``|I_E| / |I_F|``.
     I_E_A : float or None
-        The earth-return current ``|I_E|``, in A.
+        The earth current ``|I_E| = |U_E / Z_E|``, in A.
     U_E_V : float or None
         The earthing voltage ``|U_E|`` of EN 50522 (the EPR at the fault
         bus), in V.
@@ -590,8 +589,7 @@ class KeyFigureRowDTO(BaseDTO):
     EPR_fault_degree: FiniteFloat = None
     EPR_max_V: FiniteFloat = None
     EPR_max_bus: Optional[str] = None
-    r_epr: FiniteFloat = None
-    r_current: FiniteFloat = None
+    r: FiniteFloat = None
     I_E_A: FiniteFloat = None
     U_E_V: FiniteFloat = None
     Z_E_Ohm: FiniteFloat = None
@@ -601,6 +599,28 @@ class KeyFigureRowDTO(BaseDTO):
     U_vT_max_bus: Optional[str] = None
     U_transfer_max_V: FiniteFloat = None
     U_transfer_max_bus: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_earlier_factors(cls, data: Any) -> Any:
+        """
+        Read a row written before there was one reduction factor.
+
+        Parameters
+        ----------
+        data : Any
+            The raw row.
+
+        Returns
+        -------
+        Any
+            The row without ``r_epr`` and ``r_current``, whose definitions no
+            longer exist; ``r`` stays empty, as the row carries no value of
+            the current definition.
+        """
+        if isinstance(data, dict) and ("r_epr" in data or "r_current" in data):
+            data = {k: v for k, v in data.items() if k not in ("r_epr", "r_current")}
+        return data
 
 
 class KeyFiguresDTO(BaseDTO):

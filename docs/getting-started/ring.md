@@ -72,8 +72,8 @@ formula reads:
 []
 U_E  = 200.84 V
 Z_E  = 0.5631 Ohm at 27.11 deg
-I_E  = 199.85 A
-r    = 0.199847   EPR ratio = 0.384615
+I_E  = 356.69 A
+r    = 0.356691
 ```
 
 The warning is gone, and the numbers are those of Step 2: the symmetric split
@@ -95,8 +95,12 @@ bus_b       EPR     0.00 V   electrode     0.00 A
 ```
 
 The two stations half way along the routes stay at zero potential and carry
-no current: the ring is symmetric about them, and the earth current enters
-the soil at the fault and leaves it at the infeed only.
+no current: the ring is symmetric about them, and the soil current enters
+at the fault and leaves at the infeed only. The earth current $I_E = U_E/Z_E$
+= 356.69 A is more than the 199.85 A of the fault station's own electrode: it
+is the current into the whole earthing system $Z_E$, the paths through the
+shields to the other electrodes included — the current an ideal electrode at
+`bus_fault` would take.
 
 ## Step 5 — Check it by hand
 
@@ -111,29 +115,42 @@ parallel with the two half-routes, $Z_s/2$ for one section of 2.5 km
 $$
 \lvert U_E\rvert = \lvert 1-k\rvert\, I\, \bigl\lvert Z_B \parallel \tfrac{Z_s}{2} \bigr\rvert,
 \qquad
-r = \frac{\lvert I_E\rvert}{I} = \frac{\lvert Z_s - Z_m\rvert/2}{\lvert Z_B + Z_s/2\rvert},
-\qquad
 Z_E = Z_B \parallel \Bigl(\tfrac{Z_s}{2} + \tfrac{Z_B}{2} \parallel \bigl(\tfrac{Z_s}{2} + Z_B\bigr)\Bigr).
 $$
 
-The last one is one ampere injected at `bus_fault`: its own electrode in
+The second one is one ampere injected at `bus_fault`: its own electrode in
 parallel with the two half-routes to the electrodes of `bus_a` and `bus_b` (in
 parallel by symmetry, $Z_B/2$), and from there the other two half-routes to
 the electrode of `bus_source`.
+
+The reduction factor is the current into an ideal electrode at `bus_fault`
+over $I$. With that electrode ideal, `bus_a` and `bus_b` still move together
+and act as one node $M$ with $Z_B/2$; the ring becomes `bus_source`
+$-\,Z_s/2\,-$ $M$ $-\,Z_s/2\,-$ `bus_fault`, with the current $(1-k)\,I$ taken
+out at the infeed and put in at the fault. Two node equations give
+$u_M = \alpha\, u_S$ with $\alpha = Z_B/(Z_s + 2Z_B)$,
+
+$$
+u_S = \frac{-(1-k)\,I}{1/Z_B + 2(1-\alpha)/Z_s},
+\qquad
+r = \frac{\bigl\lvert (1-k)\,I + 2\alpha\, u_S / Z_s \bigr\rvert}{I}.
+$$
 
 ```python
 --8<-- "docs/snippets/ring.py:by_hand"
 ```
 
 ```text
-by hand: U_E = 200.84 V, r = 0.199847, EPR ratio = 0.384615, Z_E = 0.5631 Ohm at 27.11 deg
+by hand: U_E = 200.84 V, r = 0.356691, Z_E = 0.5631 Ohm at 27.11 deg
 ```
 
 Compared with the line of the first tutorial, the second route halves the
-shield impedance between infeed and fault, so more of the return current takes
-the shields: `r` falls from 0.274064 to 0.199847, $U_E$ from 275.43 V to
-200.84 V, and $Z_E$ from 0.8440 Ω to 0.5631 Ω. The EPR ratio stays at
-0.384615 — with the same $k$ on every branch it is $|1-k|$ in any topology.
+shield impedance between infeed and fault and adds the electrodes of `bus_a`
+and `bus_b`: $Z_E$ falls from 0.8440 Ω to 0.5631 Ω and $U_E$ from 275.43 V to
+200.84 V. `r` rises from 0.326331 to 0.356691, because the two stations half
+way give the current a second way into the soil before it reaches the
+infeed. The chain of the standard holds in both: $0.356691 \cdot 1000\ \text{A}
+\cdot 0.5631\ \Omega$ = 200.8 V.
 
 ## Step 6 — Why dividing the current matters
 
@@ -145,13 +162,15 @@ That mode is still available, so that old studies can be reproduced:
 ```
 
 ```text
-paths mode: U_E = 522.19 V, EPR ratio = 1.000000
+paths mode: U_E = 522.19 V, r = 0.927396
 ```
 
 With 1000 A on both routes the coupling is counted twice, and the earthing
 network sees $(1-2k)\,I$ instead of $(1-k)\,I$. For this cable
 $|1-2k| = |0.625 - 1.5j| / |0.625 + 1.5j| = 1$: the EPR comes out as if the
-shields did not couple at all, 2.6 times too high. With other cables the same
+shields did not couple at all, 2.6 times too high, and $r$ is that of the
+galvanic paths alone — with $|1-k|$ = 0.384615 it would be
+$0.384615 \cdot 0.927396$ = 0.356691, the value of Step 3. With other cables the same
 mistake can drive the result towards zero instead. The default,
 `phase_current_mode="auto"`, divides the current and needs nothing from you
 ([Phase currents in rings and meshes](../explanation/phase-currents.md#path-finding)).
@@ -167,25 +186,27 @@ frequency with 1.0 unless `scalings` says otherwise:
 ```
 
 ```text
- 50 Hz: I_F = 1000.00 A   U_E =  200.84 V   r = 0.199847   EPR ratio = 0.384615
-250 Hz: I_F =  200.00 A   U_E =   15.71 V   r = 0.070255   EPR ratio = 0.083045
+ 50 Hz: I_F = 1000.00 A   U_E =  200.84 V   r = 0.356691
+250 Hz: I_F =  200.00 A   U_E =   15.71 V   r = 0.083285
    RMS: I_F = 1019.80 A   U_E =  201.46 V
 ```
 
 Every frequency is an independent solve; the 50 Hz row is that of Step 3.
 At 250 Hz the shield reactance dominates its resistance, the shield takes
-nearly all of the return current, and the EPR ratio falls to
-$0.25/\lvert 0.25 + 3j\rvert = 0.083045$. The RMS row combines the
-frequencies, $\sqrt{200.84^2 + 15.71^2}$ = 201.46 V; it has no reduction
-factors, because a ratio of RMS values is not a property of the network.
+nearly all of the return current, and $r$ falls to 0.083285. The RMS row
+combines the frequencies, $\sqrt{200.84^2 + 15.71^2}$ = 201.46 V; it has no
+reduction factor, because a ratio of RMS values is not a property of the
+network.
 
-## Step 8 — Which reduction factor to read
+## Step 8 — The reduction factor
 
-| Column | Field | Meaning | Use it for |
-|---|---|---|---|
-| `r_current` (`res_fault`), `reduction_factor_current` (`res_all_impedances`) | `value_current` | share of the fault current that returns through the soil, $\lvert I_E\rvert/\lvert 3I_0\rvert$ | the reduction factor `r` of EN 50522; sensitivity to electrodes and soil |
-| `r_epr` (`res_fault`), `reduction_factor` (`res_all_impedances`) | `value` | EPR at the fault with coupling over EPR without | comparing cables: for a homogeneous run it is the tabulated $\lvert 1 - Z_m/Z_s\rvert$, and it does not respond to the electrodes |
-
+`r` (column of `res_fault`, `reduction_factor` of `res_all_impedances`, field
+`ResultReductionFactor.value`) is the reduction factor of EN 50522,
+$\lvert I_E\rvert/\lvert 3I_0\rvert$ with $I_E = U_E/Z_E$ the current into an
+ideal electrode at the fault. It does not depend on the fault station's own
+electrode; on a long homogeneous run far from the infeed it is the tabulated
+$\lvert 1 - Z_m/Z_s\rvert$ of the cable
+([Reduction factors and earthing impedance](../explanation/reduction-factors.md)).
 For a check against the limits of the standard, compare $U_E$ itself with the
 permissible value — [Compare results with EN 50522 limits](../howto/en50522-check.md)
 describes the procedure.

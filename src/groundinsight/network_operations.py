@@ -890,10 +890,7 @@ def run_fault(
         Among others (every package warning of the run is collected into
         ``Result.diagnostics``): ``PARALLEL_COEFFICIENT_DEFAULT`` when
         ``phase_current_mode="paths"`` meets a source that reaches the fault
-        over several paths with default parallel coefficients, and
-        ``EARTH_GROUP_SPREAD`` when the electrode currents are spread in angle
-        so that ``I_E`` and ``value_current`` describe the dominant direction
-        only.
+        over several paths with default parallel coefficients.
 
     Notes
     -----

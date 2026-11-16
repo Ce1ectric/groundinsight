@@ -154,11 +154,13 @@ def test_results_page_states_the_rms_row_and_both_dtypes_of_frequency():
     assert rms["frequency_Hz"].null_count() == rms.height == 3
 
 
-def test_results_page_labels_both_reduction_factors():
-    """DOC8: wherever a factor appears, the page says which one is the EN 50522 r."""
+def test_results_page_labels_the_reduction_factor():
+    """DOC8: wherever the factor appears, the page says it is the EN 50522 r."""
     text = _flat(_page("reference/results.md"))
-    for phrase in ("`reduction_factor_current`", "`r_current`", "`reduction_factor`", "`r_epr`"):
+    for phrase in ("`reduction_factor`", "`r`"):
         assert phrase in text, phrase
+    for gone in ("`reduction_factor_current`", "`r_current`", "`r_epr`"):
+        assert gone not in text, gone
     assert text.count("EN 50522") >= 3
 
 

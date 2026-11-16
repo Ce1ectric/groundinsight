@@ -8,17 +8,25 @@ These tests cover the four physical reference cases supplied by the author
 and a fully symmetric ring), plus two structural tests that the calculation
 core must satisfy independently of the bus-insertion order.
 
-Analytical reference (see module docstring of ``electrical_network.py``):
+Analytical reference (see ``ElectricalNetwork.compute_reduction_factors``):
 
-    For a network where the mutual Norton injection is exactly anti-parallel
-    to the source/fault injection (i.e. a single simple path or a symmetric
-    ring), the reduction factor simplifies to
+    The reduction factor is ``r = |U_E / (Z_E * I_F)|``, the current into an
+    ideal electrode at the fault bus over the fault current. Where every
+    branch has the same ratio ``k = Z_mutual / Z_self`` (a single cable, a
+    chain, a symmetric ring of one cable type) the mutual Norton injections
+    telescope to ``-k`` times the source/fault injection, so
 
-        r = |1 - Z_mutual / Z_self|.
+        r = |1 - k| * r0,
 
-    With Z_self = 0.25 + j*0.6 and Z_mutual = j*0.6 this evaluates to 0.3846,
-    which matches the author's field reference band of 0.3 ... 0.4 for MV
-    cables with PEN/shield.
+    with ``r0`` the galvanic share -- the same short circuit without the
+    coupling, the part of the fault current that does not return through the
+    shields to the source station. For one cable from a source earthed with
+    ``Z_A`` this is the closed form ``r = |(Z_self - Z_mutual)/(Z_self + Z_A)|``.
+    The cable value ``|1 - k|`` (0.3846 for Z_self = 0.25 + j*0.6 and
+    Z_mutual = j*0.6, the author's field band of 0.3 ... 0.4 for MV cables
+    with PEN/shield) is the limit of an ideally earthed source station.
+    ``r0`` comes from the independent reference solver
+    (``tests/_reference_mna.py``), which holds the fault bus at remote earth.
 """
 
 import cmath
@@ -29,16 +37,12 @@ import pytest
 
 import groundinsight as gi
 from groundinsight.models.core_models import BusType, BranchType
+from tests import _reference_mna as ref
 from tests._warning_policy import acknowledge
 
 #: The ring cases split their phase current by the proxy; the tests check the
 #: reduction factor against closed forms.
 pytestmark = acknowledge("PHASE_PROXY")
-
-#: The 20-bus ring spreads its electrode currents in angle at the far
-#: stations.
-SPREAD = acknowledge("EARTH_GROUP_SPREAD")
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures (not pytest fixtures to keep the tests self-contained and
@@ -139,6 +143,17 @@ def _reduction_factor(net, fault_name, freq=50):
     return net.results[fault_name].reduction_factor.value[freq]
 
 
+def _galvanic_share(net, fault_name, freq=50):
+    """``r0``: the reference solver's short circuit of the fault bus without coupling."""
+    rd = ref.reference_network(net, float(freq), fault_name)
+    solution = ref.solve_oneway(rd, with_mutual=False, shorted=True)
+    return abs(solution["I_short"]) / abs(solution["I_F"])
+
+
+#: Electrode of every station of the fixtures (``_bus_type``), in Ohm.
+Z_STATION = 1.0
+
+
 # Analytical reference: r = |1 - Z_mutual / Z_self|
 Z_SELF = complex(0.25, 0.6)
 Z_MUTUAL = complex(0.0, 0.6)
@@ -184,7 +199,8 @@ def test_reduction_factor_line_without_shield():
 
 
 def test_reduction_factor_single_ms_cable():
-    """A two-bus MV-cable link must yield the analytical r = |1 - Z_m/Z_s|."""
+    """A two-bus MV-cable link must yield the analytical
+    r = |(Z_s - Z_m)/(Z_s + Z_A)|, the cable value times the galvanic share."""
     net = gi.create_network(name="MSCableOnly", frequencies=[50])
     bus_type = _bus_type()
     cable = _ms_cable_branch_type()
@@ -206,8 +222,9 @@ def test_reduction_factor_single_ms_cable():
     gi.run_fault(net, fault="fault")
 
     r = _reduction_factor(net, "fault")
-    assert r == pytest.approx(R_REF, rel=1e-6)
-    assert 0.30 <= r <= 0.40  # matches field reference band
+    assert r == pytest.approx(abs((Z_SELF - Z_MUTUAL) / (Z_SELF + Z_STATION)), rel=1e-9)
+    assert r == pytest.approx(R_REF * _galvanic_share(net, "fault"), rel=1e-9)
+    assert 0.30 <= R_REF <= 0.40  # the cable value matches the field reference band
 
 
 # ---------------------------------------------------------------------------
@@ -286,13 +303,13 @@ def test_reduction_factor_independent_of_bus_insertion_order():
     r_nat = _reduction_factor(net_natural, "fault")
     r_rev = _reduction_factor(net_reversed, "fault")
     assert r_nat == pytest.approx(r_rev, rel=1e-9)
-    assert r_nat == pytest.approx(R_REF, rel=1e-6)
+    assert r_nat == pytest.approx(R_REF * _galvanic_share(net_natural, "fault"), rel=1e-9)
 
 
 # ---------------------------------------------------------------------------
 # Ring topology: this is the case Christian found broken. With a symmetric
 # ring and a user-set parallel_coefficient=0.5 the reduction factor must
-# collapse back to the analytical r = |1 - Z_m/Z_s|. The automatic variant
+# collapse back to the analytical r = |1 - Z_m/Z_s| * r0. The automatic variant
 # (phase_current_mode="auto") must reach the same answer without the
 # user having to set the coefficient.
 # ---------------------------------------------------------------------------
@@ -358,7 +375,7 @@ def test_ring_with_parallel_coefficient_half():
     gi.run_fault(net, fault="fault")
 
     r = _reduction_factor(net, "fault")
-    assert r == pytest.approx(R_REF, rel=1e-6)
+    assert r == pytest.approx(R_REF * _galvanic_share(net, "fault"), rel=1e-9)
 
 
 def test_ring_auto_phase_currents():
@@ -374,7 +391,7 @@ def test_ring_auto_phase_currents():
     gi.run_fault(net, fault="fault", phase_current_mode="auto")
 
     r = _reduction_factor(net, "fault")
-    assert r == pytest.approx(R_REF, rel=1e-3)
+    assert r == pytest.approx(R_REF * _galvanic_share(net, "fault"), rel=1e-3)
 
 
 def test_ring_variants_agree():
@@ -399,11 +416,12 @@ def test_ring_variants_agree():
 # :func:`_ms_cable_branch_type_freq_dependent`. For a single cable section
 # the closed form is
 #
-#     r(f) = R / sqrt(R**2 + (omega * L)**2)
+#     r(f) = |Z_self - Z_mutual| / |Z_self + Z_A| = R / |R + Z_A + j * omega * L|
 #
-# which is also the analytical reference for a fully symmetric ring with the
-# fault diametrically opposite to the source (Norton injections perfectly
-# anti-parallel along both halves).
+# the cable value R / sqrt(R**2 + (omega * L)**2) times the galvanic share.
+# A fully symmetric ring with the fault diametrically opposite the source has
+# the same cable value (Norton injections perfectly anti-parallel along both
+# halves) times its own galvanic share.
 # ---------------------------------------------------------------------------
 
 
@@ -434,26 +452,27 @@ def test_reduction_factor_sweep_single_cable_converges_to_zero():
     rf = net.results["fault"].reduction_factor.value
     rs = [rf[float(f)] for f in _SWEEP_FREQS]
 
-    # 50 Hz reproduces the existing single-cable reference value (~0.385).
-    assert rs[0] == pytest.approx(R_REF, rel=1e-6)
+    # 50 Hz reproduces the single-cable closed form of the 50-Hz cable.
+    assert rs[0] == pytest.approx(abs((Z_SELF - Z_MUTUAL) / (Z_SELF + Z_STATION)), rel=1e-9)
 
     # Monotonically decreasing across the entire sweep.
     for prev, curr in pairwise(rs):
         assert curr < prev, f"r is not monotonically decreasing: {rs}"
 
-    # Each value matches the closed-form expression r = R / sqrt(R^2+(wL)^2).
+    # Each value is the cable value R / sqrt(R^2+(wL)^2) times the galvanic
+    # share, and the closed form R / |R + Z_A + j*wL|.
     for f, r in zip(_SWEEP_FREQS, rs, strict=True):
-        assert r == pytest.approx(_r_analytical_single_cable(f), rel=1e-3)
+        assert r == pytest.approx(_r_analytical_single_cable(f) * _galvanic_share(net, "fault", f), rel=1e-9)
+        assert r == pytest.approx(0.25 / abs(complex(0.25 + Z_STATION, 0.6 * f / 50)), rel=1e-9)
 
     # By 5 kHz the reduction factor is well below 5 % -- clear convergence
     # towards 0.
     assert rs[-1] < 0.05
 
 
-@SPREAD
 def test_reduction_factor_sweep_20_bus_ring_converges_to_zero():
-    """20-bus symmetric ring with the fault opposite the source: same
-    closed-form reduction factor as a single cable, hence the same
+    """20-bus symmetric ring with the fault opposite the source: the cable
+    value of a single cable times the ring's galvanic share, and the same
     convergence towards 0 with rising frequency."""
     n_buses = 20
     fault_idx = n_buses // 2
@@ -485,9 +504,10 @@ def test_reduction_factor_sweep_20_bus_ring_converges_to_zero():
     rf = net.results["fault"].reduction_factor.value
     rs = [rf[float(f)] for f in _SWEEP_FREQS]
 
-    # 50 Hz matches the analytical single-cable reference (the ring shares
-    # the same closed form thanks to the symmetric anti-parallel injections).
-    assert rs[0] == pytest.approx(R_REF, rel=1e-3)
+    # The ring shares the cable value thanks to the symmetric anti-parallel
+    # injections; the galvanic share is the ring's own.
+    for f, r in zip(_SWEEP_FREQS, rs, strict=True):
+        assert r == pytest.approx(_r_analytical_single_cable(f) * _galvanic_share(net, "fault", f), rel=1e-3)
 
     # Monotonically decreasing across the entire sweep.
     for prev, curr in pairwise(rs):
@@ -517,9 +537,9 @@ def test_reduction_factor_sweep_20_bus_ring_converges_to_zero():
 # Adding a non-zero mutual impedance ``Z_m`` between the conductor and the
 # return path must strictly reduce ``|u_EPR / I_fault|`` (induced mutual
 # currents along the source-fault paths reduce the EPR). Note that the
-# ``grounding_impedance`` reported by :func:`run_fault` is
-# ``u_EPR / (r * I_fault)`` and is therefore invariant under ``Z_m`` for
-# this fully symmetric configuration, so the check has to use the raw
+# ``grounding_impedance`` reported by :func:`run_fault` is the driving point
+# ``Z_E`` of the earthing network, computed without the coupling, and is
+# therefore invariant under ``Z_m``, so the check has to use the raw
 # ``u_EPR / I_fault`` value.
 # ---------------------------------------------------------------------------
 

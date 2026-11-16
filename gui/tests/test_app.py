@@ -165,8 +165,7 @@ async def test_running_a_fault_shows_the_numbers_of_the_library(user: User):
         "tile-epr_fault": rms["EPR_fault_V"],
         "tile-epr_max": rms["EPR_max_V"],
         "tile-i_f": at50["I_F_A"],
-        "tile-r_epr": at50["r_epr"],
-        "tile-r_current": at50["r_current"],
+        "tile-r": at50["r"],
         "tile-i_e": at50["I_E_A"],
         "tile-z_e": at50["Z_E_Ohm"],
     }
@@ -190,6 +189,10 @@ async def test_running_a_fault_shows_the_numbers_of_the_library(user: User):
     assert _element(user, "tile-epr_fault").text == format_number(abs(mapped["u"]["b10"]), "de")
     z_e = abs(ref.driving_point_impedance(rd, "b10"))
     assert _element(user, "tile-z_e").text == format_number(z_e, "de")
+    # r: the current into an ideal electrode at the fault bus over I_F.
+    shorted = ref.solve_oneway(rd, thevenin_phase="norton", shorted=True)
+    r = abs(shorted["I_short"]) / abs(shorted["I_F"])
+    assert _element(user, "tile-r").text == format_number(r, "de")
 
 
 async def test_cancel_stops_a_fault_sweep(user: User):

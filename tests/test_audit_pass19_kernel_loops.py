@@ -27,15 +27,13 @@ import pytest
 
 import groundinsight as gi
 from groundinsight.electrical_network import _is_open_circuit
-from groundinsight.utils.earth_current import NOISE_REL, split_earth_currents
 from tests import test_audit_pass19_performance as perf
 from tests._warning_policy import acknowledge
 
 #: Random networks: rings, Thevenin sources, 0 Hz bins and electrode currents
-#: spread in angle occur by construction; the tests compare the kernel with
-#: its reference.
+#: occur by construction; the tests compare the kernel with its reference.
 pytestmark = acknowledge(
-    "DC_LIMIT", "EARTH_GROUP_SPREAD", "PHASE_PROXY", "THEVENIN_COUPLING"
+    "DC_LIMIT", "PHASE_PROXY", "THEVENIN_COUPLING"
 )
 
 
@@ -61,48 +59,36 @@ NETWORKS = {
 }
 
 
-def _split_of_the_reported_currents(net: gi.Network, fault: str = "F"):
-    """The earth-return split computed from ``ResultBus.ia`` and ``uepr``
-    with the kernel's orientation rule (fault bus, else its potential)."""
-    result = net.results[fault]
-    fault_bus = net.faults[fault].bus
-    out = {}
-    for freq in net.frequencies:
-        currents = {b.name: complex(b.ia_freq[freq]) for b in result.buses}
-        potentials = {b.name: complex(b.uepr_freq[freq]) for b in result.buses}
-        u_fault = potentials[fault_bus]
-        u_scale = max(abs(u) for u in potentials.values())
-        anchor = u_fault if abs(u_fault) > NOISE_REL * u_scale else None
-        out[freq] = split_earth_currents(
-            currents, reference_bus=fault_bus, anchor=anchor
-        )
-    return out
-
-
 @pytest.mark.parametrize("name", sorted(NETWORKS))
-def test_the_earth_return_current_is_the_split_of_the_reported_currents(name):
-    """``I_E`` and the earth group are the split of exactly the electrode
-    currents ``ResultBus.ia`` reports -- bit for bit."""
+def test_the_earth_current_is_the_fault_potential_over_the_driving_point(name):
+    """``I_E`` is ``U_E / Z_E`` of exactly the potential ``ResultBus.uepr``
+    reports at the fault bus and the reported ``Z_E`` -- bit for bit."""
     net = NETWORKS[name]()
     gi.run_fault(net, "F")
-    factor = net.results["F"].reduction_factor
-    for freq, split in _split_of_the_reported_currents(net).items():
-        if factor.i_earth.get(freq) is None:
+    result = net.results["F"]
+    factor = result.reduction_factor
+    fault_bus = net.faults["F"].bus
+    bus = next(b for b in result.buses if b.name == fault_bus)
+    for freq in net.frequencies:
+        z_e = factor.z_earthing.get(freq)
+        if factor.i_earth.get(freq) is None or z_e is None:
             continue
-        assert complex(factor.i_earth[freq]) == split.i_earth, (name, freq)
-        assert sorted(factor.earth_buses[freq]) == sorted(split.feeding_buses)
+        assert complex(factor.i_earth[freq]) == complex(bus.uepr_freq[freq]) / complex(z_e), (name, freq)
 
 
-def test_the_earth_return_current_is_exact_on_random_networks():
+def test_the_earth_current_is_exact_on_random_networks():
     nets = _solvable_random(range(40))
     assert len(nets) >= 25
     checked = 0
     for net in nets:
         factor = net.results["F"].reduction_factor
-        for freq, split in _split_of_the_reported_currents(net).items():
-            if factor.i_earth.get(freq) is None or split is None:
+        fault_bus = net.faults["F"].bus
+        bus = next(b for b in net.results["F"].buses if b.name == fault_bus)
+        for freq in net.frequencies:
+            z_e = factor.z_earthing.get(freq)
+            if factor.i_earth.get(freq) is None or z_e is None:
                 continue
-            assert complex(factor.i_earth[freq]) == split.i_earth
+            assert complex(factor.i_earth[freq]) == complex(bus.uepr_freq[freq]) / complex(z_e)
             checked += 1
     assert checked > 50
 

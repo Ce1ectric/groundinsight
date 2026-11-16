@@ -17,6 +17,6 @@ shows under *Cite this repository*.
 
 `groundinsight` implements the methods described on the pages under
 [Understanding the model](../explanation/index.md). When your work relies on
-a particular part of the model — the reduction factor on a current basis,
+a particular part of the model — the reduction factor as the current into an ideal fault electrode,
 the phase-current split, the location response — name that part as well, so
 a reader can find its definition and its assumptions.

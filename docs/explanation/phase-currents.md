@@ -165,10 +165,9 @@ both modes agree exactly — but in a meshed one it multiplies the current
 instead of dividing it. In a ring of two routes of the same construction, at
 the default coefficient of `1.0`, the Norton injections add up to
 $(1-2k)\,I$ instead of $(1-k)\,I$. With $Z_m = Z_s/2$ ($k = 0.5$) the
-symmetric ring then solves to `EPR = 0 V` at the fault, an EPR ratio
-`value = 0` and no current-based factor at all (`value_current` is `None`: no
-current reaches the soil), because the doubled mutual injections cancel the
-source exactly. With the cable of the tutorials, $\lvert 1-2k\rvert = 1$ and
+symmetric ring then solves to `EPR = 0 V` at the fault and a reduction
+factor `value = 0`, because the doubled mutual injections cancel the source
+exactly. With the cable of the tutorials, $\lvert 1-2k\rvert = 1$ and
 the EPR comes out as if the shields did not couple at all, 2.6 times the
 correct value ([From a line to a ring](../getting-started/ring.md#step-6-why-dividing-the-current-matters)).
 The earthing impedance $Z_E$ is a property of the earthing network alone and

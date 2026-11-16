@@ -79,15 +79,18 @@ $$
   neglects displacement currents and holds while the conductor depth and
   radius are small against $1/\lvert m\rvert$, $m = \sqrt{j\omega\mu_0/\rho}$.
 
-For one line between ideally bonded stations the reduction factor is
+For one line from an ideally earthed infeed — and for a long line far from
+the infeed — the reduction factor is
 
 $$
 r = \left\lvert 1 - \frac{Z_m}{Z_s} \right\rvert = \frac{R_s'}{\lvert Z_s' \rvert},
 $$
 
-which is what `ResultReductionFactor.value` reproduces for a single branch.
-The reduction factor of EN 50522 in a network, `value_current`, depends on the
-electrodes as well; see [Compare results with EN 50522 limits](en50522-check.md).
+which is what `ResultReductionFactor.value` reproduces for a single branch
+from an ideal infeed earth. In a network the reduction factor contains the
+earthing of the infeed and of the neighbouring stations as well — one cable
+from an infeed earthed with $Z_A$ gives $\lvert (Z_s - Z_m)/(Z_s + Z_A)\rvert$;
+see [Reduction factors and earthing impedance](../explanation/reduction-factors.md).
 
 ## Phase impedance for rings and meshes
 
@@ -189,9 +192,10 @@ $$
 --8<-- "docs/snippets/types_from_datasheets.py:pollaczek"
 ```
 
-**(c) A one-branch network** — the type above between two stations, solved
-with `run_fault`; `ResultReductionFactor.value` of a single branch is
-$\lvert 1 - Z_m/Z_s\rvert$:
+**(c) A one-branch network** — the type above between an ideally earthed
+infeed (1e-12 Ω; exactly zero is refused) and a station, solved with
+`run_fault`; `ResultReductionFactor.value` of such a branch is
+$\lvert 1 - Z_m/Z_s\rvert$, whatever the electrode of the fault station:
 
 ```python
 --8<-- "docs/snippets/types_from_datasheets.py:network"
@@ -208,8 +212,9 @@ Result, impedances in Ω/km:
 | 250 Hz | (b) Pollaczek, h = 0.7 m | 0.97465 + 3.15938j | 0.24765 + 3.15938j | 0.77988 + 0.40207j | 0.219883 |
 | 250 Hz | (c) groundinsight | 0.97374 + 3.15988j | 0.24674 + 3.15988j | 0.77993 + 0.40208j | 0.219869 |
 
-- **(a) and (c)** agree to rounding (about 1e-16): the model evaluates the
-  same formula and reproduces the closed form of the reduction factor.
+- **(a) and (c)** agree to 5·10⁻¹³, the effect of the 1e-12 Ω stand-in for
+  the ideal earth: the model evaluates the same formula and reproduces the
+  closed form of the reduction factor.
 - **(a) against (b)** shows how good the $D_E$ approximation is. At 50 Hz the
   earth-return resistance differs by 0.17 %, the reactance by about 1e-6, and
   r by 4.2·10⁻⁵ (1.4·10⁻⁵ at 250 Hz). At 50 Hz most of that is the rounded
@@ -407,8 +412,8 @@ unchanged at 0 Hz.
 
 ## Check a new type
 
-- Run a one-branch network and compare `value` with $\lvert 1 - Z_m/Z_s\rvert$
-  of the closed form, as method (c) does.
+- Run a one-branch network from an ideally earthed infeed and compare `value`
+  with $\lvert 1 - Z_m/Z_s\rvert$ of the closed form, as method (c) does.
 - Compare r at 50 Hz with the typical values that EN 50522:2022 lists for
   cables and lines (Annex I).
 - Evaluate the formulas at the lowest ρ, the lowest frequency and the shortest

@@ -268,14 +268,14 @@ lists what has been checked against what.
    code `THEVENIN_COUPLING`), and the EPR at the fault can come out too low.
    Model the infeed as a current source carrying the prospective fault current
    for stationary studies.
-6. **A source on the fault bus counts as fault current.** The current-based
-   reduction factor divides by the sum of all sources that feed the fault,
+6. **A source on the fault bus counts as fault current.** The reduction
+   factor divides by the sum of all sources that feed the fault,
    including one that sits on the fault bus itself, whose current never
    reaches the earthing network. With 1000 A from a remote infeed and 500 A
-   from a source on the fault bus, `value_current` is two thirds of its value
+   from a source on the fault bus, `value` is two thirds of its value
    without the local source, while the earth current $I_E$ is the same. For
    the reduction factor of the line, divide `i_earth` by the remote infeed
-   yourself; see [Reduction factors](reduction-factors.md#reduction-factor-on-a-current-basis).
+   yourself; see [Reduction factors](reduction-factors.md#reduction-factor).
 7. **Bus ρ only in the inverse analysis.** `find_max_rho_scaling` and
    `find_max_rho_f_scaling` scale the soil resistivity of buses; branch
    formulas keep theirs (see [Inverse rho analysis](#inverse-rho-analysis)).
@@ -325,7 +325,7 @@ gi.create_fault(name="F1", bus="b1",
                 scalings={50.0: 1.0, 250.0: 1.0}, network=net)
 
 gi.run_fault(network=net, fault="F1")
-print(net.res_all_impedances())   # Z_E and both reduction factors per frequency
+print(net.res_all_impedances())   # Z_E and the reduction factor per frequency
 ```
 
 The `Network` API hides every step listed in the next section behind
@@ -351,10 +351,10 @@ The `Network` API hides every step listed in the next section behind
 4. `solve_network` — solve the linear system per frequency (sparse LU).
 5. `compute_branch_currents` — derive branch currents from $\Delta u$ plus
    Norton contributions.
-6. `compute_reduction_factors` — re-solve without mutual Norton sources and
-   take the EPR ratio at the fault bus (`value`); sum the electrode currents of
-   the earth group for the current-based factor (`value_current`); record
-   $U_E$, $Z_E$ and $I_E$.
+6. `compute_reduction_factors` — the driving-point impedance $Z_E$ of the
+   earthing network at the fault bus (one more triangular solve), $U_E$ the
+   EPR there, the earth current $I_E = U_E/Z_E$ and the reduction factor
+   $r = \lvert I_E\rvert/\lvert I_F\rvert$ (`value`).
 7. `compute_grounding_impedance` — the driving-point impedance of the earthing
    network at the fault bus, per frequency.
 

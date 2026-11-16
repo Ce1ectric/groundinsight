@@ -120,9 +120,8 @@ is pinned in `gi.RES_FAULT_SCHEMA`:
 | `EPR_fault_degree` | Float64 | its angle |
 | `EPR_max_V` | Float64 | the largest EPR in the network |
 | `EPR_max_bus` | Utf8 | the bus it occurs at |
-| `r_epr` | Float64 | EPR-based reduction factor (`value`) |
-| `r_current` | Float64 | current-based reduction factor, magnitude of `I_E / I_F` (`value_current`) |
-| `I_E_A` | Float64 | magnitude of the earth-return current `I_E` (`i_earth`) |
+| `r` | Float64 | reduction factor of EN 50522, magnitude of `I_E / I_F` (`value`) |
+| `I_E_A` | Float64 | magnitude of the earth current `I_E = U_E / Z_E` (`i_earth`) |
 | `U_E_V` | Float64 | earthing voltage of EN 50522, the EPR at the fault bus (`u_earthing`) |
 | `Z_E_Ohm` | Float64 | earthing impedance of EN 50522, the driving point at the fault bus (`z_earthing`) |
 | `Z_E_degree` | Float64 | its angle |
@@ -132,7 +131,7 @@ is pinned in `gi.RES_FAULT_SCHEMA`:
 | `U_transfer_max_V` | Float64 | the largest transferred potential of any bus with an earthing characteristic |
 | `U_transfer_max_bus` | Utf8 | the bus it occurs at |
 
-A value the result marks as undefined is null — for example `r_current`
+A value the result marks as undefined is null — for example `r`
 and `I_E_A` at a frequency without fault current. The RMS row carries the
 stored RMS EPR of the fault bus and the largest one of any bus, and the root
 sum of squares of `I_F`, `I_E` and `U_E` over the frequencies; ratios,
@@ -145,7 +144,7 @@ import polars as pl
 gi.run_fault(net, "F1")                     # or keep a result from gi.solve
 figures = net.res_fault("F1")
 at_50_hz = figures.filter(pl.col("frequency_Hz") == 50.0).row(0, named=True)
-print(at_50_hz["EPR_fault_V"], at_50_hz["r_current"], at_50_hz["Z_E_Ohm"])
+print(at_50_hz["EPR_fault_V"], at_50_hz["r"], at_50_hz["Z_E_Ohm"])
 if at_50_hz["n_diagnostics"]:
     print(net.results["F1"].diagnostics)    # what qualifies these numbers
 ```

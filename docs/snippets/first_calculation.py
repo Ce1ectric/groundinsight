@@ -5,9 +5,9 @@ Your first fault calculation: the code of the tutorial page of the same name.
 Two substations joined by a 5 km medium-voltage cable whose shield is earthed
 at both ends; 1000 A (RMS, 50 Hz) flow from the infeed at ``bus_source`` to an
 earth fault at ``bus_fault``. The script builds the network, solves it, prints
-the earth potential rise, the earthing impedance and both reduction factors,
-and then computes the same numbers by hand from the closed forms of a single
-line.
+the earth potential rise, the earthing impedance, the earth current and the
+reduction factor, and then computes the same numbers by hand from the closed
+forms of a single line.
 
 The impedance formulas are illustrative round numbers, not the data of a real
 cable or electrode.
@@ -60,9 +60,8 @@ print("diagnostics:", result.diagnostics)
 key = net.res_fault("fault_at_remote_bus").row(0, named=True)  # the 50 Hz row
 print(f"U_E  = {key['U_E_V']:.2f} V        EPR at the fault bus")
 print(f"Z_E  = {key['Z_E_Ohm']:.4f} Ohm at {key['Z_E_degree']:.2f} deg")
-print(f"I_E  = {key['I_E_A']:.2f} A        earth current")
-print(f"r    = {key['r_current']:.6f}       reduction factor, EN 50522")
-print(f"EPR ratio = {key['r_epr']:.6f}  reduction factor of the cable")
+print(f"I_E  = {key['I_E_A']:.2f} A        earth current, U_E / Z_E")
+print(f"r    = {key['r']:.6f}       reduction factor, I_E / I_F")
 
 for row in net.res_buses(fault="fault_at_remote_bus").iter_rows(named=True):
     if not row["is_rms"]:
@@ -78,12 +77,12 @@ z_s = (0.25 + 0.6j) * 5.0            # shield-earth loop of 5 km
 z_m = 0.6j * 5.0                     # coupling over 5 km
 current = 1000.0
 
-ratio = abs(1 - z_m / z_s)                         # EPR ratio
-i_earth = current * (z_s - z_m) / (z_s + 2 * z_b)  # current through the soil
-u_e = z_b * i_earth                                # EPR at the fault bus
+i_soil = current * (z_s - z_m) / (z_s + 2 * z_b)   # through the two electrodes
+u_e = z_b * i_soil                                 # EPR at the fault bus
 z_e = z_b * (z_s + z_b) / (z_b + z_s + z_b)        # Z_B parallel to (Z_s + Z_B)
+r = abs((z_s - z_m) / (z_s + z_b))                 # ideal electrode at bus_fault
 
-print(f"by hand: EPR ratio = {ratio:.6f}, r = {abs(i_earth) / current:.6f}, "
+print(f"by hand: r = {r:.6f}, I_E = {r * current:.2f} A, "
       f"U_E = {abs(u_e):.2f} V, |Z_E| = {abs(z_e):.4f} Ohm")
 # --8<-- [end:by_hand]
 

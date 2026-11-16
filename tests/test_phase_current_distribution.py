@@ -50,11 +50,22 @@ FREQ = [50.0]
 # Reference values, computed once on a radial two-branch chain with
 # Z_bus = 10 Ohm, Z_self = (0.1 + 0.2j)*l, Z_mutual = (0.05 + 0.1j)*l, l = 1 km
 # and I_source = 1000 A at 50 Hz. Z_mutual / Z_self = 0.5 everywhere, so the
-# reduction factor is 0.5 for every topology built from this branch type.
+# coupling halves every potential and the reduction factor is 0.5 times the
+# galvanic share r0 for every topology built from this branch type (r0: the
+# reference solver's short circuit of the fault bus without coupling, the
+# part of the fault current that does not return through the shields).
 EPR_RADIAL = 110.6747
 EPR_TWO_ROUTES = 55.6208  # ring: the current divides over two routes
 EPR_TWO_PARALLEL_CABLES = 27.8808  # plus a doubled shield admittance
 REDUCTION_FACTOR = 0.5
+
+
+def _galvanic_share(net, fault="F"):
+    """``r0`` from the independent reference solver (fault bus held at remote earth)."""
+    from tests import _reference_mna as ref
+
+    solution = ref.solve_oneway(ref.reference_network(net, 50.0, fault), with_mutual=False, shorted=True)
+    return abs(solution["I_short"]) / abs(solution["I_F"])
 
 
 def _bus_type() -> BusType:
@@ -146,11 +157,10 @@ def test_radial_network_is_identical_in_both_modes(mode):
     This is the backwards-compatibility pin: every existing study on a radial
     network keeps its numbers when the default flips to ``"auto"``.
     """
-    epr, r, z_g = _solve(
-        _network(RADIAL, ["S", "A", "F"]), phase_current_mode=mode
-    )
+    net = _network(RADIAL, ["S", "A", "F"])
+    epr, r, z_g = _solve(net, phase_current_mode=mode)
     assert epr == pytest.approx(EPR_RADIAL, rel=1e-6)
-    assert r == pytest.approx(REDUCTION_FACTOR, rel=1e-9)
+    assert r == pytest.approx(REDUCTION_FACTOR * _galvanic_share(net), rel=1e-9)
     assert z_g is not None
 
 
@@ -176,14 +186,16 @@ def test_symmetric_ring_reproduces_the_hand_tuned_reference():
     ``auto`` must land on exactly the result a user previously had to reach by
     setting ``parallel_coefficient=0.5`` on every branch by hand.
     """
-    auto = _solve(_network(RING, ["S", "A", "B", "F"]))
+    ring = _network(RING, ["S", "A", "B", "F"])
+    auto = _solve(ring)
     hand_tuned = _solve(
         _network(RING, ["S", "A", "B", "F"], parallel_coefficient=0.5),
         phase_current_mode="paths",
     )
     assert auto[0] == pytest.approx(EPR_TWO_ROUTES, rel=1e-6)
     assert auto[0] == pytest.approx(hand_tuned[0], rel=1e-9)
-    assert auto[1] == pytest.approx(REDUCTION_FACTOR, rel=1e-9)
+    assert auto[1] == pytest.approx(REDUCTION_FACTOR * _galvanic_share(ring), rel=1e-9)
+    assert auto[1] == pytest.approx(hand_tuned[1], rel=1e-9)
     assert complex(auto[2]) == pytest.approx(complex(hand_tuned[2]), rel=1e-9)
 
 
@@ -202,15 +214,14 @@ def test_the_legacy_mode_still_collapses_the_ring():
     # Audit pass 19, decision F4: Z_G is the driving-point impedance of the
     # earthing network at the fault bus -- a property of the electrodes and
     # shields that the collapsed phase split cannot touch (second way: the
-    # reference solver). What collapses is the group quotient, which used to
-    # be Z_G and is now z_earthing_group.
+    # reference solver). What collapses is U_E, and with it I_E = U_E / Z_E.
     from tests import _reference_mna as ref
 
     z_reference = ref.driving_point_impedance(
         ref.reference_network(net, 50.0, "F"), "F"
     )
     assert abs(complex(z_g) - z_reference) <= 1e-12 * abs(z_reference)
-    assert net.results["F"].reduction_factor.z_earthing_group[50.0] is None
+    assert abs(complex(net.results["F"].reduction_factor.i_earth[50.0])) == pytest.approx(0.0, abs=1e-9)
 
 
 @PROXY_SPLIT
@@ -330,9 +341,12 @@ def test_an_island_no_longer_discards_the_whole_source_contribution():
     net.branches["SB"].active = False
     net.branches["BF"].active = False
     epr, r, _ = _solve(net)
-    # What is left is the plain radial chain S-A-F.
+    # What is left is the plain radial chain S-A-F (and the orphaned bus B,
+    # which carries no current).
     assert epr == pytest.approx(EPR_RADIAL, rel=1e-6)
-    assert r == pytest.approx(REDUCTION_FACTOR, rel=1e-9)
+    chain = _network(RADIAL, ["S", "A", "F"])
+    assert r == pytest.approx(_solve(chain)[1], rel=1e-9)
+    assert r == pytest.approx(REDUCTION_FACTOR * _galvanic_share(net), rel=1e-9)
 
 
 def test_a_source_cut_off_from_the_fault_is_named_not_silently_dropped():
@@ -356,9 +370,10 @@ def test_a_source_cut_off_from_the_fault_is_named_not_silently_dropped():
     assert "SOURCE_WITHOUT_PHASE_PATH" in [
         d.code for d in net.results["F"].diagnostics
     ]
-    # No phase current means no mutual injection: r collapses to 1 because the
-    # solution with and without coupling are the same solution.
-    assert r == pytest.approx(1.0, rel=1e-9)
+    # No phase current means no mutual injection: r is the galvanic share
+    # alone, because the solution with and without coupling are the same
+    # solution.
+    assert r == pytest.approx(_galvanic_share(net), rel=1e-9)
     assert epr > 0.0
 
 

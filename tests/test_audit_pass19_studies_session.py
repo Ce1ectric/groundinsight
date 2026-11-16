@@ -35,11 +35,6 @@ from groundinsight.analysis import _session
 from tests import test_audit_pass19_performance as perf
 from tests._warning_policy import acknowledge
 
-#: The rho searches sweep trial faults along chains and rings whose electrode
-#: currents are spread in angle; the tests compare the session with the full
-#: search.
-pytestmark = acknowledge("EARTH_GROUP_SPREAD")
-
 #: The 0 Hz stand-in cases put a 0 Hz bin in the grid on purpose.
 DC_STAND_IN = acknowledge("DC_LIMIT")
 

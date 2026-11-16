@@ -35,22 +35,16 @@ After the per-frequency solve the network derives:
 
 - **Branch currents** from $\Delta u$ and the impressed mutual
   current.
-- **Two reduction factors.** `value` is the EPR ratio
-  $|\underline{u}_\text{with}|/|\underline{u}_\text{without}|$ at
-  the fault bus, where the second solve omits the mutual Norton
-  sources — a property of the line, not the reduction factor of
-  EN 50522. `value_current` is $|I_E|/|I_F|$, the earth-return
-  current over the fault current: the reduction factor $r$ of
-  EN 50522. Both are stored in `ResultReductionFactor`
-  ([which one is which](../reference/conventions.md#which-reduction-factor-is-which)).
+- **The reduction factor.** `value` is $r = |I_E|/|I_F|$ with the
+  earth current $I_E = U_E/Z_E$ — by Norton's theorem the current an
+  ideal electrode at the fault bus would take — the reduction factor
+  of EN 50522, stored with $I_E$ in `ResultReductionFactor`
+  ([the reduction factor](../reference/conventions.md#the-reduction-factor)).
 - **Earthing impedance** $Z_G = Z_E = Z_\text{dp}(F)$ per frequency
   (EN 50522): the driving-point impedance of the earthing network
   at the fault bus -- electrodes and shields, without the coupling
   and without Thevenin loop closures. The earthing voltage $U_E$ is
-  the EPR at the fault bus. The current-weighted mean of the earth
-  group and its quotient by $I_E$, reported as $U_E$/$Z_E$ before
-  audit pass 19, remain available as `u_earthing_group` /
-  `z_earthing_group`.
+  the EPR at the fault bus.
 
 The `ElectricalNetwork` is held as a `PrivateAttr` of `Network`,
 not exposed in the JSON / DB serialisation; it carries the raw

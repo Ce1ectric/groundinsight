@@ -82,8 +82,8 @@ fault of the template scales 50 Hz only.)
 
 The tiles give the key figures of EN 50522 at the fault location: the earth
 potential rise `U_E` = 296.5 V (RMS over the five frequencies), the earthing
-impedance `Z_E` = 0.7718 Ω, the earth current `I_E` = 323.9 A and the
-reduction factor `r` = 0.3239, the last three at 50 Hz. Below them are the EPR
+impedance `Z_E` = 0.7718 Ω, the earth current `I_E` = 383.4 A and the
+reduction factor `r` = 0.3834, the last three at 50 Hz. Below them are the EPR
 of every bus, the key figures per frequency (`res_fault`) and the messages of
 the calculation. The line at the bottom names the revision of the network and
 its input digest: after an edit the result is marked stale until you run it
@@ -120,13 +120,13 @@ gi.create_fault(name="F1", bus="station_3", scalings={f: 1.0 for f in net.freque
 gi.run_fault(net, "F1")
 
 key = net.res_fault("F1").row(0, named=True)  # 50 Hz
-print(f"Z_E = {key['Z_E_Ohm']:.4f} Ohm, I_E = {key['I_E_A']:.1f} A, r = {key['r_current']:.4f}")
+print(f"Z_E = {key['Z_E_Ohm']:.4f} Ohm, I_E = {key['I_E_A']:.1f} A, r = {key['r']:.4f}")
 for name, epr in net.res_buses("F1").filter(pl.col("is_rms")).select("bus_name", "EPR_V").rows():
     print(f"{name:10s} {epr:6.1f} V")
 ```
 
 ```text title="Output"
-Z_E = 0.7718 Ohm, I_E = 323.9 A, r = 0.3239
+Z_E = 0.7718 Ohm, I_E = 383.4 A, r = 0.3834
 bus_source  326.1 V
 bus_fault    33.3 V
 station_3   296.5 V

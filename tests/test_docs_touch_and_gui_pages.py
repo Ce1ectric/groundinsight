@@ -74,9 +74,9 @@ def test_tutorial_tiles_are_the_library_numbers(tmp_path):
     """The figures the tutorial quotes from the GUI's tiles are those of its code block."""
     text = _page("getting-started/gui.md")
     printed = _run_page("getting-started/gui.md", tmp_path)
-    for quoted in ("`U_E` = 296.5 V", "`Z_E` = 0.7718 Ω", "`I_E` = 323.9 A", "`r` = 0.3239"):
+    for quoted in ("`U_E` = 296.5 V", "`Z_E` = 0.7718 Ω", "`I_E` = 383.4 A", "`r` = 0.3834"):
         assert quoted in text
-    assert "Z_E = 0.7718 Ohm, I_E = 323.9 A, r = 0.3239" in printed
+    assert "Z_E = 0.7718 Ohm, I_E = 383.4 A, r = 0.3834" in printed
     assert "station_3   296.5 V" in printed
 
 

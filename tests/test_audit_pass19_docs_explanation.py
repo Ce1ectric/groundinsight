@@ -134,31 +134,30 @@ def chain():
     return _run("reduction_factors.py")
 
 
-def test_long_run_closes_the_chain_with_the_coupling_factor(chain):
-    """U_E = |1-k| * I * |Z_inf| and Z_E = Z_inf on 64 sections (the ladder
-    closed form, independent of the solve)."""
+def test_long_run_has_the_cable_value_and_the_ladder_impedance(chain):
+    """r = |1-k|, U_E = |1-k| * I * |Z_inf| and Z_E = Z_inf on 64 sections (the
+    ladder closed form, independent of the solve), and the ideal fault
+    electrode takes the same r (Norton)."""
     assert abs(chain["u_e"]) == pytest.approx(chain["u_closed"], rel=1e-9)
     assert chain["z_e"] == pytest.approx(chain["z_inf"], rel=1e-9)
-    assert chain["r_epr"] == pytest.approx(abs(1 - chain["k"]), rel=1e-12)
+    assert chain["r"] == pytest.approx(abs(1 - chain["k"]), rel=1e-6)
+    assert chain["r_short"] == pytest.approx(chain["r"], rel=1e-6)
+    for _, model, closed in chain["one_cable"]:
+        assert model == pytest.approx(closed, rel=1e-12)
 
 
 def test_reduction_factor_page_states_the_numbers_of_the_snippet(chain):
     text = _page("explanation/reduction-factors.md")
-    rf_value = f"{chain['r_epr']:.6f}"
-    assert f"`value` | {rf_value} | $\\lvert 1 - k\\rvert$ = {rf_value}" in text
-    assert f"`value_current` | {chain['r_current']:.6f}" in text
+    r = f"{chain['r']:.6f}"
+    assert (f"| `value` ($r$) | {r} | ideal fault electrode: {chain['r_short']:.6f}; "
+            f"$\\lvert 1 - k\\rvert$ = {abs(1 - chain['k']):.6f} |") in text
     z = chain["z_e"]
     assert f"{z.real:.4f} + {z.imag:.4f}j Ω" in text
     assert f"{abs(chain['u_e']):.3f} V" in text
-    assert f"{chain['r_current'] * 1000.0 * abs(z):.3f} V" in text
-    rf = gi.run_fault(chain["net"], "F").reduction_factor
-    group_u = abs(complex(rf.u_earthing_group[50.0]))
-    group_z = abs(complex(rf.z_earthing_group[50.0]))
-    assert f"{group_u:.2f} V and {group_z:.4f} Ω, 43 % and 44.5 % below" in text
-    assert f"{100 * (1 - group_u / abs(chain['u_e'])):.0f}" == "43"
-    assert f"{100 * (1 - group_z / abs(chain['z_e'])):.1f}" == "44.5"
-    assert "on a long homogeneous run it is 44.5 % below `Z_E`" in text
-    assert f"{100 * (chain['r_current'] / chain['r_epr'] - 1):.1f} %" == "2.6 %"
+    assert f"{abs(chain['i_e']):.2f} A" in text
+    for z_a, model, closed in chain["one_cable"]:
+        label = "10 µΩ" if z_a < 1e-3 else f"{z_a:g} Ω"
+        assert f"| {label} | {model:.6f} | {closed:.6f} |" in text
 
 
 def _feeder():
@@ -184,9 +183,10 @@ def _feeder():
 
 
 def test_fault_bus_electrode_sweep_moves_z_e_but_not_value():
-    """Four decades of the faulted station's electrode: value stays, Z_E and
-    U_E grow 80-fold. First way: re-solves. Second way: the Moebius form of
-    bus_response from two solves of the unchanged network."""
+    """Four decades of the faulted station's electrode: r stays (the short
+    circuit takes the electrode out), Z_E and U_E grow 80-fold. First way:
+    re-solves. Second way: the Moebius form of bus_response from two solves
+    of the unchanged network."""
     base = _feeder()
     gi.run_fault(base, "mid")
     response = gi.bus_response(base, fault="mid", bus="S3")
@@ -199,14 +199,15 @@ def test_fault_bus_electrode_sweep_moves_z_e_but_not_value():
         assert abs(complex(rf.u_earthing[50.0])) == pytest.approx(predicted["EPR_V"][0], rel=1e-9)
         assert abs(complex(rf.z_earthing[50.0])) == pytest.approx(
             predicted["Z_driving_point_Ohm"][0], rel=1e-9)
-        rows[z_b] = (rf.value[50.0], rf.value_current[50.0],
-                     abs(complex(rf.z_earthing[50.0])), abs(complex(rf.u_earthing[50.0])))
+        assert predicted["r"][0] == pytest.approx(rf.value[50.0], rel=1e-9)
+        rows[z_b] = (rf.value[50.0], abs(complex(rf.z_earthing[50.0])),
+                     abs(complex(rf.u_earthing[50.0])))
     low, high = rows[0.01], rows[100.0]
-    assert low[0] == pytest.approx(0.310003, abs=5e-7) and high[0] == pytest.approx(low[0], rel=1e-12)
-    assert round(high[2] / low[2]) == 80 and round(high[3] / low[3]) == 80
+    assert high[0] == pytest.approx(low[0], rel=1e-9)
+    assert round(high[1] / low[1]) == 80 and round(high[2] / low[2]) == 80
     text = _page("explanation/reduction-factors.md")
-    assert (f"({low[2]:.4f} → {high[2]:.3f} Ω, {low[3]:.1f} → {high[3]:.0f} V)" in text)
-    assert f"falls from {low[1]:.3f} to {high[1]:.3f}" in text
+    assert (f"leaves $r$ at {low[0]:.6f} while $Z_E$ and $U_E$ grow by a factor of 80 "
+            f"({low[1]:.4f} → {high[1]:.3f} Ω, {low[2]:.1f} → {high[2]:.0f} V)") in text
 
 
 def _line_with_sources(local_current):
@@ -231,14 +232,12 @@ def _line_with_sources(local_current):
 def test_a_source_on_the_fault_bus_dilutes_value_current_only():
     """PH14: 500 A on the fault bus adds to 3I_0, not to I_E. By
     superposition the local source alone drives no current anywhere, so the
-    earth current is that of the remote infeed and r_I scales by 1000/1500."""
+    earth current is that of the remote infeed and r scales by 1000/1500."""
     remote = _line_with_sources(0.0).reduction_factor
     both = _line_with_sources(500.0).reduction_factor
     assert abs(complex(both.i_earth[50.0])) == pytest.approx(
         abs(complex(remote.i_earth[50.0])), rel=1e-12)
-    assert both.value_current[50.0] == pytest.approx(
-        remote.value_current[50.0] * 1000.0 / 1500.0, rel=1e-12)
-    assert both.value[50.0] == pytest.approx(remote.value[50.0], rel=1e-12)
+    assert both.value[50.0] == pytest.approx(remote.value[50.0] * 1000.0 / 1500.0, rel=1e-12)
     text = _page("explanation/theory.md") + _page("explanation/reduction-factors.md")
     assert "two thirds" in text
 
@@ -410,9 +409,10 @@ def _symmetric_ring(z_self, z_mutual, mode):
 
 def test_legacy_mode_counts_the_coupling_twice_in_a_ring():
     """The page: the injections become (1 - 2k) I instead of (1 - k) I; with
-    k = 0.5 the ring collapses to 0 V, value 0 and no value_current. Second
-    way: the EPR ratio of the legacy mode is |1 - 2k| against the auto mode's
-    |1 - k|, for k = 0.5 and for k of the tutorial cable."""
+    k = 0.5 the ring collapses to 0 V and r = 0. Second way: with one k in
+    the whole ring every potential scales with the injections, so the
+    reduction factors of the two modes stand as |1 - 2k| to |1 - k|, for
+    k = 0.5 and for k of the tutorial cable."""
     for z_self, z_mutual, z_s, z_m in (
         ("(0.1+0.2*j)*l", "(0.05+0.1*j)*l", 0.1 + 0.2j, 0.05 + 0.1j),
         ("(0.25+0.6*j)*l", "(0.6*j)*l", 0.25 + 0.6j, 0.6j),
@@ -420,10 +420,10 @@ def test_legacy_mode_counts_the_coupling_twice_in_a_ring():
         k = z_m / z_s
         auto = _symmetric_ring(z_self, z_mutual, "auto").reduction_factor
         paths = _symmetric_ring(z_self, z_mutual, "paths").reduction_factor
-        assert auto.value[50.0] == pytest.approx(abs(1 - k), rel=1e-12)
-        assert paths.value[50.0] == pytest.approx(abs(1 - 2 * k), abs=1e-12)
+        assert paths.value[50.0] == pytest.approx(
+            auto.value[50.0] * abs(1 - 2 * k) / abs(1 - k), abs=1e-12)
         assert complex(paths.z_earthing[50.0]) == pytest.approx(complex(auto.z_earthing[50.0]),
                                                                 rel=1e-12)
         if k == 0.5:
-            assert paths.value_current[50.0] is None
+            assert paths.value[50.0] == pytest.approx(0.0, abs=1e-12)
     assert "$(1-2k)\\,I$ instead of $(1-k)\\,I$" in _page("explanation/phase-currents.md")

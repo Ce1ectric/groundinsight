@@ -12,9 +12,10 @@ The single-core cable NA2XS(F)2Y 1x300 RM/25 12/20 kV in soil of
 (b) Pollaczek's earth-return integral for a cable buried at depth ``h``,
     evaluated numerically with ``scipy.integrate.quad`` -- this shows how good
     the ``D_E`` approximation is;
-(c) a one-branch groundinsight network solved with ``run_fault``, whose
-    EPR-based reduction factor ``ResultReductionFactor.value`` reproduces (a)
-    to rounding.
+(c) a one-branch groundinsight network solved with ``run_fault``, the
+    infeed station earthed ideally, whose reduction factor
+    ``ResultReductionFactor.value`` reproduces (a) to 5e-13 (the stand-in
+    1e-12 Ohm of the ideal earth).
 
 The same file builds the type of the three-phase cable system in trefoil
 (the other two screens), an overhead line with earth wire (Carson's integral
@@ -166,8 +167,12 @@ station = gi.BusType(
     name="station", system_type="Substation", voltage_level=20.0,
     impedance_formula="2.0",
 )
+infeed = gi.BusType(  # an ideal earth at the infeed; exactly 0 is refused
+    name="infeed, ideal earth", system_type="Substation", voltage_level=20.0,
+    impedance_formula="1e-12",
+)
 net = gi.create_network(name="one_branch", frequencies=FREQUENCIES)
-gi.create_bus(name="A", type=station, specific_earth_resistance=RHO, network=net)
+gi.create_bus(name="A", type=infeed, specific_earth_resistance=RHO, network=net)
 gi.create_bus(name="B", type=station, specific_earth_resistance=RHO, network=net)
 gi.create_branch(
     name="K", type=cable, from_bus="A", to_bus="B", length=1.0,
@@ -277,7 +282,7 @@ cable_system = gi.BranchType(
 # --8<-- [end:trefoil]
 
 net3 = gi.create_network(name="one_branch_trefoil", frequencies=FREQUENCIES)
-gi.create_bus(name="A", type=station, specific_earth_resistance=RHO, network=net3)
+gi.create_bus(name="A", type=infeed, specific_earth_resistance=RHO, network=net3)
 gi.create_bus(name="B", type=station, specific_earth_resistance=RHO, network=net3)
 gi.create_branch(
     name="K", type=cable_system, from_bus="A", to_bus="B", length=1.0,
@@ -357,7 +362,7 @@ def carson_earth_impedance(h_i, h_j, x, d, rho, f):
 # --8<-- [end:overhead]
 
 net_ohl = gi.create_network(name="one_span", frequencies=FREQUENCIES)
-gi.create_bus(name="A", type=station, specific_earth_resistance=RHO, network=net_ohl)
+gi.create_bus(name="A", type=infeed, specific_earth_resistance=RHO, network=net_ohl)
 gi.create_bus(name="B", type=station, specific_earth_resistance=RHO, network=net_ohl)
 gi.create_branch(
     name="K", type=overhead_line, from_bus="A", to_bus="B", length=1.0,

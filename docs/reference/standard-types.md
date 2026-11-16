@@ -33,7 +33,9 @@ of each construction) [1] and Prysmian MKM product catalogue 2019, p. 69
 (copper) [2]; screen resistance from EN 60228 [3]. The build-up between
 insulation and screen wires is estimated as on the how-to page.
 
-`r` is the reduction factor $|1 - Z_m/Z_s|$ in soil of 100 Ω·m. The thermal
+`r` is the reduction factor of the cable on a long line, $|1 - Z_m/Z_s|$, in
+soil of 100 Ω·m; in a network the solver's $r$ also contains the earthing of
+the stations ([Reduction factors](../explanation/reduction-factors.md)). The thermal
 cross-section is what the type gives `check_conductor_limits`: the screen
 cross-section divided by the share of the faulted core's screen in the bundle
 current at 50 Hz.

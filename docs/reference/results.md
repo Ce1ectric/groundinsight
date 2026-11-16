@@ -39,15 +39,12 @@ frames of an outage study: there `frequency_Hz` is text — `"50.0"`, or
 Filter with `pl.col("is_rms")` in the frames of a solve and with
 `pl.col("frequency_Hz") == "RMS"` in a comparison frame.
 
-**Two reduction factors.** `reduction_factor` (in `res_fault`: `r_epr`) is
-the EPR ratio with and without the inductive coupling — a property of the
-line, blind to the electrodes, and **not** the reduction factor of EN 50522.
-`reduction_factor_current` (in `res_fault`: `r_current`) is |I_E| / |I_F|,
-the reduction factor *r* of EN 50522. They coincide only for ideally bonded
-stations; see [Which reduction factor is which](conventions.md#which-reduction-factor-is-which).
+**The reduction factor.** `reduction_factor` (in `res_fault`: `r`) is
+|I_E| / |I_F| with I_E = U_E / Z_E, the reduction factor *r* of EN 50522; see
+[The reduction factor](conventions.md#the-reduction-factor).
 
 **Missing values.** A quantity the result marks as undefined is `null`, never
-a number: the current-based factor at a frequency without fault current, the
+a number: the reduction factor at a frequency without fault current, the
 earthing impedance of a fault bus without an electrode in its earthing group
 (diagnostic `EARTHING_IMPEDANCE_UNDEFINED`, see
 [Warnings and diagnostics](warnings.md)). The schemas are pinned, so an empty
@@ -104,7 +101,7 @@ One row per branch and frequency plus one RMS row per branch.
 ### `Network.res_all_impedances()`
 
 One row per stored fault and frequency, no RMS row: the earthing impedance and
-**both** reduction factors at the fault location.
+the reduction factor at the fault location.
 
 <!-- result-table: res_all_impedances -->
 
