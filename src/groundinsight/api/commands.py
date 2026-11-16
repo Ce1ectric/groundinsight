@@ -1508,6 +1508,12 @@ class SetFrequencies(Command):
     negative values; a list that is not increasing is accepted with the
     ``FREQUENCY_ORDER`` warning, which the command returns.
 
+    A fault with scalings keeps a scaling at every frequency: a new frequency
+    gets 1.0, the scaling of a removed frequency is dropped. A fault without
+    scalings (1.0 everywhere) keeps none. Source values are left as they are;
+    a source without a value at a new frequency contributes 0 A there and the
+    solve says so (``SOURCE_FREQUENCY_GAP``).
+
     Attributes
     ----------
     frequencies : list of float
@@ -1537,15 +1543,25 @@ class SetFrequencies(Command):
             for collection in ("buses", "branches")
             for name, element in getattr(network, collection).items()
         ]
+        scalings = {name: dict(fault.scalings) for name, fault in network.faults.items()}
         network.frequencies = list(self.frequencies)
-        self._undo = (previous, derived)
+        # A fault with scalings keeps one at every frequency: a new frequency
+        # counts in full (1.0), as it would without scalings, and a frequency
+        # that is gone loses its scaling -- otherwise the solve would fill in
+        # 1.0 with SCALINGS_INCOMPLETE on every run.
+        for fault in network.faults.values():
+            if fault.scalings:
+                fault.scalings = {f: fault.scalings.get(f, 1.0) for f in network.frequencies}
+        self._undo = (previous, derived, scalings)
 
     def _revert(self, context: CommandContext) -> None:
         network = context.network
-        previous, derived = self._undo
+        previous, derived, scalings = self._undo
         network.frequencies = previous
         for collection, name, values in derived:
             _restore_derived(getattr(network, collection)[name], values)
+        for name, values in scalings.items():
+            network.faults[name].scalings = values
 
 
 # ---------------------------------------------------------------------------

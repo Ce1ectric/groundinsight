@@ -19,7 +19,7 @@ from nicegui import ui
 from nicegui.testing import User
 
 import groundinsight as gi
-from groundinsight.api import EXAMPLES
+from groundinsight.api import EXAMPLES, SetFrequencies
 
 from groundinsight_gui.app import AppOptions, build_app
 from groundinsight_gui.plan import DEFAULT_BRANCH_LENGTH_KM, DEFAULT_SOURCE_A, free_name
@@ -171,6 +171,29 @@ async def test_the_bus_dialog_keeps_the_values_of_an_existing_source(user: User)
     assert {f: complex(v) for f, v in source.values.items()} == before
     # Second way: the stored values are the template's, read from the library directly.
     assert before == {f: complex(v) for f, v in EXAMPLES["quickstart"]().sources["substation_infeed"].values.items()}
+
+
+async def test_the_fault_tab_edits_scalings_and_duration(user: User):
+    page = await _page(user)
+    session = page.session
+    page.session.apply(SetFrequencies(frequencies=[50.0, 250.0]))
+    _fire(user, "open", kind="bus", name="bus3")
+    await user.should_see(marker="dlg-fault")
+    # The new frequency shows the scaling the command gave it.
+    assert user.find(marker="dlg-scaling-250").elements.pop().value == "1"
+    user.find(marker="dlg-scaling-250").clear().type("0,5")
+    user.find(marker="dlg-t-k").clear().type("0,3")
+    user.find(marker="dialog-apply").click()
+    fault = session.network.faults["fault"]
+    assert (fault.scalings, fault.t_k_s) == ({50.0: 1.0, 250.0: 0.5}, 0.3)
+    assert len(session.history()) == 2
+    # A fault set on another bus gets a scaling at every frequency.
+    _fire(user, "open", kind="bus", name="bus2")
+    await user.should_see(marker="dlg-fault")
+    user.find(marker="dlg-fault").click()
+    user.find(marker="dialog-apply").click()
+    new = next(f for f in session.network.faults.values() if f.bus == "bus2")
+    assert new.scalings == {50.0: 1.0, 250.0: 1.0}
 
 
 async def test_the_properties_say_yes_and_no(user: User):

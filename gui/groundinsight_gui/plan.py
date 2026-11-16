@@ -49,6 +49,7 @@ from groundinsight.api import (
     SetColourScheme,
     UpdateBranch,
     UpdateBus,
+    UpdateFault,
     UpdateSource,
     groundfield_available,
 )
@@ -640,11 +641,32 @@ class BusDialog(_ElementDialog):
                 imag = ui.input("Im / A", value=format_number(row.get("imag", 0.0), self.plan.page.language, 12))
                 self.source_inputs[f] = (real, imag)
 
+    def _faults(self) -> List[Dict[str, Any]]:
+        return [r for r in self.plan.session.table("faults").rows if r["bus"] == self.name]
+
+    def _scalings(self, fault: str) -> Dict[float, float]:
+        """The scalings of a fault, by frequency (empty: 1.0 everywhere)."""
+        return {r["frequency_Hz"]: r["scaling"] for r in self.plan.session.table("fault_scalings").rows
+                if r["fault"] == fault}
+
     def _tab_fault(self) -> None:
-        faults = [r for r in self.plan.session.table("faults").rows if r["bus"] == self.name]
+        faults = self._faults()
+        language = self.plan.page.language
         self.inputs["has_fault"] = ui.switch(self.t("fault_here"), value=bool(faults)).mark("dlg-fault")
         if faults:
             ui.label(", ".join(r["name"] for r in faults)).classes("text-sm text-gray-600")
+        scalings = self._scalings(faults[0]["name"]) if faults else {}
+        t_k_s = faults[0]["t_k_s"] if faults else None
+        self.inputs["t_k_s"] = ui.input(column_label(language, "t_k_s"),
+                                        value="" if t_k_s is None else format_number(t_k_s, language, 12)).mark(
+            "dlg-t-k")
+        ui.label(self.t("fault_scalings_hint")).classes("text-xs text-gray-500")
+        self.scaling_inputs: Dict[float, Any] = {}
+        for f in self.plan.session.summary().frequencies:
+            with ui.row().classes("items-center gap-2 no-wrap"):
+                ui.label(f"{format_number(f, language, 6)} Hz").classes("w-20 text-sm")
+                self.scaling_inputs[f] = ui.input(column_label(language, "scaling"), value=format_number(
+                    scalings.get(f, 1.0), language, 12)).mark(f"dlg-scaling-{format_number(f, 'en', 6)}")
 
     def _tab_characteristic(self) -> None:
         self.characteristic_view()
@@ -727,15 +749,22 @@ class BusDialog(_ElementDialog):
         return [UpdateSource(name=sources[0]["name"], fields={"values": values})]
 
     def _fault_commands(self) -> List[Command]:
-        faults = [r for r in self.plan.session.table("faults").rows if r["bus"] == self.name]
+        faults = self._faults()
         wanted = bool(self.inputs["has_fault"].value)
-        if wanted and not faults:
-            frequencies = self.plan.session.summary().frequencies
-            return [AddFault(name=free_name("F", self.plan._names("faults")), bus=self.name,
-                             scalings={f: 1.0 for f in frequencies})]
         if not wanted:
             return [RemoveFault(name=r["name"]) for r in faults]
-        return []
+        scalings = {f: _number(box.value) for f, box in self.scaling_inputs.items()}
+        scalings = {f: 1.0 if v is None else v for f, v in scalings.items()}
+        t_k_s = _number(self.inputs["t_k_s"].value)
+        if not faults:
+            return [AddFault(name=free_name("F", self.plan._names("faults")), bus=self.name,
+                             scalings=scalings, t_k_s=t_k_s)]
+        fields: Dict[str, Any] = {}
+        if self._scalings(faults[0]["name"]) != scalings:
+            fields["scalings"] = scalings
+        if t_k_s != faults[0]["t_k_s"]:
+            fields["t_k_s"] = t_k_s
+        return [UpdateFault(name=faults[0]["name"], fields=fields)] if fields else []
 
 
 class BranchDialog(_ElementDialog):

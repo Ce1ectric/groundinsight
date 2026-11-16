@@ -270,6 +270,13 @@ version section when a release is cut.
   (`from_file`, `save`), and with it the GUI's *Open* and *Save as* and the
   command line, expand `~/projekt.json` and `$HOME/projekt.json`; before,
   the path was taken literally and failed with "No such file or directory".
+- **Changing the frequencies keeps the fault scalings complete.**
+  `api.SetFrequencies` gives a fault with scalings the scaling 1.0 at every
+  new frequency and drops the scaling of a removed one (undo restores
+  them); before, a fault drawn at 50 Hz kept `{50: 1.0}`, and every solve
+  at the added frequencies warned `SCALINGS_INCOMPLETE`. In the GUI the
+  fault tab of the bus dialog edits the scaling per frequency and the fault
+  duration.
 
 ### Docs
 
