@@ -56,6 +56,7 @@ from groundinsight.api import (
     RemoveSource,
     CharacterizeResultDTO,
     SetCharacteristic,
+    SetFrequencies,
     SolveAllRequestDTO,
     StudyResultDTO,
     TableDTO,
@@ -67,6 +68,7 @@ from groundinsight.api import (
     UpdateSource,
 )
 
+from .catalogue import TypeDialogs
 from .colouring import MODES
 from .evaluations import EvaluationTabs
 from .formatting import DASH, format_number, format_unit, parse_number
@@ -133,6 +135,9 @@ REMOVE_COMMANDS = {
     "bus_types": RemoveBusType,
     "branch_types": RemoveBranchType,
 }
+
+#: The type tables and the catalogue each one shows.
+TYPE_TABLES = {"bus_types": "bus", "branch_types": "branch"}
 
 #: The table that lists an element kind of a diagnostic.
 KIND_TABLES = {
@@ -306,6 +311,7 @@ class ProjectPage:
         self.mode = "auto"
         self.tab = "plan"
         self.plan = PlanView(self)
+        self.types = TypeDialogs(self)
         self.evaluations = EvaluationTabs(self)
         self.study: Optional[StudyResultDTO] = None
         self.dialog_host: Any = None
@@ -553,7 +559,10 @@ class ProjectPage:
         """One editable grid per element table."""
         tables = self.session.tables()
         ui.label(self.t("edit_hint")).classes("text-xs text-gray-500")
-        self.frequency_label = ui.label().classes("text-sm text-gray-700").mark("frequencies")
+        with ui.row().classes("items-center gap-2"):
+            self.frequency_label = ui.label().classes("text-sm text-gray-700").mark("frequencies")
+            ui.button(self.t("frequencies_edit"), icon="tune", on_click=self._open_frequency_dialog).props(
+                "flat dense no-caps").mark("frequencies-edit")
         self._refresh_frequencies()
         for table in TABLES:
             with ui.expansion(self.t(f"table_{table}"), value=table in ("buses", "branches")).classes(
@@ -567,11 +576,57 @@ class ProjectPage:
                         args=["colId", "newValue", "oldValue", "data"])
                 grid.on("rowClicked", lambda e, tbl=table: self._on_row_clicked(tbl, e.args),
                         args=["data", "rowId"])
-                ui.button(self.t("remove_selected"), icon="delete",
-                          on_click=lambda _, tbl=table: self._remove_selected(tbl)).props(
-                    "flat dense no-caps").mark(f"remove-{table}")
+                with ui.row().classes("gap-1"):
+                    if table in TYPE_TABLES:
+                        self._type_buttons(table)
+                    ui.button(self.t("remove_selected"), icon="delete",
+                              on_click=lambda _, tbl=table: self._remove_selected(tbl)).props(
+                        "flat dense no-caps").mark(f"remove-{table}")
             self.grids[table] = grid
             self.expansions[table] = expansion
+
+    def _type_buttons(self, table: str) -> None:
+        """New, edit, copy and from the library, under a type table."""
+        kind = TYPE_TABLES[table]
+
+        def selected(action: Any) -> None:
+            name = self.selected.get(table)
+            if not name:
+                ui.notify(self.t("nothing_selected"), type="info")
+                return
+            action(kind, name)
+
+        ui.button(self.t("type_new"), icon="add", on_click=lambda: self.types.open_new(kind)).props(
+            "flat dense no-caps").mark(f"type-new-{kind}")
+        ui.button(self.t("type_library"), icon="library_books", on_click=lambda: self.types.open_library(kind)).props(
+            "flat dense no-caps").mark(f"type-library-{kind}")
+        ui.button(self.t("type_edit"), icon="edit", on_click=lambda: selected(self.types.open_edit)).props(
+            "flat dense no-caps").mark(f"type-edit-{kind}")
+        ui.button(self.t("type_copy"), icon="content_copy", on_click=lambda: selected(self.types.copy)).props(
+            "flat dense no-caps").mark(f"type-copy-{kind}")
+
+    def _open_frequency_dialog(self) -> None:
+        """Change the network's frequencies (one undoable command)."""
+        language = self.language
+        current = "; ".join(format_number(f, language, 6) for f in self.session.summary().frequencies)
+        with self.dialog_host, ui.dialog() as dialog, ui.card().classes("w-[30rem]").mark("frequency-dialog"):
+            ui.label(self.t("frequencies_edit")).classes("text-base font-medium")
+            field = ui.input(self.t("frequencies_hint"), value=current).classes("w-full").mark("frequency-input")
+
+            def submit() -> None:
+                try:
+                    values = [parse_number(v) for v in str(field.value or "").split(";") if v.strip()]
+                except ValueError as exc:
+                    ui.notify(f"{self.t('edit_rejected')}: {exc}", type="negative")
+                    return
+                if self.plan.apply(SetFrequencies(frequencies=values)):
+                    dialog.close()
+
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button(self.t("cancel_dialog"), on_click=dialog.close).props("flat no-caps")
+                ui.button(self.t("apply"), on_click=submit).props("no-caps").mark("frequency-apply")
+        dialog.on_value_change(lambda e: None if e.value else dialog.delete())
+        dialog.open()
 
     def _refresh_frequencies(self) -> None:
         """The frequency line above the tables."""

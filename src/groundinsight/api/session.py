@@ -53,6 +53,7 @@ that is current with one that is stale.
 """
 
 import itertools
+import json
 import logging
 import os
 import threading
@@ -1462,6 +1463,38 @@ class ProjectSession:
         """
         with self._lock:
             return characteristic_dto(self._network, kind, name, self._bus_types)
+
+    def type_definition(self, kind: str, name: str) -> Dict[str, Any]:
+        """
+        The fields of a catalogue type, as ``AddBusType``/``AddBranchType`` take them.
+
+        A front end fills its type dialog from it, and copies a type by
+        adding the definition under another name.
+
+        Parameters
+        ----------
+        kind : {"bus", "branch"}
+            The catalogue.
+        name : str
+            The type.
+
+        Returns
+        -------
+        dict
+            JSON-ready fields of the type (its characteristic included).
+
+        Raises
+        ------
+        ValueError
+            If the catalogue has no such type, or ``kind`` is unknown.
+        """
+        with self._lock:
+            catalogues = {"bus": self._bus_types, "branch": self._branch_types}
+            if kind not in catalogues:
+                raise ValueError(f"unknown type kind {kind!r}; expected 'bus' or 'branch'")
+            if name not in catalogues[kind]:
+                raise ValueError(f"there is no {kind} type '{name}'")
+            return json.loads(catalogues[kind][name].model_dump_json())
 
     def check(self, fault: Optional[str] = None) -> CheckReportDTO:
         """

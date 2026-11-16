@@ -242,6 +242,13 @@ version section when a release is cut.
   `Project.branch_types`); a session saves and reopens its whole catalogue,
   so a project can start empty and a type survives deleting its last
   element. The section is optional when reading.
+  `ProjectSession.type_definition(kind, name)` returns a type's fields as
+  `AddBusType`/`AddBranchType` take them.
+- **GUI: the type catalogue.** Under the type tables: *New …*, *Edit …*
+  (every field, a rename included), *Copy* and *From the standard library …*;
+  the same library dialog from a **+** next to the palette's type fields. A
+  new template *Empty project*, and the network's frequencies can be changed
+  above the tables. Every action is one undo step.
 
 ### Changed
 

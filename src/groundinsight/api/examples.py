@@ -13,7 +13,9 @@ build them:
 * ``"minimal"`` -- ``docs/examples/minimal.ipynb``: a three-bus cable line
   at 50 Hz whose reduction factor has a closed form;
 * ``"mv_ring"`` -- ``docs/examples/mv_ring.ipynb``: a 20-station 20 kV cable
-  ring, 1 kA at 50 Hz fed at ``b01``, fault ``F1`` at ``b10``.
+  ring, 1 kA at 50 Hz fed at ``b01``, fault ``F1`` at ``b10``;
+* ``"empty"`` -- no elements at all, for drawing from scratch with types
+  from the standard library (:func:`groundinsight.standard_branch_types`).
 
 Each builder returns a fresh, unsolved :class:`~groundinsight.Network` and
 touches no global state.
@@ -26,7 +28,7 @@ import groundinsight as gi
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["EXAMPLES", "build_minimal", "build_mv_ring", "build_quickstart"]
+__all__ = ["EXAMPLES", "build_empty", "build_minimal", "build_mv_ring", "build_quickstart"]
 
 
 def build_quickstart() -> gi.Network:
@@ -206,8 +208,28 @@ def build_mv_ring(n_buses: int = 20) -> gi.Network:
 
 
 #: Template name to builder, for "new project from template".
+def build_empty() -> gi.Network:
+    """
+    A network without elements, at 50 Hz.
+
+    Returns
+    -------
+    Network
+        ``New network``: no buses, branches, sources or faults; the
+        frequencies can be changed before or after drawing.
+
+    Examples
+    --------
+    >>> net = build_empty()
+    >>> len(net.buses), net.frequencies
+    (0, [50.0])
+    """
+    return gi.create_network(name="New network", frequencies=[50.0])
+
+
 EXAMPLES: Dict[str, Callable[[], gi.Network]] = {
     "quickstart": build_quickstart,
     "minimal": build_minimal,
     "mv_ring": build_mv_ring,
+    "empty": build_empty,
 }

@@ -103,3 +103,27 @@ def test_an_empty_project_gets_its_first_types_from_the_library_and_draws_with_t
     assert session.summary().bus_types == [RING]
     session.undo()
     assert "ONS" in session.network.buses
+
+
+def test_a_type_definition_is_what_add_type_takes_back():
+    session = api.ProjectSession.from_example("quickstart")
+    definition = session.type_definition("branch", "MSCable")
+    # Second way: the library's own type, field by field, and a copy added from it is equal.
+    assert gi.BranchType.model_validate(definition) == session.network.branches["cable_1"].type
+    session.apply(api.AddBranchType(definition={**definition, "name": "MSCable copy"}))
+    assert session.type_definition("branch", "MSCable copy") == {**definition, "name": "MSCable copy"}
+    json.dumps(definition)  # JSON-ready, for a front end
+    with pytest.raises(ValueError, match="nope"):
+        session.type_definition("bus", "nope")
+
+
+def test_an_unused_type_with_a_characteristic_is_listed_like_a_used_one():
+    ring = gi.standard_bus_types()[RING]
+    session = api.ProjectSession(gi.create_network(name="empty", frequencies=[50.0]))
+    session.apply(api.AddBusType(definition=json.loads(ring.model_dump_json())))
+    unused = [r for r in session.table("bus_types").rows if r["name"] == RING]
+    # Second way: the row Network.to_tables writes once a bus uses the type.
+    session.apply(api.AddBus(name="ONS", type=RING))
+    used = [r for r in session.table("bus_types").rows if r["name"] == RING]
+    assert unused == used and len(used) == 1
+    assert json.loads(used[0]["characteristic"])["name"] == RING

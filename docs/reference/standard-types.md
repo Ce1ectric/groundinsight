@@ -3,8 +3,9 @@
 `groundinsight` ships a small library of types so that a network can be drawn
 without first writing formulas: 20 kV cable systems, four-core LV cables and
 typical earth electrodes. Every entry is an ordinary `BranchType` or `BusType`;
-copy it into a project (in the GUI: *Types → From the standard library*) and
-change the copy where the site differs.
+copy it into a project and change the copy where the site differs. In the
+GUI: *From the standard library …* under the bus-type and branch-type tables
+of the network tab, or the **+** next to the palette's type fields.
 
 ```python
 import groundinsight as gi

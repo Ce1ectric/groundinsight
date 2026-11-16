@@ -120,6 +120,7 @@ class PlanView:
         self.branch_type: Optional[str] = None
         self.canvas: Optional[NetworkCanvas] = None
         self.dialog_host: Optional[Any] = None
+        self.type_selects: Dict[str, Any] = {}
 
     # -- helpers ------------------------------------------------------------------
 
@@ -215,12 +216,18 @@ class PlanView:
             ui.toggle({tool: self.t(f"tool_{tool}") for tool in TOOLS}, value=self.tool,
                       on_change=lambda e: self.set_tool(e.value)).props(
                 "dense no-caps spread").classes("flex-col w-full").mark("tools")
-            ui.select(summary.bus_types, value=self.bus_type, label=self.t("new_bus_type"),
-                      on_change=lambda e: setattr(self, "bus_type", e.value)).props(
-                "dense outlined").classes("w-full").mark("new-bus-type")
-            ui.select(summary.branch_types, value=self.branch_type, label=self.t("new_branch_type"),
-                      on_change=lambda e: setattr(self, "branch_type", e.value)).props(
-                "dense outlined").classes("w-full").mark("new-branch-type")
+            self.type_selects = {}
+            for kind in ("bus", "branch"):
+                options = summary.bus_types if kind == "bus" else summary.branch_types
+                with ui.row().classes("w-full no-wrap items-center gap-0"):
+                    self.type_selects[kind] = ui.select(
+                        options, value=getattr(self, f"{kind}_type"), label=self.t(f"new_{kind}_type"),
+                        on_change=lambda e, k=kind: setattr(self, f"{k}_type", e.value)).props(
+                        "dense outlined").classes("grow min-w-0").mark(f"new-{kind}-type")
+                    ui.button(icon="add", on_click=lambda _, k=kind: self.page.types.open_library(
+                        k, for_palette=True)).props(
+                        f'flat dense round aria-label="{self.t("type_add_" + kind)}"').tooltip(
+                        self.t("type_add_" + kind)).mark(f"palette-add-{kind}")
             self.tool_hint = ui.label(self.t(f"tool_hint_{self.tool}")).classes("text-xs text-gray-500").mark(
                 "tool-hint")
 
@@ -280,6 +287,7 @@ class PlanView:
         if self.canvas is None or self.session is None:
             return
         self.mode = self._mode_of_diagram()
+        self._refresh_type_selects()
         colours = self.colouring()
         self.canvas.show(self.session.diagram().model_dump(mode="json"),
                          {"nodes": colours.nodes, "edges": colours.edges})
@@ -289,6 +297,20 @@ class PlanView:
         self._sync_selection()
         self.legend.refresh()
         self.properties.refresh()
+
+    def _refresh_type_selects(self) -> None:
+        """Offer the catalogue's current types; keep the chosen one while it exists."""
+        summary = self.session.summary()
+        for kind, options in (("bus", summary.bus_types), ("branch", summary.branch_types)):
+            chosen = getattr(self, f"{kind}_type")
+            if chosen not in options:
+                chosen = options[0] if options else None
+                setattr(self, f"{kind}_type", chosen)
+            select = self.type_selects.get(kind)
+            if select is not None:
+                # set_options reports the interim value through on_change: restore the choice after it.
+                select.set_options(list(options), value=chosen)
+                setattr(self, f"{kind}_type", chosen)
 
     # -- selection and properties -------------------------------------------------
 

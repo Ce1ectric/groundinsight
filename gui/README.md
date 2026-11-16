@@ -33,7 +33,8 @@ environment; without it the button is disabled and says why.
 
 ## What it does
 
-* start page: a new project from a template, or open a project file
+* start page: a new project from a template -- an empty one included, for
+  drawing from scratch -- or open a project file
   (the library's project file, `groundinsight.save_project`; `~` and
   environment variables in the path are expanded);
 * network plan: draw the network on a canvas -- buses, buses with an infeed,
@@ -49,7 +50,14 @@ environment; without it the button is disabled and says why.
   selection;
 * network tables: buses, branches, sources, faults and the type catalogue,
   editable cell by cell; every edit is a command of the service layer and can
-  be undone; a rejected edit changes nothing and says why;
+  be undone; a rejected edit changes nothing and says why. The frequencies of
+  the network can be changed above the tables;
+* type catalogue: new types, editing every field of a type (a rename
+  included, its elements follow), copies, and types from groundinsight's
+  standard library -- 20 kV cable systems and NAYY cables from data sheets,
+  typical earth electrodes with a groundfield characteristic; also from the
+  "+" next to the palette's type fields. Types no element uses are saved
+  with the project;
 * calculation menu: one fault or all faults, the pre-flight check, outage
   study, rho-f variation with statistics, cuts, bus response, the largest
   admissible rho scaling, thermal check, EN 50522 touch-voltage check,

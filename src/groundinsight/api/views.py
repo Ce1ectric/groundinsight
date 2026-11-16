@@ -21,12 +21,13 @@ network, and only the DTO travels back.
 """
 
 import logging
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional
 
 import polars as pl
 
 import groundinsight as gi
 from groundinsight.io import TABLE_SCHEMAS
+from groundinsight.io.tables import type_row
 
 from .schemas import (
     CharacteristicDTO,
@@ -146,26 +147,6 @@ def table_dto(name: str, frame: pl.DataFrame) -> TableDTO:
     return TableDTO(name=name, columns=columns, rows=frame.to_dicts())
 
 
-def _type_row(element_type, columns: Sequence[str]) -> Dict[str, object]:
-    """
-    The table row of one bus or branch type, as ``Network.to_tables`` writes it.
-
-    Parameters
-    ----------
-    element_type : BusType or BranchType
-        The type.
-    columns : sequence of str
-        The columns of the type table.
-
-    Returns
-    -------
-    dict
-        The type's fields restricted to ``columns``.
-    """
-    dumped = element_type.model_dump()
-    return {column: dumped.get(column) for column in columns}
-
-
 def element_tables_dto(
     network: gi.Network,
     *,
@@ -204,7 +185,7 @@ def element_tables_dto(
         frame = frames[name]
         extra = {"bus_types": extra_bus_types, "branch_types": extra_branch_types}.get(name)
         if extra:
-            rows = [_type_row(t, TABLE_SCHEMAS[name]) for t in extra]
+            rows = [type_row(t, TABLE_SCHEMAS[name]) for t in extra]
             if rows:
                 frame = pl.concat(
                     [frame, pl.DataFrame(rows, schema=TABLE_SCHEMAS[name])], how="vertical"

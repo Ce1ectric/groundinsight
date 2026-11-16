@@ -55,7 +55,7 @@ import logging
 import os
 import typing
 from pathlib import Path as _FilePath
-from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import polars as pl
 from pydantic import BaseModel, ValidationError
@@ -601,6 +601,33 @@ def _characteristic_cell(
         return None
 
 
+def type_row(element_type: Any, columns: Sequence[str]) -> Dict[str, Any]:
+    """
+    The table row of one bus or branch type, as ``Network.to_tables`` writes it.
+
+    Internal API: also used by ``groundinsight.api`` for catalogue types no
+    element uses, so both rows are built the same way.
+
+    Parameters
+    ----------
+    element_type : BusType or BranchType
+        The type.
+    columns : sequence of str
+        The columns of the type table.
+
+    Returns
+    -------
+    dict
+        The type's fields restricted to ``columns``; the characteristic as
+        its JSON text.
+    """
+    dumped = element_type.model_dump()
+    row = {column: dumped.get(column) for column in columns}
+    if "characteristic" in columns:
+        row["characteristic"] = _characteristic_text(getattr(element_type, "characteristic", None))
+    return row
+
+
 def _characteristic_text(characteristic: Optional[EarthingCharacteristic]) -> Optional[str]:
     """
     The ``characteristic`` cell of an exported row.
@@ -1025,10 +1052,7 @@ def _type_rows(
     """
     rows: Dict[str, Dict[str, Any]] = {}
     for element in elements.values():
-        dumped = element.type.model_dump()
-        row = {column: dumped.get(column) for column in columns}
-        if "characteristic" in columns:
-            row["characteristic"] = _characteristic_text(element.type.characteristic)
+        row = type_row(element.type, columns)
         existing = rows.get(row["name"])
         if existing is None:
             rows[row["name"]] = row
