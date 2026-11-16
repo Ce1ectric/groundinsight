@@ -155,7 +155,7 @@ of the [service layer](service-layer.md) also refuses files above its
 ## Output
 
 ```text title="Output of persistence.py"
-project file header: ['schema_version', 'groundinsight_version', 'network', 'diagram', 'views', 'types']
+project file header: ['schema_version', 'groundinsight_version', 'network', 'diagram', 'views', 'types', 'criteria']
 JSON round trip identical: True
 project: True [{'title': 'EPR', 'blocks': []}] []
 newer schema: ValueError: 'from_the_future.json' uses project-file schema version 99

@@ -38,7 +38,7 @@ def test_unused_types_are_kept_in_the_types_section(tmp_path):
     path = tmp_path / "p.json"
     gi.save_project(path, net, bus_types=[used, ring], branch_types=[cable])
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert list(payload) == ["schema_version", "groundinsight_version", "network", "diagram", "views", "types"]
+    assert list(payload) == ["schema_version", "groundinsight_version", "network", "diagram", "views", "types", "criteria"]
     # Only the types no element uses are written; the used one lives in the network section.
     assert [t["name"] for t in payload["types"]["bus_types"]] == [RING]
     assert [t["name"] for t in payload["types"]["branch_types"]] == [NAYY]

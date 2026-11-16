@@ -5,7 +5,7 @@ The JSON project file: one network per file, UTF-8, written atomically.
 
 A project file is what :func:`save_project` (and :func:`save_network_to_json`)
 writes and :func:`load_project` (and :func:`load_network_from_json`) reads:
-two header keys and four sections::
+two header keys and five sections::
 
     {
         "schema_version": 2,
@@ -13,7 +13,8 @@ two header keys and four sections::
         "network": { ... the network's model_dump_json ... },
         "diagram": { ... the Diagram, or null ... },
         "views": [ ... the evaluation tabs of a front end ... ],
-        "types": {"bus_types": [ ... ], "branch_types": [ ... ]}
+        "types": {"bus_types": [ ... ], "branch_types": [ ... ]},
+        "criteria": { ... the assessment criteria of a front end ... }
     }
 
 ``network`` is the physical model, ``diagram`` where its elements are drawn
@@ -26,7 +27,9 @@ the type was deleted): a network only knows the types of its elements, and
 without this section such a type would vanish on saving. A used type is
 written once, inside the network; a catalogue type of the same name must be
 identical to it, otherwise saving and reading refuse the project. The
-section is optional when reading.
+section is optional when reading. ``criteria`` holds the limits the results
+are held to (:class:`groundinsight.api.CriteriaDTO`), a JSON object the
+library stores and returns unchanged like the views; optional when reading.
 
 Three properties are guaranteed, because a desktop application and a server
 open and save these files on every platform:
@@ -124,7 +127,7 @@ they are written."""
 
 _PathLike = Union[str, "os.PathLike[str]"]
 
-SECTIONS: Tuple[str, ...] = ("network", "diagram", "views", "types")
+SECTIONS: Tuple[str, ...] = ("network", "diagram", "views", "types", "criteria")
 """The sections of a version-2 project file, in the order they are written."""
 
 
@@ -145,6 +148,9 @@ class Project(BaseModel):
     bus_types, branch_types : list of BusType / BranchType
         The catalogue types no element of the network uses (the ``types``
         section); empty for a file without one.
+    criteria : dict
+        The assessment criteria, as a JSON object; stored and returned
+        unchanged, empty for a file without the section.
     schema_version : int, optional
         The layout version of the file it was read from; ``None`` for a file
         without one (0.6.0 or earlier) and for a project built in memory.
@@ -166,6 +172,7 @@ class Project(BaseModel):
     views: List[Dict[str, Any]] = Field(default_factory=list)
     bus_types: List[BusType] = Field(default_factory=list)
     branch_types: List[BranchType] = Field(default_factory=list)
+    criteria: Dict[str, Any] = Field(default_factory=dict)
     schema_version: Optional[int] = None
     groundinsight_version: Optional[Any] = None
 
@@ -178,6 +185,7 @@ def save_project(
     *,
     bus_types: Sequence[BusType] = (),
     branch_types: Sequence[BranchType] = (),
+    criteria: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Save a network with its diagram, views and type catalogue, atomically and as UTF-8.
@@ -196,6 +204,8 @@ def save_project(
     bus_types, branch_types : sequence of BusType / BranchType, optional
         The project's catalogue. Types the network's elements use are not
         written again; the others go to the ``types`` section.
+    criteria : dict, optional
+        The assessment criteria, a JSON object; ``None`` writes ``{}``.
 
     Raises
     ------
@@ -218,7 +228,9 @@ def save_project(
     >>> gi.load_project(path).diagram == diagram
     True
     """
-    payload = _project_file_text(network, diagram, views, bus_types, branch_types).encode("utf-8")
+    payload = _project_file_text(
+        network, diagram, views, bus_types, branch_types, criteria
+    ).encode("utf-8")
     target = _resolve_target(os.fspath(path))
     _atomic_write(target, payload)
     logger.debug(
@@ -364,6 +376,7 @@ def project_to_json(
     *,
     bus_types: Sequence[BusType] = (),
     branch_types: Sequence[BranchType] = (),
+    criteria: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     The text of a project file, without writing it.
@@ -381,6 +394,8 @@ def project_to_json(
         The evaluation tabs; JSON objects.
     bus_types, branch_types : sequence of BusType / BranchType, optional
         The project's catalogue, as for :func:`save_project`.
+    criteria : dict, optional
+        The assessment criteria, as for :func:`save_project`.
 
     Returns
     -------
@@ -401,7 +416,7 @@ def project_to_json(
     >>> gi.project_from_json(text).network.name
     'n'
     """
-    return _project_file_text(network, diagram, views, bus_types, branch_types)
+    return _project_file_text(network, diagram, views, bus_types, branch_types, criteria)
 
 
 def project_from_json(text: str, source: str = "<text>") -> Project:
@@ -506,7 +521,7 @@ def _parse_project(text: str, legacy_encoding: Optional[str], source: str) -> Pr
             "valid UTF-8; project files with a schema version are always "
             "written as UTF-8. Re-encode the file as UTF-8."
         )
-    network_data, diagram_data, views, types = _sections(payload, schema_version, source)
+    network_data, diagram_data, views, types, criteria = _sections(payload, schema_version, source)
     network = Network.model_validate(network_data)
     diagram = None if diagram_data is None else Diagram.model_validate(diagram_data)
     bus_types, branch_types = _catalogue_types(types, network, source)
@@ -530,13 +545,13 @@ def _parse_project(text: str, legacy_encoding: Optional[str], source: str) -> Pr
         written_by if written_by is not None else "0.6.0 or earlier",
     )
     return Project(network=network, diagram=diagram, views=views, bus_types=bus_types,
-                   branch_types=branch_types, schema_version=schema_version,
+                   branch_types=branch_types, criteria=criteria, schema_version=schema_version,
                    groundinsight_version=written_by)
 
 
 def _sections(
     payload: Dict[str, Any], schema_version: Optional[int], source: str
-) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any], Dict[str, Any]]:
     """
     Split a parsed project file (metadata removed) into its sections.
 
@@ -552,20 +567,20 @@ def _sections(
     Returns
     -------
     tuple
-        ``(network data, diagram data or None, views, types)``. A file
-        before version 2 is the network itself; ``types`` is ``{}`` for a
-        file without the section.
+        ``(network data, diagram data or None, views, types, criteria)``. A
+        file before version 2 is the network itself; ``types`` and
+        ``criteria`` are ``{}`` for a file without the section.
 
     Raises
     ------
     ValueError
         If a version-2 file has keys other than :data:`SECTIONS`, no
         ``network`` object, a ``diagram`` that is neither an object nor
-        ``null``, ``views`` that are not a list of objects, or ``types``
-        that is not an object of the two type lists.
+        ``null``, ``views`` that are not a list of objects, or ``criteria``
+        that is not an object.
     """
     if schema_version is None or schema_version < 2:
-        return payload, None, [], {}
+        return payload, None, [], {}, {}
     unknown = sorted(set(payload) - set(SECTIONS))
     if unknown:
         raise ValueError(
@@ -581,7 +596,34 @@ def _sections(
     views = payload.get("views", [])
     if not isinstance(views, list) or not all(isinstance(view, dict) for view in views):
         raise ValueError(f"'{source}': 'views' must be a list of objects.")
-    return network, diagram, views, payload.get("types", {})
+    return network, diagram, views, payload.get("types", {}), _criteria_section(payload, source)
+
+
+def _criteria_section(payload: Dict[str, Any], source: str) -> Dict[str, Any]:
+    """
+    The ``criteria`` section of a version-2 file.
+
+    Parameters
+    ----------
+    payload : dict
+        The top-level object.
+    source : str
+        File name for the error message.
+
+    Returns
+    -------
+    dict
+        The section, ``{}`` without one.
+
+    Raises
+    ------
+    ValueError
+        If it is not an object.
+    """
+    criteria = payload.get("criteria", {})
+    if not isinstance(criteria, dict):
+        raise ValueError(f"'{source}': 'criteria' must be an object.")
+    return criteria
 
 
 # ---------------------------------------------------------------------------
@@ -679,9 +721,10 @@ def _project_file_text(
     views: Optional[List[Dict[str, Any]]] = None,
     bus_types: Sequence[BusType] = (),
     branch_types: Sequence[BranchType] = (),
+    criteria: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    The text of a project file: the header keys, then the four sections.
+    The text of a project file: the header keys, then the five sections.
 
     Parameters
     ----------
@@ -693,6 +736,8 @@ def _project_file_text(
         The evaluation tabs.
     bus_types, branch_types : sequence of BusType / BranchType, optional
         The catalogue; only the types no element uses are written.
+    criteria : dict, optional
+        The assessment criteria.
 
     Returns
     -------
@@ -745,6 +790,7 @@ def _project_file_text(
     types = {"bus_types": [json.loads(t.model_dump_json()) for t in unused_bus],
              "branch_types": [json.loads(t.model_dump_json()) for t in unused_branch]}
     types_text = section(json.dumps(types, indent=4, ensure_ascii=False, allow_nan=False))
+    criteria_text = section(json.dumps(criteria or {}, indent=4, ensure_ascii=False, allow_nan=False))
     return (
         "{\n"
         f'    "{METADATA_KEYS[0]}": {SCHEMA_VERSION},\n'
@@ -752,7 +798,8 @@ def _project_file_text(
         f'    "network": {network_text},\n'
         f'    "diagram": {diagram_text},\n'
         f'    "views": {views_text},\n'
-        f'    "types": {types_text}\n'
+        f'    "types": {types_text},\n'
+        f'    "criteria": {criteria_text}\n'
         "}\n"
     )
 

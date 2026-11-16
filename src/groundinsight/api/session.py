@@ -62,14 +62,17 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
 import groundinsight as gi
 from groundinsight.diagnostics import collecting, unique
 
+from .assessment import assess
 from .commands import Command, CommandContext, parse_command, rejection_reason
 from .examples import EXAMPLES
 from .jobs import JobHandle, JobRunner, snapshot_network
 from .tasks import TaskOutcome, run_task
 from .schemas import (
+    AssessmentDTO,
     CharacteristicDTO,
     CheckReportDTO,
     CommandResultDTO,
+    CriteriaDTO,
     DiagnosticDTO,
     DiagramDTO,
     FaultResultDTO,
@@ -313,7 +316,8 @@ class MemoryStore(ProjectStore):
             The project, kept as the text of a project file.
         """
         text = gi.project_to_json(project.network, project.diagram, project.views,
-                                  bus_types=project.bus_types, branch_types=project.branch_types)
+                                  bus_types=project.bus_types, branch_types=project.branch_types,
+                                  criteria=project.criteria)
         with self._lock:
             self._projects[key] = text
 
@@ -617,6 +621,7 @@ class ProjectSession:
         views: Optional[List[Dict[str, Any]]] = None,
         bus_types: Sequence[gi.BusType] = (),
         branch_types: Sequence[gi.BranchType] = (),
+        criteria: Optional[Dict[str, Any]] = None,
     ) -> None:
         if not isinstance(network, gi.Network):
             raise TypeError(f"a session holds a groundinsight.Network, got {type(network).__name__}")
@@ -648,6 +653,8 @@ class ProjectSession:
         self._branch_types = _catalogue(network.branches.values(), branch_types)
         self._diagram = _initial_diagram(network, diagram)
         self._views: List[Dict[str, Any]] = [dict(view) for view in (views or [])]
+        self._criteria: Dict[str, Any] = CriteriaDTO.model_validate(criteria or {}).model_dump(
+            mode="json", exclude={"dto_schema_version"})
         self._lock = threading.RLock()
         self._revision = 0
         self._saved_revision = 0
@@ -698,7 +705,8 @@ class ProjectSession:
             raise ProjectError(f"cannot open '{path}': {rejection_reason(exc)}") from exc
         try:
             return cls(project.network, path=path, diagram=project.diagram, views=project.views,
-                       bus_types=project.bus_types, branch_types=project.branch_types, **options)
+                       bus_types=project.bus_types, branch_types=project.branch_types,
+                       criteria=project.criteria, **options)
         except ValueError as exc:
             raise ProjectError(f"cannot open '{path}': {rejection_reason(exc)}") from exc
 
@@ -870,7 +878,8 @@ class ProjectSession:
             raise ProjectError(f"cannot open '{location}': {rejection_reason(exc)}") from exc
         try:
             return cls(project.network, store=store, key=key, diagram=project.diagram, views=project.views,
-                       bus_types=project.bus_types, branch_types=project.branch_types, **options)
+                       bus_types=project.bus_types, branch_types=project.branch_types,
+                       criteria=project.criteria, **options)
         except ValueError as exc:
             raise ProjectError(f"cannot open '{location}': {rejection_reason(exc)}") from exc
 
@@ -971,6 +980,47 @@ class ProjectSession:
         """
         with self._lock:
             return [dict(view) for view in self._views]
+
+    def criteria(self) -> CriteriaDTO:
+        """
+        The assessment criteria of the project (set with ``SetCriteria``).
+
+        Returns
+        -------
+        CriteriaDTO
+            The limits; every field empty where none is given.
+        """
+        with self._lock:
+            return CriteriaDTO.model_validate(self._criteria)
+
+    def assessment(self, fault: str) -> AssessmentDTO:
+        """
+        The stored result of ``fault`` held to the criteria, in percent.
+
+        Nothing is solved: the stored result is checked with the library's
+        touch-voltage and thermal checks (:mod:`groundinsight.api.assessment`).
+
+        Parameters
+        ----------
+        fault : str
+            A fault with a stored result (solve it first).
+
+        Returns
+        -------
+        AssessmentDTO
+            Utilisation per bus and branch, and notes on what could not be
+            assessed.
+
+        Raises
+        ------
+        ProjectError
+            If the fault has no stored result.
+        """
+        with self._lock:
+            try:
+                return assess(self._network, fault, CriteriaDTO.model_validate(self._criteria))
+            except ValueError as exc:
+                raise ProjectError(rejection_reason(exc)) from exc
 
     @property
     def revision(self) -> int:
@@ -1144,7 +1194,8 @@ class ProjectSession:
                 try:
                     gi.save_project(target, view, self._diagram, self._views,
                                     bus_types=list(self._bus_types.values()),
-                                    branch_types=list(self._branch_types.values()))
+                                    branch_types=list(self._branch_types.values()),
+                                    criteria=self._criteria)
                 except (OSError, ValueError, TypeError) as exc:
                     raise ProjectError(f"cannot save '{target}': {rejection_reason(exc)}") from exc
                 self._path, self._store, self._key = target, None, None
@@ -1185,7 +1236,8 @@ class ProjectSession:
         """The project to store: ``network`` with the session's diagram and views."""
         return gi.Project(network=network, diagram=self._diagram, views=self._views,
                           bus_types=list(self._bus_types.values()),
-                          branch_types=list(self._branch_types.values()))
+                          branch_types=list(self._branch_types.values()),
+                          criteria=self._criteria)
 
     @staticmethod
     def _save_to_store(store: ProjectStore, key: str, project: "gi.Project") -> None:
@@ -1200,7 +1252,7 @@ class ProjectSession:
     def _context(self) -> CommandContext:
         """The objects commands act on."""
         return CommandContext(self._network, self._bus_types, self._branch_types, self._limits,
-                              diagram=self._diagram, views=self._views)
+                              diagram=self._diagram, views=self._views, criteria=self._criteria)
 
     def _require_open(self) -> None:
         """Refuse work on a closed session."""
@@ -1251,7 +1303,7 @@ class ProjectSession:
             context = self._context()
             with collecting() as records:
                 command.apply(context)
-            self._diagram, self._views = context.diagram, context.views
+            self._diagram, self._views, self._criteria = context.diagram, context.views, context.criteria
             entry = _Entry(command, self._revision, next(self._revisions), paths_before)
             self._done.append(entry)
             self._undone.clear()
@@ -1288,7 +1340,7 @@ class ProjectSession:
                 # exception reaches the caller.
                 logger.debug("undo of '%s' failed", entry.command.label, exc_info=True)
                 raise
-            self._diagram, self._views = context.diagram, context.views
+            self._diagram, self._views, self._criteria = context.diagram, context.views, context.criteria
             self._done.pop()
             self._undone.append(entry)
             self._revision = entry.before
@@ -1313,7 +1365,7 @@ class ProjectSession:
             context = self._context()
             with collecting() as records:
                 entry.command.apply(context)
-            self._diagram, self._views = context.diagram, context.views
+            self._diagram, self._views, self._criteria = context.diagram, context.views, context.criteria
             self._done.append(entry)
             self._revision = entry.after
             return self._command_result(entry.command, records)

@@ -55,7 +55,7 @@ from pydantic import Field, PrivateAttr, TypeAdapter, ValidationError, field_val
 
 import groundinsight as gi
 
-from .schemas import BaseDTO, ComplexDTO, Phasor, SessionLimitsDTO, ViewDTO
+from .schemas import BaseDTO, ComplexDTO, CriteriaDTO, Phasor, SessionLimitsDTO, ViewDTO
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +93,7 @@ __all__ = [
     "RouteBranch",
     "SetCharacteristic",
     "SetColourScheme",
+    "SetCriteria",
     "SetFrequencies",
     "UpdateBranch",
     "UpdateBranchType",
@@ -133,6 +134,9 @@ class CommandContext:
     views : list of dict, optional
         The session's evaluation tabs; replaced, never edited in place, like
         the diagram.
+    criteria : dict, optional
+        The session's assessment criteria (:class:`CriteriaDTO` in its JSON
+        form); replaced, never edited in place.
     """
 
     def __init__(
@@ -143,6 +147,7 @@ class CommandContext:
         limits: SessionLimitsDTO,
         diagram: Optional[gi.Diagram] = None,
         views: Optional[List[Dict[str, Any]]] = None,
+        criteria: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.network = network
         self.bus_types = bus_types
@@ -150,6 +155,7 @@ class CommandContext:
         self.limits = limits
         self.diagram = diagram if diagram is not None else gi.Diagram()
         self.views: List[Dict[str, Any]] = list(views) if views is not None else []
+        self.criteria: Dict[str, Any] = dict(criteria) if criteria is not None else {}
 
     def catalogue(self, kind: str) -> Dict[str, Any]:
         """
@@ -426,10 +432,11 @@ class Command(BaseDTO):
     it raises; ``_revert`` undoes a successful ``_apply`` on the network and
     must not fail.
 
-    The diagram and the views are handled here, for every command alike:
-    ``_apply`` may replace ``context.diagram`` or ``context.views`` by a
-    changed copy, and this class puts the former ones back when ``_apply``
-    raises and on :meth:`revert`. A
+    The diagram, the views and the criteria are handled here, for every
+    command alike: ``_apply`` may replace ``context.diagram``,
+    ``context.views`` or ``context.criteria`` by a changed copy, and this
+    class puts the former ones back when ``_apply`` raises and on
+    :meth:`revert`. A
     diagram is small and never edited in place, so keeping the former object
     costs nothing -- unlike a snapshot of the network, which the commands
     avoid (see the module docstring).
@@ -470,16 +477,16 @@ class Command(BaseDTO):
         CommandError
             If the library rejects the change; nothing has changed then.
         """
-        diagram, views = context.diagram, context.views
+        before = (context.diagram, context.views, context.criteria)
         try:
             self._apply(context)
         except CommandError:
-            context.diagram, context.views = diagram, views
+            context.diagram, context.views, context.criteria = before
             raise
         except (ValueError, TypeError, KeyError, AttributeError) as exc:
-            context.diagram, context.views = diagram, views
+            context.diagram, context.views, context.criteria = before
             raise CommandError(f"{self.label}: {rejection_reason(exc)}") from exc
-        self._diagram_before = (diagram, views)
+        self._diagram_before = before
 
     def revert(self, context: CommandContext) -> None:
         """
@@ -498,7 +505,7 @@ class Command(BaseDTO):
         if self._undo is None:
             raise RuntimeError(f"cannot revert '{self.label}': it was not applied")
         self._revert(context)
-        context.diagram, context.views = self._diagram_before
+        context.diagram, context.views, context.criteria = self._diagram_before
         self._undo = None
 
     def _apply(self, context: CommandContext) -> None:  # pragma: no cover - abstract
@@ -2639,6 +2646,43 @@ class Batch(Command):
 # parsing
 # ---------------------------------------------------------------------------
 
+class SetCriteria(Command):
+    """
+    Replace the assessment criteria of the project.
+
+    Attributes
+    ----------
+    criteria : dict
+        The criteria (:class:`~groundinsight.api.CriteriaDTO` in its JSON
+        form); an empty dict removes every limit.
+    """
+
+    op: Literal["set_criteria"] = "set_criteria"
+    criteria: Dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def label(self) -> str:
+        """
+        ``set criteria``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return "set criteria"
+
+    def _apply(self, context: CommandContext) -> None:
+        criteria = CriteriaDTO.model_validate(self.criteria).model_dump(
+            mode="json", exclude={"dto_schema_version"}
+        )
+        context.criteria = criteria
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        """The base class restores the criteria."""
+
+
 #: Every command class, in a stable order.
 COMMAND_TYPES = (
     AddBus,
@@ -2678,6 +2722,7 @@ COMMAND_TYPES = (
     UpdateView,
     RemoveView,
     SetColourScheme,
+    SetCriteria,
     Batch,
 )
 

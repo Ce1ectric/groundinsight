@@ -330,9 +330,11 @@ def test_every_new_command_undoes_and_redoes_exactly():
 def test_the_catalogues_cover_every_command():
     from tests.test_audit_pass19_service_layer import _command_catalogue
 
-    # The characteristic commands and Batch have their own tests.
+    # The characteristic commands, Batch and the criteria have their own tests
+    # (tests/test_assessment.py for set_criteria).
     characteristic_ops = {"set_characteristic", "clear_characteristic", "import_characteristic",
-                          "batch", "add_view", "update_view", "remove_view", "set_colour_scheme"}
+                          "batch", "add_view", "update_view", "remove_view", "set_colour_scheme",
+                          "set_criteria"}
     covered = {c.op for c in _command_catalogue()} | {c.op for c in _catalogue()} | characteristic_ops
     assert covered == set(api.COMMAND_OPS)
 

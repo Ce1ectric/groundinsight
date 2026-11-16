@@ -75,6 +75,8 @@ __all__ = [
     "CheckReportDTO",
     "CommandResultDTO",
     "ComplexDTO",
+    "CriteriaDTO",
+    "AssessmentDTO",
     "CutDTO",
     "CutsRequestDTO",
     "DiagnosticDTO",
@@ -727,6 +729,79 @@ class FaultResultsDTO(BaseDTO):
     """
 
     results: List[FaultResultDTO]
+
+
+class CriteriaDTO(BaseDTO):
+    """
+    The assessment criteria of a project: the limits its results are held to.
+
+    Stored with the project (section ``criteria`` of the project file) and
+    set with :class:`~groundinsight.api.SetCriteria`. Every limit is the
+    user's, cited from the standard or the operator's rules; the package
+    keeps no limit table of its own.
+
+    Attributes
+    ----------
+    u_e_limit_V : float, optional
+        Limit of the earth potential rise ``U_E`` in V (for every bus).
+    u_touch_limit : float or list of (float, float), optional
+        Limit of the prospective touch voltage in V, or the curve
+        ``[(t_F in s, U in V), ...]`` of the standard
+        (:func:`groundinsight.check_touch_voltages`).
+    t_f_s : float, optional
+        Fault duration for the curve where the fault has none
+        (``Fault.t_k_s``).
+    r_to_x : float, optional
+        R/X of the fault loop for the thermal check (IEC 60909 ``kappa``)
+        where the sources carry no short-circuit data.
+    branch_current_limits_A : dict of str to float
+        Admissible short-time current in A per branch type name, at the fault
+        duration; it replaces the adiabatic limit computed from material and
+        cross-section for the branches of that type.
+    """
+
+    u_e_limit_V: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    u_touch_limit: Optional[Union[float, List[Tuple[float, float]]]] = None
+    t_f_s: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    r_to_x: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    branch_current_limits_A: Dict[str, float] = Field(default_factory=dict)
+
+    @field_validator("branch_current_limits_A")
+    @classmethod
+    def _positive_limits(cls, limits: Dict[str, float]) -> Dict[str, float]:
+        """Every current limit is a positive, finite number."""
+        for name, value in limits.items():
+            if not (math.isfinite(value) and value > 0):
+                raise ValueError(f"the current limit of type '{name}' must be positive, got {value!r}")
+        return limits
+
+
+class AssessmentDTO(BaseDTO):
+    """
+    The results of one fault held to the project's criteria, in percent.
+
+    Attributes
+    ----------
+    fault : str
+        The fault.
+    buses : TableDTO
+        Per bus: ``bus_name``, ``EPR_V`` (RMS), ``U_E_limit_V``,
+        ``epr_utilisation_pct``, ``U_vT_V``, ``U_T_limit_V``,
+        ``touch_utilisation_pct``, ``thermal_utilisation_pct`` (the largest of
+        the bus's earthing conductor and electrode).
+    branches : TableDTO
+        Per branch: ``branch_name``, ``branch_type``, ``I_th_A``,
+        ``I_limit_A``, ``limit_source`` (``"criteria"`` or ``"thermal"``),
+        ``thermal_utilisation_pct``.
+    notes : list of str
+        Why a part could not be assessed (no limit given, thermal data
+        missing, the R/X needed for ``kappa``).
+    """
+
+    fault: str
+    buses: TableDTO
+    branches: TableDTO
+    notes: List[str] = Field(default_factory=list)
 
 
 class StudyResultDTO(BaseDTO):

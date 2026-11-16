@@ -87,6 +87,18 @@ version section when a release is cut.
 
 ### Added
 
+- **Assessment criteria of a project, and the utilisation of a fault.**
+  `api.CriteriaDTO` holds the user's limits -- earth potential rise `U_E`,
+  touch voltage (a value or the curve `t_F : U` of the standard, with a
+  fallback `t_F`), R/X for the thermal check, and an admissible short-time
+  current per branch type that replaces the adiabatic limit computed from
+  material and cross-section. `api.SetCriteria` sets them (undoable), the
+  project file keeps them in a new optional section `criteria`, and
+  `ProjectSession.assessment(fault)` holds the stored result to them in
+  percent per bus and branch (`api.AssessmentDTO`), from the library's own
+  touch-voltage and thermal checks; what cannot be assessed is named in
+  `notes`, never guessed.
+
 - **Earthing characteristics (`gi.EarthingCharacteristic`).** A table of the
   earthing impedance over a grid of specific earth resistances and
   frequencies -- what a field solver such as groundfield computes for a
