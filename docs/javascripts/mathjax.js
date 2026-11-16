@@ -32,11 +32,15 @@ window.MathJax = {
     // typesets every page, the first one included. Two typesets racing each
     // other -- MathJax's at startup, then a clear and a new one when
     // document$ fires -- showed the TeX source for a moment and could leave a
-    // page half done. Without Material (a page of its own) pageReady typesets.
+    // page half done. pageReady typesets when nothing else has: without
+    // Material (a page of its own), and when document$ announced the page
+    // before MathJax was loaded, so its subscription below had nothing to
+    // queue on. That happens when the page is parsed before the bundle runs
+    // (slow I/O); the page then stayed TeX source.
     typeset: false,
     pageReady() {
       return MathJax.startup.defaultPageReady().then(() => {
-        if (typeof document$ === "undefined") {
+        if (!window.giMathDone) {
           window.giMathDone = MathJax.typesetPromise(window.giMathElements);
         }
       });
@@ -48,8 +52,10 @@ window.MathJax = {
 // caches and typeset the new page (otherwise formulas of the previous page
 // leak into the new one's numbering and cache). document$ also fires for the
 // first page, possibly before MathJax has started; every typeset is therefore
-// queued on MathJax.startup.promise, as MathJax documents. window.giMathDone
-// is the promise of the last typeset (the documentation test waits for it).
+// queued on MathJax.startup.promise, as MathJax documents. If MathJax is not
+// even loaded yet, pageReady (above) typesets the first page instead.
+// window.giMathDone is the promise of the last typeset (the documentation
+// test waits for it).
 if (typeof document$ !== "undefined") {
   document$.subscribe(() => {
     if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {

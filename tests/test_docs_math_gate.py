@@ -59,7 +59,9 @@ _VISIBLE_TEX = """
 #: Wait for the page's own typesetting (no extra typeset call: the gate checks
 #: what a reader sees, with the containers the page hands to MathJax). The
 #: page sets ``window.giMathDone`` when it starts its one typeset per page;
-#: a page that never does fails here.
+#: a page that never does fails here. The 60 s are a ceiling against a hang,
+#: not a speed criterion: on a loaded machine (a fresh ``site/`` being synced)
+#: MathJax took more than 10 s to start.
 _MERRORS = """
 () => [...document.querySelectorAll("mjx-merror")]
   .map(e => e.getAttribute("data-mjx-error") || e.textContent)
@@ -67,7 +69,7 @@ _MERRORS = """
 
 _TYPESET = """
 async () => {
-  for (let k = 0; k < 200 && window.giMathDone === undefined; k++) {
+  for (let k = 0; k < 1200 && window.giMathDone === undefined; k++) {
     await new Promise(resolve => setTimeout(resolve, 50));
   }
   if (window.giMathDone === undefined) {
@@ -195,6 +197,27 @@ def test_the_gate_finds_what_it_is_meant_to_find(site_url, browser):
     assert len(problems) == 2
     assert "MathJax error" in problems[0] and "Missing argument" in problems[0]
     assert "TeX source visible" in problems[1] and "frac{a}{b}" in problems[1]
+
+
+#: A page whose ``document$`` already holds the document when ``mathjax.js`` subscribes -- the
+#: order Material produces when the page is parsed before its bundle runs (slow I/O after a
+#: fresh build) -- so the subscription fires before MathJax itself is loaded.
+_EARLY_DOCUMENT = """<!doctype html><html><head><meta charset="utf-8"></head><body><article>
+<p><span class="arithmatex" id="good">\\(Z_E = U_E / I_E\\)</span></p>
+</article>
+<script>window.document$ = {subscribe(f) { f(document); }};</script>
+<script src="/javascripts/mathjax.js"></script>
+<script src="/javascripts/mathjax/tex-mml-chtml.js"></script>
+</body></html>"""
+
+
+def test_formulas_are_typeset_when_the_page_is_announced_before_mathjax_loads(site_url, browser):
+    page = browser.new_page()
+    page.route(f"{site_url}/early/", lambda route: route.fulfill(body=_EARLY_DOCUMENT, content_type="text/html"))
+    page.goto(f"{site_url}/early/", wait_until="load")
+    count, problems = _check(page, "early")
+    page.close()
+    assert (count, problems) == (1, [])
 
 
 def _vendor_script():
