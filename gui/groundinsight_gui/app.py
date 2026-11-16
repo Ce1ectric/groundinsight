@@ -56,6 +56,7 @@ from groundinsight.api import (
     RemoveSource,
     CharacterizeResultDTO,
     SetCharacteristic,
+    SetCriteria,
     SetFrequencies,
     SolveAllRequestDTO,
     StudyResultDTO,
@@ -564,6 +565,8 @@ class ProjectPage:
             self.frequency_label = ui.label().classes("text-sm text-gray-700").mark("frequencies")
             ui.button(self.t("frequencies_edit"), icon="tune", on_click=self._open_frequency_dialog).props(
                 "flat dense no-caps").mark("frequencies-edit")
+            ui.button(self.t("criteria_edit"), icon="rule", on_click=self._open_criteria_dialog).props(
+                "flat dense no-caps").mark("criteria-edit")
         self._refresh_frequencies()
         for table in TABLES:
             with ui.expansion(self.t(f"table_{table}"), value=table in ("buses", "branches")).classes(
@@ -626,6 +629,62 @@ class ProjectPage:
             with ui.row().classes("w-full justify-end gap-2"):
                 ui.button(self.t("cancel_dialog"), on_click=dialog.close).props("flat no-caps")
                 ui.button(self.t("apply"), on_click=submit).props("no-caps").mark("frequency-apply")
+        dialog.on_value_change(lambda e: None if e.value else dialog.delete())
+        dialog.open()
+
+    def _open_criteria_dialog(self) -> None:
+        """Edit the assessment criteria of the project (one undoable command)."""
+        from .studies import parse_curve
+
+        language = self.language
+        criteria = self.session.criteria()
+
+        def shown(value: Any) -> str:
+            if value is None:
+                return ""
+            if isinstance(value, list):
+                return "; ".join(f"{format_number(t, language, 6)}:{format_number(u, language, 6)}"
+                                 for t, u in value)
+            return format_number(value, language, 12)
+
+        with self.dialog_host, ui.dialog() as dialog, ui.card().classes("w-[36rem]").mark("criteria-dialog"):
+            ui.label(self.t("criteria_edit")).classes("text-base font-medium")
+            ui.label(self.t("criteria_hint")).classes("text-xs text-gray-500")
+            fields = {
+                "u_e_limit_V": ui.input(self.t("criteria_u_e"), value=shown(criteria.u_e_limit_V)),
+                "u_touch_limit": ui.input(self.t("criteria_u_touch"), value=shown(criteria.u_touch_limit)),
+                "t_f_s": ui.input(self.t("criteria_t_f"), value=shown(criteria.t_f_s)),
+                "r_to_x": ui.input(self.t("criteria_r_to_x"), value=shown(criteria.r_to_x)),
+            }
+            for key, box in fields.items():
+                box.classes("w-full").mark(f"criteria-{key}")
+            ui.label(self.t("criteria_branch_limits")).classes("text-xs text-gray-500")
+            limits = {}
+            for name in self.session.summary().branch_types:
+                limits[name] = ui.input(name, value=shown(criteria.branch_current_limits_A.get(name))).classes(
+                    "w-full").mark(f"criteria-limit-{name}")
+
+            def submit() -> None:
+                try:
+                    values: Dict[str, Any] = {}
+                    for key, box in fields.items():
+                        text = str(box.value or "").strip()
+                        if text:
+                            values[key] = parse_curve(text) if key == "u_touch_limit" else parse_number(text)
+                    values["branch_current_limits_A"] = {
+                        name: parse_number(box.value) for name, box in limits.items()
+                        if str(box.value or "").strip()
+                    }
+                except ValueError as exc:
+                    ui.notify(f"{self.t('edit_rejected')}: {exc}", type="negative")
+                    return
+                if self.plan.apply(SetCriteria(criteria=values)):
+                    dialog.close()
+                    self.plan.refresh()
+
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button(self.t("cancel_dialog"), on_click=dialog.close).props("flat no-caps")
+                ui.button(self.t("apply"), on_click=submit).props("no-caps").mark("criteria-apply")
         dialog.on_value_change(lambda e: None if e.value else dialog.delete())
         dialog.open()
 
@@ -1082,6 +1141,7 @@ class ProjectPage:
         key_columns = [{"name": name, "dtype": _KEY_FIGURE_DTYPES.get(name, "float")} for name in KEY_FIGURE_COLUMNS]
         ui.aggrid(self._result_grid(key_columns, rows, digits=4, fit="content"), theme="quartz",
                   auto_size_columns=False).classes("h-48").mark("grid-key_figures")
+        self._assessment_panel(result.fault)
         self._diagnostics_panel(result.diagnostics, title=self.t("diagnostics"))
         duration = self.durations.get(result.fault)
         parts = [
@@ -1272,6 +1332,21 @@ class ProjectPage:
             definitions.append(definition)
         default = {"minWidth": 70} if fit == "content" else {"flex": 1, "minWidth": 80}
         return {"defaultColDef": default, "columnDefs": definitions, "rowData": rows}
+
+    def _assessment_panel(self, fault: str) -> None:
+        """The result held to the project's criteria: percent of each limit."""
+        try:
+            assessment = self.session.assessment(fault)
+        except ProjectError:
+            return
+        with ui.expansion(self.t("assessment"), icon="rule", value=False).classes(
+                "w-full bg-white rounded").mark("assessment"):
+            for note in assessment.notes:
+                ui.label(note).classes("text-xs text-gray-500")
+            for table, marker in ((assessment.buses, "grid-assessment_buses"),
+                                  (assessment.branches, "grid-assessment_branches")):
+                ui.aggrid(self._result_grid(table.columns, table.rows, digits=4), theme="quartz").classes(
+                    "h-56").mark(marker)
 
     def _diagnostics_panel(self, diagnostics: List[Any], title: str) -> None:
         """Diagnostics with severity, code, element links and message."""

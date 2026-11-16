@@ -126,3 +126,31 @@ def test_unknown_modes_are_refused_and_the_scale_has_its_ends():
         colour("rainbow", _session("minimal").diagram())
     assert scale_colour(0.0) == SCALE[0] and scale_colour(1.0) == SCALE[-1]
     assert scale_colour(-1.0) == SCALE[0] and scale_colour(2.0) == SCALE[-1]
+
+
+def test_the_thermal_utilisation_colours_branches_and_buses_in_percent():
+    """Second way: the assessment of the session against the library's check
+    of the standard cable, on the GUI's ramp (green, amber at 100 %, red)."""
+    from groundinsight import api
+    from groundinsight_gui.colouring import utilisation_colour
+
+    net = gi.create_network(name="thermal", frequencies=[50.0])
+    ring = gi.standard_bus_types()["Substation ring 2.5 m, 4 rods 2.5 m"]
+    cable = gi.standard_branch_types()["NA2XS(F)2Y 1x95RM/25 12/20 kV"]
+    for name in ("A", "B"):
+        gi.create_bus(name=name, type=ring, network=net)
+    gi.create_branch(name="K", type=cable, from_bus="A", to_bus="B", length=1.0, network=net)
+    gi.create_source(name="Q", bus="A", values={50.0: 20000.0}, network=net)
+    gi.create_fault(name="F", bus="B", t_k_s=1.0, network=net)
+    session = api.ProjectSession(net)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", gi.GroundinsightWarning)
+        session.solve("F")
+    session.apply(api.SetCriteria(criteria={"r_to_x": 0.1}))
+    out = colour("util_thermal", session.diagram(), assessment=session.assessment("F"))
+    limits = gi.check_conductor_limits(session.network, "F", 1.0, r_to_x=0.1)
+    percent = 100.0 * limits["utilization"][0]
+    assert percent > 100.0  # 20 kA for 1 s exceed a 25 mm2 screen
+    top = max(150.0, percent)
+    assert out.edges == {"K": utilisation_colour(percent, top)}
+    assert out.scale == (0.0, top, "%")

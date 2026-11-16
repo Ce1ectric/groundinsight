@@ -19,7 +19,7 @@ import groundinsight as gi
 from groundinsight.api import EXAMPLES
 
 from groundinsight_gui.app import AppOptions, build_app
-from groundinsight_gui.colouring import NEUTRAL, SEVERITY_COLOURS
+from groundinsight_gui.colouring import NEUTRAL, utilisation_colour
 
 pytestmark = pytest.mark.anyio
 
@@ -121,6 +121,12 @@ async def _study(user: User, study: str, **fields):
     await user.should_see(marker="study-result", retries=JOB_RETRIES)
 
 
+async def _run_fault(user: User) -> None:
+    user.find(marker="tab-results").click()
+    user.find(marker="run").click()
+    await user.should_see(marker="result-footer", retries=JOB_RETRIES)
+
+
 def _shown(user: User, table: str):
     return _element(user, f"study-table-{table}").options["rowData"]
 
@@ -189,13 +195,34 @@ async def test_touch_check_and_the_utilisation_colouring(user: User):
     _quiet(gi.run_fault, twin, "F")
     frame = gi.check_touch_voltages(twin, "F", [(0.1, 600.0), (1.0, 100.0)], 0.5)
     assert _shown(user, "touch") == _rows(frame)
-    user.find(marker="colour-utilisation").click()
+
+    # The limits of the project: the criteria dialog of the network tab.
+    user.find(marker="tab-network").click()
+    user.find(marker="criteria-edit").click()
+    await user.should_see(marker="criteria-dialog")
+    _element(user, "criteria-u_touch_limit").set_value("0,1:600; 1:100")
+    _element(user, "criteria-t_f_s").set_value("0,5")
+    _element(user, "criteria-u_e_limit_V").set_value("400")
+    user.find(marker="criteria-apply").click()
+    criteria = page.session.criteria()
+    assert criteria.u_touch_limit == [(0.1, 600.0), (1.0, 100.0)] and criteria.u_e_limit_V == 400.0
+
+    await _run_fault(user)
+    user.find(marker="tab-plan").click()
+    user.find(marker="colour-util_touch").click()
     canvas = _element(user, "canvas")
-    verdict = dict(zip(frame["bus_name"], frame["within_limit"], strict=True))
-    expected = {b: {True: SEVERITY_COLOURS["ok"], False: SEVERITY_COLOURS["error"], None: NEUTRAL}[v]
-                for b, v in verdict.items()}
+    # Second way: the library's check, in percent, on the ramp of the GUI.
+    percent = {r["bus_name"]: None if r["utilisation"] is None else 100.0 * r["utilisation"]
+               for r in frame.iter_rows(named=True)}
+    top = max(150.0, max(v for v in percent.values() if v is not None))
+    expected = {b: NEUTRAL if v is None else utilisation_colour(v, top) for b, v in percent.items()}
     assert canvas._props["colours"]["nodes"] == expected
-    assert page.session.diagram_model.color_scheme == "utilisation"
+    assert page.session.diagram_model.color_scheme == "util_touch"
+    # EPR against U_E: the RMS EPR of the twin over 400 V.
+    user.find(marker="colour-util_epr").click()
+    epr = {r["bus_name"]: 100.0 * r["EPR_V"] / 400.0 for r in frame.iter_rows(named=True)}
+    top = max(150.0, max(epr.values()))
+    assert canvas._props["colours"]["nodes"] == {b: utilisation_colour(v, top) for b, v in epr.items()}
 
 
 async def test_transient(user: User):

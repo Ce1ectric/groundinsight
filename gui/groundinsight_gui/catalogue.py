@@ -40,7 +40,8 @@ FIELDS: Dict[str, List[Tuple[str, str]]] = {
     "branch": [("name", "required"), ("description", "text"), ("grounding_conductor", "bool"),
                ("self_impedance_formula", "formula"), ("mutual_impedance_formula", "formula"),
                ("phase_impedance_formula", "text"), ("conductor_material", "text"),
-               ("cross_section_mm2", "number_or_none")],
+               ("cross_section_mm2", "number_or_none"), ("theta_initial_C", "number"),
+               ("theta_final_C", "number_or_none")],
 }
 
 #: What a new type starts with.
@@ -49,7 +50,7 @@ NEW_TYPE: Dict[str, Dict[str, Any]] = {
             "impedance_formula": "rho/50"},
     "branch": {"name": "", "description": None, "grounding_conductor": True, "self_impedance_formula": "",
                "mutual_impedance_formula": "", "phase_impedance_formula": None, "conductor_material": None,
-               "cross_section_mm2": None},
+               "cross_section_mm2": None, "theta_initial_C": 20.0, "theta_final_C": None},
 }
 
 _ADD = {"bus": AddBusType, "branch": AddBranchType}

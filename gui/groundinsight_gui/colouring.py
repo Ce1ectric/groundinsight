@@ -20,14 +20,26 @@ which is perceptually uniform and prints in greyscale.
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__all__ = ["MODES", "NEUTRAL", "Colouring", "LegendEntry", "colour"]
+__all__ = ["MODES", "NEUTRAL", "UTILISATION_MODES", "Colouring", "LegendEntry", "colour", "utilisation_colour"]
 
 #: The colouring modes, in menu order.
 MODES = ("voltage_level", "type", "group", "infeed_fault", "epr", "u_touch", "i_branch",
-         "utilisation", "characteristic", "diagnostics")
+         "util_epr", "util_touch", "util_thermal", "characteristic", "diagnostics")
 
 #: Modes that need a fault result.
-RESULT_MODES = ("epr", "u_touch", "i_branch")
+RESULT_MODES = ("epr", "u_touch", "i_branch", "util_epr", "util_touch", "util_thermal")
+
+#: Modes that read the assessment of the result against the project's
+#: criteria (``ProjectSession.assessment``): the column of its bus and branch
+#: tables they colour.
+UTILISATION_MODES = {
+    "util_epr": ("epr_utilisation_pct", None),
+    "util_touch": ("touch_utilisation_pct", None),
+    "util_thermal": ("thermal_utilisation_pct", "thermal_utilisation_pct"),
+}
+
+#: The utilisation ramp: green, amber at 100 % of the limit, red above.
+UTILISATION_COLOURS = ("#009E73", "#E69F00", "#c62828")
 
 #: Colour of an element a mode says nothing about.
 NEUTRAL = "#9aa3ad"
@@ -178,6 +190,65 @@ def _numerical(values: Dict[str, Optional[float]], unit: str) -> Tuple[Dict[str,
     return colours, (low, high, unit)
 
 
+def _ramp(a: str, b: str, w: float) -> str:
+    """The colour a fraction ``w`` of the way from ``a`` to ``b``."""
+    x, y = _hex(a), _hex(b)
+    return "#" + "".join(f"{round(p + w * (q - p)):02x}" for p, q in zip(x, y, strict=True))
+
+
+def utilisation_colour(percent: float, top: float) -> str:
+    """
+    The colour of a utilisation in percent of the limit.
+
+    Parameters
+    ----------
+    percent : float
+        Utilisation in percent.
+    top : float
+        The top of the scale (at least 100): red.
+
+    Returns
+    -------
+    str
+        ``#rrggbb``: green at 0 %, amber at 100 %, red at ``top`` and above.
+
+    Examples
+    --------
+    >>> utilisation_colour(0.0, 150.0), utilisation_colour(100.0, 150.0), utilisation_colour(200.0, 150.0)
+    ('#009e73', '#e69f00', '#c62828')
+    """
+    green, amber, red = UTILISATION_COLOURS
+    if percent <= 100.0:
+        return _ramp(green, amber, max(percent, 0.0) / 100.0)
+    return _ramp(amber, red, min((percent - 100.0) / (top - 100.0), 1.0) if top > 100.0 else 1.0)
+
+
+def _utilisation(values: Dict[str, Optional[float]], top: float) -> Dict[str, str]:
+    """Colours of a utilisation table; ``None`` (not assessed) is neutral."""
+    return {name: NEUTRAL if v is None else utilisation_colour(v, top) for name, v in values.items()}
+
+
+def _colour_utilisation(out: "Colouring", mode: str, diagram: Any, assessment: Any) -> None:
+    """Fill ``out`` for a utilisation mode from the assessment (percent of the limit)."""
+    bus_column, branch_column = UTILISATION_MODES[mode]
+    buses = {r["bus_name"]: r[bus_column] for r in assessment.buses.rows} if bus_column else {}
+    branches = ({r["branch_name"]: r[branch_column] for r in assessment.branches.rows}
+                if branch_column else {})
+    node_values = {n.name: buses.get(n.name) for n in diagram.nodes}
+    edge_values = {e.name: branches.get(e.name) for e in diagram.edges}
+    present = [v for v in [*node_values.values(), *edge_values.values()] if v is not None]
+    if not present:
+        return
+    top = max(150.0, max(present))
+    out.nodes = _utilisation(node_values, top)
+    if branch_column:
+        out.edges = _utilisation(edge_values, top)
+    out.scale = (0.0, top, "%")
+    stop = 100.0 * 100.0 / top
+    out.gradient = (f"linear-gradient(to right, {UTILISATION_COLOURS[0]} 0%, "
+                    f"{UTILISATION_COLOURS[1]} {stop:.1f}%, {UTILISATION_COLOURS[2]} 100%)")
+
+
 def _groups(diagram: Any) -> Dict[str, Optional[int]]:
     """
     The earthing group of every bus: connected through active earth conductors.
@@ -273,7 +344,8 @@ def _severities(report: Any) -> Dict[Tuple[str, str], str]:
     return worst
 
 
-def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None, touch: Any = None) -> Colouring:
+def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None,
+           assessment: Any = None) -> Colouring:
     """
     Colour the diagram in one mode.
 
@@ -287,10 +359,11 @@ def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None, to
         The fault result the numerical modes read.
     check : CheckReportDTO, optional
         The pre-flight check the ``diagnostics`` mode reads.
-    touch : TableDTO, optional
-        The table ``touch`` of an EN 50522 check (``TouchCheckRequestDTO``),
-        which the ``utilisation`` mode reads: within the limit, above it, or
-        not assessed (no touch factor).
+    assessment : AssessmentDTO, optional
+        The result held to the project's criteria
+        (``ProjectSession.assessment``), which the utilisation modes read:
+        percent of the limit on a ramp from green through amber (100 %) to
+        red; neutral where nothing was assessed.
 
     Returns
     -------
@@ -335,6 +408,9 @@ def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None, to
         out.entries = [LegendEntry(PALETTE[0], "legend_infeed", True),
                        LegendEntry(PALETTE[5], "legend_fault", True),
                        LegendEntry(NEUTRAL, "legend_other", True)]
+    elif mode in UTILISATION_MODES:
+        if assessment is not None:
+            _colour_utilisation(out, mode, diagram, assessment)
     elif mode in RESULT_MODES:
         if result is not None:
             if mode == "i_branch":
@@ -344,13 +420,6 @@ def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None, to
                 column = "EPR_V" if mode == "epr" else "U_vT_V"
                 values = _rms(result.buses.rows, "bus_name", column)
                 out.nodes, out.scale = _numerical({n.name: values.get(n.name) for n in diagram.nodes}, "V")
-    elif mode == "utilisation":
-        verdict = {r["bus_name"]: r["within_limit"] for r in (touch.rows if touch is not None else [])}
-        colours = {True: SEVERITY_COLOURS["ok"], False: SEVERITY_COLOURS["error"], None: NEUTRAL}
-        out.nodes = {n.name: colours[verdict.get(n.name)] for n in diagram.nodes}
-        out.entries = [LegendEntry(colours[True], "legend_within", True),
-                       LegendEntry(colours[False], "legend_exceeded", True),
-                       LegendEntry(NEUTRAL, "legend_not_assessed", True)]
     elif mode == "characteristic":
         labels = {"bus": "legend_char_bus", "bus_type": "legend_char_type", None: "legend_char_formula"}
         colours = {"bus": PALETTE[2], "bus_type": PALETTE[4], None: NEUTRAL}

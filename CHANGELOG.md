@@ -87,6 +87,16 @@ version section when a release is cut.
 
 ### Added
 
+- **GUI: assessment criteria and utilisation colouring.** *Assessment criteria
+  …* on the network tab sets the limits of the project; the plan colours by
+  the utilisation of the last result in percent of its limit -- EPR against
+  `U_E`, `U_vT` against `U_T`, and the thermally equivalent short-time
+  current of shields, earthing conductors and electrodes against the
+  admissible one -- on a ramp from green through amber (100 %) to red, and the
+  results tab shows the assessment tables. The colouring after the last
+  EN 50522 study is replaced by these. The type dialog edits the initial and
+  final conductor temperature of a branch type (20 °C by default).
+
 - **Assessment criteria of a project, and the utilisation of a fault.**
   `api.CriteriaDTO` holds the user's limits -- earth potential rise `U_E`,
   touch voltage (a value or the curve `t_F : U` of the standard, with a

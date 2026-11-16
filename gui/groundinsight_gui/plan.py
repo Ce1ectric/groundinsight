@@ -40,6 +40,7 @@ from groundinsight.api import (
     ImportCharacteristic,
     MoveNodes,
     PlaceBus,
+    ProjectError,
     RemoveBranch,
     RemoveBus,
     RemoveFault,
@@ -55,7 +56,7 @@ from groundinsight.api import (
 )
 
 from .canvas import CANVAS_CSS, TOOLS, NetworkCanvas
-from .colouring import MODES, RESULT_MODES, Colouring, colour
+from .colouring import MODES, RESULT_MODES, UTILISATION_MODES, Colouring, colour
 from .formatting import DASH, format_number, format_scale, parse_number
 from .i18n import column_label
 from .studies import grid_options
@@ -169,9 +170,13 @@ class PlanView:
         if self.mode in RESULT_MODES and self.page.fault:
             result = self.session.result(self.page.fault)
         check = self.session.check() if self.mode == "diagnostics" else None
-        study = self.page.study
-        touch = study.tables.get("touch") if study is not None and study.study == "touch" else None
-        return colour(self.mode, diagram, result=result, check=check, touch=touch)
+        assessment = None
+        if self.mode in UTILISATION_MODES and result is not None:
+            try:
+                assessment = self.session.assessment(self.page.fault)
+            except ProjectError:
+                assessment = None
+        return colour(self.mode, diagram, result=result, check=check, assessment=assessment)
 
     def _mode_of_diagram(self) -> str:
         """The colouring the project keeps (``Diagram.color_scheme``), or by type."""
