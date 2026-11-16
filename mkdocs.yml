@@ -217,6 +217,7 @@ nav:
       - Result tables: reference/results.md
       - Conventions and units: reference/conventions.md
       - Formula syntax: reference/formula-syntax.md
+      - Standard types: reference/standard-types.md
       - Warnings and diagnostics: reference/warnings.md
       - Glossary and symbols: reference/glossary.md
       - API:
@@ -236,6 +237,7 @@ nav:
           - Fault-location decomposition: api/decomposition.md
           - Location response: api/response.md
           - Reference cases: api/reference.md
+          - Standard library of types: api/library.md
           - Statistics and classification: api/statistics.md
           - Transient simulations: api/transient.md
   - Project:

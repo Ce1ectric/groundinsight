@@ -50,6 +50,9 @@ public name with its page.
   electrode (`bus_response`).
 - [Reference cases](reference.md) — the closed-form cases the solver is
   checked against (`run_reference_cases`).
+- [Standard library of types](library.md) — cables and earth electrodes
+  ready to use (`standard_branch_types`, `standard_bus_types`) and the cable
+  builders.
 - [Statistics](statistics.md) — `summarize` and `classify` on long-format
   frames.
 - [Transient simulations](transient.md) — `TransientStudy`, `ResultTransient`

@@ -30,6 +30,7 @@ with a `DeprecationWarning` for at least two releases and six months).
 | Decomposition at the fault | `Cut`, `CutAnalysis`, `analyze_cuts` | [Decomposition](decomposition.md) |
 | Location response | `BusResponse`, `bus_response` | [Location response](response.md) |
 | Reference cases | `ReferenceCase`, `REFERENCE_CASES`, `run_reference_cases` | [Reference cases](reference.md) |
+| Standard types | `standard_branch_types`, `standard_bus_types`, `cable_system_type`, `lv_cable_type` | [Standard library of types](library.md) |
 | Parameter sweeps | `SweepPoint`, `SweepResult`, `rho_f_points`, `run_sweep` | [Parameter sweeps](sweep.md) |
 | Statistics | `summarize`, `classify` | [Statistics](statistics.md) |
 | Outage studies | `Outage`, `OutageStudyResult`, `outage_context`, `run_outage_study` | [Outage studies](outage.md) |

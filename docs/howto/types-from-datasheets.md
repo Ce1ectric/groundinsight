@@ -20,6 +20,13 @@ agreement stated below.
     are estimates and are marked as such. Replace them by the values of your
     cable and line.
 
+!!! tip "Common cables are ready to use"
+
+    The [standard types](../reference/standard-types.md) build these
+    formulas for 20 kV cable systems (NA2XS(F)2Y, N2XS(F)2Y, trefoil) and
+    NAYY cables from their data sheets: `gi.standard_branch_types()`, or
+    `gi.cable_system_type(...)` / `gi.lv_cable_type(...)` for another cable.
+
 ## What a branch type needs
 
 | Field | Quantity | Symbol |

@@ -1,0 +1,921 @@
+{
+ "comment": "written by scripts/build_standard_bus_types.py -- do not edit by hand",
+ "bus_types": [
+  {
+   "name": "Substation ring 2.5 m, 4 rods 2.5 m",
+   "description": "MV/LV substation: ring electrode r = 2.5 m at 0.6 m depth, four rods of 2.5 m on a 1.5 m circle",
+   "system_type": "MV/LV",
+   "voltage_level": 20.0,
+   "impedance_formula": "1.25897768665e-18*f*rho + 1.45550977255e-16*f + 0.086219632048*rho - 4.01975959065e-13",
+   "R_formula": null,
+   "L_formula": null,
+   "C_formula": null,
+   "earthing_conductor_material": null,
+   "earthing_conductor_cross_section_mm2": null,
+   "earthing_conductor_theta_initial_C": 20.0,
+   "earthing_conductor_theta_final_C": null,
+   "earthing_conductor_current_split": 1.0,
+   "electrode_material": null,
+   "electrode_cross_section_mm2": null,
+   "electrode_theta_initial_C": 20.0,
+   "electrode_theta_final_C": null,
+   "electrode_current_split": 1.0,
+   "characteristic": {
+    "rho_Ohm_m": [
+     30.0,
+     100.0,
+     300.0,
+     1000.0,
+     3000.0
+    ],
+    "frequency_Hz": [
+     50.0,
+     150.0,
+     250.0,
+     550.0,
+     1000.0
+    ],
+    "impedance_Ohm": [
+     [
+      {
+       "real": 2.58658896143917,
+       "imag": 0.0
+      },
+      {
+       "real": 2.58658896143917,
+       "imag": 0.0
+      },
+      {
+       "real": 2.58658896143917,
+       "imag": 0.0
+      },
+      {
+       "real": 2.58658896143917,
+       "imag": 0.0
+      },
+      {
+       "real": 2.58658896143917,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 8.62196320479723,
+       "imag": 0.0
+      },
+      {
+       "real": 8.62196320479723,
+       "imag": 0.0
+      },
+      {
+       "real": 8.62196320479723,
+       "imag": 0.0
+      },
+      {
+       "real": 8.62196320479723,
+       "imag": 0.0
+      },
+      {
+       "real": 8.62196320479723,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 25.86588961439169,
+       "imag": 0.0
+      },
+      {
+       "real": 25.86588961439169,
+       "imag": 0.0
+      },
+      {
+       "real": 25.86588961439169,
+       "imag": 0.0
+      },
+      {
+       "real": 25.86588961439169,
+       "imag": 0.0
+      },
+      {
+       "real": 25.86588961439169,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 86.21963204797231,
+       "imag": 0.0
+      },
+      {
+       "real": 86.21963204797231,
+       "imag": 0.0
+      },
+      {
+       "real": 86.21963204797231,
+       "imag": 0.0
+      },
+      {
+       "real": 86.21963204797231,
+       "imag": 0.0
+      },
+      {
+       "real": 86.21963204797231,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 258.658896143917,
+       "imag": 0.0
+      },
+      {
+       "real": 258.658896143917,
+       "imag": 0.0
+      },
+      {
+       "real": 258.658896143917,
+       "imag": 0.0
+      },
+      {
+       "real": 258.658896143917,
+       "imag": 0.0
+      },
+      {
+       "real": 258.658896143917,
+       "imag": 0.0
+      }
+     ]
+    ],
+    "k_touch": [
+     [
+      0.46093109205442695,
+      0.46093109205442695,
+      0.46093109205442695,
+      0.46093109205442695,
+      0.46093109205442695
+     ],
+     [
+      0.46093109205442695,
+      0.46093109205442695,
+      0.46093109205442695,
+      0.46093109205442695,
+      0.46093109205442695
+     ],
+     [
+      0.460931092054427,
+      0.460931092054427,
+      0.460931092054427,
+      0.460931092054427,
+      0.460931092054427
+     ],
+     [
+      0.4609310920544269,
+      0.4609310920544269,
+      0.4609310920544269,
+      0.4609310920544269,
+      0.4609310920544269
+     ],
+     [
+      0.46093109205442695,
+      0.46093109205442695,
+      0.46093109205442695,
+      0.46093109205442695,
+      0.46093109205442695
+     ]
+    ],
+    "k_transfer": null,
+    "impedance_formula": "1.25897768665e-18*f*rho + 1.45550977255e-16*f + 0.086219632048*rho - 4.01975959065e-13",
+    "impedance_source": "table",
+    "name": "Substation ring 2.5 m, 4 rods 2.5 m",
+    "provenance": {
+     "source": "groundfield",
+     "groundfield_version": "0.15.0",
+     "solver": "mom",
+     "soil": {
+      "soils": [
+       {
+        "kind": "homogeneous",
+        "rho": 30.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 100.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 300.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 1000.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 3000.0,
+        "relative_permittivity": 10.0
+       }
+      ],
+      "rho_definition": "effective_resistivity"
+     },
+     "geometry_id": "ring default",
+     "rho_preset": null,
+     "created": "2026-11-16T08:39:16Z",
+     "input_hash": "sha256:1f0dc3f8a619c2468a1e465e45fd98974b685ff3ea6c94f699a10d91ca626f2f",
+     "note": "cluster impedance of 'E'; k_touch: envelope at 1.0 m, 24 directions, interior=False"
+    }
+   }
+  },
+  {
+   "name": "House foundation 10 x 10 m",
+   "description": "House: square foundation electrode 10 m x 10 m at 0.8 m depth, 2 x 2 meshes",
+   "system_type": "LV",
+   "voltage_level": 0.4,
+   "impedance_formula": "5.73862237298e-18*f*rho + 1.51947412683e-16*f + 0.0463661230045*rho - 2.33420410506e-14",
+   "R_formula": null,
+   "L_formula": null,
+   "C_formula": null,
+   "earthing_conductor_material": null,
+   "earthing_conductor_cross_section_mm2": null,
+   "earthing_conductor_theta_initial_C": 20.0,
+   "earthing_conductor_theta_final_C": null,
+   "earthing_conductor_current_split": 1.0,
+   "electrode_material": null,
+   "electrode_cross_section_mm2": null,
+   "electrode_theta_initial_C": 20.0,
+   "electrode_theta_final_C": null,
+   "electrode_current_split": 1.0,
+   "characteristic": {
+    "rho_Ohm_m": [
+     30.0,
+     100.0,
+     300.0,
+     1000.0,
+     3000.0
+    ],
+    "frequency_Hz": [
+     50.0,
+     150.0,
+     250.0,
+     550.0,
+     1000.0
+    ],
+    "impedance_Ohm": [
+     [
+      {
+       "real": 1.3909836901338766,
+       "imag": 0.0
+      },
+      {
+       "real": 1.3909836901338766,
+       "imag": 0.0
+      },
+      {
+       "real": 1.3909836901338766,
+       "imag": 0.0
+      },
+      {
+       "real": 1.3909836901338766,
+       "imag": 0.0
+      },
+      {
+       "real": 1.3909836901338766,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 4.636612300446256,
+       "imag": 0.0
+      },
+      {
+       "real": 4.636612300446256,
+       "imag": 0.0
+      },
+      {
+       "real": 4.636612300446256,
+       "imag": 0.0
+      },
+      {
+       "real": 4.636612300446256,
+       "imag": 0.0
+      },
+      {
+       "real": 4.636612300446256,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 13.909836901338766,
+       "imag": 0.0
+      },
+      {
+       "real": 13.909836901338766,
+       "imag": 0.0
+      },
+      {
+       "real": 13.909836901338766,
+       "imag": 0.0
+      },
+      {
+       "real": 13.909836901338766,
+       "imag": 0.0
+      },
+      {
+       "real": 13.909836901338766,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 46.36612300446255,
+       "imag": 0.0
+      },
+      {
+       "real": 46.36612300446255,
+       "imag": 0.0
+      },
+      {
+       "real": 46.36612300446255,
+       "imag": 0.0
+      },
+      {
+       "real": 46.36612300446255,
+       "imag": 0.0
+      },
+      {
+       "real": 46.36612300446255,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 139.09836901338772,
+       "imag": 0.0
+      },
+      {
+       "real": 139.09836901338772,
+       "imag": 0.0
+      },
+      {
+       "real": 139.09836901338772,
+       "imag": 0.0
+      },
+      {
+       "real": 139.09836901338772,
+       "imag": 0.0
+      },
+      {
+       "real": 139.09836901338772,
+       "imag": 0.0
+      }
+     ]
+    ],
+    "k_touch": [
+     [
+      0.4761147037553373,
+      0.4761147037553373,
+      0.4761147037553373,
+      0.4761147037553373,
+      0.4761147037553373
+     ],
+     [
+      0.47611470375533727,
+      0.47611470375533727,
+      0.47611470375533727,
+      0.47611470375533727,
+      0.47611470375533727
+     ],
+     [
+      0.4761147037553373,
+      0.4761147037553373,
+      0.4761147037553373,
+      0.4761147037553373,
+      0.4761147037553373
+     ],
+     [
+      0.4761147037553374,
+      0.4761147037553374,
+      0.4761147037553374,
+      0.4761147037553374,
+      0.4761147037553374
+     ],
+     [
+      0.4761147037553374,
+      0.4761147037553374,
+      0.4761147037553374,
+      0.4761147037553374,
+      0.4761147037553374
+     ]
+    ],
+    "k_transfer": null,
+    "impedance_formula": "5.73862237298e-18*f*rho + 1.51947412683e-16*f + 0.0463661230045*rho - 2.33420410506e-14",
+    "impedance_source": "table",
+    "name": "House foundation 10 x 10 m",
+    "provenance": {
+     "source": "groundfield",
+     "groundfield_version": "0.15.0",
+     "solver": "mom",
+     "soil": {
+      "soils": [
+       {
+        "kind": "homogeneous",
+        "rho": 30.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 100.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 300.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 1000.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 3000.0,
+        "relative_permittivity": 10.0
+       }
+      ],
+      "rho_definition": "effective_resistivity"
+     },
+     "geometry_id": "foundation default",
+     "rho_preset": null,
+     "created": "2026-11-16T08:39:16Z",
+     "input_hash": "sha256:1acfa64ab2051f86fcc8cc199aacc25751f3a4f7abe6dd5a96e6f71d1f9c1932",
+     "note": "cluster impedance of 'E'; k_touch: envelope at 1.0 m, 24 directions, interior=False"
+    }
+   }
+  },
+  {
+   "name": "Rod 2.5 m",
+   "description": "Single driven rod, 2.5 m, top at the surface",
+   "system_type": "LV",
+   "voltage_level": 0.4,
+   "impedance_formula": "-7.17936824392e-17*f*rho + 2.79583307802e-15*f + 0.414913685445*rho - 8.56021644456e-13",
+   "R_formula": null,
+   "L_formula": null,
+   "C_formula": null,
+   "earthing_conductor_material": null,
+   "earthing_conductor_cross_section_mm2": null,
+   "earthing_conductor_theta_initial_C": 20.0,
+   "earthing_conductor_theta_final_C": null,
+   "earthing_conductor_current_split": 1.0,
+   "electrode_material": null,
+   "electrode_cross_section_mm2": null,
+   "electrode_theta_initial_C": 20.0,
+   "electrode_theta_final_C": null,
+   "electrode_current_split": 1.0,
+   "characteristic": {
+    "rho_Ohm_m": [
+     30.0,
+     100.0,
+     300.0,
+     1000.0,
+     3000.0
+    ],
+    "frequency_Hz": [
+     50.0,
+     150.0,
+     250.0,
+     550.0,
+     1000.0
+    ],
+    "impedance_Ohm": [
+     [
+      {
+       "real": 12.447410563336403,
+       "imag": 0.0
+      },
+      {
+       "real": 12.447410563336403,
+       "imag": 0.0
+      },
+      {
+       "real": 12.447410563336403,
+       "imag": 0.0
+      },
+      {
+       "real": 12.447410563336403,
+       "imag": 0.0
+      },
+      {
+       "real": 12.447410563336403,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 41.49136854445467,
+       "imag": 0.0
+      },
+      {
+       "real": 41.49136854445467,
+       "imag": 0.0
+      },
+      {
+       "real": 41.49136854445467,
+       "imag": 0.0
+      },
+      {
+       "real": 41.49136854445467,
+       "imag": 0.0
+      },
+      {
+       "real": 41.49136854445467,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 124.474105633364,
+       "imag": 0.0
+      },
+      {
+       "real": 124.474105633364,
+       "imag": 0.0
+      },
+      {
+       "real": 124.474105633364,
+       "imag": 0.0
+      },
+      {
+       "real": 124.474105633364,
+       "imag": 0.0
+      },
+      {
+       "real": 124.474105633364,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 414.91368544454673,
+       "imag": 0.0
+      },
+      {
+       "real": 414.91368544454673,
+       "imag": 0.0
+      },
+      {
+       "real": 414.91368544454673,
+       "imag": 0.0
+      },
+      {
+       "real": 414.91368544454673,
+       "imag": 0.0
+      },
+      {
+       "real": 414.91368544454673,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 1244.7410563336402,
+       "imag": 0.0
+      },
+      {
+       "real": 1244.7410563336402,
+       "imag": 0.0
+      },
+      {
+       "real": 1244.7410563336402,
+       "imag": 0.0
+      },
+      {
+       "real": 1244.7410563336402,
+       "imag": 0.0
+      },
+      {
+       "real": 1244.7410563336402,
+       "imag": 0.0
+      }
+     ]
+    ],
+    "k_touch": [
+     [
+      0.7509193012693812,
+      0.7509193012693812,
+      0.7509193012693812,
+      0.7509193012693812,
+      0.7509193012693812
+     ],
+     [
+      0.7509193012693811,
+      0.7509193012693811,
+      0.7509193012693811,
+      0.7509193012693811,
+      0.7509193012693811
+     ],
+     [
+      0.7509193012693811,
+      0.7509193012693811,
+      0.7509193012693811,
+      0.7509193012693811,
+      0.7509193012693811
+     ],
+     [
+      0.750919301269381,
+      0.750919301269381,
+      0.750919301269381,
+      0.750919301269381,
+      0.750919301269381
+     ],
+     [
+      0.7509193012693812,
+      0.7509193012693812,
+      0.7509193012693812,
+      0.7509193012693812,
+      0.7509193012693812
+     ]
+    ],
+    "k_transfer": null,
+    "impedance_formula": "-7.17936824392e-17*f*rho + 2.79583307802e-15*f + 0.414913685445*rho - 8.56021644456e-13",
+    "impedance_source": "table",
+    "name": "Rod 2.5 m",
+    "provenance": {
+     "source": "groundfield",
+     "groundfield_version": "0.15.0",
+     "solver": "mom",
+     "soil": {
+      "soils": [
+       {
+        "kind": "homogeneous",
+        "rho": 30.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 100.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 300.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 1000.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 3000.0,
+        "relative_permittivity": 10.0
+       }
+      ],
+      "rho_definition": "effective_resistivity"
+     },
+     "geometry_id": "rod default",
+     "rho_preset": null,
+     "created": "2026-11-16T08:39:16Z",
+     "input_hash": "sha256:ba31024512f74af7390325c498bfd46880a84c0297f466f4588f6bbb6e0b913c",
+     "note": "cluster impedance of 'E'; k_touch: envelope at 1.0 m, 24 directions, interior=False"
+    }
+   }
+  },
+  {
+   "name": "Rod 5 m",
+   "description": "Single driven rod, 5 m, top at the surface",
+   "system_type": "LV",
+   "voltage_level": 0.4,
+   "impedance_formula": "-3.39836891622e-19*f*rho - 6.44550220022e-16*f + 0.228580429935*rho + 3.74687283445e-13",
+   "R_formula": null,
+   "L_formula": null,
+   "C_formula": null,
+   "earthing_conductor_material": null,
+   "earthing_conductor_cross_section_mm2": null,
+   "earthing_conductor_theta_initial_C": 20.0,
+   "earthing_conductor_theta_final_C": null,
+   "earthing_conductor_current_split": 1.0,
+   "electrode_material": null,
+   "electrode_cross_section_mm2": null,
+   "electrode_theta_initial_C": 20.0,
+   "electrode_theta_final_C": null,
+   "electrode_current_split": 1.0,
+   "characteristic": {
+    "rho_Ohm_m": [
+     30.0,
+     100.0,
+     300.0,
+     1000.0,
+     3000.0
+    ],
+    "frequency_Hz": [
+     50.0,
+     150.0,
+     250.0,
+     550.0,
+     1000.0
+    ],
+    "impedance_Ohm": [
+     [
+      {
+       "real": 6.8574128980462135,
+       "imag": 0.0
+      },
+      {
+       "real": 6.8574128980462135,
+       "imag": 0.0
+      },
+      {
+       "real": 6.8574128980462135,
+       "imag": 0.0
+      },
+      {
+       "real": 6.8574128980462135,
+       "imag": 0.0
+      },
+      {
+       "real": 6.8574128980462135,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 22.858042993487377,
+       "imag": 0.0
+      },
+      {
+       "real": 22.858042993487377,
+       "imag": 0.0
+      },
+      {
+       "real": 22.858042993487377,
+       "imag": 0.0
+      },
+      {
+       "real": 22.858042993487377,
+       "imag": 0.0
+      },
+      {
+       "real": 22.858042993487377,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 68.57412898046212,
+       "imag": 0.0
+      },
+      {
+       "real": 68.57412898046212,
+       "imag": 0.0
+      },
+      {
+       "real": 68.57412898046212,
+       "imag": 0.0
+      },
+      {
+       "real": 68.57412898046212,
+       "imag": 0.0
+      },
+      {
+       "real": 68.57412898046212,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 228.58042993487373,
+       "imag": 0.0
+      },
+      {
+       "real": 228.58042993487373,
+       "imag": 0.0
+      },
+      {
+       "real": 228.58042993487373,
+       "imag": 0.0
+      },
+      {
+       "real": 228.58042993487373,
+       "imag": 0.0
+      },
+      {
+       "real": 228.58042993487373,
+       "imag": 0.0
+      }
+     ],
+     [
+      {
+       "real": 685.7412898046214,
+       "imag": 0.0
+      },
+      {
+       "real": 685.7412898046214,
+       "imag": 0.0
+      },
+      {
+       "real": 685.7412898046214,
+       "imag": 0.0
+      },
+      {
+       "real": 685.7412898046214,
+       "imag": 0.0
+      },
+      {
+       "real": 685.7412898046214,
+       "imag": 0.0
+      }
+     ]
+    ],
+    "k_touch": [
+     [
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281
+     ],
+     [
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281
+     ],
+     [
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281
+     ],
+     [
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281
+     ],
+     [
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281,
+      0.6852018621758281
+     ]
+    ],
+    "k_transfer": null,
+    "impedance_formula": "-3.39836891622e-19*f*rho - 6.44550220022e-16*f + 0.228580429935*rho + 3.74687283445e-13",
+    "impedance_source": "table",
+    "name": "Rod 5 m",
+    "provenance": {
+     "source": "groundfield",
+     "groundfield_version": "0.15.0",
+     "solver": "mom",
+     "soil": {
+      "soils": [
+       {
+        "kind": "homogeneous",
+        "rho": 30.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 100.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 300.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 1000.0,
+        "relative_permittivity": 10.0
+       },
+       {
+        "kind": "homogeneous",
+        "rho": 3000.0,
+        "relative_permittivity": 10.0
+       }
+      ],
+      "rho_definition": "effective_resistivity"
+     },
+     "geometry_id": "rod {'length_m': 5.0}",
+     "rho_preset": null,
+     "created": "2026-11-16T08:39:16Z",
+     "input_hash": "sha256:726117c9ee766a72f519d58809fa218410bec0be967fe89646526e813d89da76",
+     "note": "cluster impedance of 'E'; k_touch: envelope at 1.0 m, 24 directions, interior=False"
+    }
+   }
+  }
+ ]
+}

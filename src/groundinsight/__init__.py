@@ -144,6 +144,7 @@ from .io.project_file import (
     save_project,
 )
 from .diagram import Diagram, DiagramEdge, DiagramMarker, DiagramNode
+from .library import cable_system_type, lv_cable_type, standard_branch_types, standard_bus_types
 from .analysis import (
     Cut,
     CutAnalysis,
@@ -321,6 +322,10 @@ __all__ = [
     "DiagramNode",
     "DiagramEdge",
     "DiagramMarker",
+    "standard_branch_types",
+    "standard_bus_types",
+    "cable_system_type",
+    "lv_cable_type",
     # Cross-repo convention helper.
     "show_versions",
 ]
