@@ -67,7 +67,10 @@ def _line(z_source: complex, z_fault: complex, i_f: float = 1000.0) -> gi.Networ
 
 
 def _meshed(z_fault: complex = complex(8.6, 0.0)) -> gi.Network:
-    """A ring with mixed cables, two sources inside the earthing network, a dead end."""
+    """A ring, two sources inside the earthing network, a dead end; two cable
+    types, but one per mesh: the ring is Al 1x300, the radial L6 Cu 1x95. The
+    phase split then does not depend on the earthing, and Norton's short
+    circuit is exact (a ring of mixed cables: tests/test_coupled_solve.py)."""
     net = gi.create_network(name="mesh", frequencies=[FREQ, 250.0])
     station = _bus_type("station", complex(8.6, 0.0))
     for name in ("B1", "B2", "B3", "B5", "B6", "B7", "B8"):
@@ -76,9 +79,9 @@ def _meshed(z_fault: complex = complex(8.6, 0.0)) -> gi.Network:
     al = gi.standard_branch_types()["NA2XS(F)2Y 1x300RM/25 12/20 kV"]
     cu = gi.standard_branch_types()["N2XS(F)2Y 1x95RM/16 12/20 kV"]
     for name, a, b, length, kind in (("L1", "B7", "B1", 1.0, al), ("L2", "B1", "B2", 1.0, al),
-                                     ("L4", "B3", "B4", 1.0, al), ("L5", "B4", "B5", 2.0, al),
-                                     ("L6", "B5", "B6", 1.0, cu), ("L7", "B7", "B6", 5.0, al),
-                                     ("L8", "B8", "B5", 1.0, al), ("L9", "B5", "B2", 10.0, cu)):
+                                     ("L4", "B3", "B4", 1.0, cu), ("L5", "B4", "B5", 2.0, al),
+                                     ("L6", "B5", "B6", 1.0, al), ("L7", "B7", "B6", 5.0, al),
+                                     ("L8", "B8", "B5", 1.0, cu), ("L9", "B5", "B2", 10.0, al)):
         gi.create_branch(name=name, type=kind, from_bus=a, to_bus=b, length=length,
                          specific_earth_resistance=100.0, network=net)
     gi.create_source(name="I1", bus="B7", values={FREQ: 1000.0, 250.0: 50.0}, network=net)
@@ -124,11 +127,16 @@ def test_the_earth_current_flows_into_an_ideal_fault_earth():
 
 
 def test_the_oracle_shorts_the_fault_bus_its_own_way():
+    """The coupled model of the oracle with the fault bus earthed ideally
+    (1e-9 Ohm) against r of the solve."""
     net = _meshed()
     factor = _factor(net, "F1")
     for f in (FREQ, 250.0):
         data = mna.reference_network(net, f, "F1")
-        assert factor.value[f] == pytest.approx(mna.reduction_factor_short_circuit(data), rel=1e-9)
+        data["buses"]["B4"]["z"] = 1e-9
+        shorted = mna.solve_package(data)
+        i_short = shorted["u"]["B4"] / 1e-9
+        assert factor.value[f] == pytest.approx(abs(i_short) / abs(shorted["I_F"]), rel=1e-6)
 
 
 def test_r_does_not_depend_on_the_fault_bus_electrode():

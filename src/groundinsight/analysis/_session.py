@@ -17,9 +17,14 @@ Everything else a solve needs is the same for every trial:
 
 * the position of every stamp of ``Y`` (the sparsity pattern) and the
   admittances of the grounding branches and Thevenin loop closures;
-* the injection vectors -- source currents, the phase currents of the
-  phase-conductor network and the mutual Norton terms derived from them,
-  none of which reads a bus impedance.
+* the injection vectors -- source currents, the phase currents and the
+  mutual Norton terms derived from them, none of which reads a bus impedance
+  where the phase network around the fault has no mesh and no Thevenin
+  source. Elsewhere the phase currents come from the coupled solve and follow
+  the electrodes; there the session keeps the coupled system instead and a
+  trial re-solves it with the new diagonal of the earth nodes
+  (:meth:`~groundinsight.electrical_network.ElectricalNetwork.coupled_solution`),
+  which is where run_fault takes the potentials from as well.
 
 A session keeps those from one full solve and answers a trial by
 re-assembling the values of ``Y`` (the kernel's own
@@ -180,6 +185,11 @@ class BusImpedanceSession:
         self._grid = parts.grid_admittance
         self._loop = parts.loop_admittance
         self._i_vectors = list(parts.i_vectors)
+        # Frequencies whose phase currents came from the coupled solve: they
+        # follow the electrodes, so a trial re-solves the coupled system
+        # with the new diagonal instead of the kept injection vector.
+        self._electrical = electrical
+        self._coupled = set(electrical.coupled_potentials)
 
     @classmethod
     def attach(cls, network: Network, fault: str) -> Optional[BusImpedanceSession]:
@@ -197,7 +207,7 @@ class BusImpedanceSession:
         -------
         BusImpedanceSession or None
             ``None`` when sessions are switched off, the network carries no
-            solved system of this fault, or the system uses a 0 Hz stand-in
+            solved system of this fault, the system uses a 0 Hz stand-in
             (whose size may follow the bus impedances).
         """
         if not _ENABLED:
@@ -234,7 +244,7 @@ class BusImpedanceSession:
             ``True`` when neither has a loop closure and pattern, branch
             admittances and assembled bus impedances are identical.
         """
-        if self._loop.size or other._loop.size:
+        if self._fault_specific() or other._fault_specific():
             return False
         return (
             self._frequencies == other._frequencies
@@ -247,6 +257,19 @@ class BusImpedanceSession:
             and np.array_equal(self._bus_z, other._bus_z, equal_nan=True)
             and np.array_equal(self._present, other._present)
         )
+
+    def _fault_specific(self) -> bool:
+        """``True`` if the system has a stamp that depends on the fault bus.
+
+        A Thevenin loop closure ends at the fault bus, and so does the fault
+        bond of a coupled system.
+
+        Returns
+        -------
+        bool
+            Whether a loop closure or a coupled frequency is present.
+        """
+        return bool(self._loop.size or self._coupled)
 
     def factorise(self, impedances: Dict[str, np.ndarray]) -> Optional[list]:
         """
@@ -262,9 +285,11 @@ class BusImpedanceSession:
 
         Returns
         -------
-        list of scipy.sparse.linalg.SuperLU or None
-            One factorisation per network frequency, or ``None`` when only a
-            full solve can answer (see the module docstring).
+        list or None
+            Per network frequency the factorisation of ``Y``
+            (:class:`scipy.sparse.linalg.SuperLU`), or for a frequency of the
+            coupled solve the grounding admittances of the trial; ``None``
+            when only a full solve can answer (see the module docstring).
         """
         bus_z = self._bus_z.copy()
         rows: List[int] = []
@@ -283,15 +308,15 @@ class BusImpedanceSession:
             if not (self._usable[index].all() and _usable_electrodes(new).all()):
                 return None
             bus_z[index] = new
+        y_bus = bus_admittances(bus_z, self._present)
         matrices = assemble_nodal_matrices(
-            self._pattern,
-            bus_admittances(bus_z, self._present),
-            self._grid,
-            self._loop,
-            self._frequencies,
+            self._pattern, y_bus, self._grid, self._loop, self._frequencies,
         )
         factors = []
-        for freq in self._frequencies:
+        for column, freq in enumerate(self._frequencies):
+            if freq in self._coupled:
+                factors.append(y_bus[:, column])
+                continue
             try:
                 factors.append(splu(matrices[freq]))
             except (np.linalg.LinAlgError, RuntimeError):
@@ -323,8 +348,17 @@ class BusImpedanceSession:
             if factors is None:
                 return None
         solved: Dict[float, np.ndarray] = {}
+        n = len(self._rows)
         for freq, i_vector, lu in zip(self._frequencies, self._i_vectors, factors, strict=True):
-            u_vector = lu.solve(i_vector)
+            if freq in self._coupled:
+                # The phase split follows the electrodes: the coupled system
+                # of run_fault, re-solved with this trial's diagonal.
+                x = self._electrical.coupled_solution(freq, lu)
+                if x is None:
+                    return None
+                u_vector = -x[:n]
+            else:
+                u_vector = lu.solve(i_vector)
             if not np.all(np.isfinite(u_vector)):
                 return None
             solved[freq] = u_vector

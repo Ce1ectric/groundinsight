@@ -86,6 +86,17 @@ reduction factor of a line
 in the sense of the standard counts the remote infeed only; divide `i_earth` by
 it where a local source is present.
 
+**Where the short circuit is exact.** Norton's theorem holds for the network
+seen from the fault bus with the phase currents as they are. In a mesh whose
+routes are different cables, the coupled solve lets the shield currents act
+back on the split of the phase current, so earthing the fault bus ideally
+also moves the phase currents a little: there the current into an ideal
+electrode and $U_E / Z_E$ differ slightly — by 4·10⁻⁴ relative on a 20 kV
+ring with an Al 1×95 and a Cu 1×95 cable section (`tests/test_coupled_solve.py`).
+`r` keeps the definition $U_E/(Z_E I_F)$, the one that reproduces $U_E$ with the
+$Z_E$ a measurement sees. In radial networks and wherever every mesh has one
+cable type the two are the same.
+
 ## Checked a second way
 
 The identity $U_E = r \cdot I_F \cdot Z_E$ holds by construction and checks

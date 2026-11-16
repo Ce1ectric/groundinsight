@@ -75,38 +75,41 @@ def _coupled(ns, route_2):
 
 def test_one_way_coupling_is_exact_in_a_homogeneous_ring(phase_split):
     """Same construction on both routes: Z_red, Z_pp and the proxy all give
-    the coupled result, and the split is the inverse ratio of the lengths."""
+    the coupled result, one-way divider and run_fault alike, and the split
+    is the inverse ratio of the lengths."""
     i_coupled, u_coupled = _coupled(phase_split, phase_split["CABLE"])
     for phase in ("Z_red", "Z_pp", "proxy"):
-        i_route_1, u_fault = phase_split["TABLE"][("homogeneous", phase)]
+        one_way, i_route_1, u_fault = phase_split["TABLE"][("homogeneous", phase)]
+        assert one_way == pytest.approx(i_coupled, rel=1e-9)
         assert i_route_1 == pytest.approx(i_coupled, rel=1e-9)
         assert u_fault == pytest.approx(u_coupled, rel=1e-9)
     assert i_coupled == pytest.approx(1000.0 * 3.0 / 5.4, rel=1e-9)
 
 
-def test_one_way_coupling_is_an_approximation_in_a_mixed_ring(phase_split):
-    """Cable | overhead line with earth wire: no choice is exact; Z_red gives
-    the split closest to the coupled one. The numbers are the page's."""
+def test_run_fault_is_the_coupled_model_in_a_mixed_ring(phase_split):
+    """Cable | overhead line with earth wire: with Z_red declared run_fault
+    gives the coupled multi-conductor result (second way: the oracle with
+    the data-sheet Z_pp), the one-way divider does not. The numbers are the
+    page's."""
     i_coupled, u_coupled = _coupled(phase_split, phase_split["OVERHEAD_LINE"])
-    assert i_coupled == pytest.approx(764.90, abs=0.005)
-    assert u_coupled == pytest.approx(289.231, abs=0.0005)
-    split_error = {}
-    page = {"Z_red": (728.39, 310.735, "+7.4 %"), "Z_pp": (582.47, 298.635, "+3.3 %"),
-            "proxy": (653.92, 278.187, "−3.8 %")}
-    for phase, (i_page, u_page, deviation) in page.items():
-        i_route_1, u_fault = phase_split["TABLE"][("mixed", phase)]
+    one_way, i_route_1, u_fault = phase_split["TABLE"][("mixed", "Z_red")]
+    assert i_route_1 == pytest.approx(i_coupled, rel=1e-9)
+    assert u_fault == pytest.approx(u_coupled, rel=1e-9)
+    assert abs(one_way - i_coupled) > 30.0
+    page = {"Z_red": (728.39, 764.90, 289.231), "Z_pp": (582.47, 612.19, 283.011),
+            "proxy": (653.92, 683.49, 264.794)}
+    for phase, (one_way_page, i_page, u_page) in page.items():
+        one_way, i_route_1, u_fault = phase_split["TABLE"][("mixed", phase)]
+        assert one_way == pytest.approx(one_way_page, abs=0.005)
         assert i_route_1 == pytest.approx(i_page, abs=0.005)
         assert u_fault == pytest.approx(u_page, abs=0.0005)
-        assert f"{100 * (u_fault / u_coupled - 1):+.1f} %".replace("-", "−") == deviation
-        split_error[phase] = abs(i_route_1 - i_coupled)
-    assert min(split_error, key=split_error.get) == "Z_red"
 
 
 def test_phase_currents_page_states_the_numbers_of_the_snippet():
     text = _page("explanation/phase-currents.md")
-    for number in ("555.56 A", "205.863 V", "728.39 A", "310.735 V (+7.4 %)",
-                   "582.47 A", "298.635 V (+3.3 %)", "653.92 A", "278.187 V (−3.8 %)",
-                   "764.90 A, 289.231 V"):
+    for number in ("555.56 A", "205.863 V", "| mixed | `Z_red` | 728.39 A | 764.90 A | 289.231 V |",
+                   "| mixed | `Z_pp` | 582.47 A | 612.19 A | 283.011 V |",
+                   "| mixed | proxy | 653.92 A | 683.49 A | 264.794 V |", "310.7 V, 7.4 % too high"):
         assert number in text, number
 
 
@@ -377,16 +380,20 @@ def test_a_formula_is_evaluated_again_when_its_input_changes():
     assert complex(net.buses["B"].impedance[250.0]) == pytest.approx(1.0 + 0.25j)
 
 
-def test_phase_split_of_the_example_is_the_one_the_solver_uses(phase_split):
-    """The page computes the split as a current divider of the declared phase
-    impedances; the solver's own phase network must give the same."""
+def test_phase_split_of_the_example_is_the_one_way_divider(phase_split):
+    """The page's one-way split is the current divider of the declared phase
+    impedances -- the split of the phase-only network, solved here a second
+    way by the oracle; the 310.7 V the page quotes is the EPR that split
+    gives (the oracle's one-way model)."""
     for label, route_2 in (("homogeneous", phase_split["CABLE"]),
                            ("mixed", phase_split["OVERHEAD_LINE"])):
         for phase in ("Z_red", "Z_pp", "proxy"):
-            net = phase_split["ring"](route_2, phase)
-            phase_split["epr_at_fault"](net)
-            solver = abs(complex(net.electrical_network.phase_currents[50.0]["SA"]))
-            assert phase_split["TABLE"][(label, phase)][0] == pytest.approx(solver, rel=1e-12)
+            rd = ref.reference_network(phase_split["ring"](route_2, phase), 50.0, "F1")
+            alpha = ref.phase_split(rd, "declared")["infeed"]
+            assert phase_split["TABLE"][(label, phase)][0] == pytest.approx(
+                1000.0 * abs(alpha["SA"]), rel=1e-12)
+    rd = ref.reference_network(phase_split["ring"](phase_split["OVERHEAD_LINE"], "Z_red"), 50.0, "F1")
+    assert f"{abs(ref.solve_oneway(rd)['u']['F']):.1f}" == "310.7"
 
 
 def _symmetric_ring(z_self, z_mutual, mode):

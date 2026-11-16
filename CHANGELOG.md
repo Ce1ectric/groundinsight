@@ -279,6 +279,24 @@ version section when a release is cut.
 
 ### Changed
 
+- **One calculation method: phase conductors, shields and earth are solved
+  together.** `phase_current_mode="auto"` (the default) solves one linear
+  system per frequency: per branch the 2×2 impedance matrix of shield and
+  phase conductor, both loops with earth return, with
+  `Z_pp = Z_red + Z_m²/Z_s` from the type's `phase_impedance_formula` (types
+  are unchanged), every electrode, the sources and the fault bond. Before,
+  the phase current was split on a phase-only network with `Z_red`, which
+  ignores what the shields carry; with one cable type per mesh and in every
+  radial network both give the same numbers (radial networks bit for bit),
+  in a 20 kV ring with two cable types the EPR moves by up to 1.2 % at a bus, in a ring of
+  cable and overhead line by 7 %. A Thevenin source is now its EMF in series
+  with `source_impedance`, the phase conductor in the branches: its loop
+  current is solved, the EPR is no longer 6–38 % low, and
+  `THEVENIN_COUPLING` is raised only in the deprecated path mode. Checked
+  against the coupled multi-conductor solvers of both test oracles. The
+  study sessions of the ρ searches re-solve the coupled system with the
+  trial's electrodes, so a search on a meshed network stays as fast and gives
+  the numbers of `run_fault`. The GUI has no choice of method any more.
 - **`SCHEMA_VERSION` of the project file is 2** (see *Breaking*).
   `save_network_to_json` writes a version-2 file without diagram and views;
   `load_network_from_json` reads every version and returns the network.
@@ -295,6 +313,10 @@ version section when a release is cut.
 
 ### Deprecated
 
+- **`phase_current_mode="paths"`.** The path-based phase split with
+  `Branch.parallel_coefficient` is wrong for rings and meshes; it works for
+  the deprecation period with a `DeprecationWarning` (removal no earlier
+  than two releases and six months after this release).
 - **`ResultReductionFactor.value_current`.** An alias of `value` with a
   `DeprecationWarning`; removal no earlier than two releases and six months
   after this release.
@@ -3708,12 +3730,10 @@ Carried forward:
 
 **Model fidelity.**
 
-- Thévenin sources with the loop current as an unknown of a bordered
-  system; until then `THEVENIN_COUPLING` warns.
-- A fully coupled `phase_current_mode="coupled"` (2×2 branch blocks, twice
-  the nodes, still sparse) that removes the one-way-coupling approximation
-  and the phase proxy together; `ImportDefaults.derive_phase_impedance`
-  then derives `Z_red = Z_pp − Z_m²/Z_s` instead of `R₁ + jX₁`.
+- The pandapower import derives the phase impedance as `Z_red = Z_pp −
+  Z_m²/Z_s` (`ImportDefaults.derive_phase_impedance`) instead of `R₁ + jX₁`,
+  now that the coupled solve rebuilds `Z_pp` from it. (Thévenin loop current
+  and the coupled solve: done, see `[Unreleased]`.)
 - Eight further reference cases through `run_fault`: uniform and asymmetric
   ring split, long feeder against the ladder limit, Thévenin single line,
   superposition of two sources, resistive DC chain, the ladder cases through

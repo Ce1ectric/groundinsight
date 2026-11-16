@@ -375,9 +375,9 @@ def _condition_limited_bins(net, reference, frequencies, label):
     system (used before and after the pass-19 rewrite alike) lands at 1-5 %
     of that bound, dense LAPACK somewhat lower. The reference is the
     clongdouble-refined solution of the stored system, the yardstick the
-    forward-error bound ``kappa_2(Y) * eps``. Quantities that do not pass
-    through the nodal solve -- phase currents, source injections -- stay at
-    the strict 1e-12.
+    forward-error bound ``kappa_2(Y) * eps``. The phase currents and the
+    loop currents of Thevenin sources come out of the coupled solve of the
+    same bin and are held to the same bound.
     """
     refined = oracle.solve(net, "F", refine=3, division="numpy")
     pkg = oracle.package_arrays(net, "F")
@@ -393,7 +393,7 @@ def _condition_limited_bins(net, reference, frequencies, label):
         bound = max(float(np.linalg.cond(reference.Y[f])) * eps, TOL)
         for key, scale, tol in (("u", u_scale, bound), ("ia", i_scale, bound),
                                 ("i_shield", i_scale, bound),
-                                ("i_phase", i_scale, TOL), ("i_inj", i_scale, TOL)):
+                                ("i_phase", i_scale, bound), ("i_inj", i_scale, bound)):
             want = getattr(refined, key)[:, col]
             err = float(np.abs(pkg[key][:, col] - want).max()) / scale
             assert err <= tol, (label, f, key, err, tol)

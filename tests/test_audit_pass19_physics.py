@@ -257,6 +257,25 @@ def _structural_cases() -> Dict[str, dict]:
 STRUCTURAL_CASES = _structural_cases()
 
 
+def result_is_meshed(net: gi.Network) -> bool:
+    """Whether the active branches of ``net`` close a mesh (more branches
+    than a spanning forest of their buses)."""
+    active = [b for b in net.branches.values() if b.active]
+    parent = {name: name for name in net.buses}
+
+    def root(x):
+        while parent[x] != x:
+            x = parent[x]
+        return x
+
+    for branch in active:
+        a, b = root(branch.from_bus), root(branch.to_bus)
+        if a == b:
+            return True
+        parent[a] = b
+    return False
+
+
 def test_there_are_seventeen_structural_cases():
     assert len(STRUCTURAL_CASES) == 17
 
@@ -264,30 +283,30 @@ def test_there_are_seventeen_structural_cases():
 @pytest.mark.parametrize("case", sorted(STRUCTURAL_CASES))
 def test_run_fault_matches_the_reference_solver(case):
     """PQ-REF: EPR, shield and electrode currents, the earth current and the
-    reduction factor agree with the branch-current MNA to <= 1e-12. With
-    current sources only, the reference holds the fault bus at remote earth
-    and reads the current into that ideal electrode (Norton); with a
-    Thevenin source, whose loop current a short would change, it forms
-    U_E / Z_E from its own potential and driving point."""
+    reduction factor agree with the branch-current MNA of the coupled
+    multi-conductor model to <= 1e-12. The reference forms I_E = U_E / Z_E
+    from its own potential and driving point; where the phase split cannot
+    depend on the earthing -- no mesh, current sources only -- it also holds
+    the fault bus at remote earth and reads the current into that ideal
+    electrode (Norton)."""
     spec = STRUCTURAL_CASES[case]
     net = build(spec, case.replace(" ", "_"))
     result = solve(net)
     factor = result.reduction_factor
     for f in spec["freqs"]:
         rd = ref.reference_network(net, f, "F1")
-        solution = ref.solve_oneway(rd, thevenin_phase="norton")
+        solution = ref.solve_package(rd)
         mapped = ref.to_package_frame(solution)
         pkg = package_vectors(result, f)
         assert ref.max_relative_deviation(pkg["u"], mapped["u"]) <= TOL, (case, f, "u")
         assert ref.max_relative_deviation(pkg["ia"], mapped["ia"]) <= TOL, (case, f, "ia")
         assert ref.max_relative_deviation(pkg["i_s"], mapped["i_s"]) <= TOL, (case, f, "i_s")
 
-        if all(d["kind"] == "current" for d in rd["sources"].values()):
-            shorted = ref.solve_oneway(rd, thevenin_phase="norton", shorted=True)
-            i_earth = -shorted["I_short"]  # package frame
-        else:
-            i_earth = mapped["u"][rd["fault_bus"]] / ref.driving_point_impedance(rd, rd["fault_bus"])
+        i_earth = mapped["u"][rd["fault_bus"]] / ref.driving_point_impedance(rd, rd["fault_bus"])
         assert abs(complex(factor.i_earth[f]) - i_earth) <= TOL * abs(i_earth), (case, f, "I_E")
+        if not result_is_meshed(net) and all(d["kind"] == "current" for d in rd["sources"].values()):
+            shorted = ref.solve_oneway(rd, thevenin_phase="norton", shorted=True)
+            assert abs(-shorted["I_short"] - i_earth) <= TOL * abs(i_earth), (case, f, "Norton")
         r_ref = abs(i_earth) / abs(solution["I_F"])
         assert factor.value[f] == pytest.approx(r_ref, rel=TOL), (case, f, "r")
 
@@ -361,7 +380,7 @@ def _check_invariants(seed: int) -> None:
     # second way for the same solve: the reference solver
     for f in spec["freqs"]:
         rd = ref.reference_network(net, f, "F1")
-        mapped = ref.to_package_frame(ref.solve_oneway(rd, thevenin_phase="norton"))
+        mapped = ref.to_package_frame(ref.solve_package(rd))
         pkg = package_vectors(result, f)
         assert ref.max_relative_deviation(pkg["u"], mapped["u"]) <= TOL
         assert ref.max_relative_deviation(pkg["i_s"], mapped["i_s"]) <= TOL
@@ -515,7 +534,7 @@ def test_pq_ph4_definitions_hold_on_every_structural_case(case):
         z_e = complex(factor.z_earthing[f])
         assert abs(z_e - z_ref) <= TOL * abs(z_ref), (case, f)
         assert complex(result.grounding_impedance.value[f]) == z_e
-        i_f_ref = ref.solve_oneway(rd, thevenin_phase="norton")["I_F"]
+        i_f_ref = ref.solve_package(rd)["I_F"]
         assert abs(complex(factor.i_fault[f]) - i_f_ref) <= TOL * abs(i_f_ref)
 
 
@@ -634,7 +653,7 @@ def test_pq_ph3_a_broken_shield_keeps_its_phase_conductor():
     warning at all. The phase conductor of R1 must carry current, Kirchhoff
     must hold at the source, and the proxy must be announced naming R1.
 
-    Second way: the reference solver's phase split with the same proxy rule
+    Second way: the reference solver's coupled model with the same proxy rule
     (length proxy for a branch without an intact shield)."""
     net = build(_broken_shield_ring(), "ph3_broken")
     with pytest.warns(ModelAssumptionWarning) as record:
@@ -649,27 +668,32 @@ def test_pq_ph3_a_broken_shield_keeps_its_phase_conductor():
     assert "PHASE_PROXY" in [d.code for d in result.diagnostics]
 
     rd = ref.reference_network(net, 50.0, "F1")
-    alpha = ref.phase_split(rd, "declared")["src"]
+    coupled = ref.solve_package(rd)
     for name in ("R1", "R2", "R3", "R4"):
-        assert abs(phase[name] - 1000.0 * alpha[name]) <= TOL * 1000.0
-    mapped = ref.to_package_frame(ref.solve_oneway(rd, thevenin_phase="norton"))
+        assert abs(phase[name] - coupled["I_p"][name]) <= TOL * 1000.0
+    mapped = ref.to_package_frame(coupled)
     assert ref.max_relative_deviation(package_vectors(result, 50.0)["u"], mapped["u"]) <= TOL
 
 
-def test_pq_ph3_a_declared_phase_impedance_splits_the_ring_in_half():
+def test_pq_ph3_a_declared_phase_impedance_splits_the_ring_by_the_shields_too():
     """With the phase impedance declared (identical conductors) the split of
-    the symmetric ring is 500/500 A whatever the shields do -- second way:
-    the reference split on Z_pp."""
-    net = build(_broken_shield_ring(phase_formula="(0.33+0.16*j*f/50)*l"), "ph3_declared")
-    solve(net)
-    phase = net.electrical_network.phase_currents[50.0]
+    the symmetric ring is 500/500 A while both halves keep their shields; a
+    broken shield on one half moves it, because the phase-shield coupling of
+    the intact half lowers its loop impedance (coupled model). Second way:
+    the reference solver's coupled model."""
+    formula = "(0.33+0.16*j*f/50)*l"
+    intact = build(_broken_shield_ring(phase_formula=formula, broken=False), "ph3_declared_intact")
+    solve(intact)
+    phase = intact.electrical_network.phase_currents[50.0]
     assert abs(phase["R1"]) == pytest.approx(500.0, rel=1e-12)
     assert abs(phase["R4"]) == pytest.approx(500.0, rel=1e-12)
-    rd = ref.reference_network(net, 50.0, "F1")
-    for branch in rd["branches"].values():
-        branch["zpp"] = branch["zp"]
-    alpha = ref.phase_split(rd, "zpp")["src"]
-    assert abs(phase["R1"] - 1000.0 * alpha["R1"]) <= TOL * 1000.0
+    net = build(_broken_shield_ring(phase_formula=formula), "ph3_declared")
+    solve(net)
+    phase = net.electrical_network.phase_currents[50.0]
+    assert abs(abs(phase["R1"]) - 500.0) > 50.0
+    coupled = ref.solve_package(ref.reference_network(net, 50.0, "F1"))
+    for name in ("R1", "R2", "R3", "R4"):
+        assert abs(phase[name] - coupled["I_p"][name]) <= TOL * 1000.0
 
 
 def test_pq_ph3_the_proxy_note_names_the_branches_on_an_intact_ring():
@@ -685,7 +709,7 @@ def test_pq_ph3_the_proxy_note_names_the_branches_on_an_intact_ring():
 
 
 # ---------------------------------------------------------------------------
-# PQ-PH1b -- warn about Thevenin sources with coupling while PH1 is open
+# PQ-PH1b -- the loop current of a Thevenin source (closed by the coupled solve)
 # ---------------------------------------------------------------------------
 
 import math  # noqa: E402
@@ -733,44 +757,49 @@ def _thevenin_chain(z_src: complex, explicit_phase: bool) -> dict:
     )
 
 
-def test_pq_ph1b_a_thevenin_source_with_coupling_is_announced():
-    """PQ-PH1b: a voltage source feeding the fault over coupled branches
-    gets a THEVENIN_COUPLING ModelAssumptionWarning naming the source, and
-    the numbers do not change (second way: the reference solver with the
-    package's Norton phase current reproduces them to 1e-12)."""
+def test_pq_ph1b_the_path_mode_announces_its_thevenin_approximation():
+    """PQ-PH1b: the deprecated path mode still couples a voltage source with
+    its Norton current E/Z_src and says so with THEVENIN_COUPLING, naming
+    the source (second way: the reference solver with the Norton phase
+    current reproduces it to 1e-12). The default mode solves the loop current
+    and stays silent."""
     net = build(_thevenin_chain(1 + 3j, explicit_phase=False), "ph1b")
     with pytest.warns(ModelAssumptionWarning) as record:
-        result = gi.run_fault(net, "F1")
+        result = gi.run_fault(net, "F1", phase_current_mode="paths")
     coupling = [w.message for w in record if getattr(w.message, "code", None) == "THEVENIN_COUPLING"]
     assert len(coupling) == 1
     assert ("source", "vs") in coupling[0].elements
-    assert "too low" in str(coupling[0]) and "unconservative" in str(coupling[0])
     assert "THEVENIN_COUPLING" in [d.code for d in result.diagnostics]
-
     rd = ref.reference_network(net, 50.0, "F1")
     mapped = ref.to_package_frame(ref.solve_oneway(rd, thevenin_phase="norton"))
     assert ref.max_relative_deviation(package_vectors(result, 50.0)["u"], mapped["u"]) <= TOL
-    # The direction the warning states: with the actual loop current the
-    # fault-bus EPR is higher (the package value is unconservative).
-    actual = ref.solve_oneway(rd, thevenin_phase="actual")
-    assert abs(actual["u"]["F"]) > abs(mapped["u"]["F"])
+    assert "THEVENIN_COUPLING" not in [d.code for d in solve(net).diagnostics]
 
 
 @pytest.mark.parametrize(
-    "z_transformer, expected_percent",
+    "z_transformer, path_mode_percent",
     [(5 + 15j, -5.8), (1 + 3j, -22.2), (0.3 + 1j, -37.9)],
 )
-def test_pq_ph1b_the_quoted_error_range_is_reproducible(z_transformer, expected_percent):
-    """The warning quotes EPR 6 to 38 % too low. Second way for that claim:
-    the fully coupled multi-conductor reference (phase conductor explicit,
-    Z_src the transformer only) against the package with the screened phase
-    path lumped into Z_src."""
+def test_pq_ph1b_the_loop_current_is_solved(z_transformer, path_mode_percent):
+    """PH1 closed: with the transformer as Z_src and the phase conductor in
+    the branches, run_fault equals the fully coupled multi-conductor
+    reference to 1e-12. The deprecated path mode, which needs the screened
+    phase path lumped into Z_src, keeps the error the THEVENIN_COUPLING
+    warning quotes: EPR 6 to 38 % too low."""
     coupled = ref.solve_coupled(_coupled_reference(z_transformer))
-    net = build(_thevenin_chain(z_transformer, explicit_phase=False), "ph1b_size")
+    net = build(_thevenin_chain(z_transformer, explicit_phase=True), "ph1b_exact")
     result = solve(net)
-    u_package = abs(next(complex(b.uepr_freq[50.0]) for b in result.buses if b.name == "F"))
-    deviation = 100.0 * (u_package / abs(coupled["u"]["F"]) - 1.0)
-    assert deviation == pytest.approx(expected_percent, abs=0.1)
+    u_fault = next(complex(b.uepr_freq[50.0]) for b in result.buses if b.name == "F")
+    # Z_pp from the stored Z_red, Z_s and Z_m, as the package builds it (the
+    # reference above rounds Z_pp itself to the six decimals of its formula).
+    exact = ref.solve_package(ref.reference_network(net, 50.0, "F1"))
+    assert abs(u_fault + exact["u"]["F"]) <= TOL * abs(exact["u"]["F"])
+    assert abs(u_fault + coupled["u"]["F"]) <= 1e-5 * abs(coupled["u"]["F"])
+    lumped = build(_thevenin_chain(z_transformer, explicit_phase=False), "ph1b_size")
+    old = solve(lumped, phase_current_mode="paths")
+    u_old = abs(next(complex(b.uepr_freq[50.0]) for b in old.buses if b.name == "F"))
+    deviation = 100.0 * (u_old / abs(coupled["u"]["F"]) - 1.0)
+    assert deviation == pytest.approx(path_mode_percent, abs=0.1)
 
 
 def _coupled_reference(z_transformer: complex) -> dict:

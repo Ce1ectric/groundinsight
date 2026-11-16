@@ -399,25 +399,29 @@ def test_rho_f_search_with_session_equals_the_full_search(monkeypatch, full_solv
 
 @THEVENIN
 def test_fault_locations_share_the_matrix_unless_a_voltage_source_loops():
-    """Two fault locations of one network assemble the same nodal matrix --
-    except for the loop closure a voltage source puts between its bus and
-    the fault bus. Sessions that share it share each trial's factorisation;
-    the per-location solves are then bit for bit the unshared ones."""
-    def sessions(builder):
+    """Two fault locations of a radial network assemble the same nodal
+    matrix. Sessions that share it share each trial's factorisation; the
+    per-location solves are then bit for bit the unshared ones. Not shared:
+    the loop closure a voltage source puts between its bus and the fault
+    bus, and the coupled system of a meshed phase network, whose fault bond
+    sits at the fault bus."""
+    def sessions(builder, buses):
         net = builder()
         made = []
-        for bus in ("B3", "B11"):
+        for bus in buses:
             gi.create_fault(name=f"at_{bus}", bus=bus, scalings={}, network=net)
             gi.run_fault(net, f"at_{bus}")
             made.append(_session.BusImpedanceSession.attach(net, f"at_{bus}"))
         return net, made
 
-    net, (first, second) = sessions(lambda: perf.ring(20, F=3))
+    net, (first, second) = sessions(lambda: perf.radial(20, F=3), ("T2", "A1_1"))
     assert first.same_matrix_as(second)
-    changed = {"B5": _session.bus_impedance_at(net.buses["B5"], 333.0, net.frequencies)}
+    changed = {"T3": _session.bus_impedance_at(net.buses["T3"], 333.0, net.frequencies)}
     factors = first.factorise(changed)
     assert second.epr_rms(changed, factors) == second.epr_rms(changed)
-    _, (first, second) = sessions(lambda: perf.thevenin_ring(20, F=3))
+    _, (first, second) = sessions(lambda: perf.thevenin_ring(20, F=3), ("B3", "B11"))
+    assert not first.same_matrix_as(second)
+    _, (first, second) = sessions(lambda: perf.ring(20, F=3), ("B3", "B11"))
     assert not first.same_matrix_as(second)
 
 

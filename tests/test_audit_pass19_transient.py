@@ -205,14 +205,17 @@ def _phase_factors(study):
 def test_reference_reproduces_the_stationary_solver():
     """The oracle itself: same model and sign convention as ``run_fault``.
 
-    Measured 1e-15 on all four networks used below; without this the
-    reference could agree with the transient for the wrong reason.
+    Measured 1e-15 on the three networks below; without this the reference
+    could agree with the transient for the wrong reason. The reference splits
+    the phase current on the phase network alone (one-way coupling), which
+    is the coupled split of ``run_fault`` exactly where every mesh has one
+    cable type -- not on the mixed ring, whose split the test below takes
+    from the solver.
     """
     for label, rn, declare in (
         ("chain", _four_bus(False), False),
         ("ring", _four_bus(True), False),
         ("asym", _four_bus(True, lengths=(0.5, 1.0, 2.0, 1.5)), True),
-        ("mixed", _mixed_ring(), True),
     ):
         model = _build(rn, name=f"oracle_{label}", declare_phase=declare)
         stationary = _stationary(model)
@@ -305,10 +308,11 @@ def test_mixed_ring_is_exact_at_f_eval_and_warns_about_the_dynamics():
       real split ``Re(alpha)`` would be 4.4 % low at the fault, unconservative);
     * the solver says that DC offset and harmonics see the 50 Hz split
       (``TRANSIENT_PHASE_SPLIT``);
-    * against the reference with the phase network integrated exactly, the
-      fully offset fault current deviates by about 1 % of the peak (measured
-      0.99 %), and against the reference fed with the *same* folded split by
-      integration error only (9.5e-7).
+    * against the reference fed with the *same* folded split -- the coupled
+      split of ``run_fault`` at 50 Hz -- the fully offset fault current
+      deviates by integration error only (9.5e-7). (The reference's own
+      one-way phase network is no yardstick here: on this ring it splits the
+      50 Hz current 12 % differently from the coupled model.)
     """
     rn = _mixed_ring()
     model = _build(rn, name="ph2_mixed", declare_phase=True)
@@ -330,16 +334,11 @@ def test_mixed_ring_is_exact_at_f_eval_and_warns_about_the_dynamics():
             model, waves={"s": _offset_fault_current()}, t_end=0.3, dt=2e-5,
         )
     t = np.asarray(transient.time_s)
-    exact = ref.time_solve(rn, t, _offset_fault_current())["epr"]
-    peak = max(np.max(np.abs(v)) for v in exact.values())
-    deviation = max(np.max(np.abs(np.asarray(transient.epr_t[b]) - exact[b]))
-                    for b in exact)
-    # Measured 0.99 %: a real, warned approximation -- not zero, not large
-    # (a fixed Re(alpha) instead of the fold: 6.5 %).
-    assert 0.005 < deviation / peak < 0.0125
 
-    # Same folded split in the reference: R'_m + j w M' = (R_m + j w M) * alpha.
-    alpha = ref.phase_split(rn, 50.0)
+    # Same folded split in the reference: R'_m + j w M' = (R_m + j w M) * alpha,
+    # alpha the coupled split of the stationary solve (1000 A source).
+    phase = model.electrical_network.phase_currents[50.0]
+    alpha = {name: complex(value) / 1000.0 for name, value in phase.items()}
     folded = ref.RefNetwork(bus_R=dict(rn.bus_R), source_bus=rn.source_bus,
                             fault_bus=rn.fault_bus)
     for br in rn.branches:
@@ -352,9 +351,10 @@ def test_mixed_ring_is_exact_at_f_eval_and_warns_about_the_dynamics():
         folded, t, _offset_fault_current(),
         phase_factors={br.name: 1.0 for br in rn.branches},
     )["epr"]
+    peak = max(np.max(np.abs(v)) for v in same_model.values())
     worst = max(np.max(np.abs(np.asarray(transient.epr_t[b]) - same_model[b]))
                 for b in same_model)
-    assert worst / peak < 1e-5                         # measured 9.5e-7
+    assert worst / peak < 1e-5
 
 
 def test_state_space_leaves_paths_and_active_fault_alone(caplog):

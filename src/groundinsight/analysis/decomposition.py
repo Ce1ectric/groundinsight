@@ -412,6 +412,34 @@ def _finite_impedance(value) -> Optional[complex]:
     return z
 
 
+def _system_injection(electrical, freq: float, injection: complex) -> complex:
+    """
+    The injection at the fault bus of the solved nodal system.
+
+    It differs from the physical one (``ResultBus.i_inj``) where the coupled
+    solve carries the loop current of a Thevenin source through its loop
+    closure: the system injects ``I_loop + Y_src (u_S - u_F)`` there
+    (:attr:`ElectricalNetwork.thevenin_currents`). The current balance of
+    the directions is the one of that system.
+
+    Parameters
+    ----------
+    electrical : ElectricalNetwork or None
+        The solved system.
+    freq : float
+        Frequency in Hz.
+    injection : complex
+        The physical injection at the fault bus.
+
+    Returns
+    -------
+    complex
+        The injection of the system.
+    """
+    loops = electrical.thevenin_currents.get(freq, {}) if electrical is not None else {}
+    return injection - sum((injected - current for current, injected in loops.values()), 0j)
+
+
 def _resolve(electrical, value, freq: float) -> Optional[complex]:
     """
     The impedance the *solver* sees, reduced to the ones carrying an admittance.
@@ -980,9 +1008,10 @@ def analyze_cuts(
                     i_total[name][freq] = None
                     r_side[name][freq] = None
 
+            in_system = _system_injection(electrical, freq, injection)
             reference = abs(injection)
             kcl_residual[freq] = (
-                abs(injection - local_current - leaving) / reference
+                abs(in_system - local_current - leaving) / reference
                 if reference > 0
                 else 0.0
             )

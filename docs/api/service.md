@@ -221,7 +221,7 @@ category and the function whose docstring describes the condition:
 | `THERMAL_DATA_INCOMPLETE` | `InputWarning` | `check_conductor_limits` / `check_node_limits`: half-declared thermal data |
 | `THERMAL_DC_EXCLUDED` | `ModelAssumptionWarning` | `check_conductor_limits` / `check_node_limits`: 0 Hz left out of the adiabatic check |
 | `TOUCH_FACTORS_MISSING` | `InputWarning` | `check_touch_voltages`: no bus of the result has a tabulated touch factor |
-| `THEVENIN_COUPLING` | `ModelAssumptionWarning` | `run_fault`: a Thevenin source drives coupled branches |
+| `THEVENIN_COUPLING` | `ModelAssumptionWarning` | `run_fault(phase_current_mode="paths")`: a Thevenin source drives coupled branches |
 | `TRANSIENT_BRANCH_SKIPPED` | `InputWarning` | `TransientStudy.solve` (state space): branches without `R_self`/`L_self` |
 | `TRANSIENT_COUPLING_SKIPPED` | `TransientModelWarning` | `TransientStudy.solve` (state space): coupling of voltage sources |
 | `TRANSIENT_MODEL` | `TransientModelWarning` | `TransientStudy.solve`: the model is narrower than the input |

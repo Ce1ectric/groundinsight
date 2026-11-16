@@ -519,6 +519,115 @@ def assemble(network, fault: str, *, division: str = "python") -> Dict[float, np
     return {f: model.nodal(f, division)[4].dense() for f in model.frequencies}
 
 
+def _coupled(network, model, f, division, refine, sparse, bus_z, grid, y_grid,
+             y_phase, component, reaching, injection, resolved):
+    """Phase conductors, shields and electrodes of one frequency in one system.
+
+    Assembled here, densely or sparse, from the public data in the physical
+    frame: an earth node per active bus (its electrode to remote earth), a
+    phase node per bus of the phase component of the fault bus, whose own
+    phase node is its earth node (the fault bond). A branch with shield and
+    phase conductor stamps the inverse of ``[[Z_s, Z_m], [Z_m, Z_pp]]`` with
+    ``Z_pp = Z_red + Z_m**2 / Z_s``, written out as ``1/Z_s + k**2/Z_red``,
+    ``-k/Z_red`` and ``1/Z_red`` (``k = Z_m/Z_s``); a current source drives
+    its current from its earth node into its phase node, a Thevenin source
+    is ``E/Z_src`` with ``1/Z_src`` between the two. A source outside the
+    phase component is injected between its earth node and the fault's, a
+    Thevenin one with its loop closure there, as the package does.
+
+    Returns
+    -------
+    tuple or None
+        ``(phase currents per branch, earth potentials in the package frame,
+        [(bus row, effective source current), ...], [(bus row, loop-closure
+        current Y_src (u_S - u_F)), ...])``; ``None`` when nothing drives the
+        phase network or the system is singular.
+    """
+    index, k_fault, n = model.index, model.k_fault, model.n
+    branches = model.branches
+    keep = sorted(component - {k_fault})
+    node = {k_fault: k_fault}
+    for p, bus in enumerate(keep):
+        node[bus] = n + p
+    size = n + len(keep)
+    system = _Assembler(size)
+    usable = [(k, z) for k, z in enumerate(bus_z) if z is not None and not _is_open(z)]
+    for (k, _), y in zip(usable, _reciprocals([z for _, z in usable], division), strict=True):
+        system.stamp(k, k, y)
+    shield_y = {b: y for (b, _, _, _), y in zip(grid, y_grid, strict=True)}
+    blocks = {}
+    for b, branch in enumerate(branches):
+        if not model.in_net[b]:
+            continue
+        a = index[branch.from_bus]
+        c = index[branch.to_bus]
+        y_p = y_phase.get(b, 0j)
+        has_phase = y_p != 0 and a in component
+        y_s = shield_y.get(b)
+        k = 0j
+        if y_s is not None and has_phase:
+            z_mut = branch.mutual_impedance.get(f)
+            if z_mut is not None:
+                k = complex(z_mut.real, z_mut.imag) * y_s
+        if y_s is not None:
+            system.branch(a, c, y_s + k * k * y_p if has_phase else y_s)
+        if has_phase:
+            pa, pc = node[a], node[c]
+            system.branch(pa, pc, y_p)
+            if k != 0:
+                y_sp = -k * y_p
+                for r, col, v in ((a, pa, y_sp), (c, pc, y_sp), (a, pc, -y_sp), (c, pa, -y_sp)):
+                    system.stamp(r, col, v)
+                    system.stamp(col, r, v)
+            blocks[b] = (a, c, pa, pc, k * -y_p, y_p)
+    rhs = np.zeros(size, dtype=complex)
+    thevenin = []
+    outside = []
+    for name, source in network.sources.items():
+        s_idx = index.get(source.bus)
+        if s_idx is None:
+            continue
+        p_s = node.get(s_idx, k_fault)  # outside the component: towards the fault
+        y_src = None
+        if source.source_type == "voltage" and s_idx != k_fault:
+            z_src = resolved((source.source_impedance or {}).get(f))
+            if z_src is not None and not _is_open(z_src):
+                # every Thevenin source closes its loop, fed or not, as the
+                # earthing matrix of the package does
+                y_src = 1.0 / z_src
+                system.branch(p_s, s_idx, y_src)
+        inj = injection(source) if name in reaching else None
+        if inj is None:
+            continue
+        rhs[p_s] += inj
+        rhs[s_idx] -= inj
+        if y_src is not None and s_idx in node:
+            thevenin.append((s_idx, p_s, inj, y_src))
+            continue
+        # The package reports a source outside the phase component with its
+        # Norton current, its loop closure sitting in the earthing matrix.
+        outside.append((s_idx, inj))
+    if not rhs.any():
+        return None
+    matrix = system.sparse() if sparse else system.dense()
+    try:
+        x = np.asarray(_solve(matrix, rhs, refine))
+    except (np.linalg.LinAlgError, RuntimeError):
+        return None
+    if not np.all(np.isfinite(x.astype(complex))):
+        return None
+    m = len(branches)
+    ip = np.zeros(m, dtype=x.dtype)
+    for b, (a, c, pa, pc, y_sp, y_p) in blocks.items():
+        ip[b] = y_sp * (x[a] - x[c]) + y_p * (x[pa] - x[pc])
+    effective = list(outside)
+    closures = []
+    for s_idx, p_s, inj, y_src in thevenin:
+        effective.append((s_idx, complex(inj - y_src * (x[p_s] - x[s_idx]))))
+        closures.append((s_idx, complex(y_src * (x[k_fault] - x[s_idx]))))
+    return ip, -x[:n], effective, closures
+
+
 def solve(
     network,
     fault: str,
@@ -711,10 +820,30 @@ def solve(
                     ip[b] += (full_u[a, col] - full_u[c, col]) * np.asarray(
                         y_phase[b], dtype=dtype
                     )
+        # --- the coupled multi-conductor model (phase_current_mode="auto") -
+        coupled = _coupled(
+            network, model, f, division, refine, sparse, bus_z, grid, y_grid,
+            y_phase, component, reaching, injection, resolved,
+        )
+        i_drive = i_src
+        if coupled is not None:
+            ip, u_coupled, effective, closures = coupled
+            i_src = np.zeros(n, dtype=complex)
+            for k_bus, current in effective:
+                i_src[k_bus] += current
+                i_src[k_fault] -= current
+            INJ[:, j] = i_src
+            IF[j] = sum((current for _, current in effective), 0j)
+            # The injection of the earth-side system that carries a loop
+            # current through its closure 1/Z_src: I + Y_src (u_S - u_F).
+            i_drive = i_src.copy()
+            for k_bus, extra in closures:
+                i_drive[k_bus] += extra
+                i_drive[k_fault] -= extra
         IP[:, j] = ip
 
         # --- mutual Norton injections ------------------------------------
-        i_vec = i_src.astype(dtype)
+        i_vec = i_drive.astype(dtype)
         stored = np.zeros(m, dtype=dtype)
         for b, a, c, z_self in grid:
             z_mut = branches[b].mutual_impedance.get(f)
@@ -729,7 +858,9 @@ def solve(
         IVEC[:, j] = i_vec
 
         # --- nodal solves --------------------------------------------------
-        u = _solve(Y, i_vec, refine)
+        # The coupled model gives the earth potentials itself; the nodal
+        # solve of the earthing network is the one-way model's.
+        u = u_coupled if coupled is not None else _solve(Y, i_vec, refine)
         u_nm = _solve(Y, i_src, refine)
         U[:, j] = u
         U_nm[:, j] = u_nm

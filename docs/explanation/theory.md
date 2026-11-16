@@ -251,12 +251,15 @@ lists what has been checked against what.
    remote earth; neighbouring electrodes do not couple resistively; the soil
    is one `rho` per bus and per branch. The model gives earth potential rises,
    not touch or step voltages and not the potential on the surface.
-3. **One-way coupling.** The phase currents are determined first, on the
-   phase-conductor network, and then drive the shields; the shields do not act
-   back on the split. That is exact when the ratio $k = Z_m/Z_s$ is the same on
-   every branch of each mesh of the phase network, and an approximation
-   otherwise — see
-   [When the split is exact](phase-currents.md#one-way-coupling-when-the-split-is-exact).
+3. **Phase conductor and shield of a branch, coupled.** Per branch the
+   faulted phase conductor and the shield are one 2x2 impedance matrix, both
+   loops with earth return, and phase conductors, shields and electrodes are
+   solved as one system — so the shields act back on the split of the phase
+   current in a mesh with different cables, and the loop current of a
+   Thevenin source is part of the solution — see
+   [Why the shields belong in the split](phase-currents.md#why-the-shields-belong-in-the-split).
+   Mutual coupling between different branches (parallel cables in one
+   trench) is not modelled.
 4. **One phase conductor.** The phase network contains the faulted conductor
    only. In a ring the healthy phases form closed loops of their own, and the
    currents the fault induces in them are not modelled. The size of that

@@ -1,6 +1,6 @@
 # docs/snippets/phase_split.py
 """
-How the phase current divides in a ring, and when the one-way coupling is exact.
+How the phase current divides in a ring, and why it is solved with the shields.
 
 The example of the explanation page "Phase currents in rings and meshes": a
 ring ``S - A - F - B - S`` fed at ``S`` (1 kA, 50 Hz) with the earth fault at
@@ -12,9 +12,12 @@ values: for each construction the shield-earth loop ``Z_s'``, the coupling
 ``Z_red' = Z_pp' - Z_m'^2 / Z_s'`` follows from them.
 
 Every ring is solved three times, with ``phase_impedance_formula`` set to
-``Z_red``, to ``Z_pp`` and left out (the proxy). The test suite solves the
-same rings with a fully coupled multi-conductor model -- phase conductors,
-shields and electrodes in one system -- and compares.
+``Z_red``, to ``Z_pp`` and left out (the proxy), and each time set against
+the one-way current divider of the phase impedances (the split of a
+phase-only network, which ignores what the shields carry). The test suite
+solves the same rings with the fully coupled multi-conductor model of its
+oracle -- phase conductors, shields and electrodes in one system -- and
+compares.
 
 Run it as a script: ``python docs/snippets/phase_split.py``.
 """
@@ -83,23 +86,25 @@ def split(route_2, phase):
     return abs(1000.0 * z_route_2 / (z_route_1 + z_route_2))
 
 
-def epr_at_fault(net):
-    """EPR at the fault bus F in V."""
+def solve(net):
+    """Phase current on route 1 in A and |EPR| at the fault bus F in V."""
     with warnings.catch_warnings():
         # the proxy variant is announced by a ModelAssumptionWarning PHASE_PROXY
         warnings.simplefilter("ignore", gi.ModelAssumptionWarning)
         result = gi.run_fault(net, "F1")
-    return abs(complex(next(b.uepr_freq[50.0] for b in result.buses if b.name == "F")))
+    i_route_1 = abs(complex(net.electrical_network.phase_currents[50.0]["SA"]))
+    u_fault = abs(complex(next(b.uepr_freq[50.0] for b in result.buses if b.name == "F")))
+    return i_route_1, u_fault
 
 
 TABLE = {
-    (label, phase): (split(route_2, phase), epr_at_fault(ring(route_2, phase)))
+    (label, phase): (split(route_2, phase), *solve(ring(route_2, phase)))
     for label, route_2 in (("homogeneous", CABLE), ("mixed", OVERHEAD_LINE))
     for phase in ("Z_red", "Z_pp", "proxy")
 }
 # --8<-- [end:ring]
 
 if __name__ == "__main__":
-    for (label, phase), (i_route_1, u_fault) in TABLE.items():
-        print(f"{label:>11} ring, {phase:>5}: I_p(route 1) = {i_route_1:7.2f} A,"
-              f" |EPR(F)| = {u_fault:8.3f} V")
+    for (label, phase), (one_way, i_route_1, u_fault) in TABLE.items():
+        print(f"{label:>11} ring, {phase:>5}: one-way {one_way:7.2f} A, "
+              f"run_fault I_p(route 1) = {i_route_1:7.2f} A, |EPR(F)| = {u_fault:8.3f} V")

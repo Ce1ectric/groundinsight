@@ -224,7 +224,7 @@ def test_every_column_agrees_with_the_reference_solver(kind):
     i_f_squares, i_e_squares = 0.0, 0.0
     for f, row in per_frequency.items():
         rd = ref.reference_network(net, f, "F1")
-        solution = ref.solve_oneway(rd, thevenin_phase="norton")
+        solution = ref.solve_package(rd)  # the coupled model of run_fault
         mapped = ref.to_package_frame(solution)
         u_f = mapped["u"][rd["fault_bus"]]
         i_f = solution["I_F"]
@@ -235,13 +235,12 @@ def test_every_column_agrees_with_the_reference_solver(kind):
         top_bus = max(mapped["u"], key=lambda b: abs(mapped["u"][b]))
         assert row["EPR_max_bus"] == top_bus
         assert row["EPR_max_V"] == pytest.approx(abs(mapped["u"][top_bus]), rel=TOL)
-        # The earth current as the current into an ideal fault electrode
-        # (the reference shorts the fault bus; current sources only).
-        i_earth = ref.solve_oneway(rd, thevenin_phase="norton", shorted=True)["I_short"]
+        # I_E = U_E / Z_E from the reference's own potential and driving point.
+        z_e = ref.driving_point_impedance(rd, rd["fault_bus"])
+        i_earth = u_f / z_e
         assert row["I_E_A"] == pytest.approx(abs(i_earth), rel=TOL)
         assert row["r"] == pytest.approx(abs(i_earth) / abs(i_f), rel=TOL)
         assert row["U_E_V"] == pytest.approx(abs(u_f), rel=TOL)
-        z_e = ref.driving_point_impedance(rd, rd["fault_bus"])
         assert row["Z_E_Ohm"] == pytest.approx(abs(z_e), rel=TOL)
         assert row["Z_E_degree"] == pytest.approx(_degrees(z_e), abs=1e-9)
         for bus, value in mapped["u"].items():

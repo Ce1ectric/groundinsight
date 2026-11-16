@@ -308,7 +308,6 @@ class ProjectPage:
         self.session: Optional[ProjectSession] = None
         self.handle = None
         self.fault: Optional[str] = None
-        self.mode = "auto"
         self.tab = "plan"
         self.plan = PlanView(self)
         self.types = TypeDialogs(self)
@@ -949,18 +948,12 @@ class ProjectPage:
     # -- results ----------------------------------------------------------------
 
     def _results_panel(self) -> None:
-        """Fault and mode selection, run/cancel, progress, the result view."""
+        """Fault selection, run/cancel, progress, the result view."""
         with ui.row().classes("items-end gap-3 w-full"):
             self.fault_select = ui.select(
                 self.session.fault_names(), value=self.fault, label=self.t("fault"),
                 on_change=self._on_fault_change,
             ).props("outlined dense").classes("w-56").mark("fault-select")
-            ui.select(
-                {"auto": self.t("mode_auto"), "paths": self.t("mode_paths")},
-                value=self.mode,
-                label=self.t("mode"),
-                on_change=lambda e: setattr(self, "mode", e.value),
-            ).props("outlined dense").classes("w-80").mark("mode-select")
             self.run_button = ui.button(self.t("run"), icon="play_arrow", on_click=self._run).mark("run")
             self.run_all_button = ui.button(self.t("run_all"), icon="playlist_play",
                                             on_click=self._run_all).props("outline").mark("run-all")
@@ -995,7 +988,7 @@ class ProjectPage:
         """Solve the chosen fault as a job."""
         if self._busy() or self.fault is None:
             return
-        self.handle = self.session.submit_solve(self.fault, phase_current_mode=self.mode)
+        self.handle = self.session.submit_solve(self.fault)
         self.progress_label.set_text(self.t("running"))
         self._update_busy()
 
@@ -1003,7 +996,7 @@ class ProjectPage:
         """Solve every fault as one job, cancellable between faults."""
         if self._busy():
             return
-        self.handle = self.session.submit(SolveAllRequestDTO(phase_current_mode=self.mode))
+        self.handle = self.session.submit(SolveAllRequestDTO())
         self.progress_label.set_text(self.t("running"))
         self._update_busy()
 
@@ -1095,7 +1088,6 @@ class ProjectPage:
             f"{self.t('revision')} {result.revision if result.revision is not None else DASH}",
             f"{self.t('input_digest')} {(result.input_digest or DASH)[:20]}",
             f"{self.t('duration')} {format_number(duration * 1e3, self.language, 3) if duration else DASH} ms",
-            f"{self.t('mode')}: {result.phase_current_mode or DASH}",
             f"groundinsight {result.groundinsight_version}",
         ]
         ui.label(" · ".join(parts)).classes("text-xs text-gray-500").mark("result-footer")

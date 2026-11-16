@@ -5,18 +5,30 @@ the phase current in every branch. On a radial feeder that current is the
 source current on every branch between source and fault. In ring or meshed
 topologies a single source–fault pair yields multiple routes, and the source
 current has to be *divided* between them. This page explains how
-`groundinsight` divides it, what `phase_impedance_formula` must describe, when
-the result is exact, and what the legacy path-based mode does differently.
+`groundinsight` divides it, what `phase_impedance_formula` must describe, and
+what the deprecated path-based mode does differently.
 
-## The phase-conductor network
+## One coupled solve
 
-The division is the default and is computed, not declared:
-`run_fault(..., phase_current_mode="auto")` solves a reduced
-**phase-conductor** network per source — the fault bus as reference node,
-the source current injected at the source bus — and reads the branch phase
-currents off that solution. The split then follows the topology and the
-conductor impedances, is independent of the order the branches were declared
-in, and needs no user input.
+The division is computed, not declared: `run_fault` solves phase conductors,
+shields and electrodes **together**, in one linear system per frequency. Every
+bus has an earth node (its electrode to remote earth) and a phase node; the
+fault bonds the phase node of the fault bus to its earth node; a current
+source drives its current from the earth node of its bus into the phase node;
+a Thevenin source is its EMF in series with `Z_src` between the two. Per
+branch, the phase conductor (voltage $V$) and the shield (potential $u$) obey,
+both loops with earth return and both currents in the same direction,
+
+$$
+\begin{pmatrix} V_a - V_b \\ u_a - u_b \end{pmatrix}
+= \begin{pmatrix} Z_{pp} & Z_m \\ Z_m & Z_s \end{pmatrix}
+  \begin{pmatrix} I_p \\ I_s \end{pmatrix}.
+$$
+
+The split then follows the topology, the conductors **and** what the shields
+and electrodes carry, is independent of the order the branches were declared
+in, and needs no user input. The loop current of a Thevenin source is part of
+the solution.
 
 The solve runs on the galvanic component of the phase network that contains
 the fault bus; inactive branches and a phase conductor declared open
@@ -29,23 +41,7 @@ code `SOURCE_WITHOUT_PHASE_PATH`.
 
 ## What `phase_impedance_formula` describes
 
-The phase impedance used for that solve comes from
-`BranchType.phase_impedance_formula` (symbols `f`, `rho`, `l`, same as the
-other formulas). It is optional, because in a network without cycles the
-split is fixed by the topology alone and the impedance value cannot change
-it.
-
-Where it matters, it has to be the impedance the one-way model needs. Per
-branch, the phase conductor (voltage $V$) and the shield (potential $u$) obey,
-both loops with earth return and both currents in the same direction,
-
-$$
-\begin{pmatrix} V_a - V_b \\ u_a - u_b \end{pmatrix}
-= \begin{pmatrix} Z_{pp} & Z_m \\ Z_m & Z_s \end{pmatrix}
-  \begin{pmatrix} I_p \\ I_s \end{pmatrix}.
-$$
-
-Eliminating the shield current $I_s$ gives
+Eliminating the shield current $I_s$ from the branch equations gives
 
 $$
 (V_a - k\,u_a) - (V_b - k\,u_b) = Z_\text{red}\, I_p,
@@ -55,23 +51,28 @@ Z_\text{red} = Z_{pp} - \frac{Z_m^2}{Z_s},
 k = \frac{Z_m}{Z_s}.
 $$
 
-`phase_impedance_formula` is therefore the **phase–earth loop impedance with
-the shield bonded at both ends**, $Z_\text{red}$, for a branch with a grounding
+`phase_impedance_formula` is the **phase–earth loop impedance with the shield
+bonded at both ends**, $Z_\text{red}$, for a branch with a grounding
 conductor, and the plain phase–earth loop impedance $Z_{pp}$ for a branch
-without one. It is neither the positive-sequence impedance $R_1 + jX_1$ nor the
+without one. The solve rebuilds $Z_{pp} = Z_\text{red} + Z_m^2/Z_s$ from it, so
+a type carries exactly one phase quantity, the one a data sheet calculation
+gives. It is neither the positive-sequence impedance $R_1 + jX_1$ nor the
 resistance of the conductor alone.
 [Bus and branch types from data sheets](../howto/types-from-datasheets.md#phase-impedance-for-rings-and-meshes)
 computes $Z_\text{red}$ for a real cable.
 
+The formula is optional, because in a network without cycles the split is
+fixed by the topology alone and the impedance value cannot change it.
+
 ## Without the formula: the proxy
 
 Where cycles exist and the formula is missing, the solve falls back to a
-proxy — `1/Z_self` for a branch with a grounding conductor, `1/length` for
-one without — and says so once per solve with a `ModelAssumptionWarning`,
-code `PHASE_PROXY`, that names the branches. Those two quantities are not
-comparable, so the split between routes of different construction is then a
-heuristic. Declare the formula whenever the ring mixes cable and overhead
-line.
+proxy for $Z_\text{red}$ — `Z_self` for a branch with a grounding conductor,
+`length` for one without — and says so once per solve with a
+`ModelAssumptionWarning`, code `PHASE_PROXY`, that names the branches. Those
+two quantities are not comparable, so the split between routes of different
+construction is then a heuristic. Declare the formula whenever the ring mixes
+cable and overhead line.
 
 The warning is raised only where it means something: in a network without a
 cycle around the fault, the proxy cannot change the result, and it stays
@@ -79,16 +80,17 @@ silent. A branch whose shield is broken (`self_impedance_formula="nan"`) keeps
 its phase conductor in the phase network with the length proxy — a broken
 screen does not open the conductor next to it.
 
-## One-way coupling: when the split is exact
+## Why the shields belong in the split
 
-The model determines the phase currents first and lets them drive the shields
-afterwards; the shield currents do not act back on the split. The elimination
-above shows when that is exact. If $k$ has the same value on every branch of a
-mesh, $W = V - k\,u$ is a potential on that mesh, the phase network written in
-$W$ no longer contains the shields, and the split it gives is the split of the
-fully coupled system. If $k$ differs between the routes of a mesh, the term
+A phase-only network with $Z_\text{red}$ — the one-way model, in which the
+phase currents are fixed first and drive the shields afterwards — assumes that
+every shield carries the induced current $k I_p$ and nothing else. The
+elimination above shows when that is exact: if $k$ has the same value on
+every branch of a mesh, $W = V - k\,u$ is a potential on that mesh, the phase
+network written in $W$ no longer contains the shields, and the one-way split
+is the coupled one. If $k$ differs between the routes of a mesh, the term
 $(k_1 - k_2)(u_S - u_F)$ drives a circulating current that the one-way model
-does not see.
+does not see; the coupled solve does.
 
 The example below makes this concrete
 ([`phase_split.py`](../snippets/phase_split.py)). A ring `S – A – F – B – S`
@@ -105,30 +107,29 @@ values:
 --8<-- "docs/snippets/phase_split.py:ring"
 ```
 
-The one-way model divides the source current between the two routes like a
-current divider of their phase impedances; `split` computes that share for
-route 1. The results against a fully coupled multi-conductor model — phase
-conductors, shields and electrodes solved as one system, the test oracle of
-the suite:
+`split` is the one-way current divider of the two routes' phase impedances;
+`solve` reads the phase current and the EPR off `run_fault`. The test suite
+checks `run_fault` against the fully coupled multi-conductor model of its
+oracle:
 
-| Ring | `phase_impedance_formula` | phase current, route 1 | \|EPR\| at `F` | coupled model |
+| Ring | `phase_impedance_formula` | one-way split, route 1 | `run_fault`, route 1 | \|EPR\| at `F` |
 |---|---|---|---|---|
-| homogeneous | `Z_red` | 555.56 A | 205.863 V | 555.56 A, 205.863 V |
-| homogeneous | `Z_pp` | 555.56 A | 205.863 V | |
-| homogeneous | proxy | 555.56 A | 205.863 V | |
-| mixed | `Z_red` | 728.39 A | 310.735 V (+7.4 %) | 764.90 A, 289.231 V |
-| mixed | `Z_pp` | 582.47 A | 298.635 V (+3.3 %) | |
-| mixed | proxy | 653.92 A | 278.187 V (−3.8 %) | |
+| homogeneous | `Z_red` | 555.56 A | 555.56 A | 205.863 V |
+| homogeneous | `Z_pp` | 555.56 A | 555.56 A | 205.863 V |
+| homogeneous | proxy | 555.56 A | 555.56 A | 205.863 V |
+| mixed | `Z_red` | 728.39 A | 764.90 A | 289.231 V |
+| mixed | `Z_pp` | 582.47 A | 612.19 A | 283.011 V |
+| mixed | proxy | 653.92 A | 683.49 A | 264.794 V |
 
-In the homogeneous ring all three choices give the coupled result — any phase
+In the homogeneous ring every choice gives the same result — any phase
 impedance proportional to length divides the current in inverse proportion to
-the route lengths (3.0 km against 2.4 km: 555.56 A on route 1). In the mixed ring none is exact. `Z_red` is the quantity the
-elimination defines and gives the split closest to the coupled one; the
-smaller EPR error of the other two choices in this ring is a cancellation of
-a wrong split against the missing circulating current, not a better model.
-The size and the sign of the error depend on the network; it grows with the
-difference in $k$ between the routes and is largest where a route without an
-earth wire ($k = 0$) runs parallel to a cable.
+the route lengths (3.0 km against 2.4 km: 555.56 A on route 1), and the
+coupling changes nothing. In the mixed ring the one-way split of the correct
+$Z_\text{red}$ is 37 A off and would put the EPR at 310.7 V, 7.4 % too high;
+the coupled solve with $Z_\text{red}$ is the reference result, 764.90 A and
+289.231 V. Declaring $Z_{pp}$ or leaving the proxy is a wrong input for the
+coupled solve as well: it adds $Z_m^2/Z_s$ to a quantity that already contains
+it, or replaces the phase conductor by the shield.
 
 ## One phase conductor
 
@@ -138,10 +139,11 @@ currents in them that couple back to the faulted phase and to the shields.
 The model does not represent them, and the size of the effect has not been
 quantified.
 
-## Enumerated paths and the legacy mode { #path-finding }
+## Enumerated paths and the deprecated mode { #path-finding }
 
-Mutual-coupling injections require a direction. In the legacy
-`phase_current_mode="paths"` `groundinsight` derives that direction by
+Mutual-coupling injections require a direction. In the deprecated
+`phase_current_mode="paths"` (a `DeprecationWarning` on use) `groundinsight`
+derives that direction by
 enumerating every simple path from each source bus to the active fault bus
 via a depth-first search (`PathFinder`). Each path is stored as an ordered
 list of `Branch` objects; its injection signs follow the traversal order.
@@ -152,7 +154,7 @@ list of `Branch` objects; its injection signs follow the traversal order.
     independent loops, not with the number of buses: a 500-bus ring has
     two paths, a 5×5 grid 8 512 and a 6×6 grid 1 262 816 — roughly a
     minute of enumeration against milliseconds in the solver. The default
-    `phase_current_mode="auto"` therefore does **not** enumerate: it only
+    `phase_current_mode="auto"` does **not** enumerate: it only
     needs to know which sources reach the fault, and
     `Network.sources_reaching(...)` answers that with a breadth-first
     search. `network.paths` is empty after a default `run_fault`; call
@@ -171,9 +173,9 @@ exactly. With the cable of the tutorials, $\lvert 1-2k\rvert = 1$ and
 the EPR comes out as if the shields did not couple at all, 2.6 times the
 correct value ([From a line to a ring](../getting-started/ring.md#step-6-why-dividing-the-current-matters)).
 The earthing impedance $Z_E$ is a property of the earthing network alone and
-does not change with the mode. The mode is kept so studies
-produced before 0.6.0 stay reproducible, and for networks where the split is
-known from measurement and set by hand. When a source reaches the fault over
+does not change with the mode. The mode is kept for the deprecation period
+so studies produced before 0.6.0 stay reproducible; it couples a Thevenin
+source with its Norton current `E/Z_src` (`THEVENIN_COUPLING`). When a source reaches the fault over
 more than one path and the coefficients are still at their default, the mode
 says so (`ModelAssumptionWarning`, code `PARALLEL_COEFFICIENT_DEFAULT`).
 
@@ -197,6 +199,4 @@ is then the physically correct answer.
   symmetric ring, the phase impedance and the legacy mode.
 - [Phase currents in meshes](../examples/mesh_phase_currents.ipynb) — the
   example notebook: a line, a ring, two parallel cables and a mesh in both
-  modes, checked against a fully coupled multi-conductor solve; with the same
-  $k$ on every branch the split moves the shield currents but no earth
-  potential.
+  modes, checked against a fully coupled multi-conductor solve.

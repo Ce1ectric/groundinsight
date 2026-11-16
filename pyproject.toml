@@ -122,6 +122,10 @@ filterwarnings = [
     "error::pytest.PytestUnraisableExceptionWarning",
     # Every package warning is asserted or acknowledged, never scrolled past.
     "error::groundinsight.GroundinsightWarning",
+    # The deprecated path mode stays in use as a second model in comparison
+    # tests; its deprecation is pinned by tests/test_coupled_solve.py, where
+    # pytest.warns records it regardless of this filter.
+    "ignore:phase_current_mode='paths' is deprecated:DeprecationWarning",
     # pandapower 3 calls fillna on object columns in its branch and zero-
     # sequence builders, which pandas 2.2 deprecates. Not ours to fix; it
     # surfaces only through the optional pandapower import.

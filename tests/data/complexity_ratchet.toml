@@ -44,7 +44,7 @@ limit = 10
 "electrical_network.py::ElectricalNetwork._assert_finite_system" = 25
 "electrical_network.py::ElectricalNetwork._check_source_coverage" = 16
 
-"electrical_network.py::ElectricalNetwork._compute_phase_currents_auto" = 18
+"electrical_network.py::ElectricalNetwork._compute_phase_currents_one_way" = 18
 "electrical_network.py::ElectricalNetwork._compute_phase_currents_from_paths" = 13
 "electrical_network.py::ElectricalNetwork._dc_substitute_at" = 14
 "electrical_network.py::ElectricalNetwork._report_undefined_reduction_quantities" = 14

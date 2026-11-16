@@ -83,6 +83,7 @@ All quantities are per frequency; callers loop over frequencies.
 from __future__ import annotations
 
 import cmath
+import copy
 import math
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -813,6 +814,54 @@ def solve_coupled(net: dict, R_F: complex = 0.0) -> dict:
 # ---------------------------------------------------------------------------
 # frame mapping and derived quantities
 # ---------------------------------------------------------------------------
+
+
+def package_model(net: dict) -> dict:
+    """A copy of ``net`` with ``zpp`` from the package's phase rules.
+
+    ``run_fault`` takes a branch's declared phase impedance -- or the proxy,
+    see :func:`phase_impedance` -- as ``Z_red`` and builds the coupled model
+    with ``Z_pp = Z_red + Z_ps**2 / Z_ss`` (a branch without intact shield:
+    ``Z_pp = Z_red``). This is that model's input for :func:`solve_coupled`.
+
+    Parameters
+    ----------
+    net : dict
+        Reference network.
+
+    Returns
+    -------
+    dict
+        A deep copy with ``zpp`` filled for every branch.
+    """
+    model = copy.deepcopy(net)
+    for branch in model["branches"].values():
+        z_red = phase_impedance(branch, "declared")
+        zs = branch.get("zs")
+        shield = branch.get("gc", True) and zs is not None and not _isinf(zs)
+        if shield and not _isinf(z_red):
+            branch["zpp"] = z_red + complex(branch["zm"]) ** 2 / complex(zs)
+        else:
+            branch["zpp"] = z_red
+    return model
+
+
+def solve_package(net: dict, R_F: complex = 0.0) -> dict:
+    """The coupled model of ``run_fault``: :func:`solve_coupled` of :func:`package_model`.
+
+    Parameters
+    ----------
+    net : dict
+        Reference network.
+    R_F : complex
+        Fault resistance.
+
+    Returns
+    -------
+    dict
+        As :func:`solve_coupled`.
+    """
+    return solve_coupled(package_model(net), R_F)
 
 
 def to_package_frame(solution: dict) -> dict:

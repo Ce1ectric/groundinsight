@@ -86,9 +86,9 @@ shield currents, and no comparison with another earthing program, is part of
 the package or its documentation. The model assumptions that such a
 comparison would test — and that bound what to expect from it — are:
 
-- the coupling acts one way: the phase current is split first, then drives the
-  shields; this is exact when all routes of a mesh have the same construction
-  and an approximation otherwise ([Phase currents](phase-currents.md#one-way-coupling-when-the-split-is-exact));
+- phase conductor and shield of a branch are coupled through one 2x2
+  impedance matrix and solved together with the electrodes; coupling between
+  different branches is not modelled ([Phase currents](phase-currents.md#why-the-shields-belong-in-the-split));
 - only the faulted phase conductor is modelled, not the healthy phases;
 - electrodes are lumped impedances to remote earth, without resistive coupling
   between neighbouring electrodes;

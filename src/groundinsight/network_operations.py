@@ -718,9 +718,10 @@ def _resolve_phase_current_mode(
     if phase_current_mode not in ("auto", "paths"):
         raise ValueError(
             f"phase_current_mode must be 'auto' or 'paths', got "
-            f"{phase_current_mode!r}. 'auto' solves the phase-conductor network "
-            f"and is the only mode that handles rings and meshes; 'paths' is the "
-            f"pre-0.6 behaviour driven by Branch.parallel_coefficient."
+            f"{phase_current_mode!r}. 'auto' solves phase conductors, shields "
+            f"and earth together and is the only mode that handles rings and "
+            f"meshes; 'paths' is the deprecated pre-0.6 behaviour driven by "
+            f"Branch.parallel_coefficient."
         )
     if auto_parallel_coefficients is not None:
         replacement = "auto" if auto_parallel_coefficients else "paths"
@@ -739,6 +740,17 @@ def _resolve_phase_current_mode(
         warnings.warn(message, DeprecationWarning, stacklevel=warn_stacklevel(3))
         logger.warning("%s", message)
         return bool(auto_parallel_coefficients)
+    if phase_current_mode == "paths":
+        warnings.warn(
+            "phase_current_mode='paths' is deprecated: the path-based phase "
+            "split with Branch.parallel_coefficient is wrong for rings and "
+            "meshes. phase_current_mode='auto' (the default) solves phase "
+            "conductors, shields and earth together. The mode goes no earlier "
+            "than two releases and six months after the release that "
+            "deprecated it.",
+            DeprecationWarning,
+            stacklevel=warn_stacklevel(3),
+        )
     return phase_current_mode == "auto"
 
 
@@ -850,11 +862,18 @@ def run_fault(
     phase_current_mode : {"auto", "paths"}, optional
         How the phase current per branch is determined.
 
-        ``"auto"`` (default) solves a reduced phase-conductor network per
-        source with the fault bus as reference and reads the branch
-        currents off that solution. This is the only mode that splits the
-        source current correctly over rings, meshes and parallel
-        branches, and it ignores ``Branch.parallel_coefficient``.
+        ``"auto"`` (default) solves phase conductors, shields and
+        electrodes as one system per frequency: per branch the 2x2
+        impedance matrix of shield and phase conductor (``Z_pp = Z_red +
+        Z_m**2 / Z_s`` from the type's ``phase_impedance_formula``), the
+        fault bonding the phase conductor to the earth of the fault bus,
+        a Thevenin source in series with its ``source_impedance``. The
+        split over rings, meshes and parallel branches follows from it --
+        including what the shields carry -- and so does the loop current of
+        a Thevenin source; ``Branch.parallel_coefficient`` is ignored. In a
+        network without a mesh and without a Thevenin source the phase
+        currents are the source currents, and nothing else is solved for
+        them.
 
         ``"paths"``: every branch on any enumerated source-to-fault path
         receives the *full* source current scaled by its
@@ -863,9 +882,9 @@ def run_fault(
         at the default coefficient of 1.0, the coupled injections add up to
         ``(1 - 2k) I`` instead of ``(1 - k) I`` (``k = Z_m / Z_s``). That
         collapses the EPR to 0 for ``k = 0.5`` and, where ``|1 - 2k| = 1``,
-        reports it as if the shields did not couple at all. Kept for
-        reproducing studies made with this scheme and for networks where the
-        split is known from measurement and set by hand.
+        reports it as if the shields did not couple at all. Deprecated
+        (``DeprecationWarning``); kept for the deprecation period to
+        reproduce studies made with this scheme.
 
     Returns
     -------

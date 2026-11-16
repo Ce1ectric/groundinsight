@@ -26,18 +26,20 @@ injected as +i_mut out of the from bus (nodal: i_vector[from] -= i_mut) and
 
 Two strategies are available to determine the phase current I_p per branch:
 1) Path-based (``auto_phase_currents=False``, the default of this class;
-   ``run_fault(phase_current_mode="paths")``). For every simple path from
+   ``run_fault(phase_current_mode="paths")``, deprecated). For every simple path from
    source to fault, the branch direction is derived from the actual path
    traversal (no index heuristic). The user may scale the contribution per
    branch via Branch.parallel_coefficient, the knob for splitting current
    between parallel paths in this mode.
-2) Automatic distribution (``auto_phase_currents=True``; the default of
-   :func:`~groundinsight.run_fault`, ``phase_current_mode="auto"``). A
-   reduced phase-only network is solved with +I at each source bus and the
-   fault bus as reference. The resulting branch currents are used directly.
-   In this mode parallel_coefficient is ignored. This mode is
-   topology-agnostic and is the intended integration point for an external
-   phase-current source (e.g. pandapower single-phase short-circuit results).
+2) The coupled solve (``auto_phase_currents=True``; the default of
+   :func:`~groundinsight.run_fault`, ``phase_current_mode="auto"``). Phase
+   conductors, shields and electrodes are one linear system per frequency
+   (:meth:`ElectricalNetwork._compute_phase_currents_auto`); the phase
+   currents it gives drive the Norton injections above, and the earth
+   potentials are its own. Where the phase network around the fault has no
+   mesh with coupling and no Thevenin source, the phase currents are the
+   source currents and the phase-only network gives them exactly. In this
+   mode parallel_coefficient is ignored.
 
 Sparse kernel
 -------------
@@ -89,14 +91,15 @@ import hashlib
 import logging
 import math
 import threading
+import warnings
 from collections.abc import Mapping
 from contextlib import contextmanager
 
 import numpy as np
 from typing import Dict, Iterator, List, NamedTuple, Optional, Tuple
-from scipy.sparse import csc_matrix, csr_matrix, issparse
+from scipy.sparse import coo_matrix, csc_matrix, csr_matrix, issparse
 from scipy.sparse.csgraph import connected_components
-from scipy.sparse.linalg import splu
+from scipy.sparse.linalg import MatrixRankWarning, splu
 from groundinsight.models.core_models import (
     Network,
     Branch,
@@ -781,6 +784,62 @@ def _extra_entries(
     return extras
 
 
+class _CoupledStamps:
+    """Stamps of the coupled phase/earth system, summed into one CSC matrix.
+
+    Parameters
+    ----------
+    n : int
+        Number of earth nodes (the active buses); the phase nodes follow.
+    """
+
+    def __init__(self, n: int):
+        self.n = n
+        self.rows: List[np.ndarray] = []
+        self.cols: List[np.ndarray] = []
+        self.values: List[np.ndarray] = []
+
+    def add(self, rows: np.ndarray, cols: np.ndarray, values: np.ndarray) -> None:
+        """Add ``values`` at ``(rows, cols)``."""
+        self.rows.append(np.asarray(rows, dtype=np.int64))
+        self.cols.append(np.asarray(cols, dtype=np.int64))
+        self.values.append(np.asarray(values, dtype=complex))
+
+    def pair(self, i_a, i_b, j_a, j_b, y) -> None:
+        """Stamp the admittance ``y`` between two conductors.
+
+        Conductor ``i`` runs from node ``i_a`` to ``i_b``, conductor ``j``
+        from ``j_a`` to ``j_b``: ``+y`` at (i_a, j_a) and (i_b, j_b), ``-y`` at
+        (i_a, j_b) and (i_b, j_a). Zero entries drop out.
+        """
+        y = np.asarray(y, dtype=complex)
+        keep = y != 0
+        i_a, i_b, j_a, j_b, y = (np.asarray(v)[keep] for v in (i_a, i_b, j_a, j_b, y))
+        self.add(np.concatenate([i_a, i_b, i_a, i_b]), np.concatenate([j_a, j_b, j_b, j_a]),
+                 np.concatenate([y, y, -y, -y]))
+
+    def matrix(self, size: int, diagonal: np.ndarray) -> csc_matrix:
+        """The summed matrix, ``size x size``, with ``diagonal`` on the earth nodes.
+
+        Parameters
+        ----------
+        size : int
+            Number of nodes.
+        diagonal : numpy.ndarray
+            The grounding admittance of every earth node, stamped first.
+
+        Returns
+        -------
+        scipy.sparse.csc_matrix
+            The matrix; the same stamps in the same order give the same bits.
+        """
+        earth = np.arange(self.n, dtype=np.int64)
+        rows = np.concatenate([earth] + self.rows)
+        cols = np.concatenate([earth] + self.cols)
+        values = np.concatenate([np.asarray(diagonal, dtype=complex)] + self.values)
+        return coo_matrix((values, (rows, cols)), shape=(size, size)).tocsc()
+
+
 class _NetworkTables:
     """Everything one assembly reads from the model, gathered into arrays.
 
@@ -1124,8 +1183,8 @@ class ElectricalNetwork:
     network : Network
         The Network instance containing buses, branches, sources, and faults.
     auto_phase_currents : bool, optional
-        If True the phase current through each
-        branch is computed by solving a reduced phase-only network (Variant B).
+        If True the phase current through each branch comes from the
+        coupled solve of phase conductors, shields and electrodes (Variant B).
         If False (default) the phase current is derived from the enumerated
         source-to-fault paths using each branch's ``parallel_coefficient``
         (Variant A). Defaults to False.
@@ -1225,6 +1284,21 @@ class ElectricalNetwork:
         # no lumped conductor carries them into the node.
         self.source_injections = {}
         self.phase_currents = {}  # Signed phase current per branch per frequency
+        # Per Thevenin source and frequency, from the coupled solve
+        # (phase_current_mode="auto"): its loop current and the earth-side
+        # injection that carries it; see _compute_phase_currents_auto.
+        self.thevenin_currents: Dict[float, Dict[str, Tuple[complex, complex]]] = {}
+        # False once a frequency needed the coupled solve: its phase currents
+        # then depend on the bus impedances (analysis/_session.py re-solves
+        # the coupled system for such a frequency).
+        self.phase_split_fixed = True
+        # The coupled systems of the frequencies that needed one (stamps
+        # without the electrodes, right-hand side, size), and the earth
+        # potentials they give in the package frame: solve_network takes them,
+        # so a study session that re-solves the system with other electrodes
+        # (coupled_solution) gets the same numbers as run_fault.
+        self._coupled_systems: Dict[float, Tuple[_CoupledStamps, np.ndarray, int]] = {}
+        self.coupled_potentials: Dict[float, np.ndarray] = {}
         # One-shot latch so the phase-impedance proxy warning is emitted once
         # per network, not once per frequency of the sweep.
         self._phase_proxy_warned = False
@@ -2069,7 +2143,9 @@ class ElectricalNetwork:
             # The run_fault checks of the input (see ``input_checks``).
             self._check_source_coverage(sources_with_path, fault)
             self._warn_incomplete_scalings(fault)
-            self._warn_thevenin_coupling(sources_with_path, fault)
+            if not self.auto_phase_currents:
+                # The coupled solve of "auto" carries the loop current.
+                self._warn_thevenin_coupling(sources_with_path, fault)
 
         for freq in frequencies:
             u_vector = np.zeros(self.num_buses, dtype=complex)
@@ -2084,6 +2160,18 @@ class ElectricalNetwork:
             # for current and voltage sources: +I at source bus, -I at fault bus.
             # For voltage sources I is the Norton-equivalent ``I_N = scaling*U/Z_src``;
             # the corresponding ``Y_src`` loop closure has already been added to Y.
+            # Phase currents per branch at this frequency. First, because the
+            # coupled solve also gives the loop current of a Thevenin source.
+            phase_currents = self.compute_phase_currents(freq, sources_with_path)
+            self.phase_currents[freq] = phase_currents
+            loops = self.thevenin_currents.get(freq, {})
+
+            # ``effective`` is what each source drives into the earthing
+            # system: its current, or the loop current of a Thevenin source
+            # from the coupled solve. ``i_vector`` carries the injection that
+            # gives it, with the loop closure of the Thevenin source in Y.
+            effective = np.zeros(self.num_buses, dtype=complex)
+            total_injection = 0j
             for source_name in sources_with_path:
                 source = self.network.sources[source_name]
                 if source.bus not in self.bus_indices:
@@ -2093,22 +2181,24 @@ class ElectricalNetwork:
                 injection = self._source_injection(source, freq, scaling)
                 if injection is None:
                     continue
-                total_source_current += injection
+                current = injection
+                if source_name in loops:
+                    current, injection = loops[source_name]
+                total_source_current += current
+                total_injection += injection
                 i_vector[bus_idx] += injection
+                effective[bus_idx] += current
 
-            i_vector[fault_bus_idx] -= total_source_current
+            i_vector[fault_bus_idx] -= total_injection
+            effective[fault_bus_idx] -= total_source_current
             self.total_source_currents[freq] = total_source_current
 
-            # Snapshot of the source-only injection, taken *before*
-            # ``_add_mutual_currents`` mutates ``i_vector`` in place. This is the
-            # current a lumped earthing conductor carries into (source buses) or
-            # out of (fault bus) the grounding system; see the attribute comment
-            # in ``__init__`` for why the mutual terms must not be included.
-            self.source_injections[freq] = i_vector.copy()
-
-            # Phase currents per branch at this frequency
-            phase_currents = self.compute_phase_currents(freq, sources_with_path)
-            self.phase_currents[freq] = phase_currents
+            # The source-only injection, before ``_add_mutual_currents``
+            # mutates ``i_vector`` in place: the current a lumped earthing
+            # conductor carries into (source buses) or out of (fault bus) the
+            # grounding system; see the attribute comment in ``__init__`` for
+            # why the mutual terms must not be included.
+            self.source_injections[freq] = effective
 
             # Mutual Norton injections on top
             self._add_mutual_currents(i_vector, freq, phase_currents)
@@ -2373,6 +2463,30 @@ class ElectricalNetwork:
             tables.mutual_present & self_usable & (tables.mutual != 0)
         ).any(axis=1) & in_grid
         return [tables.branch_names[row] for row in np.flatnonzero(coupled).tolist()]
+
+    def _source_admittance(self, source: Source, freq: float) -> Optional[complex]:
+        """
+        ``1/Z_src`` of a Thevenin source at ``freq``, as the loop closure stamps it.
+
+        Parameters
+        ----------
+        source : Source
+            Any source.
+        freq : float
+            Frequency in Hz.
+
+        Returns
+        -------
+        complex or None
+            ``None`` for a current source and where no finite source
+            impedance is stored.
+        """
+        if source.source_type != "voltage" or source.source_impedance is None:
+            return None
+        z_src = self.resolved_impedance(source.source_impedance.get(freq), freq)
+        if z_src is None or _is_open_circuit(z_src):
+            return None
+        return 1.0 / z_src
 
     def _source_injection(
         self, source: Source, freq: float, scaling: float
@@ -2737,8 +2851,335 @@ class ElectricalNetwork:
     def _compute_phase_currents_auto(
         self, freq: float, sources_with_path
     ) -> Dict[str, complex]:
+        r"""
+        The phase currents of the coupled multi-conductor model.
+
+        Phase conductors, shields and electrodes are solved together in one
+        linear system per frequency: every bus has an earth node (its
+        electrode to remote earth) and a phase node, the fault bonds the phase
+        node of the fault bus to its earth node, a current source drives its
+        current from the earth node of its bus into the phase node, and a
+        Thevenin source is its EMF in series with ``Z_src`` between the two.
+        A branch with shield and phase conductor is the 2x2 impedance matrix
+
+        $$
+        \begin{pmatrix} Z_s & Z_m \\ Z_m & Z_{pp} \end{pmatrix},
+        \qquad Z_{pp} = Z_{red} + \frac{Z_m^2}{Z_s},
+        $$
+
+        both loops with earth return; its admittance matrix is
+        ``[[1/Z_s + k^2/Z_red, -k/Z_red], [-k/Z_red, 1/Z_red]]`` with
+        ``k = Z_m/Z_s``. ``Z_red`` is the type's phase impedance (or the
+        documented proxy, :meth:`_phase_admittances`), so the types stay as
+        they are. A branch without grounding conductor or with an open shield
+        is its phase conductor alone, a branch with an open phase conductor
+        its shield alone.
+
+        Why: the phase-only network with ``Z_red`` assumes that every shield
+        carries the induced current ``k I_p`` and nothing else. The galvanic
+        shield currents of a mesh with different cables -- and the earthing
+        of the stations -- shift the phase split; on a 20 kV ring with two
+        cable types the EPR moved by about 1 %. With one cable type per mesh
+        and in every radial network the two agree exactly. The phase currents
+        returned here are the coupled ones; :meth:`_add_mutual_currents` and
+        the earth-side solve then reproduce the coupled earth potentials
+        exactly, because given the phase currents the earth equations are the
+        same. The loop current of a Thevenin source is part of the solution;
+        it and the earth-side injection that carries it are kept in
+        :attr:`thevenin_currents`.
+
+        Where the coupled system is singular -- a group of buses whose only
+        path to remote earth is missing -- the split of the phase network
+        alone (:meth:`_compute_phase_currents_one_way`) is used, and the
+        earth-side solve reports the group as it always has.
+
+        Parameters
+        ----------
+        freq : float
+            Frequency at which to solve.
+        sources_with_path : Iterable[str]
+            Sources contributing to the active fault.
+
+        Returns
+        -------
+        Dict[str, complex]
+            Signed phase current per branch (from -> to positive).
         """
-        Variant B: solve a reduced phase-only network to split source currents over parallel paths.
+        one_way = self._compute_phase_currents_one_way(freq, sources_with_path)
+        if not self._coupling_matters(freq):
+            return one_way
+        coupled = self._solve_coupled(freq, sources_with_path)
+        if coupled is None:
+            return one_way
+        phase_currents, loop_currents = coupled
+        self.thevenin_currents[freq] = loop_currents
+        self.phase_split_fixed = False
+        return phase_currents
+
+    def _coupling_matters(self, freq: float) -> bool:
+        """
+        ``False`` where the coupled phase split equals the one-way one exactly.
+
+        Without a mesh in the phase network around the fault bus -- or without
+        any phase-shield coupling in it, as at 0 Hz -- the phase currents do
+        not depend on the shields and electrodes -- unless a Thevenin source
+        sits in that network,
+        whose loop current depends on the earth potentials. There the split of
+        the phase network is returned as it is, bit for bit, and the phase
+        currents do not depend on the bus impedances
+        (:attr:`phase_split_fixed`).
+
+        Parameters
+        ----------
+        freq : float
+            Frequency in Hz.
+
+        Returns
+        -------
+        bool
+            ``True`` if the coupled system has to be solved.
+        """
+        fault = self.network.faults[self.network.active_fault]
+        fault_idx = self.bus_indices[fault.bus]
+        n = self.num_buses
+        tables = self._network_tables()
+        column = tables.column[float(freq)]
+        rows = np.flatnonzero(tables.branch_in_net)
+        y_red, _, _ = self._phase_admittances(tables, column)
+        phase = y_red != 0
+        ends_a, ends_b = tables.branch_from[rows][phase], tables.branch_to[rows][phase]
+        graph = csr_matrix((np.ones(ends_a.size), (ends_a, ends_b)), shape=(n, n))
+        _, labels = connected_components(graph, directed=False)
+        in_component = labels == labels[fault_idx]
+        # A mesh matters only where a phase conductor in it couples to its
+        # shield (at 0 Hz Z_m is zero: the phase network is then on its own).
+        z_mutual = tables.mutual[rows, column][phase]
+        coupling = (
+            tables.branch_grounding[rows][phase]
+            & tables.mutual_present[rows, column][phase]
+            & (z_mutual != 0)
+            & in_component[ends_a]
+        )
+        meshed = coupling.any() and int(in_component[ends_a].sum()) > int(in_component.sum()) - 1
+        thevenin = any(
+            source.source_type == "voltage"
+            and self.bus_indices.get(source.bus) is not None
+            and self.bus_indices[source.bus] != fault_idx
+            and in_component[self.bus_indices[source.bus]]
+            for source in self.network.sources.values()
+        )
+        return meshed or thevenin
+
+    def coupled_solution(self, freq: float, y_bus: np.ndarray) -> Optional[np.ndarray]:
+        """
+        Solve the coupled system of ``freq`` for given grounding admittances.
+
+        Internal API: also used by :mod:`groundinsight.analysis._session`,
+        whose trials change nothing but the electrodes -- the diagonal of the
+        earth nodes. Not exported and free to change in any release.
+
+        Parameters
+        ----------
+        freq : float
+            A frequency at which :meth:`_solve_coupled` assembled a system.
+        y_bus : numpy.ndarray
+            Grounding admittance per active bus.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            Earth node potentials (physical frame) followed by the phase
+            nodes; ``None`` if the system is singular or the solution not
+            finite.
+        """
+        stamps, rhs, size = self._coupled_systems[freq]
+        matrix = stamps.matrix(size, y_bus)
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", MatrixRankWarning)
+                factor = splu(matrix)
+                x = factor.solve(rhs)
+                # One step of iterative refinement: the phase and earth nodes
+                # of a long feeder make the system a Laplacian with condition
+                # of order n**2, and the step brings the phase currents back to
+                # the accuracy the phase-only network had.
+                x = x + factor.solve(rhs - matrix @ x)
+        except (RuntimeError, MatrixRankWarning):
+            return None
+        if not np.all(np.isfinite(x)):
+            return None
+        return x
+
+    def _solve_coupled(
+        self, freq: float, sources_with_path
+    ) -> Optional[Tuple[Dict[str, complex], Dict[str, Tuple[complex, complex]]]]:
+        """
+        Assemble and solve the coupled system of one frequency.
+
+        See :meth:`_compute_phase_currents_auto` for the model. The system is
+        assembled in the physical frame (``+I_F`` into the earth node of the
+        fault bus); the phase currents it returns are signed from -> to like
+        those of the phase network.
+
+        Parameters
+        ----------
+        freq : float
+            Frequency in Hz.
+        sources_with_path : Iterable[str]
+            Sources contributing to the active fault.
+
+        Returns
+        -------
+        tuple of (dict, dict) or None
+            Phase current per branch, and per Thevenin source in the phase
+            network its loop current and the injection of the earth-side
+            system that carries it; ``None`` when nothing feeds the phase
+            network or the system is singular.
+        """
+        fault = self.network.faults[self.network.active_fault]
+        fault_idx = self.bus_indices[fault.bus]
+        n = self.num_buses
+        tables = self._network_tables()
+        column = tables.column[float(freq)]
+        rows = np.flatnonzero(tables.branch_in_net)
+        y_red, _, _ = self._phase_admittances(tables, column)
+        ends_a, ends_b = tables.branch_from[rows], tables.branch_to[rows]
+        z_self = tables.self_z[rows, column]
+        shield = (
+            tables.branch_grounding[rows]
+            & tables.self_present[rows, column]
+            & ~_open_mask(z_self)
+        )
+        y_shield = _reciprocal(z_self, shield)
+        z_mutual = np.where(
+            shield & tables.mutual_present[rows, column], tables.mutual[rows, column], 0.0
+        )
+
+        # The phase nodes of the component around the fault bus; the phase
+        # node of the fault bus is its earth node (the fault bond).
+        phase = y_red != 0
+        graph = csr_matrix(
+            (np.ones(int(phase.sum())), (ends_a[phase], ends_b[phase])), shape=(n, n)
+        )
+        _, labels = connected_components(graph, directed=False)
+        in_component = labels == labels[fault_idx]
+        phase &= in_component[ends_a]
+        node = np.full(n, -1, dtype=np.int64)
+        others = np.flatnonzero(in_component & (np.arange(n) != fault_idx))
+        node[others] = n + np.arange(others.size)
+        node[fault_idx] = fault_idx
+        size = n + others.size
+
+        k = np.where(phase, z_mutual * y_shield, 0.0)
+        y_pp = np.where(phase, y_red, 0.0)
+        y_sp = -k * y_pp
+        y_ss = y_shield + k * k * y_pp
+        stamps = _CoupledStamps(n)
+        stamps.pair(ends_a, ends_b, ends_a, ends_b, y_ss)
+        p_a, p_b = np.where(phase, node[ends_a], 0), np.where(phase, node[ends_b], 0)
+        stamps.pair(p_a, p_b, p_a, p_b, y_pp)
+        stamps.pair(ends_a, ends_b, p_a, p_b, y_sp)
+        stamps.pair(p_a, p_b, ends_a, ends_b, y_sp)
+
+        rhs = np.zeros(size, dtype=complex)
+        thevenin = self._coupled_sources(
+            freq, set(sources_with_path), stamps, rhs, node, in_component, fault_idx
+        )
+        if not rhs.any():
+            return None
+        self._coupled_systems[freq] = (stamps, rhs, size)
+        x = self.coupled_solution(freq, bus_admittances(tables.bus_z, tables.bus_present)[:, column])
+        if x is None:
+            del self._coupled_systems[freq]
+            return None
+        self.coupled_potentials[freq] = -x[:n]
+
+        phase_potential = np.zeros(n, dtype=complex)
+        phase_potential[in_component] = x[node[in_component]]
+        i_phase = y_sp * (x[ends_a] - x[ends_b]) + np.where(
+            phase, y_pp * (phase_potential[ends_a] - phase_potential[ends_b]), 0.0
+        )
+        currents = {name: 0.0 + 0.0j for name in self.network.branches}
+        for b, value in zip(rows, i_phase.tolist(), strict=True):
+            currents[tables.branch_names[b]] = value
+        # The earth-side system carries the loop closure 1/Z_src between the
+        # source bus and the fault bus (package frame u = -x). The injection
+        # that makes its effective source current the coupled loop current
+        # is I_loop + Y_src (u_S - u_F).
+        loops = {}
+        for name, (p, e, norton, y_src) in thevenin.items():
+            loop = complex(norton - y_src * (x[p] - x[e]))
+            loops[name] = (loop, loop + y_src * complex(x[fault_idx] - x[e]))
+        return currents, loops
+
+    def _coupled_sources(
+        self, freq: float, feeding: set, stamps: _CoupledStamps, rhs: np.ndarray,
+        node: np.ndarray, in_component: np.ndarray, fault_idx: int,
+    ) -> Dict[str, Tuple[int, int, complex, complex]]:
+        """
+        Stamp the sources into the coupled system of :meth:`_solve_coupled`.
+
+        A current source drives its current from its earth node into its
+        phase node; a Thevenin source is ``E/Z_src`` with ``1/Z_src`` between
+        the two. A source outside the phase component feeds no phase
+        current: its current is injected between its earth node and the
+        fault's, as in the earth-side system (``SOURCE_WITHOUT_PHASE_PATH``).
+        Every Thevenin source closes its loop, as in the earth-side matrix
+        (:meth:`thevenin_loop_admittances`), fed or not.
+
+        Parameters
+        ----------
+        freq : float
+            Frequency in Hz.
+        feeding : set of str
+            Sources that reach the active fault.
+        stamps : _CoupledStamps
+            The system, extended in place.
+        rhs : numpy.ndarray
+            Its right-hand side, extended in place.
+        node : numpy.ndarray
+            Phase node per bus (the fault's is its earth node; ``-1`` outside
+            the component).
+        in_component : numpy.ndarray
+            Buses of the phase component of the fault bus.
+        fault_idx : int
+            Row of the fault bus.
+
+        Returns
+        -------
+        dict
+            Per Thevenin source in the component: ``(phase node, earth node,
+            Norton current, 1/Z_src)``.
+        """
+        scaling = self.network.faults[self.network.active_fault].scaling_at(freq)
+        thevenin: Dict[str, Tuple[int, int, complex, complex]] = {}
+        for name, source in self.network.sources.items():
+            bus = self.bus_indices.get(source.bus)
+            if bus is None:
+                continue
+            phase_node = int(node[bus]) if in_component[bus] else fault_idx
+            y_src = self._source_admittance(source, freq) if bus != fault_idx else None
+            if y_src is not None:
+                stamps.pair(np.array([phase_node]), np.array([bus]),
+                            np.array([phase_node]), np.array([bus]), np.array([y_src]))
+            norton = self._source_injection(source, freq, scaling) if name in feeding else None
+            if norton is None:
+                continue
+            rhs[phase_node] += norton
+            rhs[bus] -= norton
+            if y_src is not None and in_component[bus]:
+                thevenin[name] = (phase_node, int(bus), norton, y_src)
+        return thevenin
+
+    def _compute_phase_currents_one_way(
+        self, freq: float, sources_with_path
+    ) -> Dict[str, complex]:
+        """
+        The phase split of the phase-only network with ``Z_red`` (one-way coupling).
+
+        The fallback of :meth:`_compute_phase_currents_auto` where the coupled
+        system is singular, and the place where the proxy and the sources
+        without phase path are reported.
 
         The phase-side admittance of each branch is the declared phase
         impedance, or the documented proxy ``1 / Z_self`` when a grounding
@@ -3510,7 +3951,11 @@ class ElectricalNetwork:
                 raise ValueError(f"{singular_msg} Original solver error: {e}") from e
             if not np.all(np.isfinite(u_vector)):
                 raise ValueError(singular_msg)
-            self.u_vectors[freq] = u_vector
+            # Where the coupled system was solved, its earth potentials are the
+            # solution (the nodal system with the coupled phase currents gives
+            # the same to rounding; the coupled one is what a study session
+            # re-solves, so both report the same bits).
+            self.u_vectors[freq] = self.coupled_potentials.get(freq, u_vector)
             # Keep the factorisation: ``compute_reduction_factors`` solves the
             # *same* Y with a second right-hand side (the injection without the
             # mutual Norton terms). Re-using the factor turns that second solve
