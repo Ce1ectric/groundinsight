@@ -107,6 +107,7 @@ def test_tables_export_and_import_round_trip(tmp_path, monkeypatch):
     # Second way: the library's own reader of the same directory.
     direct = gi.network_from_tables(str(tmp_path / "tables"))
     assert again.network.model_dump_json() == direct.model_dump_json()
+    assert again.import_diagnostics == []  # a clean round trip reports nothing
     assert set(again.network.buses) == set(session.network.buses)
     for name, bus in again.network.buses.items():
         assert bus.impedance == session.network.buses[name].impedance
@@ -129,6 +130,14 @@ def test_a_pandapower_net_is_imported_with_the_catalogue_types(tmp_path):
         direct = gi.from_pandapower(pp.from_json(str(path)), defaults=defaults, voltage_level_kV=20.0)
     assert imported.network.model_dump_json() == direct.model_dump_json()
     assert imported.location is None and len(imported.network.buses) > 0
+    # What the importer reported travels with the new session, for a front end to show.
+    # Second way: the same import under the library's own collector.
+    with warnings.catch_warnings(), gi.diagnostics.collecting() as records:
+        warnings.simplefilter("ignore")
+        gi.from_pandapower(pp.from_json(str(path)), defaults=defaults, voltage_level_kV=20.0)
+    expected = [(d.code, d.message) for d in gi.diagnostics.unique(records)]
+    assert expected and [(d.code, d.message) for d in imported.import_diagnostics] == expected
+    assert session.import_diagnostics == []  # a session that was not imported has none
     with pytest.raises(api.ProjectError, match="bus type"):
         session.import_pandapower(str(path), voltage_level_kV=20.0, rho=150.0, bus_type="nope",
                                   branch_type="NA2XS_300_25")

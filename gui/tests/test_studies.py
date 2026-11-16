@@ -298,3 +298,6 @@ async def test_pandapower_import(user: User, tmp_path):
                                  default_branch_type=old.network.branches["L_01_02"].type)
     direct = _quiet(gi.from_pandapower, pp.from_json(str(path)), defaults=defaults, voltage_level_kV=20.0)
     assert imported.model_dump_json() == direct.model_dump_json()
+    # The importer's reports (a transformer and a bus-to-bus switch are skipped) reach the user.
+    codes = [d.code for d in page.session.import_diagnostics]
+    assert codes and all(user.notify.contains(code) for code in codes)

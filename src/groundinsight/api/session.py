@@ -69,6 +69,7 @@ from .schemas import (
     CharacteristicDTO,
     CheckReportDTO,
     CommandResultDTO,
+    DiagnosticDTO,
     DiagramDTO,
     FaultResultDTO,
     FaultResultsDTO,
@@ -643,6 +644,7 @@ class ProjectSession:
         self._result_mode: Dict[str, Optional[str]] = {}
         self._handles: List[JobHandle] = []
         self._closed = False
+        self._import_diagnostics: List[DiagnosticDTO] = []
 
     # -- construction ---------------------------------------------------------
 
@@ -707,8 +709,9 @@ class ProjectSession:
         """
         directory = _expand_path(directory)
         try:
-            network = gi.network_from_tables(directory)
-            return cls(network, **options)
+            with collecting() as records:
+                network = gi.network_from_tables(directory)
+            return cls(network, **options)._imported(records)
         except (OSError, ValueError) as exc:
             raise ProjectError(f"cannot import '{directory}': {rejection_reason(exc)}") from exc
 
@@ -808,8 +811,9 @@ class ProjectSession:
             import pandapower
 
             net = pandapower.from_json(path)
-            network = gi.from_pandapower(net, defaults=defaults, voltage_level_kV=voltage_level_kV)
-            return type(self)(network, **options)
+            with collecting() as records:
+                network = gi.from_pandapower(net, defaults=defaults, voltage_level_kV=voltage_level_kV)
+            return type(self)(network, **options)._imported(records)
         except ImportError as exc:
             raise ProjectError(f"cannot import '{path}': pandapower is not installed "
                                "(pip install 'groundinsight[pandapower]')") from exc
@@ -985,6 +989,30 @@ class ProjectSession:
             The limits the session was opened with.
         """
         return self._limits
+
+    def _imported(self, records: List[gi.Diagnostic]) -> "ProjectSession":
+        """Keep what the importer reported; returns ``self``."""
+        self._import_diagnostics = [diagnostic_dto(d) for d in unique(records)]
+        return self
+
+    @property
+    def import_diagnostics(self) -> List[DiagnosticDTO]:
+        """
+        What the library reported while this project was imported.
+
+        An importer cannot always map every element: a pandapower
+        transformer, a bus-to-bus switch or an open line switch is skipped or
+        changed, and the library says so as a warning. A front end shows these
+        when it opens the new project; they belong to no command and no
+        result, so the session keeps them here.
+
+        Returns
+        -------
+        list of DiagnosticDTO
+            In the order raised, repetitions dropped; empty for a project that
+            was opened or created rather than imported.
+        """
+        return list(self._import_diagnostics)
 
     @property
     def location(self) -> Optional[str]:

@@ -1125,6 +1125,8 @@ class ProjectPage:
         except ValueError as exc:  # ProjectError is a ValueError
             ui.notify(f"{self.t('open_failed')}: {exc}", type="negative", multi_line=True)
             return
+        # What the importer skipped or changed; notified while the dialog's slot still exists.
+        self._notify_diagnostics(session.import_diagnostics)
         dialog.close()
         self._replace_session(session)
 

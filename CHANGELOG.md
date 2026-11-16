@@ -193,6 +193,9 @@ version section when a release is cut.
   `ProjectSession.export_tables(directory)`, `ProjectSession.from_tables` and
   `ProjectSession.import_pandapower(path, ...)` (frequencies and types from
   the session's catalogue); `~` and environment variables are expanded.
+  `ProjectSession.import_diagnostics` keeps what the importer reported
+  (skipped transformers and switches, open line switches); the GUI shows
+  them when the imported project opens.
 - **GUI: every function of groundinsight.** A *Calculation* menu runs single
   and all faults, the check, outage study, rho-f variation with statistics,
   cuts, bus response, the largest admissible rho scaling, the thermal check,
