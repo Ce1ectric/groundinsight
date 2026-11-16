@@ -28,7 +28,7 @@ The last command opens `http://127.0.0.1:8080` in the browser
 
 ## 1. Start from a template
 
-![The start page with three templates and a field to open a project file](img/gui-start.png)
+![The start page with four templates and a field to open a project file](img/gui-start.png)
 
 Click **Quickstart**. The template is the network of the first tutorial:
 `bus_source` with the infeed (the blue triangle), `bus_fault` with the fault
@@ -58,6 +58,14 @@ and *Length / km* to `3`; **Apply**.
 Every change is one step of the service layer: **Undo** and **Redo** in the
 toolbar take it back and forth, and a change the library refuses — a
 duplicate name, a negative length — is not applied and says why.
+
+!!! tip "Other types"
+
+    The **+** next to *Type of new buses* and *Type of new branches* adds a
+    type from the [standard library](../reference/standard-types.md) — 20 kV
+    cable systems, NAYY cables, typical earth electrodes — and makes it the
+    type of new elements. The template **Empty project** starts without any
+    element; the network tab's type tables create, edit and copy types.
 
 ## 3. Put a fault at the new station
 

@@ -208,23 +208,28 @@ def build_mv_ring(n_buses: int = 20) -> gi.Network:
 
 
 #: Template name to builder, for "new project from template".
-def build_empty() -> gi.Network:
+def build_empty(name: str = "New network") -> gi.Network:
     """
     A network without elements, at 50 Hz.
+
+    Parameters
+    ----------
+    name : str, optional
+        Name of the network; a front end passes it in its language.
 
     Returns
     -------
     Network
-        ``New network``: no buses, branches, sources or faults; the
-        frequencies can be changed before or after drawing.
+        No buses, branches, sources or faults; the frequencies can be
+        changed before or after drawing.
 
     Examples
     --------
     >>> net = build_empty()
-    >>> len(net.buses), net.frequencies
-    (0, [50.0])
+    >>> net.name, len(net.buses), net.frequencies
+    ('New network', 0, [50.0])
     """
-    return gi.create_network(name="New network", frequencies=[50.0])
+    return gi.create_network(name=name, frequencies=[50.0])
 
 
 EXAMPLES: Dict[str, Callable[[], gi.Network]] = {

@@ -353,9 +353,11 @@ class ProjectPage:
         self.runner.shutdown(wait=False)
 
     def _session_from_template(self, name: str) -> ProjectSession:
-        """A new session on a template network."""
+        """A new session on a template network (the empty one named in the page's language)."""
+        builder = self.templates[name]
+        network = builder(name=self.t("new_network_name")) if name == "empty" else builder()
         return ProjectSession(
-            self.templates[name](),
+            network,
             runner=self.runner,
             max_job_runtime_s=self.options.max_job_runtime_s,
         )

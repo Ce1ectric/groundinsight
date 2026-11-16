@@ -148,3 +148,10 @@ async def test_types_without_users_are_saved_with_the_project(user: User, tmp_pa
     page.session.save(str(path))
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert [t["name"] for t in payload["types"]["branch_types"]] == [NAYY]
+
+
+@pytest.mark.parametrize("language, expected", [("de", "Neues Netz"), ("en", "New network")])
+async def test_the_empty_project_is_named_in_the_pages_language(user: User, language, expected):
+    pages = build_app(AppOptions(start_example="empty", language=language))
+    await user.open("/")
+    assert pages[0].session.network.name == expected
