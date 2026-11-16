@@ -95,8 +95,10 @@ network.
 
 ![The plan coloured by the EPR, from 33 V at bus_fault to 326 V at bus_source](img/gui-epr.png)
 
-**Save as** writes the project file — network, plan and evaluation tabs in
-one JSON file that the library reads with `gi.load_project`.
+**Save as** opens the file manager: walk to a folder, type a name and save.
+The project file holds network, plan, evaluation tabs and the assessment
+criteria in one JSON file that the library reads with `gi.load_project`;
+**Open** lists the project files of a folder the same way.
 
 ## 5. The same network with the library
 
@@ -137,10 +139,18 @@ too: `gi.load_project(path).network`, solved for `F1`, is this network.
 
 ## Where to go next
 
+- **Assessment criteria …** on the *Network* tab takes the limits of the
+  project — `U_E`, the touch voltage (a value or the curve of the standard),
+  an admissible short-time current per cable type — and the plan then
+  colours the result by its utilisation in percent of each limit: EPR,
+  touch voltage and the thermal load of shields, earthing conductors and
+  electrodes ([Reduction factors and earthing impedance](../explanation/reduction-factors.md)
+  explains `r` and `I_E`).
 - The GUI covers the whole library. **Calculation** runs all faults, the
   pre-flight check, outage and rho-f studies, cuts, the bus response, the
-  thermal and touch-voltage checks of EN 50522, transients and the reference
-  cases; their tables are the library's frames.
+  thermal and touch-voltage checks of EN 50522, transients — with the
+  signals of the chart to choose and minimum, maximum and RMS over a time
+  window — and the reference cases; their tables are the library's frames.
 - An earthing characteristic of a station — impedance, touch factor and
   transfer factor over ρ and f, typically from a field calculation — goes on
   the *Earthing characteristic* tab of the bus dialog
