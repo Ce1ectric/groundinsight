@@ -503,6 +503,10 @@ every finding of `check_network`, as `table`, `json` (`CheckReportDTO`) or
     options:
       heading_level: 3
 
+::: groundinsight.api.views.series_statistics
+    options:
+      heading_level: 3
+
 ::: groundinsight.api.assessment
 
 ::: groundinsight.api.examples

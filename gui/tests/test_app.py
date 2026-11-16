@@ -134,9 +134,10 @@ async def test_save_as_writes_the_project_file_without_results(user: User, tmp_p
     await _start(user, start_example="quickstart")
     await _run_fault(user)
     user.find(marker="save-as").click()
+    await user.should_see(marker="file-dialog-save")
     target = tmp_path / "projekt.json"
-    user.find(marker="save-path").type(str(target))
-    user.find(marker="save-confirm").click()
+    user.find(marker="file-path").type(str(target))
+    user.find(marker="file-confirm").click()
     # The notification comes after the write (the path field shows the name
     # from the start, so the name alone is no signal).
     await user.should_see("Gespeichert", retries=50)
@@ -294,3 +295,38 @@ async def test_the_language_switch_translates_the_interface(user: User):
         toggle.set_value("en")
     await user.should_see("Open project")
     await user.should_not_see("Projekt öffnen")
+
+
+async def test_the_file_manager_walks_folders_opens_and_saves(user: User, tmp_path, monkeypatch):
+    """Open by clicking through folders; save by folder and name (".json"
+    added). Second way: the file on disk and the session's location."""
+    monkeypatch.setenv("HOME", str(tmp_path))  # the dialog opens at home without a project
+    (tmp_path / "netze" / "ms").mkdir(parents=True)
+    gi.save_network_to_json(EXAMPLES["minimal"](), tmp_path / "netze" / "ms" / "minimal.json")
+    (tmp_path / "netze" / "notiz.txt").write_text("not a project", encoding="utf-8")
+    await _start(user)
+    user.find(marker="open-browse").click()
+    await user.should_see(marker="file-dialog-open")
+    user.find(marker="file-folder-netze").click()
+    await user.should_see(marker="file-folder-ms")
+    await user.should_not_see(marker="file-file-notiz.txt")  # only project files
+    user.find(marker="file-up").click()  # and back: up one level
+    await user.should_see(marker="file-folder-netze")
+    user.find(marker="file-folder-netze").click()
+    await user.should_see(marker="file-folder-ms")
+    user.find(marker="file-folder-ms").click()
+    await user.should_see(marker="file-file-minimal.json")
+    user.find(marker="file-file-minimal.json").click()
+    await user.should_see("SmokeTest", retries=50)
+
+    user.find(marker="save-as").click()
+    await user.should_see(marker="file-dialog-save")
+    # It opens in the project's folder, with the project's file name proposed.
+    await user.should_see(marker="file-file-minimal.json")
+    await user.should_see(marker="file-replaced")
+    user.find(marker="file-name").clear().type("kopie")
+    user.find(marker="file-confirm").click()
+    await user.should_see("Gespeichert", retries=50)
+    target = tmp_path / "netze" / "ms" / "kopie.json"
+    assert target.is_file()
+    assert gi.load_network_from_json(target).name == "SmokeTest"

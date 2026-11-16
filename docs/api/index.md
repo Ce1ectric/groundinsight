@@ -86,7 +86,8 @@ Some functions and methods are shared between modules of the package but are
 not meant for application code: the matrix helpers of `ElectricalNetwork`
 that the response and decomposition analyses reuse (`resolved_impedance`,
 `grounding_shunts`, `earthed_buses`, `remove_loop_closures`,
-`compute_phase_currents`), the frequency rules that `gi.check_network`
+`compute_phase_currents`, `coupled_solution` for the study sessions), the
+window statistics of a transient frame (`window_statistics`), the frequency rules that `gi.check_network`
 applies again (`validate_frequencies`), the bookkeeping of a network
 (`Fault.mark_active`, `Network.needs_path_rebuild`, `Network.input_digest`,
 `Network.path_cache`) and a few helpers of the importers and of the

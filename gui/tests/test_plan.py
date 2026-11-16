@@ -240,8 +240,9 @@ async def test_opening_a_project_from_the_toolbar(user: User, tmp_path, monkeypa
     gi.save_network_to_json(EXAMPLES["mv_ring"](), tmp_path / "ring.json")
     page = await _page(user)
     user.find(marker="open").click()
-    user.find(marker="open-dialog-path").type("~/ring.json")
-    user.find(marker="open-dialog-confirm").click()
+    await user.should_see(marker="file-dialog-open")
+    user.find(marker="file-path").type("~/ring.json")
+    user.find(marker="file-confirm").click()
     await user.should_see(os.path.join(str(tmp_path), "ring.json"))  # the title, after the open
     assert page.session.location == os.path.join(str(tmp_path), "ring.json")
     assert len(page.session.network.buses) == 20

@@ -58,6 +58,7 @@ __all__ = [
     "element_tables_dto",
     "fault_result_dto",
     "key_figures_dto",
+    "series_statistics",
     "table_dto",
     "view_table_dto",
 ]
@@ -145,6 +146,49 @@ def table_dto(name: str, frame: pl.DataFrame) -> TableDTO:
         for column, dtype in frame.schema.items()
     ]
     return TableDTO(name=name, columns=columns, rows=frame.to_dicts())
+
+
+def series_statistics(table: TableDTO, t_start: Optional[float] = None,
+                      t_end: Optional[float] = None) -> TableDTO:
+    """
+    Minimum, maximum, peak and RMS of the signals of a transient table.
+
+    The table ``series`` of a transient study (``ResultTransient.to_polars``)
+    over a window, computed by the library
+    (:meth:`groundinsight.ResultTransient.statistics`).
+
+    Parameters
+    ----------
+    table : TableDTO
+        The ``series`` table.
+    t_start, t_end : float, optional
+        The window in s, both ends included; default every sample.
+
+    Returns
+    -------
+    TableDTO
+        Table ``statistics``, one row per signal.
+
+    Raises
+    ------
+    ValueError
+        For an empty or reversed window.
+
+    Examples
+    --------
+    >>> import polars as pl
+    >>> frame = pl.DataFrame({"time_s": [0.0, 1.0], "signal_kind": ["epr", "epr"],
+    ...                       "name": ["B", "B"], "value": [3.0, -4.0]})
+    >>> series_statistics(table_dto("series", frame)).rows[0]["peak_abs"]
+    4.0
+    """
+    from groundinsight.simulation.transient import window_statistics
+
+    columns = ["time_s", "signal_kind", "name", "value"]
+    frame = pl.DataFrame([{c: row[c] for c in columns} for row in table.rows],
+                         schema={"time_s": pl.Float64, "signal_kind": pl.Utf8, "name": pl.Utf8,
+                                 "value": pl.Float64})
+    return table_dto("statistics", window_statistics(frame, t_start, t_end))
 
 
 def element_tables_dto(

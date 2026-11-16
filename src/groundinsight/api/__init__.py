@@ -126,7 +126,7 @@ from .schemas import (
     parse_job_request,
 )
 from .session import DatabaseStore, MemoryStore, ProjectError, ProjectSession, ProjectStore
-from .views import table_dto
+from .views import series_statistics, table_dto
 
 __all__ = [
     # sessions and stores
@@ -194,6 +194,7 @@ __all__ = [
     "parse_job_request",
     "finite_or_none",
     "table_dto",
+    "series_statistics",
     "ElementRefDTO",
     "DiagnosticDTO",
     "CheckReportDTO",

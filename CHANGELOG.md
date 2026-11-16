@@ -87,12 +87,21 @@ version section when a release is cut.
 
 ### Added
 
+- **GUI: a file manager for opening and saving.** *Open* and *Save as* show
+  the folders and project files (`*.json`) of a folder, walk into a folder
+  on a click and up with the breadcrumb or the *up* button, open the file
+  clicked or save under the name typed (`.json` added, a file to be replaced
+  is pointed out); the dialog opens in the project's folder or the last one
+  used, and a pasted path still works. The start page has *Browse …* next
+  to the path field.
+
 - **Statistics of transient signals over a window.**
   `ResultTransient.statistics(t_start=None, t_end=None)` gives per signal the
   minimum, maximum, peak magnitude and RMS over the window (both ends
   included). The transient request of the service layer can return the
   shield currents of chosen branches (`TransientRequestDTO.observe_branches`),
-  `api.table_dto` turns a frame into a table DTO, and the GUI's transient
+  `api.table_dto` turns a frame into a table DTO, `api.series_statistics`
+  gives the window statistics of a transient table, and the GUI's transient
   result lets the user choose the signals of the chart (potentials on the V
   axis, currents on the A axis) and shows the statistics of a window.
 

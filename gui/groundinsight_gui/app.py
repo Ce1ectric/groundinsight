@@ -36,6 +36,7 @@ session (unsaved edits are lost).
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from nicegui import app, run, ui
@@ -75,6 +76,7 @@ from .evaluations import EvaluationTabs
 from .formatting import DASH, format_number, format_unit, parse_number
 from .i18n import STRINGS, column_label, template_label, text
 from .plan import PlanView
+from .files import FileDialog, start_directory
 from .studies import (
     STUDIES,
     StudyDialog,
@@ -324,6 +326,9 @@ class ProjectPage:
         self.types = TypeDialogs(self)
         self.evaluations = EvaluationTabs(self)
         self.study: Optional[StudyResultDTO] = None
+        # The folder of the last project file opened or saved: where the file
+        # manager opens next.
+        self.last_directory: Optional[Path] = None
         self.dialog_host: Any = None
         self.view_ids: List[str] = []
         self.durations: Dict[str, Optional[float]] = {}
@@ -468,17 +473,6 @@ class ProjectPage:
                 value=self.language,
                 on_change=lambda e: self._set_language(e.value),
             ).props(f'dense aria-label="{self.t("language")}"').mark("lang")
-        with ui.dialog() as self.open_dialog, ui.card().classes("w-[34rem]"):
-            ui.label(self.t("open_project")).classes("text-base font-medium")
-            self.open_dialog_input = ui.input(self.t("path"), placeholder=self.t("path_example")).classes(
-                "w-full").mark("open-dialog-path")
-            ui.button(self.t("open"), on_click=lambda: self._open_path(self.open_dialog_input.value)).mark(
-                "open-dialog-confirm")
-        if self.session is not None:
-            with ui.dialog() as self.save_dialog, ui.card().classes("w-[34rem]"):
-                ui.label(self.t("save_as_title")).classes("text-base font-medium")
-                self.save_input = ui.input(self.t("path")).classes("w-full").mark("save-path")
-                ui.button(self.t("save"), on_click=lambda: self._do_save(self.save_input.value)).mark("save-confirm")
         self._refresh_toolbar()
 
     def _icon_button(self, key: str, icon: str, on_click: Any) -> Any:
@@ -536,6 +530,8 @@ class ProjectPage:
                 self.open_input = ui.input(self.t("path"), placeholder=self.t("path_example")).classes(
                     "w-[32rem]").mark("open-path")
                 ui.button(self.t("open"), icon="folder_open", on_click=self._open_file).mark("open-button")
+                ui.button(self.t("browse"), icon="folder", on_click=self._open_open_dialog).props(
+                    "outline no-caps").mark("open-browse")
 
     def _workspace(self) -> None:
         """The three tabs of an open project."""
@@ -1458,25 +1454,30 @@ class ProjectPage:
         await self._open_path(self.open_input.value)
 
     def _open_open_dialog(self) -> None:
-        """Ask for a project file to open."""
-        self.open_dialog_input.set_value("")
-        self.open_dialog.open()
+        """The file manager: pick a project file to open."""
+        location = self.session.location if self.session is not None else None
+        with self.dialog_host:
+            FileDialog(self.t, "open", start_directory(location, self.last_directory), self._open_path).open()
 
-    async def _open_path(self, path: Optional[str]) -> None:
+    async def _open_path(self, path: Optional[str]) -> bool:
         """Open a project file (``~`` and variables are expanded by the session)."""
         path = (path or "").strip()
         try:
             session = await run.io_bound(self._session_from_file, path)
         except ProjectError as exc:
             ui.notify(f"{self.t('open_failed')}: {exc}", type="negative", multi_line=True)
-            return
-        self.open_dialog.close()
+            return False
+        self.last_directory = Path(path).expanduser().parent
         self._replace_session(session)
+        return True
 
     def _open_save_dialog(self) -> None:
-        """Ask for a file name."""
-        self.save_input.set_value(self.session.location or "")
-        self.save_dialog.open()
+        """The file manager: a folder and a name to save under."""
+        location = self.session.location
+        name = Path(location).name if location else f"{self.session.summary().name}.json"
+        with self.dialog_host:
+            FileDialog(self.t, "save", start_directory(location, self.last_directory), self._do_save,
+                       name=name).open()
 
     async def _save(self) -> None:
         """Save to the project's location, or ask for one."""
@@ -1485,17 +1486,19 @@ class ProjectPage:
             return
         await self._do_save(None)
 
-    async def _do_save(self, path: Optional[str]) -> None:
+    async def _do_save(self, path: Optional[str]) -> bool:
         """Save (to ``path`` if given) and report the location."""
         target = path.strip() if isinstance(path, str) and path.strip() else None
         try:
             location = await run.io_bound(self.session.save, target)
         except ProjectError as exc:
             ui.notify(f"{self.t('save_failed')}: {exc}", type="negative", multi_line=True)
-            return
-        self.save_dialog.close()
+            return False
+        if target is not None:
+            self.last_directory = Path(target).expanduser().parent
         ui.notify(f"{self.t('saved')}: {location}", type="positive")
         self._refresh_toolbar()
+        return True
 
     def _set_language(self, language: str) -> None:
         """Switch the language without losing the session."""

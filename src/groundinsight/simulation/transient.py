@@ -460,7 +460,7 @@ def window_statistics(
     """
     Statistics of the signals of a long-form transient frame over a window.
 
-    Internal API: also used by the GUI on the rows of a transient study; not
+    Internal API: also used by :func:`groundinsight.api.views.series_statistics`; not
     exported from ``groundinsight`` and free to change in any release.
 
     The RMS is the root of the mean square of the samples in the window,

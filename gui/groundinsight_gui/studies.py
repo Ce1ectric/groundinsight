@@ -30,8 +30,6 @@ reference cases    ``ReferenceCasesRequestDTO``
 import logging
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-import polars as pl
-
 from nicegui import ui
 
 from groundinsight.api import (
@@ -50,9 +48,8 @@ from groundinsight.api import (
     TouchCheckRequestDTO,
     TableDTO,
     TransientRequestDTO,
-    table_dto,
+    series_statistics,
 )
-from groundinsight.simulation.transient import window_statistics
 
 from .formatting import format_number, parse_number
 from .i18n import column_label
@@ -221,11 +218,7 @@ def transient_statistics(dto: StudyResultDTO, t_start: Optional[float], t_end: O
     ValueError
         For an empty or reversed window.
     """
-    columns = ["time_s", "signal_kind", "name", "value"]
-    frame = pl.DataFrame([{c: r[c] for c in columns} for r in dto.tables["series"].rows],
-                         schema={"time_s": pl.Float64, "signal_kind": pl.Utf8, "name": pl.Utf8,
-                                 "value": pl.Float64})
-    return table_dto("statistics", window_statistics(frame, t_start, t_end))
+    return series_statistics(dto.tables["series"], t_start, t_end)
 
 
 def study_chart(dto: StudyResultDTO, language: str) -> Optional[Dict[str, Any]]:
