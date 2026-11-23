@@ -752,7 +752,9 @@ class PlanView:
             Buses and branches.
         at : tuple of float, optional
             Where the centre of the copied buses goes (diagram coordinates);
-            default two raster steps right of and below the originals.
+            default two raster steps right of and below the originals. Either
+            way the copies move on to the lower right until none of them lies
+            on another symbol.
 
         Returns
         -------
@@ -777,6 +779,13 @@ class PlanView:
         if at is not None and buses:
             dx = round((at[0] - sum(nodes[b].x for b in buses) / len(buses)) / grid) * grid
             dy = round((at[1] - sum(nodes[b].y for b in buses) / len(buses)) / grid) * grid
+        # A copy on top of a symbol would hide it (a paste with the pointer
+        # still on the original, a second paste at the same place): move on
+        # by two raster steps until every copy has a place of its own.
+        occupied = {(node.x, node.y) for node in nodes.values()}
+        while any((nodes[b].x + dx, nodes[b].y + dy) in occupied for b in buses):
+            dx += 2 * grid
+            dy += 2 * grid
         taken = {"bus": list(bus_rows), "branch": list(branch_rows), "source": self._names("sources")}
 
         def name_of(kind: str, original: str) -> str:

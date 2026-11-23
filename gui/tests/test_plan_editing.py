@@ -299,3 +299,21 @@ async def test_an_empty_project_says_how_to_begin(user: User):
 async def test_a_plan_with_elements_has_no_hint(user: User):
     await _page(user)
     assert _canvas(user)._props["hint"] == ""
+
+
+async def test_a_copy_never_lands_on_another_symbol(user: User):
+    """Paste with the pointer still on the original, and paste again: each copy gets a free place."""
+    page = await _page(user)
+    session = page.session
+    nodes, grid = session.diagram_model.nodes, session.diagram_model.grid_size
+    x, y = nodes["bus2"].x, nodes["bus2"].y
+    _fire(user, "select", kind="bus", name="bus2")
+    _fire(user, "key", action="copy")
+    _fire(user, "key", action="paste", x=x, y=y)
+    _fire(user, "key", action="paste", x=x, y=y)
+    _fire(user, "key", action="duplicate")  # of the selection, the second copy: beside it, not on the first
+    nodes = session.diagram_model.nodes
+    places = [(n.x, n.y) for n in nodes.values()]
+    assert len(set(places)) == len(places) == 6
+    assert (nodes["bus2 Kopie"].x, nodes["bus2 Kopie"].y) == (x + 2 * grid, y + 2 * grid)
+    assert (nodes["bus2 Kopie 2"].x, nodes["bus2 Kopie 2"].y) == (x + 4 * grid, y + 4 * grid)
