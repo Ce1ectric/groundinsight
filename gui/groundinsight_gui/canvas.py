@@ -77,6 +77,8 @@ CANVAS_CSS = """
 .gi-far .gi-edge.gi-sel .gi-edge-label, .gi-far .gi-edge:hover .gi-edge-label { display: inline; }
 .gi-very-far .gi-label, .gi-very-far .gi-flash-name { display: none; }
 .gi-very-far .gi-node.gi-sel .gi-label, .gi-very-far .vue-flow__node:hover .gi-label { display: inline; }
+.gi-plan-search .q-field__control, .gi-plan-search .q-field__native { min-height: 26px; height: 26px; }
+.gi-plan-search .q-field__native { padding: 0; }
 .gi-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
            padding: 0 15%; text-align: center; color: #6b7480; font-size: 14px; pointer-events: none; z-index: 4; }
 .gi-handle { position: absolute !important; inset: 0 !important; width: 100% !important;
@@ -136,6 +138,8 @@ class NetworkCanvas(ui.element, component="network_canvas.js", esm={"groundinsig
         self._props["menus"] = menus or {}
         self._props["annotations"] = annotations or {"nodes": {}, "edges": {}, "stale": False}
         self._props["hint"] = hint
+        self._props["focus"] = None
+        self._focus_count = 0
         self._props["diagram"] = diagram
         self._props["colours"] = colours or {"nodes": {}, "edges": {}}
         self._props["tool"] = tool
@@ -227,6 +231,23 @@ class NetworkCanvas(ui.element, component="network_canvas.js", esm={"groundinsig
             The elements; empty clears the selection.
         """
         self._props["selected"] = [{"kind": kind, "name": name} for kind, name in items]
+        self.update()
+
+    def focus(self, kind: str, name: str) -> None:
+        """
+        Move an element into the middle of the canvas (zoomed in if its name would be hidden).
+
+        Parameters
+        ----------
+        kind : {"bus", "branch"}
+            The element kind.
+        name : str
+            The element.
+        """
+        # A prop, not a method call: it also reaches a canvas whose tab is
+        # only just being shown. The counter makes a repeated request a new one.
+        self._focus_count += 1
+        self._props["focus"] = {"kind": kind, "name": name, "n": self._focus_count}
         self.update()
 
     def fit(self) -> None:

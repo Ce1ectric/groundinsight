@@ -149,6 +149,10 @@ REMOVE_COMMANDS = {
     "branch_types": RemoveBranchType,
 }
 
+#: Tables whose rows have a place in the plan: the element kind of a bus or
+#: branch row; a source and a fault are shown at their bus.
+PLAN_KINDS = {"buses": "bus", "branches": "branch", "sources": "bus", "faults": "bus"}
+
 #: The type tables and the catalogue each one shows.
 TYPE_TABLES = {"bus_types": "bus", "branch_types": "branch"}
 
@@ -370,6 +374,8 @@ class ProjectPage:
         self.selected: Dict[str, Optional[str]] = {table: None for table in TABLES}
         self.grids: Dict[str, Any] = {}
         self.expansions: Dict[str, Any] = {}
+        # The text of the search field over the tables: a quick filter of every grid.
+        self.table_filter = ""
         self.start_error: Optional[str] = None
         if options.start_file:
             try:
@@ -427,6 +433,7 @@ class ProjectPage:
         self.handle = None
         self.durations = {}
         self.selected = {table: None for table in TABLES}
+        self.table_filter = ""
         self.tab = "plan"
         self.plan = PlanView(self)
         self.study = None
@@ -614,12 +621,16 @@ class ProjectPage:
         """One editable grid per element table."""
         tables = self.session.tables()
         ui.label(self.t("edit_hint")).classes("text-xs text-gray-500")
-        with ui.row().classes("items-center gap-2"):
+        with ui.row().classes("w-full items-center gap-2"):
             self.frequency_label = ui.label().classes("text-sm text-gray-700").mark("frequencies")
             ui.button(self.t("frequencies_edit"), icon="tune", on_click=self._open_frequency_dialog).props(
                 "flat dense no-caps").mark("frequencies-edit")
             ui.button(self.t("criteria_edit"), icon="rule", on_click=self._open_criteria_dialog).props(
                 "flat dense no-caps").mark("criteria-edit")
+            ui.space()
+            ui.input(label=self.t("table_filter"), value=self.table_filter,
+                     on_change=lambda e: self._filter_tables(e.value)).props(
+                "dense outlined clearable debounce=200").classes("w-72").mark("table-filter")
         self._refresh_frequencies()
         for table in TABLES:
             with ui.expansion(self.t(f"table_{table}"), value=table in ("buses", "branches")).classes(
@@ -634,6 +645,10 @@ class ProjectPage:
                 grid.on("rowClicked", lambda e, tbl=table: self._on_row_clicked(tbl, e.args),
                         args=["data", "rowId"])
                 with ui.row().classes("gap-1"):
+                    if table in PLAN_KINDS:
+                        ui.button(self.t("show_in_plan"), icon="schema",
+                                  on_click=lambda _, tbl=table: self._show_selected_in_plan(tbl)).props(
+                            "flat dense no-caps").mark(f"show-in-plan-{table}")
                     if table in TYPE_TABLES:
                         self._type_buttons(table)
                     ui.button(self.t("remove_selected"), icon="delete",
@@ -806,6 +821,7 @@ class ProjectPage:
             ":getRowId": "p => String(p.data.name)",
             "rowSelection": {"mode": "singleRow", "checkboxes": False, "enableClickSelection": True},
             "stopEditingWhenCellsLoseFocus": True,
+            "quickFilterText": self.table_filter,
         }
 
     @staticmethod
@@ -882,6 +898,36 @@ class ProjectPage:
         grid = self.grids.get(table)
         if grid is not None:
             grid.run_row_method(name, "setSelected", True)
+
+    def _filter_tables(self, value: Optional[str]) -> None:
+        """Show only the rows that contain the text of the search field, in every table."""
+        self.table_filter = (value or "").strip()
+        for grid in self.grids.values():
+            grid.options["quickFilterText"] = self.table_filter
+            grid.run_grid_method("setGridOption", "quickFilterText", self.table_filter)
+
+    def _show_selected_in_plan(self, table: str) -> None:
+        """Show the selected row of a table in the plan."""
+        name = self.selected.get(table)
+        row = next((r for r in self.session.table(table).rows if r["name"] == name), None) if name else None
+        if row is None:
+            ui.notify(self.t("nothing_selected"), type="info")
+            return
+        self.show_in_plan(PLAN_KINDS[table], row["bus"] if table in ("sources", "faults") else name)
+
+    def show_in_plan(self, kind: str, name: str) -> None:
+        """
+        Show an element in the plan: the plan tab, the element selected and in the middle.
+
+        Parameters
+        ----------
+        kind : {"bus", "branch"}
+            The element kind.
+        name : str
+            The element.
+        """
+        self.show_tab("plan")
+        self.plan.show(kind, name)
 
     def _remove_selected(self, table: str) -> None:
         """Delete the selected row through a remove command."""

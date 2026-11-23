@@ -454,6 +454,42 @@ def test_elk_lays_the_network_out_in_the_browser(page):
     assert page.errors == []
 
 
+def _in_the_middle(page, name):
+    """Whether a bus is in the middle of the canvas (within 60 px)."""
+    canvas = page.locator(".gi-canvas").bounding_box()
+    x, y = _centre(_node(page, name))
+    return (abs(x - canvas["x"] - canvas["width"] / 2) < 60 and abs(y - canvas["y"] - canvas["height"] / 2) < 60)
+
+
+def test_finding_an_element_from_the_table_and_by_its_name(page):
+    page.get_by_role("button", name="Neu").click()
+    page.get_by_text("MS-Ring", exact=True).click()
+    page.locator(".vue-flow__node[data-id='b20']").wait_for()
+    assert not _in_the_middle(page, "b17")
+    page.get_by_role("tab", name="Netz", exact=True).click()
+    grid = page.locator(".ag-root-wrapper").first
+    grid.locator(".ag-row").first.wait_for()
+    page.get_by_label("In den Tabellen suchen").fill("b17")
+    # Of twenty buses the one that is asked for (and the two branches that end at it, in their table).
+    page.wait_for_function("document.querySelector('.ag-root-wrapper').querySelectorAll('.ag-row').length === 1")
+    grid.get_by_role("gridcell", name="b17").first.click()
+    page.get_by_role("button", name="Im Plan zeigen").first.click()
+    # The plan tab, bus b17 selected and in the middle.
+    page.locator("[data-bus='b17'].gi-sel").wait_for()
+    page.wait_for_function("document.querySelector('.gi-canvas').clientWidth > 0")
+    page.wait_for_timeout(400)
+    assert _in_the_middle(page, "b17")
+    # The search of the plan: a name, Enter, and that element is in the middle.
+    search = page.get_by_label("Element suchen")
+    search.fill("b03")
+    page.get_by_role("option", name="b03", exact=True).click()
+    page.locator("[data-bus='b03'].gi-sel").wait_for()
+    page.wait_for_timeout(400)
+    assert _in_the_middle(page, "b03") and not _in_the_middle(page, "b17")
+    _screenshot(page, "ring_found_by_name")
+    assert page.errors == []
+
+
 def test_a_solved_ring_coloured_by_its_epr(page):
     page.get_by_role("button", name="Neu").click()
     page.get_by_text("MS-Ring", exact=True).click()

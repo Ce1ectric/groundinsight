@@ -164,6 +164,7 @@ export default {
     menus: { type: Object, default: () => ({}) },
     annotations: { type: Object, default: () => ({ nodes: {}, edges: {}, stale: false }) },
     hint: { type: String, default: "" },
+    focus: { type: Object, default: null },
     flowId: String,
   },
   setup(props) {
@@ -230,6 +231,11 @@ export default {
     // The server has answered a click: its selection replaces the stand-in.
     selected() {
       this.clicked = null;
+    },
+    focus(target) {
+      if (target) {
+        this.centreOn(target, 20);
+      }
     },
   },
   computed: {
@@ -449,6 +455,38 @@ export default {
       this.$nextTick(() => {
         window.setTimeout(() => this.fitNow(), 80);
       });
+    },
+    centreOn(target, tries) {
+      // The canvas may belong to a tab that is only just being shown: wait
+      // until it has a size.
+      if (!this.$el.clientWidth || !this.$el.clientHeight) {
+        if (tries > 0) {
+          window.setTimeout(() => this.centreOn(target, tries - 1), 50);
+        }
+        return;
+      }
+      const nodes = {};
+      for (const n of (this.diagram && this.diagram.nodes) || []) {
+        nodes[n.name] = n;
+      }
+      let point = null;
+      if (target.kind === "bus" && nodes[target.name]) {
+        point = [nodes[target.name].x, nodes[target.name].y];
+      } else if (target.kind === "branch") {
+        const edge = ((this.diagram && this.diagram.edges) || []).find((e) => e.name === target.name);
+        if (edge && nodes[edge.from_bus] && nodes[edge.to_bus]) {
+          point = [(nodes[edge.from_bus].x + nodes[edge.to_bus].x) / 2, (nodes[edge.from_bus].y + nodes[edge.to_bus].y) / 2];
+        }
+      }
+      if (point) {
+        // Close enough to read the names around it; never further out than now.
+        const zoom = Math.max(this.flow.viewport.value.zoom, 0.7);
+        this.flow.setViewport({
+          x: this.$el.clientWidth / 2 - zoom * point[0],
+          y: this.$el.clientHeight / 2 - zoom * point[1],
+          zoom,
+        });
+      }
     },
     fitNow() {
       const nodes = (this.diagram && this.diagram.nodes) || [];

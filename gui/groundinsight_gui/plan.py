@@ -158,6 +158,7 @@ class PlanView:
         self.dialog_host: Optional[Any] = None
         self.type_selects: Dict[str, Any] = {}
         self.tool_toggle: Optional[Any] = None
+        self.search: Optional[Any] = None
         # What Ctrl/Cmd+C took: names, not values -- a paste copies the
         # elements as they are then, and leaves out what was deleted since.
         self.clipboard: List[Tuple[str, str]] = []
@@ -323,7 +324,16 @@ class PlanView:
             with ui.column().classes("grow gap-1 min-w-0 min-h-0"):
                 diagram = self.session.diagram()
                 colours = self.colouring(diagram)
-                self.legend()
+                with ui.row().classes("w-full items-center no-wrap gap-2"):
+                    with ui.element("div").classes("grow min-w-0 overflow-hidden"):
+                        self.legend()
+                    # Type a name: the element is selected and moved into the middle.
+                    # No floating label: the row stays as low as the legend, the plan as high as it can be.
+                    self.search = ui.select(self._search_options(), with_input=True,
+                                            on_change=self._on_search).props(
+                        "dense outlined hide-dropdown-icon options-dense "
+                        f'placeholder="{self.t("plan_search")}" aria-label="{self.t("plan_search")}"').classes(
+                        "gi-plan-search w-52").mark("plan-search")
                 self.canvas = NetworkCanvas(diagram.model_dump(mode="json"),
                                             colours={"nodes": colours.nodes, "edges": colours.edges},
                                             tool=self.tool, menus=self._menus(),
@@ -439,6 +449,8 @@ class PlanView:
             return
         self.mode = self._mode_of_diagram()
         self._refresh_type_selects()
+        if self.search is not None:
+            self.search.set_options(self._search_options(), value=None)
         diagram = self.session.diagram()
         colours = self.colouring(diagram)
         self.canvas.show(diagram.model_dump(mode="json"),
@@ -499,6 +511,35 @@ class PlanView:
             kind, name = self.selected
             self.page.select_row({"bus": "buses", "branch": "branches"}[kind], name)
 
+    def _search_options(self) -> Dict[str, str]:
+        """What the search of the plan offers: every bus and branch by name."""
+        options = {f"bus:{name}": name for name in self._names("buses")}
+        options.update({f"branch:{name}": f"{name} ({self.t('kind_branch')})" for name in self._names("branches")})
+        return options
+
+    def _on_search(self, event: Any) -> None:
+        """An element was chosen in the search: show it, and clear the field for the next one."""
+        if not event.value:
+            return
+        kind, name = str(event.value).split(":", 1)
+        self.show(kind, name)
+        self.search.set_value(None)
+
+    def show(self, kind: str, name: str) -> None:
+        """
+        Select an element and move it into the middle of the plan.
+
+        Parameters
+        ----------
+        kind : {"bus", "branch"}
+            The element kind.
+        name : str
+            The element.
+        """
+        self.select(kind, name)
+        if self.selected == (kind, name) and self.canvas is not None:
+            self.canvas.focus(kind, name)
+
     def _existing(self, items: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
         """The items that are buses or branches of the network, without repeats."""
         names = {"bus": set(self._names("buses")), "branch": set(self._names("branches"))}
@@ -545,6 +586,9 @@ class PlanView:
             with ui.row().classes("gap-1 mt-2"):
                 ui.button(self.t("edit"), icon="edit", on_click=lambda: self.open_dialog(kind, name)).props(
                     "dense no-caps").mark("properties-edit")
+                ui.button(icon="table_view", on_click=lambda: self.page.show_row(kind, name)).props(
+                    f'dense flat aria-label="{self.t("menu_show_row")}"').tooltip(self.t("menu_show_row")).mark(
+                    "properties-show-row")
                 ui.button(self.t("delete"), icon="delete", on_click=lambda: self._on_delete(
                     {"kind": kind, "name": name})).props("dense flat no-caps color=negative").mark(
                     "properties-delete")
