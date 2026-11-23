@@ -70,7 +70,7 @@ from groundinsight.api import (
 from .canvas import CANVAS_CSS, TOOLS, NetworkCanvas
 from .catalogue import copy_name
 from .colouring import MODES, RESULT_MODES, UTILISATION_MODES, Colouring, colour
-from .formatting import DASH, format_number, format_scale, parse_number
+from .formatting import DASH, format_number, format_scale, format_value, parse_number
 from .i18n import column_label
 from .studies import grid_options
 
@@ -159,6 +159,10 @@ class PlanView:
         # What Ctrl/Cmd+C took: names, not values -- a paste copies the
         # elements as they are then, and leaves out what was deleted since.
         self.clipboard: List[Tuple[str, str]] = []
+        # Whether the result the plan is coloured by is older than the inputs.
+        self.result_stale = False
+        # The colouring on the canvas; the legend shows the same one.
+        self.colours: Optional[Colouring] = None
 
     # -- helpers ------------------------------------------------------------------
 
@@ -204,12 +208,26 @@ class PlanView:
         """The names in an element table."""
         return [row["name"] for row in self.session.table(table).rows]
 
-    def colouring(self) -> Colouring:
-        """The colours of the current mode for the current diagram."""
-        diagram = self.session.diagram()
+    def colouring(self, diagram: Any = None) -> Colouring:
+        """
+        The colours of the current mode.
+
+        Parameters
+        ----------
+        diagram : DiagramDTO, optional
+            The diagram to colour; default the session's current one.
+
+        Returns
+        -------
+        Colouring
+            Colours, legend and the values of a numerical mode.
+        """
+        if diagram is None:
+            diagram = self.session.diagram()
         result = None
         if self.mode in RESULT_MODES and self.page.fault:
             result = self.session.result(self.page.fault)
+        self.result_stale = bool(result is not None and result.stale)
         check = self.session.check() if self.mode == "diagnostics" else None
         assessment = None
         if self.mode in UTILISATION_MODES and result is not None:
@@ -217,7 +235,70 @@ class PlanView:
                 assessment = self.session.assessment(self.page.fault)
             except ProjectError:
                 assessment = None
-        return colour(self.mode, diagram, result=result, check=check, assessment=assessment)
+        self.colours = colour(self.mode, diagram, result=result, check=check, assessment=assessment)
+        return self.colours
+
+    def annotations(self, colours: Colouring, diagram: Any = None) -> Dict[str, Any]:
+        """
+        What the canvas writes at the elements.
+
+        Parameters
+        ----------
+        colours : Colouring
+            The colouring shown; a numerical mode brings the values.
+        diagram : DiagramDTO, optional
+            The diagram the colouring belongs to; default the session's
+            current one.
+
+        Returns
+        -------
+        dict
+            ``{"nodes": {name: note}, "edges": {name: note}, "stale": bool}``
+            for :class:`~groundinsight_gui.canvas.NetworkCanvas`: per element
+            the value of the colouring with its unit (four significant
+            digits, like the tiles; a numerical zero as ``0``), the tooltip,
+            and for a bus the names of its faults and sources.
+        """
+        language = self.page.language
+        quantity = self.t(f"value_{self.mode}") if (colours.node_values or colours.edge_values) else ""
+        largest = max((abs(v) for v in [*colours.node_values.values(), *colours.edge_values.values()]), default=0.0)
+        at_bus: Dict[str, Dict[str, List[str]]] = {"faults": {}, "sources": {}}
+        for table, names in at_bus.items():
+            for row in self.session.table(table).rows:
+                names.setdefault(row["bus"], []).append(row["name"])
+        if diagram is None:
+            diagram = self.session.diagram()
+        nodes: Dict[str, Dict[str, Any]] = {}
+        for node in diagram.nodes:
+            note: Dict[str, Any] = {}
+            tip = [node.name, node.bus_type]
+            if node.name in colours.node_values:
+                note["value"] = f"{format_value(colours.node_values[node.name], largest, language)} {colours.unit}"
+                tip.append(f"{quantity} {note['value']}")
+            for table, kind in (("faults", "fault"), ("sources", "source")):
+                if node.name in at_bus[table]:
+                    note[table] = at_bus[table][node.name]
+                    tip.append(f"{self.t('kind_' + kind)} {', '.join(note[table])}")
+            if not node.active:
+                tip.append(self.t("out_of_service"))
+            note["tip"] = " · ".join(str(part) for part in tip if part)
+            nodes[node.name] = note
+        edges: Dict[str, Dict[str, Any]] = {}
+        for edge in diagram.edges:
+            note = {}
+            tip = [edge.name, edge.branch_type]
+            if edge.name in colours.edge_values:
+                note["value"] = f"{format_value(colours.edge_values[edge.name], largest, language)} {colours.unit}"
+                tip.append(f"{quantity} {note['value']}")
+            if not edge.active:
+                tip.append(self.t("switch_is_open"))
+            note["tip"] = " · ".join(str(part) for part in tip if part)
+            edges[edge.name] = note
+        return {"nodes": nodes, "edges": edges, "stale": bool(quantity) and self.result_stale}
+
+    def _hint(self) -> str:
+        """The text in the middle of a plan without elements; empty once it has one."""
+        return "" if self.session.diagram_model.nodes or self.session.network.buses else self.t("plan_empty")
 
     def _mode_of_diagram(self) -> str:
         """The colouring the project keeps (``Diagram.color_scheme``), or by type."""
@@ -238,11 +319,14 @@ class PlanView:
         with ui.row().classes("w-full no-wrap gap-2 items-stretch"):
             self._palette(summary)
             with ui.column().classes("grow gap-1 min-w-0"):
+                diagram = self.session.diagram()
+                colours = self.colouring(diagram)
                 self.legend()
-                colours = self.colouring()
-                self.canvas = NetworkCanvas(self.session.diagram().model_dump(mode="json"),
+                self.canvas = NetworkCanvas(diagram.model_dump(mode="json"),
                                             colours={"nodes": colours.nodes, "edges": colours.edges},
-                                            tool=self.tool, menus=self._menus()).classes(
+                                            tool=self.tool, menus=self._menus(),
+                                            annotations=self.annotations(colours, diagram),
+                                            hint=self._hint()).classes(
                     "w-full rounded border bg-white").style("height: 68vh").mark("canvas")
                 for name, handler in (("place", self._on_place), ("move", self._on_move),
                                       ("connect", self._on_connect), ("fault", self._on_fault),
@@ -309,7 +393,7 @@ class PlanView:
     @ui.refreshable_method
     def legend(self) -> None:
         """Colouring mode and its legend."""
-        colours = self.colouring()
+        colours = self.colours if self.colours is not None else self.colouring()
         with ui.row().classes("w-full items-center gap-3 no-wrap").mark("legend"):
             ui.icon("palette").classes("text-gray-500")
             ui.label(self.t(f"colour_{self.mode}")).classes("text-sm font-medium").mark("colour-mode")
@@ -320,6 +404,10 @@ class PlanView:
                 ui.element("div").style(f"width: 160px; height: 10px; border-radius: 3px; "
                                         f"background: {colours.gradient}")
                 ui.label(f"{high_text} {unit}").classes("text-xs").mark("legend-max")
+                if self.result_stale:
+                    ui.label(self.t("stale_short")).classes(
+                        "text-xs text-amber-900 bg-amber-100 rounded px-2").tooltip(self.t("stale")).mark(
+                        "legend-stale")
             elif self.mode in RESULT_MODES:
                 ui.label(self.t("legend_no_result")).classes("text-xs text-gray-500").mark("legend-empty")
             for entry in colours.entries:
@@ -349,9 +437,11 @@ class PlanView:
             return
         self.mode = self._mode_of_diagram()
         self._refresh_type_selects()
-        colours = self.colouring()
-        self.canvas.show(self.session.diagram().model_dump(mode="json"),
-                         {"nodes": colours.nodes, "edges": colours.edges})
+        diagram = self.session.diagram()
+        colours = self.colouring(diagram)
+        self.canvas.show(diagram.model_dump(mode="json"),
+                         {"nodes": colours.nodes, "edges": colours.edges},
+                         annotations=self.annotations(colours, diagram), hint=self._hint())
         self.selection = self._existing(self.selection)
         self._sync_selection()
         self.legend.refresh()

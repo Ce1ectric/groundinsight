@@ -13,7 +13,7 @@ functions, tested on their own.
 import math
 from typing import Any, Optional, Tuple
 
-__all__ = ["DASH", "format_number", "format_scale", "format_unit", "parse_number"]
+__all__ = ["DASH", "format_number", "format_scale", "format_unit", "format_value", "parse_number"]
 
 #: Shown where a DTO carries ``None`` (an undefined or non-finite value).
 DASH = "–"
@@ -91,6 +91,40 @@ def format_scale(low: float, high: float, language: str) -> Tuple[str, str]:
         return fixed.replace(".", ",") if language == "de" else fixed
 
     return text(low), text(high)
+
+
+def format_value(value: Optional[float], largest: float, language: str, digits: int = 4) -> str:
+    """
+    Format one value of a set, with the largest of the set in view.
+
+    Like :func:`format_number`, but a value a million times smaller than the
+    largest one of its set is a numerical zero of the solve and reads as
+    ``0`` (``5.9e-15`` V beside ``18.03`` V), not in scientific notation.
+
+    Parameters
+    ----------
+    value : float or None
+        The number.
+    largest : float
+        The largest magnitude of the set the value belongs to.
+    language : {"de", "en"}
+        ``"de"`` uses a decimal comma.
+    digits : int, optional
+        Significant digits. Default 4.
+
+    Returns
+    -------
+    str
+        The text.
+
+    Examples
+    --------
+    >>> format_value(5.89e-15, 18.03, "de"), format_value(18.03, 18.03, "de")
+    ('0', '18,03')
+    """
+    if value is not None and not isinstance(value, bool) and abs(float(value)) < 1e-6 * abs(largest):
+        return "0"
+    return format_number(value, language, digits)
 
 
 def parse_number(value: Any) -> float:

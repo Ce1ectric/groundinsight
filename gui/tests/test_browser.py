@@ -321,6 +321,71 @@ def test_the_context_menu_acts_on_what_was_right_clicked(page):
     assert page.errors == []
 
 
+def _text_height(page, selector):
+    return page.locator(selector).first.evaluate("e => e.getBoundingClientRect().height")
+
+
+def test_names_stay_readable_when_the_plan_is_zoomed_out_and_go_when_too_small(page):
+    assert _text_height(page, ".gi-label") >= 13  # at the zoom of the fit: the font's own size
+    zoom_out = page.locator(".vue-flow__controls-zoomout")
+    zoom_out.click()
+    zoom_out.click()
+    page.wait_for_timeout(500)
+    # Zoomed out the symbols shrink, the names do not go below about 11 px on screen.
+    assert _text_height(page, ".gi-label") >= 11
+    assert _text_height(page, ".gi-edge-label") >= 9
+    for _ in range(6):
+        zoom_out.click()
+    page.locator(".gi-canvas.gi-very-far").wait_for()
+    assert not page.locator(".gi-label").first.is_visible()
+    assert not page.locator(".gi-edge-label").first.is_visible()
+    # What the pointer is on shows its name again.
+    _node(page, "bus2").hover()
+    assert _node(page, "bus2").locator(".gi-label").is_visible()
+    assert page.errors == []
+
+
+def test_parallel_branches_are_drawn_side_by_side(page):
+    _tool(page, "Zweig")
+    x0, y0 = _centre(_node(page, "bus1"))
+    x1, y1 = _centre(_node(page, "bus2"))
+    page.mouse.move(x1, y1)  # drawn the other way round than b12
+    page.mouse.down()
+    page.mouse.move(x0, y0, steps=15)
+    page.mouse.up()
+    page.locator("[data-branch='L1']").wait_for()
+    boxes = [page.locator(f"[data-branch='{name}'] .gi-edge-line").bounding_box() for name in ("b12", "L1")]
+    # Two lines of the same length, 12 px of the diagram apart at right angles to the branch.
+    horizontal = boxes[0]["width"] > boxes[0]["height"]
+    apart = abs(boxes[0]["y"] - boxes[1]["y"]) if horizontal else abs(boxes[0]["x"] - boxes[1]["x"])
+    zoom = page.evaluate("document.querySelector('.vue-flow__transformationpane').getBoundingClientRect().width"
+                         " / document.querySelector('.vue-flow__transformationpane').offsetWidth")
+    assert apart == pytest.approx(12 * zoom, abs=1.5)
+    # Each of them can be clicked.
+    _tool(page, "Auswahl")
+    page.locator("[data-branch='L1'] .gi-edge-line").click(force=True)
+    page.get_by_text("Zweig L1", exact=True).wait_for()
+    assert page.errors == []
+
+
+def test_the_result_is_written_at_the_buses_and_the_tooltip_names_the_element(page):
+    page.get_by_role("tab", name="Ergebnisse").click()
+    page.get_by_role("button", name="Rechnen").click()
+    page.get_by_text("Revision", exact=False).first.wait_for(timeout=60000)
+    tile = page.locator(".gi-tile").first.inner_text().split("\n")[1]  # EPR at the fault location, bus3
+    page.get_by_role("tab", name="Netzplan").click()
+    page.get_by_role("button", name="Einfärben").click()
+    page.get_by_text("Ergebnis: EPR (RMS)").click()
+    value = _node(page, "bus3").locator(".gi-value")
+    value.wait_for()
+    assert value.inner_text() == f"{tile} V"
+    assert _node(page, "bus3").locator(".gi-flash-name").inner_text() == "fault"
+    tip = page.locator("[data-bus='bus3']").get_attribute("title")
+    assert tip.startswith("bus3 · ") and f"EPR {tile} V" in tip and tip.endswith("Fehler fault")
+    _screenshot(page, "minimal_epr_values")
+    assert page.errors == []
+
+
 def test_elk_lays_the_network_out_in_the_browser(page):
     before = [_centre(_node(page, n)) for n in ("bus1", "bus2", "bus3")]
     page.get_by_role("button", name="Auto-Layout").click()
@@ -341,7 +406,7 @@ def test_a_solved_ring_coloured_by_its_epr(page):
     page.get_by_role("tab", name="Netzplan").click()
     page.get_by_role("button", name="Einfärben").click()
     page.get_by_text("Ergebnis: EPR (RMS)").click()
-    page.get_by_text("Ergebnis: EPR (RMS)").first.wait_for()
+    page.locator(".gi-value").first.wait_for()  # the colouring has reached the canvas
     # Second way: the ends of the scale sit at the buses with the smallest and
     # the largest RMS EPR of the library's own solve.
     import warnings

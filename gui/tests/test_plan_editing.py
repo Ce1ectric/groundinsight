@@ -250,3 +250,52 @@ async def test_the_context_menu_of_the_pane_and_of_a_group(user: User):
     assert "bus2" not in session.network.buses and "B1" not in session.network.buses
     _fire(user, "menu", action="select_all", kind="pane", name=None)
     assert ("bus", "bus1") in page.plan.selection and ("bus", "bus3") in page.plan.selection
+
+
+async def test_the_plan_writes_the_result_beside_the_element_and_marks_it_stale(user: User):
+    import warnings
+
+    import groundinsight as gi
+    from groundinsight.api import EXAMPLES, UpdateBranch
+
+    page = await _page(user, "mv_ring")
+    session = page.session
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        session.solve("F1")
+    user.find(marker="colour-epr").click()
+    notes = _canvas(user)._props["annotations"]
+    # Second way: the RMS EPR of the library's own solve, four significant digits, decimal comma.
+    twin = EXAMPLES["mv_ring"]()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        gi.run_fault(twin, "F1")
+    frame = twin.res_buses("F1").filter(twin.res_buses("F1")["frequency_Hz"].is_null())
+    expected = {name: f"{value:.4g}".replace(".", ",") + " V"
+                for name, value in zip(frame["bus_name"], frame["EPR_V"], strict=True)}
+    assert {name: note["value"] for name, note in notes["nodes"].items()} == expected
+    assert notes["stale"] is False
+    await user.should_not_see(marker="legend-stale")
+    # The fault and the infeed are named at their bus, and the tooltip says what the element is.
+    assert notes["nodes"]["b10"]["faults"] == ["F1"] and notes["nodes"]["b01"]["sources"] == ["src"]
+    assert notes["nodes"]["b10"]["tip"] == f"b10 · MV_substation · EPR {expected['b10']} · Fehler F1"
+    # An input changes: the numbers stay on the plan, marked as stale.
+    session.apply(UpdateBranch(name="L_03_04", fields={"length": 7.0}))
+    page.plan.refresh()
+    assert _canvas(user)._props["annotations"]["stale"] is True
+    await user.should_see(marker="legend-stale")
+    # Coloured by type there is no number to write.
+    user.find(marker="colour-type").click()
+    notes = _canvas(user)._props["annotations"]
+    assert "value" not in notes["nodes"]["b10"] and notes["stale"] is False
+    assert notes["edges"]["L_01_02"]["tip"].startswith("L_01_02 · NA2XS_300_25")
+
+
+async def test_an_empty_project_says_how_to_begin(user: User):
+    await _page(user, "empty")
+    assert "Bus" in _canvas(user)._props["hint"]
+
+
+async def test_a_plan_with_elements_has_no_hint(user: User):
+    await _page(user)
+    assert _canvas(user)._props["hint"] == ""

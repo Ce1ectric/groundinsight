@@ -22,6 +22,12 @@
 // otherwise). The entries and their texts come from the server (`menus`); a
 // chosen entry goes back as the event `menu` with the element and the place.
 //
+// Texts: names, the values of a numerical colouring, fault and infeed marks
+// and the tooltips come with `annotations`. Their size follows the zoom
+// through the CSS variable --gi-s (see CANVAS_CSS): the canvas only sets the
+// variable and two classes, so zooming a plan of a thousand buses re-renders
+// no symbol.
+//
 // Coordinates: the diagram stores the centre of a symbol, Vue Flow the top
 // left corner of a node; both conversions happen here, and positions are
 // snapped to the diagram's raster before they are sent.
@@ -39,6 +45,15 @@ const BUSBAR_DEFAULT_LENGTH = 100;
 // to the right of them, hence the generous padding. A short feeder would fill
 // the screen at several-fold zoom, hence maxZoom 1 (labels at their own size).
 const FIT = { padding: 0.3, maxZoom: 1.0 };
+// Texts keep their size on screen below this zoom, up to this factor ...
+const TEXT_FULL_ZOOM = 0.85;
+const TEXT_MAX_SCALE = 2.6;
+// ... branch names are hidden below FAR, bus names and values below VERY_FAR
+// (they would overlap: buses of a laid out plan are 160 px apart).
+const FAR_ZOOM = 0.45;
+const VERY_FAR_ZOOM = 0.3;
+// Distance between the lines of parallel branches (same two buses).
+const PARALLEL_GAP = 12;
 
 function symbolSize(node) {
   if (node.symbol === "busbar") {
@@ -63,14 +78,24 @@ const BusNode = {
   template: `
     <div :class="['gi-node', 'gi-' + data.symbol, { 'gi-sel': selected, 'gi-off': !data.active }]"
          :style="{ width: data.w + 'px', height: data.h + 'px', background: data.colour }"
-         :data-bus="id" :title="id">
+         :data-bus="id" :title="data.note.tip || id">
       <Handle type="target" position="top" class="gi-handle" />
       <Handle type="source" position="top" class="gi-handle" />
-      <span class="gi-label"
-            :style="{ left: (data.w / 2 + 8 + data.label_offset[0]) + 'px', top: (data.h / 2 - 22 + data.label_offset[1]) + 'px' }">{{ id }}</span>
-      <span v-if="data.has_fault" class="gi-flash">&#x26A1;</span>
+      <span class="gi-label" :style="textStyle(-4)">{{ id }}<span v-if="data.note.value" class="gi-value">{{ data.note.value }}</span></span>
+      <span v-if="data.has_fault" class="gi-flash">&#x26A1;<span class="gi-flash-name">{{ (data.note.faults || []).join(", ") }}</span></span>
       <span v-if="data.has_source" class="gi-infeed">&#x25BC;</span>
     </div>`,
+  methods: {
+    // The name, and after it the value of the colouring: right of the symbol
+    // and above its middle (branches leave through the middle); the gap to
+    // the symbol grows with the text.
+    textStyle(dy) {
+      return {
+        left: "calc(" + (this.data.w + this.data.label_offset[0]) + "px + 5px * var(--gi-s, 1))",
+        top: (this.data.h / 2 + dy + this.data.label_offset[1]) + "px",
+      };
+    },
+  },
 };
 
 const LineEdge = {
@@ -78,7 +103,20 @@ const LineEdge = {
   props: ["id", "data", "selected", "sourceNode", "targetNode"],
   computed: {
     points() {
-      return [centre(this.sourceNode), ...(this.data.waypoints || []), centre(this.targetNode)];
+      const a = centre(this.sourceNode);
+      const b = centre(this.targetNode);
+      const waypoints = this.data.waypoints || [];
+      // Parallel branches run side by side; a routed branch keeps its route.
+      if (this.data.shift && !waypoints.length) {
+        // The normal of the pair, not of this branch: two branches drawn in
+        // opposite directions between the same buses still move apart.
+        const [p, q] = this.data.reversed ? [b, a] : [a, b];
+        const length = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+        const nx = -(q[1] - p[1]) / length * this.data.shift;
+        const ny = (q[0] - p[0]) / length * this.data.shift;
+        return [[a[0] + nx, a[1] + ny], [b[0] + nx, b[1] + ny]];
+      }
+      return [a, ...waypoints, b];
     },
     path() {
       return this.points.map((p, i) => (i ? "L" : "M") + p[0] + " " + p[1]).join(" ");
@@ -86,6 +124,8 @@ const LineEdge = {
     // The label sits beside the middle segment, on the side away from the bus
     // labels (those are above and right of their symbol): below a horizontal
     // segment, left of a vertical one -- so neither covers the other.
+    // The value of a colouring follows the name. The gap to the line grows
+    // with the text (--gi-s).
     label() {
       const p = this.points;
       const a = p[Math.floor((p.length - 1) / 2)];
@@ -93,15 +133,21 @@ const LineEdge = {
       const x = (a[0] + b[0]) / 2 + this.data.label_offset[0];
       const y = (a[1] + b[1]) / 2 + this.data.label_offset[1];
       const vertical = Math.abs(b[1] - a[1]) > Math.abs(b[0] - a[0]);
-      return vertical ? { x: x - 8, y: y + 4, anchor: "end" } : { x: x, y: y + 16, anchor: "middle" };
+      const gap = (dx, dy) => ({ transform: "translate(calc(" + dx + "px * var(--gi-s, 1)), calc(" + dy + "px * var(--gi-s, 1)))" });
+      return vertical
+        ? { x, y, anchor: "end", baseline: "middle", style: gap(-7, 0) }
+        : { x, y, anchor: "middle", baseline: "hanging", style: gap(0, 6) };
     },
   },
   template: `
     <g :class="['gi-edge', { 'gi-sel': selected, 'gi-off': !data.active, 'gi-noearth': !data.grounding_conductor }]"
        :data-branch="id">
+      <title>{{ data.note.tip || id }}</title>
       <path :d="path" class="gi-edge-hit" />
       <path :d="path" class="gi-edge-line" :style="{ stroke: data.colour }" />
-      <text :x="label.x" :y="label.y" :text-anchor="label.anchor" class="gi-edge-label">{{ id }}</text>
+      <text :x="label.x" :y="label.y" :text-anchor="label.anchor" :dominant-baseline="label.baseline"
+            :style="label.style" class="gi-edge-label">{{ id }}<tspan v-if="data.note.value" dx="0.45em"
+            class="gi-edge-value">{{ data.note.value }}</tspan></text>
     </g>`,
 };
 
@@ -113,6 +159,8 @@ export default {
     colours: Object,
     selected: { type: Array, default: () => [] },
     menus: { type: Object, default: () => ({}) },
+    annotations: { type: Object, default: () => ({ nodes: {}, edges: {}, stale: false }) },
+    hint: { type: String, default: "" },
     flowId: String,
   },
   setup(props) {
@@ -129,6 +177,8 @@ export default {
       clicked: null,
       pointer: null,
       menu: null,
+      far: false,
+      veryFar: false,
     };
   },
   mounted() {
@@ -166,11 +216,13 @@ export default {
     window.addEventListener("pointerdown", this.onPointer, true);
     window.addEventListener("pointermove", this.onPointerMove, true);
     window.addEventListener("keydown", this.onWindowKey);
+    this.stopZoomWatch = this.$watch(() => this.flow.viewport.value.zoom, this.onZoom, { immediate: true });
   },
   unmounted() {
     window.removeEventListener("pointerdown", this.onPointer, true);
     window.removeEventListener("pointermove", this.onPointerMove, true);
     window.removeEventListener("keydown", this.onWindowKey);
+    this.stopZoomWatch();
   },
   watch: {
     // The server has answered a click: its selection replaces the stand-in.
@@ -184,13 +236,14 @@ export default {
     },
     nodes() {
       const colours = (this.colours && this.colours.nodes) || {};
+      const notes = (this.annotations && this.annotations.nodes) || {};
       return ((this.diagram && this.diagram.nodes) || []).map((n) => {
         const [w, h] = symbolSize(n);
         return {
           id: n.name,
           type: "bus",
           position: { x: n.x - w / 2, y: n.y - h / 2 },
-          data: { ...n, w, h, colour: colours[n.name] || "#2a78d6" },
+          data: { ...n, w, h, colour: colours[n.name] || "#2a78d6", note: notes[n.name] || {} },
           selected: this.isSelected("bus", n.name),
           draggable: this.tool === "select",
           connectable: this.tool === "branch",
@@ -199,17 +252,46 @@ export default {
     },
     edges() {
       const colours = (this.colours && this.colours.edges) || {};
-      return ((this.diagram && this.diagram.edges) || []).map((e) => ({
-        id: e.name,
-        type: "line",
-        source: e.from_bus,
-        target: e.to_bus,
-        data: { ...e, colour: colours[e.name] || "#5b6470" },
-        selected: this.isSelected("branch", e.name),
-      }));
+      const notes = (this.annotations && this.annotations.edges) || {};
+      const all = (this.diagram && this.diagram.edges) || [];
+      // Branches between the same two buses, whichever way they were drawn.
+      const pair = (e) => (e.from_bus < e.to_bus ? e.from_bus + "\u0000" + e.to_bus : e.to_bus + "\u0000" + e.from_bus);
+      const groups = {};
+      for (const e of all) {
+        (groups[pair(e)] = groups[pair(e)] || []).push(e.name);
+      }
+      return all.map((e) => {
+        const group = groups[pair(e)];
+        return {
+          id: e.name,
+          type: "line",
+          source: e.from_bus,
+          target: e.to_bus,
+          data: {
+            ...e,
+            colour: colours[e.name] || "#5b6470",
+            note: notes[e.name] || {},
+            shift: (group.indexOf(e.name) - (group.length - 1) / 2) * PARALLEL_GAP,
+            reversed: e.from_bus > e.to_bus,
+          },
+          selected: this.isSelected("branch", e.name),
+        };
+      });
     },
   },
   methods: {
+    onZoom(zoom) {
+      const element = this.$el;
+      if (!element || !element.style) {
+        return;
+      }
+      const scale = zoom >= TEXT_FULL_ZOOM ? 1 : Math.min(TEXT_FULL_ZOOM / zoom, TEXT_MAX_SCALE);
+      element.style.setProperty("--gi-s", scale.toFixed(3));
+      // Reactive, but changing only when a threshold is crossed: the class
+      // binding of the root must know them, or its next patch would drop them.
+      this.far = zoom < FAR_ZOOM;
+      this.veryFar = zoom < VERY_FAR_ZOOM;
+    },
     isSelected(kind, name) {
       return (this.selected || []).some((s) => s.kind === kind && s.name === name);
     },
@@ -391,7 +473,9 @@ export default {
     },
   },
   template: `
-    <div :class="['gi-canvas', 'gi-tool-' + tool]" tabindex="0">
+    <div :class="['gi-canvas', 'gi-tool-' + tool,
+                  { 'gi-stale': annotations && annotations.stale, 'gi-far': far, 'gi-very-far': veryFar }]"
+         tabindex="0">
       <VueFlow :id="flowId" :nodes="nodes" :edges="edges" :node-types="nodeTypes" :edge-types="edgeTypes"
                connection-mode="loose" :delete-key-code="null"
                :selection-key-code="tool === 'select' ? 'Shift' : null"
@@ -407,6 +491,7 @@ export default {
         <MiniMap pannable zoomable />
         <Controls :show-interactive="false" :fit-view-params="fitParams" />
       </VueFlow>
+      <div v-if="hint" class="gi-hint">{{ hint }}</div>
       <div v-if="menu" class="gi-menu" role="menu" :style="{ left: menu.left + 'px', top: menu.top + 'px' }"
            @contextmenu.prevent>
         <div v-for="entry in menu.entries" :key="entry.action" role="menuitem" :data-action="entry.action"

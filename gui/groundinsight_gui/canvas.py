@@ -57,12 +57,28 @@ CANVAS_CSS = """
 .gi-node.gi-bus { border-radius: 50%; }
 .gi-node.gi-source_bus { border-radius: 2px; }
 .gi-node.gi-busbar { border-radius: 1px; border-width: 1px; }
-.gi-node.gi-sel { box-shadow: 0 0 0 3px #ffb300; }
+.gi-node.gi-sel { box-shadow: 0 0 0 calc(3px * var(--gi-s, 1)) #ffb300; }
 .gi-node.gi-off { opacity: 0.4; border-style: dashed; }
-.gi-label { position: absolute; white-space: nowrap; font-size: 12px; color: #1f2a36;
-            pointer-events: none; }
-.gi-flash { position: absolute; left: -16px; top: -18px; font-size: 14px; color: #D55E00; }
-.gi-infeed { position: absolute; left: 3px; top: -20px; font-size: 13px; color: #0072B2; }
+/* Texts of the plan. --gi-s is set by the canvas from the zoom: below 85 %
+   the texts grow against it, so a name stays about 11 px high on screen
+   while the plan is zoomed out. Each text is anchored at the corner next to
+   its symbol and grows away from it. Zoomed out further the branch names go
+   first (.gi-far), then the bus names and values (.gi-very-far); what is
+   selected or under the pointer keeps its name. */
+.gi-label, .gi-flash, .gi-infeed { position: absolute; white-space: nowrap; pointer-events: none;
+            line-height: 1.15; text-shadow: 0 0 2px #fbfbfa, 0 0 2px #fbfbfa, 0 0 3px #fbfbfa; }
+.gi-label { font-size: calc(13px * var(--gi-s, 1)); color: #1f2a36; transform: translateY(-100%); }
+.gi-value { margin-left: 0.45em; font-weight: 600; font-variant-numeric: tabular-nums; }
+.gi-flash { right: 100%; bottom: 100%; font-size: calc(13px * var(--gi-s, 1)); color: #b84a00; font-weight: 600; }
+.gi-infeed { left: 50%; bottom: 100%; transform: translateX(-50%); font-size: calc(12px * var(--gi-s, 1));
+             color: #0072B2; line-height: 1; }
+.gi-stale .gi-value, .gi-stale .gi-edge-value { opacity: 0.6; font-style: italic; }
+.gi-far .gi-edge-label { display: none; }
+.gi-far .gi-edge.gi-sel .gi-edge-label, .gi-far .gi-edge:hover .gi-edge-label { display: inline; }
+.gi-very-far .gi-label, .gi-very-far .gi-flash-name { display: none; }
+.gi-very-far .gi-node.gi-sel .gi-label, .gi-very-far .vue-flow__node:hover .gi-label { display: inline; }
+.gi-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+           padding: 0 15%; text-align: center; color: #6b7480; font-size: 14px; pointer-events: none; z-index: 4; }
 .gi-handle { position: absolute !important; inset: 0 !important; width: 100% !important;
              height: 100% !important; transform: none !important; border: none !important;
              background: transparent !important; border-radius: inherit; opacity: 0;
@@ -78,7 +94,9 @@ CANVAS_CSS = """
 .gi-edge.gi-noearth .gi-edge-line { stroke-dasharray: 7 4; }
 .gi-edge.gi-off .gi-edge-line { stroke-dasharray: 2 5; opacity: 0.5; }
 .gi-edge.gi-sel .gi-edge-line { stroke-width: 4.5; filter: drop-shadow(0 0 2px #ffb300); }
-.gi-edge-label { font-size: 11px; fill: #3b4652; pointer-events: none; }
+.gi-edge-label { pointer-events: none; paint-order: stroke; stroke: #fbfbfa; stroke-width: 3px;
+                 stroke-linejoin: round; font-size: calc(11px * var(--gi-s, 1)); fill: #3b4652; }
+.gi-edge-value { fill: #1f2a36; font-weight: 600; }
 """
 
 
@@ -101,12 +119,23 @@ class NetworkCanvas(ui.element, component="network_canvas.js", esm={"groundinsig
         label, ``Mod`` for Ctrl or Cmd), ``"danger"``, ``"rule"`` (a line
         above) and ``"when"`` (``"active"`` or ``"inactive"``: only for an
         element in that state). A chosen entry arrives as the event ``menu``.
+    annotations : dict, optional
+        What is written at the elements: ``{"nodes": {name: note}, "edges":
+        {name: note}, "stale": bool}``. A note may carry ``"value"`` (the
+        number of the colouring, with its unit), ``"tip"`` (the tooltip) and
+        for a bus ``"faults"`` and ``"sources"`` (their names). ``stale``
+        greys the values: they belong to a result older than the inputs.
+    hint : str
+        Shown in the middle of a plan without elements.
     """
 
     def __init__(self, diagram: Dict[str, Any], *, colours: Optional[Dict[str, Any]] = None,
-                 tool: str = "select", menus: Optional[Dict[str, List[Dict[str, Any]]]] = None) -> None:
+                 tool: str = "select", menus: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+                 annotations: Optional[Dict[str, Any]] = None, hint: str = "") -> None:
         super().__init__()
         self._props["menus"] = menus or {}
+        self._props["annotations"] = annotations or {"nodes": {}, "edges": {}, "stale": False}
+        self._props["hint"] = hint
         self._props["diagram"] = diagram
         self._props["colours"] = colours or {"nodes": {}, "edges": {}}
         self._props["tool"] = tool
@@ -134,9 +163,10 @@ class NetworkCanvas(ui.element, component="network_canvas.js", esm={"groundinsig
         items = self._props["selected"]
         return items[0] if len(items) == 1 else None
 
-    def show(self, diagram: Dict[str, Any], colours: Dict[str, Any]) -> None:
+    def show(self, diagram: Dict[str, Any], colours: Dict[str, Any],
+             annotations: Optional[Dict[str, Any]] = None, hint: str = "") -> None:
         """
-        Show a new diagram and its colours.
+        Show a new diagram, its colours and what is written at the elements.
 
         Parameters
         ----------
@@ -144,9 +174,15 @@ class NetworkCanvas(ui.element, component="network_canvas.js", esm={"groundinsig
             ``DiagramDTO.model_dump()``.
         colours : dict
             ``{"nodes": ..., "edges": ...}``.
+        annotations : dict, optional
+            Values, tooltips and marker names (see the class).
+        hint : str
+            Shown in the middle of a plan without elements.
         """
         self._props["diagram"] = diagram
         self._props["colours"] = colours
+        self._props["annotations"] = annotations or {"nodes": {}, "edges": {}, "stale": False}
+        self._props["hint"] = hint
         self.update()
 
     def set_tool(self, tool: str) -> None:

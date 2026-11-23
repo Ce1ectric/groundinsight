@@ -91,6 +91,12 @@ class Colouring:
         categorical or when there is no number to show.
     gradient : str
         CSS ``linear-gradient`` of the scale.
+    node_values, edge_values : dict of str to float
+        The number a numerical mode coloured each element by (elements
+        without one are left out); empty for a categorical mode. The plan
+        writes it beside the element.
+    unit : str
+        Unit of the values; empty without values.
     """
 
     mode: str
@@ -98,6 +104,9 @@ class Colouring:
     edges: Dict[str, str] = field(default_factory=dict)
     entries: List[LegendEntry] = field(default_factory=list)
     scale: Optional[Tuple[float, float, str]] = None
+    node_values: Dict[str, float] = field(default_factory=dict)
+    edge_values: Dict[str, float] = field(default_factory=dict)
+    unit: str = ""
     gradient: str = "linear-gradient(to right, " + ", ".join(SCALE) + ")"
 
 
@@ -241,12 +250,20 @@ def _colour_utilisation(out: "Colouring", mode: str, diagram: Any, assessment: A
         return
     top = max(150.0, max(present))
     out.nodes = _utilisation(node_values, top)
+    out.node_values = _present(node_values)
     if branch_column:
         out.edges = _utilisation(edge_values, top)
+        out.edge_values = _present(edge_values)
     out.scale = (0.0, top, "%")
+    out.unit = "%"
     stop = 100.0 * 100.0 / top
     out.gradient = (f"linear-gradient(to right, {UTILISATION_COLOURS[0]} 0%, "
                     f"{UTILISATION_COLOURS[1]} {stop:.1f}%, {UTILISATION_COLOURS[2]} 100%)")
+
+
+def _present(values: Dict[str, Optional[float]]) -> Dict[str, float]:
+    """The elements that have a value."""
+    return {name: value for name, value in values.items() if value is not None}
 
 
 def _groups(diagram: Any) -> Dict[str, Optional[int]]:
@@ -415,11 +432,15 @@ def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None,
         if result is not None:
             if mode == "i_branch":
                 values = _rms(result.branches.rows, "branch_name", "I_branch_A")
-                out.edges, out.scale = _numerical({e.name: values.get(e.name) for e in diagram.edges}, "A")
+                shown = {e.name: values.get(e.name) for e in diagram.edges}
+                out.edges, out.scale = _numerical(shown, "A")
+                out.edge_values, out.unit = _present(shown), "A"
             else:
                 column = "EPR_V" if mode == "epr" else "U_vT_V"
                 values = _rms(result.buses.rows, "bus_name", column)
-                out.nodes, out.scale = _numerical({n.name: values.get(n.name) for n in diagram.nodes}, "V")
+                shown = {n.name: values.get(n.name) for n in diagram.nodes}
+                out.nodes, out.scale = _numerical(shown, "V")
+                out.node_values, out.unit = _present(shown), "V"
     elif mode == "characteristic":
         labels = {"bus": "legend_char_bus", "bus_type": "legend_char_type", None: "legend_char_formula"}
         colours = {"bus": PALETTE[2], "bus_type": PALETTE[4], None: NEUTRAL}

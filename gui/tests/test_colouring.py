@@ -154,3 +154,24 @@ def test_the_thermal_utilisation_colours_branches_and_buses_in_percent():
     top = max(150.0, percent)
     assert out.edges == {"K": utilisation_colour(percent, top)}
     assert out.scale == (0.0, top, "%")
+
+
+def test_a_numerical_mode_keeps_the_values_it_coloured():
+    """The plan writes the value beside the element: the same number that chose the colour."""
+    session = _session()
+    result = _solved(session, "F1")
+    twin = EXAMPLES["mv_ring"]()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        gi.run_fault(twin, "F1")
+    buses = twin.res_buses("F1").filter(twin.res_buses("F1")["frequency_Hz"].is_null())
+    branches = twin.res_branches("F1").filter(twin.res_branches("F1")["frequency_Hz"].is_null())
+    epr = colour("epr", session.diagram(), result=result)
+    assert epr.node_values == dict(zip(buses["bus_name"], buses["EPR_V"], strict=True))
+    assert (epr.edge_values, epr.unit) == ({}, "V")
+    current = colour("i_branch", session.diagram(), result=result)
+    assert current.edge_values == dict(zip(branches["branch_name"], branches["I_branch_A"], strict=True))
+    assert (current.node_values, current.unit) == ({}, "A")
+    # A categorical mode and a mode without its result have no numbers to write.
+    assert colour("type", session.diagram()).node_values == {}
+    assert colour("epr", session.diagram()).node_values == {}

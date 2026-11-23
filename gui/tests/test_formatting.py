@@ -72,3 +72,14 @@ def test_units_are_shown_with_their_symbols():
 )
 def test_the_two_ends_of_a_colour_scale_share_their_decimal_place(low, high, language, expected):
     assert format_scale(low, high, language) == expected
+
+
+def test_a_numerical_zero_beside_real_values_reads_as_zero():
+    from groundinsight_gui.formatting import format_value
+
+    assert format_value(5.89e-15, 18.03, "de") == "0"
+    assert format_value(-3e-9, 934.0, "en") == "0"
+    # A small value that is a value keeps its digits; so does everything without a larger neighbour.
+    assert format_value(0.0366, 934.0, "de") == "0,0366"
+    assert format_value(5.89e-15, 5.89e-15, "en") == "5.89e-15"
+    assert format_value(None, 1.0, "de") == "–"
