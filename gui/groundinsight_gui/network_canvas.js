@@ -41,10 +41,13 @@ const SYMBOL_SIZE = 22;
 const BUSBAR_HEIGHT = 8;
 const BUSBAR_DEFAULT_LENGTH = 100;
 // Fit of the whole diagram, for the first draw, after a layout and for the fit
-// button of the controls. Vue Flow fits the symbols only; the bus labels stand
-// to the right of them, hence the generous padding. A short feeder would fill
-// the screen at several-fold zoom, hence maxZoom 1 (labels at their own size).
-const FIT = { padding: 0.3, maxZoom: 1.0 };
+// button. Vue Flow's own fit knows the symbols only; the texts stand around
+// them -- the name and value to the right, the fault mark to the upper left --
+// so the fit is computed here, for the symbols plus this room for their texts
+// (in pixels of the screen, the texts do not shrink with the plan). A short
+// feeder would fill the screen at several-fold zoom, hence at most zoom 1.
+const FIT_MARGIN = { left: 56, top: 40, right: 170, bottom: 28 };
+const FIT_MAX_ZOOM = 1.0;
 // Texts keep their size on screen below this zoom, up to this factor ...
 const TEXT_FULL_ZOOM = 0.85;
 const TEXT_MAX_SCALE = 2.6;
@@ -171,7 +174,6 @@ export default {
       nodeTypes: markRaw({ bus: markRaw(BusNode) }),
       edgeTypes: markRaw({ line: markRaw(LineEdge) }),
       fitted: false,
-      fitParams: FIT,
       multiKeys: ["Shift", "Meta", "Control"],
       active: false,
       clicked: null,
@@ -445,7 +447,37 @@ export default {
       // After the next render and layout pass: the nodes of a new diagram and
       // the final size of the canvas are known only then.
       this.$nextTick(() => {
-        window.setTimeout(() => this.flow.fitView(FIT), 80);
+        window.setTimeout(() => this.fitNow(), 80);
+      });
+    },
+    fitNow() {
+      const nodes = (this.diagram && this.diagram.nodes) || [];
+      const width = this.$el.clientWidth;
+      const height = this.$el.clientHeight;
+      if (!nodes.length || !width || !height) {
+        return;
+      }
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const n of nodes) {
+        const [w, h] = symbolSize(n);
+        x0 = Math.min(x0, n.x - w / 2);
+        y0 = Math.min(y0, n.y - h / 2);
+        x1 = Math.max(x1, n.x + w / 2);
+        y1 = Math.max(y1, n.y + h / 2);
+      }
+      const m = FIT_MARGIN;
+      const zoom = Math.max(0.1, Math.min(
+        FIT_MAX_ZOOM,
+        (width - m.left - m.right) / Math.max(x1 - x0, 1),
+        (height - m.top - m.bottom) / Math.max(y1 - y0, 1),
+      ));
+      // The symbols in the middle of what the margins leave. At once, not as
+      // an animation: a click right after the fit must find the symbols where
+      // they are drawn.
+      this.flow.setViewport({
+        x: m.left + (width - m.left - m.right - zoom * (x1 - x0)) / 2 - zoom * x0,
+        y: m.top + (height - m.top - m.bottom - zoom * (y1 - y0)) / 2 - zoom * y0,
+        zoom,
       });
     },
     async layoutElk() {
@@ -488,8 +520,12 @@ export default {
                @selection-context-menu="onSelectionContextMenu" @pane-context-menu="onPaneContextMenu"
                @move-start="menu = null">
         <Background :gap="grid" pattern-color="#d6dbe1" />
-        <MiniMap pannable zoomable />
-        <Controls :show-interactive="false" :fit-view-params="fitParams" />
+        <MiniMap pannable zoomable :width="150" :height="100" />
+        <Controls :show-interactive="false" :show-fit-view="false">
+          <button type="button" class="vue-flow__controls-button vue-flow__controls-fitview" @click="fitNow">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 30"><path d="M3.692 4.63c0-.53.4-.938.939-.938h5.215V0H4.708C2.13 0 0 2.054 0 4.63v5.216h3.692V4.631zM27.354 0h-5.2v3.692h5.17c.53 0 .984.4.984.939v5.215H32V4.631A4.624 4.624 0 0027.354 0zm.954 24.83c0 .532-.4.94-.939.94h-5.215v3.768h5.215c2.577 0 4.631-2.13 4.631-4.707v-5.139h-3.692v5.139zm-23.677.94c-.531 0-.939-.4-.939-.94v-5.138H0v5.139c0 2.577 2.13 4.707 4.708 4.707h5.138V25.77H4.631z"/></svg>
+          </button>
+        </Controls>
       </VueFlow>
       <div v-if="hint" class="gi-hint">{{ hint }}</div>
       <div v-if="menu" class="gi-menu" role="menu" :style="{ left: menu.left + 'px', top: menu.top + 'px' }"

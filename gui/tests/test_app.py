@@ -141,7 +141,10 @@ async def test_save_as_writes_the_project_file_without_results(user: User, tmp_p
     # The notification comes after the write (the path field shows the name
     # from the start, so the name alone is no signal).
     await user.should_see("Gespeichert", retries=50)
-    assert str(target) in _element(user, "project-title").text
+    # The title names the file, its tooltip the whole path.
+    title = _element(user, "project-title")
+    assert title.text == "QuickstartNet · projekt.json"
+    assert [child.text for child in title.default_slot.children] == [str(target)]
     await user.should_not_see(marker="dirty")
     payload = json.loads(target.read_text(encoding="utf-8"))
     assert payload["network"]["results"] == {} and payload["schema_version"] >= 2

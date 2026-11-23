@@ -243,7 +243,7 @@ async def test_opening_a_project_from_the_toolbar(user: User, tmp_path, monkeypa
     await user.should_see(marker="file-dialog-open")
     user.find(marker="file-path").type("~/ring.json")
     user.find(marker="file-confirm").click()
-    await user.should_see(os.path.join(str(tmp_path), "ring.json"))  # the title, after the open
+    await user.should_see(marker="project-title", content="ring.json")  # the title, after the open
     assert page.session.location == os.path.join(str(tmp_path), "ring.json")
     assert len(page.session.network.buses) == 20
 

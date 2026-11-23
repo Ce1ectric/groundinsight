@@ -195,8 +195,21 @@ window.addEventListener("keydown", (event) => {
 </script>
 """
 
+# The page is as high as the window: toolbar and tabs stay where they are,
+# the open tab takes the rest and scrolls on its own -- so the plan always
+# ends at the bottom edge of the window, on a small screen too.
 _CSS = """
 body { background: #f6f6f4; }
+.nicegui-content { height: 100vh; padding: 8px; gap: 8px; flex-wrap: nowrap; }
+.gi-toolbar { flex: none; }
+.gi-toolbar .q-btn { flex: none; }
+.gi-tabs { flex: none; }
+.gi-panels { flex: 1 1 0; min-height: 0; }
+.gi-panels .q-tab-panel { padding: 8px; }
+/* A tab's content keeps its height and the tab scrolls; only the plan fits itself into the tab. */
+.gi-panels .q-tab-panel > * { flex-shrink: 0; }
+.gi-panels .q-tab-panel.gi-plan-panel { padding: 4px 0 0 0; }
+.gi-panels .q-tab-panel.gi-plan-panel > * { flex-shrink: 1; }
 .gi-num { font-variant-numeric: tabular-nums; }
 .gi-tile { min-width: 0; }
 """
@@ -438,9 +451,13 @@ class ProjectPage:
 
     def _toolbar(self) -> None:
         """Title, file actions, undo/redo, language."""
-        with ui.row().classes("w-full items-center gap-2 px-4 py-2 bg-white shadow-sm no-wrap"):
+        with ui.row().classes("gi-toolbar w-full items-center gap-2 px-4 py-2 bg-white shadow-sm no-wrap"):
             ui.label(self.t("app_title")).classes("text-lg font-semibold tracking-tight whitespace-nowrap")
+            # Project and file name; the folder is in the tooltip (a long path
+            # would take the room of the menus).
             self.title_label = ui.label().classes("text-sm text-gray-600 truncate min-w-0").mark("project-title")
+            with self.title_label:
+                self.title_tooltip = ui.tooltip("")
             self.dirty_marker = ui.label("●").classes("text-amber-600").mark("dirty")
             self.dirty_marker.tooltip(self.t("unsaved"))
             ui.space()
@@ -459,12 +476,13 @@ class ProjectPage:
                 self.redo_button = ui.button(icon="redo", on_click=self._redo).props("flat dense").mark("redo")
                 self.undo_button.props(f'aria-label="{self.t("undo")}"')
                 self.redo_button.props(f'aria-label="{self.t("redo")}"')
-                with ui.button(self.t("colouring"), icon="palette").props("flat dense no-caps").mark("colouring"):
+                with ui.button(self.t("colouring"), icon="palette").props("flat dense no-caps no-wrap").mark(
+                        "colouring"):
                     with ui.menu():
                         for mode in MODES:
                             ui.menu_item(self.t(f"colour_{mode}"), on_click=lambda _, m=mode: self._colour(m)).mark(
                                 f"colour-{mode}")
-                with ui.button(self.t("calculation"), icon="calculate").props("flat dense no-caps").mark(
+                with ui.button(self.t("calculation"), icon="calculate").props("flat dense no-caps no-wrap").mark(
                         "calculation"):
                     with ui.menu():
                         ui.menu_item(self.t("calc_solve"), on_click=lambda: self._calculate("solve")).mark("calc-solve")
@@ -477,14 +495,14 @@ class ProjectPage:
                             ui.menu_item(self.t(f"study_{study}"),
                                          on_click=lambda _, st=study: StudyDialog(self, st).open()).mark(
                                 f"calc-{study}")
-                with ui.button(self.t("import_export"), icon="import_export").props("flat dense no-caps").mark(
-                        "import-export"):
+                with ui.button(self.t("import_export"), icon="import_export").props(
+                        "flat dense no-caps no-wrap").mark("import-export"):
                     with ui.menu():
                         for action in ("export_tables", "import_tables", "import_pandapower"):
                             ui.menu_item(self.t(action), on_click=lambda _, a=action: self._io_dialog(a)).mark(
                                 f"io-{action}")
-                with ui.button(self.t("auto_layout"), icon="account_tree").props("flat dense no-caps").mark(
-                        "auto-layout"):
+                with ui.button(self.t("auto_layout"), icon="account_tree").props(
+                        "flat dense no-caps no-wrap").mark("auto-layout"):
                     with ui.menu():
                         for how in ("library", "unplaced", "elk"):
                             ui.menu_item(self.t(f"layout_{how}"), on_click=lambda _, h=how: self._layout(h)).mark(
@@ -523,11 +541,15 @@ class ProjectPage:
         """Project title, dirty marker and the undo/redo state."""
         if self.session is None:
             self.title_label.set_text("")
+            self.title_tooltip.set_text("")
+            self.title_tooltip.set_visibility(False)
             self.dirty_marker.set_visibility(False)
             return
         summary = self.session.summary()
-        location = summary.location or self.t("not_saved_yet")
-        self.title_label.set_text(f"{summary.name} · {location}")
+        file_name = Path(summary.location).name if summary.location else self.t("not_saved_yet")
+        self.title_label.set_text(f"{summary.name} · {file_name}")
+        self.title_tooltip.set_text(summary.location or self.t("not_saved_yet"))
+        self.title_tooltip.set_visibility(True)
         self.dirty_marker.set_visibility(summary.dirty)
         self.undo_button.set_enabled(summary.can_undo)
         self.redo_button.set_enabled(summary.can_redo)
@@ -556,8 +578,9 @@ class ProjectPage:
 
     def _workspace(self) -> None:
         """The three tabs of an open project."""
-        with ui.tabs(value=self.tab, on_change=lambda e: setattr(self, "tab", e.value)).classes(
-                "w-full bg-white text-gray-700").mark("tabs") as self.tabs:
+        with ui.tabs(value=self.tab, on_change=lambda e: setattr(self, "tab", e.value)).props(
+                "dense inline-label align=left").classes("gi-tabs w-full bg-white text-gray-700").mark(
+                "tabs") as self.tabs:
             ui.tab("plan", label=self.t("tab_plan"), icon="schema").mark("tab-plan")
             ui.tab("network", label=self.t("tab_network"), icon="table_view").mark("tab-network")
             ui.tab("results", label=self.t("tab_results"), icon="bar_chart").mark("tab-results")
@@ -569,8 +592,8 @@ class ProjectPage:
                 f'flat dense round aria-label="{self.t("view_new")}"').tooltip(self.t("view_new")).mark("view-add")
         if self.tab not in ("plan", "network", "results", "check", *self.view_ids):
             self.tab = "plan"
-        with ui.tab_panels(self.tabs, value=self.tab).classes("w-full bg-transparent"):
-            with ui.tab_panel("plan").classes("gap-2 p-2"):
+        with ui.tab_panels(self.tabs, value=self.tab).classes("gi-panels w-full bg-transparent"):
+            with ui.tab_panel("plan").classes("gi-plan-panel gap-2 h-full"):
                 self.plan.build()
             with ui.tab_panel("network").classes("gap-2"):
                 self._network_panel()

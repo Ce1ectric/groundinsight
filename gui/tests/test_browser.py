@@ -215,6 +215,44 @@ def test_delete_removes_a_connected_bus(page):
     assert page.errors == []
 
 
+@pytest.mark.parametrize("size", [(1440, 900), (1280, 800)])
+def test_the_plan_fills_the_window_below_a_flat_header(browser, server, tmp_path, size):
+    """The plan is the main view: it starts high up and ends at the bottom of the window, without scrolling."""
+    import shutil
+
+    # A project file deep in the file system: its path must not push the toolbar into two lines.
+    folder = tmp_path / "ein" / "sehr" / "langer" / "pfad" / "zu" / "einem" / "projekt" / "im" / "dateisystem"
+    folder.mkdir(parents=True)
+    import groundinsight as gi
+    from groundinsight.api import EXAMPLES
+
+    gi.save_network_to_json(EXAMPLES["minimal"](), folder / "strang.json")
+    context = browser.new_context(viewport={"width": size[0], "height": size[1]}, locale="de-DE")
+    page = context.new_page()
+    try:
+        page.goto(server)
+        page.locator(".vue-flow__node").first.wait_for()
+        page.get_by_role("button", name="Öffnen").click()
+        page.get_by_label("Dateipfad (.json)").fill(str(folder / "strang.json"))
+        page.locator(".q-dialog").get_by_role("button", name="Öffnen").click()
+        page.get_by_text("strang.json").wait_for()
+        page.locator(".vue-flow__node").first.wait_for()
+        page.wait_for_timeout(500)
+        canvas = page.locator(".gi-canvas").bounding_box()
+        toolbar = page.locator(".gi-toolbar").bounding_box()
+        assert toolbar["height"] <= 56  # one line, whatever the path
+        assert canvas["y"] <= 150  # was 264 of 900
+        assert size[1] - 16 <= canvas["y"] + canvas["height"] <= size[1]
+        assert page.evaluate("document.documentElement.scrollHeight <= window.innerHeight")
+        # The title names the file; the whole path is its tooltip.
+        assert page.locator(".gi-toolbar").get_by_text(str(folder)).count() == 0
+        page.get_by_text("strang.json").hover()
+        page.get_by_text(str(folder / "strang.json")).wait_for()
+    finally:
+        context.close()
+    shutil.rmtree(tmp_path / "ein")
+
+
 def _selected(page):
     return sorted(page.locator(".gi-node.gi-sel").evaluate_all("ns => ns.map(n => n.dataset.bus)"))
 

@@ -316,9 +316,9 @@ class PlanView:
             self.bus_type = summary.bus_types[0] if summary.bus_types else None
         if self.branch_type not in summary.branch_types:
             self.branch_type = summary.branch_types[0] if summary.branch_types else None
-        with ui.row().classes("w-full no-wrap gap-2 items-stretch"):
+        with ui.row().classes("w-full no-wrap gap-2 items-stretch grow min-h-0"):
             self._palette(summary)
-            with ui.column().classes("grow gap-1 min-w-0"):
+            with ui.column().classes("grow gap-1 min-w-0 min-h-0"):
                 diagram = self.session.diagram()
                 colours = self.colouring(diagram)
                 self.legend()
@@ -327,7 +327,7 @@ class PlanView:
                                             tool=self.tool, menus=self._menus(),
                                             annotations=self.annotations(colours, diagram),
                                             hint=self._hint()).classes(
-                    "w-full rounded border bg-white").style("height: 68vh").mark("canvas")
+                    "w-full rounded border bg-white grow min-h-0").mark("canvas")
                 for name, handler in (("place", self._on_place), ("move", self._on_move),
                                       ("connect", self._on_connect), ("fault", self._on_fault),
                                       ("select", self._on_select), ("select_many", self._on_select_many),
@@ -335,7 +335,7 @@ class PlanView:
                                       ("delete", self._on_delete), ("layout", self._on_layout),
                                       ("key", self._on_key), ("menu", self._on_menu)):
                     self.canvas.on(name, lambda e, h=handler: h(e.args or {}))
-            with ui.column().classes("w-72 gap-1"):
+            with ui.column().classes("w-72 gap-1 overflow-auto"):
                 self.properties()
         # Dialogs are created here: an event handler runs in the slot of the
         # element that fired it, and the canvas renders no slot.
@@ -354,7 +354,7 @@ class PlanView:
 
     def _palette(self, summary: Any) -> None:
         """Tools and the types new elements get."""
-        with ui.column().classes("w-56 gap-1 bg-white rounded border p-2").mark("palette"):
+        with ui.column().classes("w-56 gap-1 bg-white rounded border p-2 overflow-auto").mark("palette"):
             ui.label(self.t("palette")).classes("text-xs uppercase tracking-wide text-gray-500")
             self.tool_toggle = ui.toggle({tool: self.t(f"tool_{tool}") for tool in TOOLS}, value=self.tool,
                                          on_change=lambda e: self.set_tool(e.value)).props(
