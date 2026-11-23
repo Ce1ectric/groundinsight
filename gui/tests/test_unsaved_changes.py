@@ -88,3 +88,23 @@ async def test_the_browser_is_told_to_warn_while_the_dirty_marker_shows(user: Us
     assert "gi-dirty" in page.dirty_marker.classes and not page.dirty_marker.visible
     _change(user)
     assert page.dirty_marker.visible
+
+
+async def test_the_save_dialog_warns_for_the_file_it_will_really_write(user: User, tmp_path):
+    """A typed path wins over folder and name; the hint 'will be replaced' follows what is written."""
+    existing = tmp_path / "strang.json"
+    gi.save_network_to_json(EXAMPLES["minimal"](), existing)
+    page = await _page(user, start_example=None, start_file=str(existing))
+    user.find(marker="save-as").click()
+    await user.should_see(marker="file-dialog-save")
+    await user.should_see(marker="file-replaced")  # folder and name: the project's own file
+    user.find(marker="file-path").type(str(tmp_path / "neu.json"))
+    await user.should_not_see(marker="file-replaced")  # the path typed does not exist
+    user.find(marker="file-path").clear().type(str(existing))
+    await user.should_see(marker="file-replaced")
+    user.find(marker="file-path").clear()
+    user.find(marker="file-name").clear().type("kopie")
+    await user.should_not_see(marker="file-replaced")
+    user.find(marker="file-name").trigger("keydown.enter")  # Enter saves
+    await user.should_see("Gespeichert", retries=50)
+    assert (tmp_path / "kopie.json").exists() and page.session.location == str(tmp_path / "kopie.json")

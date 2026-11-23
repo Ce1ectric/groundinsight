@@ -153,6 +153,7 @@ class FileDialog:
         self.name = name
         self.dialog: Any = None
         self.name_input: Any = None
+        self.path_input: Any = None
 
     def open(self) -> None:
         """Build and open the dialog."""
@@ -160,44 +161,60 @@ class FileDialog:
             ui.label(self.t("open_project") if self.mode == "open" else self.t("save_as_title")).classes(
                 "text-base font-medium")
             self.listing()
+            self.replaced_hint()
             if self.mode == "save":
                 self.name_input = ui.input(self.t("file_name"), value=self.name,
-                                           on_change=lambda _: self.listing.refresh()).classes("w-full").mark(
-                    "file-name")
-                self.listing.refresh()  # the listing was drawn before the name existed
+                                           on_change=lambda _: self.replaced_hint.refresh()).props(
+                    "autofocus").classes("w-full").mark("file-name")
+                self.name_input.on("keydown.enter", lambda: self._confirm(self.path_input.value))
             with ui.row().classes("w-full items-end gap-2 no-wrap"):
-                path = ui.input(self.t("path"), placeholder=self.t("path_example")).classes("grow").mark(
+                self.path_input = ui.input(self.t("path"), placeholder=self.t("path_example"),
+                                           on_change=lambda _: self.replaced_hint.refresh()).classes("grow").mark(
                     "file-path")
+                self.path_input.on("keydown.enter", lambda: self._confirm(self.path_input.value))
                 ui.button(self.t("open") if self.mode == "open" else self.t("save"),
-                          on_click=lambda: self._confirm(path.value)).props("no-caps").mark("file-confirm")
+                          on_click=lambda: self._confirm(self.path_input.value)).props("no-caps").mark(
+                    "file-confirm")
                 ui.button(self.t("cancel_dialog"), on_click=self.dialog.close).props("flat no-caps")
+            self.replaced_hint.refresh()  # the hint was drawn before the fields existed
         self.dialog.on_value_change(lambda e: None if e.value else self.dialog.delete())
         self.dialog.open()
 
     @ui.refreshable_method
     def listing(self) -> None:
         """Breadcrumb, *up*, folders and project files of the current folder."""
-        with ui.row().classes("items-center gap-1 flex-wrap").mark("file-breadcrumbs"):
+        with ui.row().classes("items-center gap-0 flex-wrap").mark("file-breadcrumbs"):
             ui.button(icon="arrow_upward", on_click=lambda: self.go(self.directory.parent)).props(
-                f'flat dense round aria-label="{self.t("folder_up")}"').mark("file-up")
+                f'flat dense round size=sm aria-label="{self.t("folder_up")}"').mark("file-up")
             for crumb in breadcrumbs(self.directory):
                 ui.button(crumb.name or str(crumb), on_click=lambda _, c=crumb: self.go(c)).props(
-                    "flat dense no-caps").classes("text-xs").mark(f"file-crumb-{crumb}")
+                    "flat dense no-caps size=sm").mark(f"file-crumb-{crumb}")
         folders, files = list_directory(self.directory)
-        with ui.scroll_area().classes("w-full h-64 border rounded"):
+        # Dense rows: about ten entries in view, as in a file manager.
+        with ui.scroll_area().classes("w-full h-72 border rounded"):
             for folder in folders:
-                with ui.item(on_click=lambda _, f=folder: self.go(f)).mark(f"file-folder-{folder.name}"):
-                    with ui.item_section().props("avatar"):
-                        ui.icon("folder", color="amber-8")
+                with ui.item(on_click=lambda _, f=folder: self.go(f)).props("dense").mark(
+                        f"file-folder-{folder.name}"):
+                    with ui.item_section().props("avatar").classes("min-w-0 pr-2"):
+                        ui.icon("folder", color="amber-8", size="xs")
                     ui.item_section(folder.name)
             for file in files:
-                with ui.item(on_click=lambda _, f=file: self.pick(f)).mark(f"file-file-{file.name}"):
-                    with ui.item_section().props("avatar"):
-                        ui.icon("description", color="blue-grey-6")
+                with ui.item(on_click=lambda _, f=file: self.pick(f)).props("dense").mark(
+                        f"file-file-{file.name}"):
+                    with ui.item_section().props("avatar").classes("min-w-0 pr-2"):
+                        ui.icon("description", color="blue-grey-6", size="xs")
                     ui.item_section(file.name)
             if not folders and not files:
                 ui.label(self.t("folder_empty")).classes("text-xs text-gray-500 p-2")
-        if self.mode == "save" and self.name_input is not None and self._target().exists():
+
+    @ui.refreshable_method
+    def replaced_hint(self) -> None:
+        """Saving: the warning that the file to be written exists (a typed path wins over folder and name)."""
+        if self.mode != "save" or self.name_input is None or self.path_input is None:
+            return
+        typed = str(self.path_input.value or "").strip()
+        target = Path(os.path.expandvars(typed)).expanduser() if typed else self._target()
+        if target.is_file():
             ui.label(self.t("file_replaced")).classes("text-xs text-amber-800").mark("file-replaced")
 
     def go(self, directory: Path) -> None:
@@ -212,6 +229,7 @@ class FileDialog:
         if directory.is_dir():
             self.directory = directory
             self.listing.refresh()
+            self.replaced_hint.refresh()
 
     async def pick(self, file: Path) -> None:
         """
