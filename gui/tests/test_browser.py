@@ -281,6 +281,22 @@ def test_the_plan_fills_the_window_below_a_flat_header(browser, server, tmp_path
     shutil.rmtree(tmp_path / "ein")
 
 
+def test_the_browser_asks_before_a_page_with_unsaved_changes_is_left(page):
+    asked = []
+    page.on("dialog", lambda dialog: (asked.append(dialog.type), dialog.accept()))
+    page.reload()  # nothing changed: no question
+    page.locator(".vue-flow__node").first.wait_for()
+    assert asked == []
+    _tool(page, "Bus")
+    pane = page.locator(".vue-flow__pane").bounding_box()
+    page.mouse.click(pane["x"] + pane["width"] * 0.5, pane["y"] + pane["height"] * 0.8)
+    _node(page, "B1").wait_for()
+    page.locator(".gi-dirty:not(.hidden)").wait_for()
+    page.reload()
+    page.locator(".vue-flow__node").first.wait_for()
+    assert asked == ["beforeunload"]
+
+
 def _selected(page):
     return sorted(page.locator(".gi-node.gi-sel").evaluate_all("ns => ns.map(n => n.dataset.bus)"))
 

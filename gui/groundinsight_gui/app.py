@@ -29,9 +29,12 @@ the result and disappears again when the edit is undone.
 The plan and the tables show the same session: a selection in one selects
 the element in the other, and a command from either refreshes both.
 
+Unsaved changes are not thrown away without a question: a template, a file
+or an import that would replace the project asks first, and the browser asks
+before the page is left or reloaded.
+
 Limits, by design: no paste from spreadsheets, no formula editor beyond a
-text cell, no studies besides the fault sweep; a page reload starts a new
-session (unsaved edits are lost).
+text cell; a page reload starts a new session.
 """
 
 import logging
@@ -195,6 +198,21 @@ window.addEventListener("keydown", (event) => {
   if (action !== "save" && (typing || document.querySelector(".q-dialog"))) return;
   event.preventDefault();
   emitEvent("gi_shortcut", { action: action });
+});
+</script>
+"""
+
+#: Leaving the page -- closing the tab or the window, a reload -- with unsaved
+#: changes: the browser asks first. It decides by the marker of unsaved
+#: changes in the toolbar, which the server shows and hides.
+_UNSAVED_JS = """
+<script>
+window.addEventListener("beforeunload", (event) => {
+  const marker = document.querySelector(".gi-dirty");
+  if (marker && !marker.classList.contains("hidden")) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
 });
 </script>
 """
@@ -397,6 +415,7 @@ class ProjectPage:
         """Create the page content and the job poller."""
         ui.add_css(_CSS)
         ui.add_head_html(_SHORTCUTS_JS)
+        ui.add_head_html(_UNSAVED_JS)
         ui.on("gi_shortcut", lambda e: self.shortcut(e.args or {}))
         ui.colors(primary=ACCENT)
         self.root()
@@ -469,7 +488,7 @@ class ProjectPage:
             self.title_label = ui.label().classes("text-sm text-gray-600 truncate min-w-0").mark("project-title")
             with self.title_label:
                 self.title_tooltip = ui.tooltip("")
-            self.dirty_marker = ui.label("●").classes("text-amber-600").mark("dirty")
+            self.dirty_marker = ui.label("●").classes("gi-dirty text-amber-600").mark("dirty")
             self.dirty_marker.tooltip(self.t("unsaved"))
             ui.space()
             # The file actions as icons (with tooltip and accessible name): the
@@ -478,8 +497,9 @@ class ProjectPage:
                 with ui.menu():
                     for name in self.templates:
                         ui.menu_item(template_label(self.language, name),
-                                     on_click=lambda _, n=name: self._open_template(n)).mark(f"new-{name}")
-            self._icon_button("open", "folder_open", self._open_open_dialog)
+                                     on_click=lambda _, n=name: self._ask_before_replacing(
+                                         lambda: self._open_template(n))).mark(f"new-{name}")
+            self._icon_button("open", "folder_open", lambda: self._ask_before_replacing(self._open_open_dialog))
             if self.session is not None:
                 self._icon_button("save", "save", self._save)
                 self._icon_button("save_as", "save_as", self._open_save_dialog).mark("save-as")
@@ -510,8 +530,10 @@ class ProjectPage:
                         "flat dense no-caps no-wrap").mark("import-export"):
                     with ui.menu():
                         for action in ("export_tables", "import_tables", "import_pandapower"):
-                            ui.menu_item(self.t(action), on_click=lambda _, a=action: self._io_dialog(a)).mark(
-                                f"io-{action}")
+                            # An import replaces the project; an export does not.
+                            ui.menu_item(self.t(action), on_click=lambda _, a=action: (
+                                self._io_dialog(a) if a == "export_tables"
+                                else self._ask_before_replacing(lambda: self._io_dialog(a)))).mark(f"io-{action}")
                 with ui.button(self.t("auto_layout"), icon="account_tree").props(
                         "flat dense no-caps no-wrap").mark("auto-layout"):
                     with ui.menu():
@@ -1609,6 +1631,47 @@ class ProjectPage:
         self._diagnostics_panel(report.diagnostics, title=self.t("tab_check"))
 
     # -- files and language -----------------------------------------------------
+
+    def _ask_before_replacing(self, action: Callable[[], Any]) -> None:
+        """
+        Run an action that replaces the project -- after a question, if there are unsaved changes.
+
+        Parameters
+        ----------
+        action : callable
+            Opens a template, the file manager or an import dialog. It runs
+            at once for a project without unsaved changes; else the page
+            offers to cancel, to discard the changes, or to save them first.
+        """
+        if self.session is None or not self.session.summary().dirty:
+            action()
+            return
+        with self.dialog_host, ui.dialog() as dialog, ui.card().classes("w-[30rem]").mark("discard-dialog"):
+            ui.label(self.t("discard_title")).classes("text-base font-medium")
+            ui.label(self.t("discard_text", name=self.session.summary().name)).classes("text-sm text-gray-700")
+
+            def discard() -> None:
+                dialog.close()
+                action()
+
+            async def save_first() -> None:
+                if self.session.location is None:
+                    dialog.close()
+                    self._open_save_dialog()  # a place is needed first; the action is asked for again after it
+                    return
+                # The dialog stays until the file is written: the handler runs in its slot.
+                saved = await self._do_save(None)
+                dialog.close()
+                if saved:
+                    action()
+
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button(self.t("cancel_dialog"), on_click=dialog.close).props("flat no-caps").mark("discard-cancel")
+                ui.button(self.t("discard"), on_click=discard).props("flat no-caps color=negative").mark(
+                    "discard-confirm")
+                ui.button(self.t("save_and_continue"), on_click=save_first).props("no-caps").mark("discard-save")
+        dialog.on_value_change(lambda e: None if e.value else dialog.delete())
+        dialog.open()
 
     def _open_template(self, name: str) -> None:
         """Start a new, unsaved project from a template."""
