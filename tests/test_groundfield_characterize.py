@@ -267,3 +267,41 @@ def test_the_templates_build_the_same_geometry_alone_and_in_a_larger_world():
     assert [e.model_dump() for e in alone.electrodes] == [e.model_dump() for e in world.electrodes[:5]]
     with pytest.raises(ValueError, match="no dimension"):
         gfi.add_electrode(world, "ring", name="X", size_m=3.0)
+
+
+def test_a_mesh_electrode_is_a_grid_with_its_rods():
+    """The rectangular mesh: one mesh is a ring; rods stand at the corners or outside, joined by bare strips."""
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gfi.add_electrode(world, "mesh", name="G", length_m=50.0, width_m=100.0)
+    gfi.add_electrode(world, "mesh", name="R", position=(200.0, 0.0), length_m=5.0, width_m=5.0, mesh_m=5.0,
+                      rods=2, rod_length_m=12.0, rod_distance_m=5.0)
+    gfi.add_electrode(world, "mesh", name="C", position=(400.0, 0.0), length_m=5.0, width_m=5.0, mesh_m=5.0,
+                      rods=1, rod_length_m=6.0)
+    by_name = {e.name: e for e in world.electrodes}
+    assert list(by_name) == ["G", "R", "R_rod0", "R_strip0", "R_rod1", "R_strip1", "C", "C_rod0"]
+    grid = by_name["G"].model_dump()
+    assert (grid["n_x"], grid["n_y"]) == (5, 10)
+    assert (by_name["R"].model_dump()["n_x"], by_name["R"].model_dump()["n_y"]) == (1, 1)
+    # the outlying rods: 5 m beyond the edge of the 5 m ring, on opposite sides, at the depth of the ring
+    assert tuple(by_name["R_rod0"].model_dump()["position"]) == (207.5, 0.0, 0.8)
+    assert tuple(by_name["R_rod1"].model_dump()["position"]) == (192.5, 0.0, 0.8)
+    strip = by_name["R_strip0"].model_dump()
+    assert (tuple(strip["start"]), tuple(strip["end"])) == ((202.5, 0.0, 0.8), (207.5, 0.0, 0.8))
+    assert tuple(by_name["C_rod0"].model_dump()["position"]) == (402.5, 2.5, 0.8)
+    with pytest.raises(ValueError, match="at most 4 rods"):
+        gfi.add_electrode(world, "mesh", name="X", rods=5)
+
+
+def test_the_ring_with_outlying_rods_is_one_electrode():
+    """Ring, strips and rods are bonded: the characteristic is that of the whole, below ring and rods alone."""
+    engine = gf.create_engine(backend="mom", frequencies=[50.0], segment_length=0.5)
+    together = gfi.characterize(
+        gfi.electrode_world("mesh", length_m=5.0, width_m=5.0, mesh_m=5.0, rods=2, rod_length_m=12.0,
+                            rod_distance_m=5.0), [100.0], electrode="E", engine=engine, name="t")
+    ring = gfi.characterize(gfi.electrode_world("mesh", length_m=5.0, width_m=5.0, mesh_m=5.0), [100.0],
+                            electrode="E", engine=engine, name="r")
+    z_together = abs(together.evaluate(100.0, [50.0]).impedance[0])
+    z_ring = abs(ring.evaluate(100.0, [50.0]).impedance[0])
+    rod = 100.0 / (2 * math.pi * 12.0) * (math.log(4 * 12.0 / 0.005) - 1)       # Dwight, one rod of 12 m
+    assert z_together < min(z_ring, rod / 2 * 1.05)
+    assert z_together > 1 / (1 / z_ring + 2 / rod)                               # coupling: more than ideal parallel

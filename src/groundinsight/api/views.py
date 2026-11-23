@@ -199,7 +199,7 @@ def element_tables_dto(
     extra_branch_types: Iterable = (),
 ) -> NetworkTablesDTO:
     """
-    The input of a network as the ten tables of ``Network.to_tables``.
+    The input of a network as the twelve tables of ``Network.to_tables``.
 
     Parameters
     ----------

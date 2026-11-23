@@ -128,7 +128,9 @@ compares `U_vT` with the permissible value of EN 50522 you pass
 `characterize` builds the world once per soil, solves it and fills one row of
 the table per soil. `electrode_world` builds a typical electrode alone —
 `"ring"` (a station ring with driven rods), `"foundation"` (a meshed house
-foundation) or `"rod"`, with the dimensions of `ELECTRODES` as defaults — and
+foundation), `"rod"` or `"mesh"` (a rectangular mesh electrode — one mesh is a
+rectangular ring — with rods at its corners or outside it, joined by bare
+conductors), with the dimensions of `ELECTRODES` as defaults — and
 `add_electrode` puts the same electrode into a larger world of your own.
 `scaled_soils` spans the ρ axis: every layer of a layered soil is scaled by
 the same factor, the same soil wetter or drier.

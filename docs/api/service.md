@@ -102,6 +102,10 @@ warnings raised during the check keep their own codes (`FREQUENCY_ORDER`,
 | `BRANCH_UNKNOWN_BUS` | error | A branch end names an unknown bus; the solver would drop the branch. |
 | `SOURCE_UNKNOWN_BUS` | error | A source names an unknown bus; the solver would ignore it. |
 | `FAULT_UNKNOWN_BUS` | error | A fault names an unknown bus. |
+| `NEUTRAL_UNKNOWN_BUS` | error | A neutral-point element names an unknown bus. |
+| `NEUTRAL_FREQUENCY_MISMATCH` | error | The neutral-point elements of one supply area name different nominal frequencies. |
+| `NEUTRAL_FREQUENCY_NOT_SOLVED` | warning | The nominal frequency of a neutral-point element is not a network frequency; its capacitances are not charged. |
+| `FAULT_VOLTAGE_LEVEL_AMBIGUOUS` | error | Feeding elements of several voltage levels reach the fault bus and the fault names none. |
 | `FAULT_BUS_INACTIVE` | error | A fault sits on an inactive bus. |
 | `SOURCE_BUS_INACTIVE` | warning | A source sits on an inactive bus and injects nothing. |
 | `IMPEDANCE_MISSING` | error | An element of the nodal system has no impedance at a network frequency. |
@@ -226,6 +230,7 @@ category and the function whose docstring describes the condition:
 | `TRANSIENT_COUPLING_SKIPPED` | `TransientModelWarning` | `TransientStudy.solve` (state space): coupling of voltage sources |
 | `TRANSIENT_MODEL` | `TransientModelWarning` | `TransientStudy.solve`: the model is narrower than the input |
 | `TRANSIENT_PHASE_SPLIT` | `ModelAssumptionWarning` | `TransientStudy.solve` (state space): frequency-dependent phase split |
+| `TRANSIENT_WITHOUT_NEUTRALS` | `ModelAssumptionWarning` | `TransientStudy.solve`: neutral-point elements and charging currents take no part |
 | `TRANSIENT_RESISTIVE_COUPLING_IGNORED` | `TransientModelWarning` | `TransientStudy.solve` (state space): mutual data on resistive branches |
 | `TRANSIENT_SOURCE_NOT_CONNECTED` | `InputWarning` | `TransientStudy.solve` (FFT): a source without connection to the fault |
 
@@ -314,11 +319,14 @@ session.close()
 ```
 
 A session owns one network and its diagram. Front ends read them through the
-DTO methods -- `summary()`, `tables()` (the ten tables of `Network.to_tables`,
+DTO methods -- `summary()`, `tables()` (the tables of `Network.to_tables`,
 plus catalogue types nobody uses yet), `diagram()` (every bus and branch with
 its place), `characteristic(kind, name)` (the earthing characteristic of a bus
-or bus type), `check()` (the pre-flight check), `result(fault)` -- and change
-them only through `apply(command)`. `revision` identifies an input
+or bus type), `check()` (the pre-flight check), `result(fault)`,
+`supply_areas()` (who feeds which branches, with the capacitive earth-fault
+current and the detuning) and `earth_current(fault)` (the earth current by
+the buses its current returns to) -- and change them only through
+`apply(command)`. `revision` identifies an input
 state: a new command gets a new number, undo and redo return to the number of
 the state they restore. `dirty` compares it with the last opened or saved
 revision.
@@ -353,6 +361,7 @@ so two sessions with different caps share nothing.
 | bus | `AddBus`, `PlaceBus` (with its symbol) | `UpdateBus` (`Network.update_bus`) | `RenameBus` | `RemoveBus` |
 | branch | `AddBranch` | `UpdateBranch` (`Network.update_branch`) | `RenameBranch` | `RemoveBranch` |
 | source | `AddSource` | `UpdateSource` (a validated replacement) | `RenameSource` | `RemoveSource` |
+| neutral-point element | `AddNeutral` (`kind`: `isolated`, `resonant`, `low_impedance`) | `UpdateNeutral` (a validated replacement; `kind` may change) | `RenameNeutral` | `RemoveNeutral` |
 | fault | `AddFault` | `UpdateFault` (validated, then assigned) | `RenameFault` | `RemoveFault` |
 | bus type | `AddBusType` | `UpdateBusType` | `RenameBusType` | `RemoveBusType` |
 | branch type | `AddBranchType` | `UpdateBranchType` | `RenameBranchType` | `RemoveBranchType` |
@@ -391,6 +400,28 @@ diagram entry. Diagram commands change no input of a result, so every result
 stays current. The commands are pydantic models with a discriminator `op`, so
 `parse_command({"op": "update_bus", "name": "b1", "fields": {"active": False}})`
 builds one from JSON; `COMMAND_OPS` lists the `op` value of every command.
+
+### Edits of several elements
+
+Deleting a selection and copying it are sequences of the single commands: a
+bus goes only after everything that refers to it, a copy needs free names and
+a place of its own. The sequences are built in the service layer, so that a
+script and a front end do the same thing, and each is one undo step.
+`removal(session, items)` returns the command that deletes buses and branches
+with the faults, sources, neutral-point elements and branches that refer to
+them; `duplication(session, items, at=None)` the command that copies buses
+(with their symbol, their own earthing characteristic and their sources) and
+branches, and the names it creates. `session.remove_elements(items)` and
+`session.duplicate_elements(items)` apply them.
+
+```python
+from groundinsight.api import ProjectSession
+
+session = ProjectSession.from_example("minimal")
+created = session.duplicate_elements([("bus", "bus3")])     # [("bus", "bus3 copy")]
+session.remove_elements([("bus", "bus2")])                  # with its two branches
+session.undo()                                              # one step each
+```
 
 ### Jobs
 
@@ -498,6 +529,14 @@ every finding of `check_network`, as `table`, `json` (`CheckReportDTO`) or
 ::: groundinsight.api.tasks.groundfield_available
 
 ::: groundinsight.api.schemas
+
+::: groundinsight.api.editing
+    options:
+      heading_level: 3
+      members:
+        - removal
+        - duplication
+        - copy_name
 
 ::: groundinsight.api.views.table_dto
     options:

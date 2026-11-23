@@ -14,7 +14,10 @@ import warnings
 
 from .diagnostics import ModelAssumptionWarning, collecting, emit, unique
 from .models.characteristic import report_extrapolation
-from .models.core_models import Network, Bus, BusType, Branch, BranchType, Fault, Source
+from .models.core_models import (
+    Network, Bus, BusType, Branch, BranchType, Fault, Source,
+    IsolatedNeutral, ResonantNeutral, LowImpedanceNeutral,
+)
 from .utils.compat import renamed_parameters, warn_stacklevel
 from typing import Optional, List, Dict
 
@@ -234,6 +237,7 @@ def create_fault(
     network: Optional[Network] = None,
     t_k_s: Optional[float] = None,
     n_factor: float = 1.0,
+    voltage_level: Optional[float] = None,
 ) -> Fault:
     """
     Create a new :class:`Fault` instance and optionally add it to a network.
@@ -271,6 +275,9 @@ def create_fault(
         IEC 60909-0 AC heat factor ``n``. Keep the default ``1.0`` for
         far-from-generator faults, which is the normal case in grounding
         studies.
+    voltage_level : float, optional
+        Voltage level in kV of the system the fault is in; needed only where
+        several fed levels meet at the fault bus.
 
     Returns
     -------
@@ -319,6 +326,7 @@ def create_fault(
         scalings=scalings,
         t_k_s=t_k_s,
         n_factor=n_factor,
+        voltage_level=voltage_level,
     )
 
     if network:
@@ -387,6 +395,7 @@ def create_source(
     i_k_a: Optional[float] = None,
     r_to_x: Optional[float] = None,
     kappa: Optional[float] = None,
+    voltage_level: Optional[float] = None,
 ) -> Source:
     """
     Create a new current :class:`Source` and optionally add it to a network.
@@ -414,6 +423,9 @@ def create_source(
         when the latter is not given.
     kappa : float, optional
         IEC 60909-0 peak factor. Takes precedence over ``r_to_x``.
+    voltage_level : float, optional
+        Nominal voltage in kV of the system the source feeds; ``None`` feeds
+        every fault the source reaches.
 
     Returns
     -------
@@ -455,10 +467,208 @@ def create_source(
         i_k_a=i_k_a,
         r_to_x=r_to_x,
         kappa=kappa,
+        voltage_level=voltage_level,
     )
     if network:
         network.add_source(source)
     return source
+
+
+def create_isolated_neutral(
+    name: str,
+    bus: str,
+    voltage_level: float,
+    remaining_capacitive_current: float = 0.0,
+    harmonic_currents: Optional[Dict] = None,
+    nominal_frequency: float = 50.0,
+    description: Optional[str] = None,
+    network: Optional[Network] = None,
+) -> IsolatedNeutral:
+    """
+    Create an :class:`IsolatedNeutral` and optionally add it to a network.
+
+    Parameters
+    ----------
+    name : str
+        The name of the element.
+    bus : str
+        The bus at which the neutral of the system is.
+    voltage_level : float
+        Nominal line-to-line voltage of the system in kV.
+    remaining_capacitive_current : float, optional
+        Capacitive earth-fault current in A of the part of the system that
+        is not modelled. Defaults to 0.
+    harmonic_currents : dict of float to complex, optional
+        Fault current in A at frequencies other than the nominal one.
+        Defaults to none.
+    nominal_frequency : float, optional
+        Frequency of the system in Hz. Defaults to 50.
+    description : str, optional
+        A brief description.
+    network : Network, optional
+        The network to add the element to.
+
+    Returns
+    -------
+    IsolatedNeutral
+        The new element.
+
+    Raises
+    ------
+    ValueError
+        If the bus is not in the network, if the name is taken, or if a
+        value is outside its range.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> neutral = gi.create_isolated_neutral(name="20 kV", bus="UW", voltage_level=20.0)
+    >>> neutral.voltage_level
+    20.0
+    """
+    neutral = IsolatedNeutral(
+        name=name, description=description, bus=bus, voltage_level=voltage_level,
+        remaining_capacitive_current=remaining_capacitive_current,
+        harmonic_currents=harmonic_currents or {}, nominal_frequency=nominal_frequency,
+    )
+    if network:
+        network.add_neutral(neutral)
+    return neutral
+
+
+def create_resonant_neutral(
+    name: str,
+    bus: str,
+    voltage_level: float,
+    coil_current: float,
+    active_residual_current: float = 0.0,
+    remaining_capacitive_current: float = 0.0,
+    harmonic_currents: Optional[Dict] = None,
+    nominal_frequency: float = 50.0,
+    description: Optional[str] = None,
+    network: Optional[Network] = None,
+) -> ResonantNeutral:
+    """
+    Create a :class:`ResonantNeutral` (arc-suppression coil) and optionally add it to a network.
+
+    Parameters
+    ----------
+    name : str
+        The name of the element.
+    bus : str
+        The bus at which the coil is connected.
+    voltage_level : float
+        Nominal line-to-line voltage of the system in kV.
+    coil_current : float
+        Current of the coil in A at the nominal voltage and frequency.
+    active_residual_current : float, optional
+        Watt residual current in A. Defaults to 0.
+    remaining_capacitive_current : float, optional
+        Capacitive earth-fault current in A of the part of the system that
+        is not modelled. Defaults to 0.
+    harmonic_currents : dict of float to complex, optional
+        Residual current in A at frequencies other than the nominal one.
+        Defaults to none.
+    nominal_frequency : float, optional
+        Frequency of the system in Hz. Defaults to 50.
+    description : str, optional
+        A brief description.
+    network : Network, optional
+        The network to add the element to.
+
+    Returns
+    -------
+    ResonantNeutral
+        The new element.
+
+    Raises
+    ------
+    ValueError
+        If the bus is not in the network, if the name is taken, or if a
+        value is outside its range.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> coil = gi.create_resonant_neutral(name="coil", bus="UW", voltage_level=20.0, coil_current=28.6)
+    >>> coil.coil_current
+    28.6
+    """
+    neutral = ResonantNeutral(
+        name=name, description=description, bus=bus, voltage_level=voltage_level,
+        coil_current=coil_current, active_residual_current=active_residual_current,
+        remaining_capacitive_current=remaining_capacitive_current,
+        harmonic_currents=harmonic_currents or {}, nominal_frequency=nominal_frequency,
+    )
+    if network:
+        network.add_neutral(neutral)
+    return neutral
+
+
+def create_low_impedance_neutral(
+    name: str,
+    bus: str,
+    voltage_level: float,
+    current: complex,
+    remaining_capacitive_current: float = 0.0,
+    harmonic_currents: Optional[Dict] = None,
+    nominal_frequency: float = 50.0,
+    description: Optional[str] = None,
+    network: Optional[Network] = None,
+) -> LowImpedanceNeutral:
+    """
+    Create a :class:`LowImpedanceNeutral` and optionally add it to a network.
+
+    Parameters
+    ----------
+    name : str
+        The name of the element.
+    bus : str
+        The bus at which the neutral is earthed.
+    voltage_level : float
+        Nominal line-to-line voltage of the system in kV.
+    current : complex
+        Current through the neutral in A at the nominal frequency for a fault
+        at the busbar.
+    remaining_capacitive_current : float, optional
+        Capacitive earth-fault current in A of the part of the system that
+        is not modelled. Defaults to 0.
+    harmonic_currents : dict of float to complex, optional
+        Current through the neutral in A at frequencies other than the
+        nominal one. Defaults to none.
+    nominal_frequency : float, optional
+        Frequency of the system in Hz. Defaults to 50.
+    description : str, optional
+        A brief description.
+    network : Network, optional
+        The network to add the element to.
+
+    Returns
+    -------
+    LowImpedanceNeutral
+        The new element.
+
+    Raises
+    ------
+    ValueError
+        If the bus is not in the network, if the name is taken, or if a
+        value is outside its range.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> neutral = gi.create_low_impedance_neutral(name="R", bus="UW", voltage_level=20.0, current=1000.0)
+    >>> complex(neutral.current)
+    (1000+0j)
+    """
+    neutral = LowImpedanceNeutral(
+        name=name, description=description, bus=bus, voltage_level=voltage_level, current=current,
+        remaining_capacitive_current=remaining_capacitive_current,
+        harmonic_currents=harmonic_currents or {}, nominal_frequency=nominal_frequency,
+    )
+    if network:
+        network.add_neutral(neutral)
+    return neutral
 
 
 def create_voltage_source(
@@ -616,7 +826,7 @@ def _assert_network_is_excited(network: Network) -> None:
     islands the fault bus produces, and the all-zero result is then the
     correct answer.
     """
-    if not network.sources:
+    if not network.sources and not any(neutral.active for neutral in network.neutrals.values()):
         raise ValueError(
             f"Network '{network.name}' defines no sources, so no source-to-fault "
             "path exists and the calculation would return 0 V at every bus. "

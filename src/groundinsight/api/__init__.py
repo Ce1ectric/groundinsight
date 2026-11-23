@@ -50,6 +50,10 @@ from .commands import (
     RemoveBusType,
     RemoveFault,
     RemoveSource,
+    AddNeutral,
+    UpdateNeutral,
+    RemoveNeutral,
+    RenameNeutral,
     RemoveView,
     RenameBranch,
     RenameBranchType,
@@ -126,6 +130,7 @@ from .schemas import (
     parse_job_request,
 )
 from .session import DatabaseStore, MemoryStore, ProjectError, ProjectSession, ProjectStore
+from .editing import copy_name, duplication, removal
 from .views import series_statistics, table_dto
 
 __all__ = [
@@ -149,6 +154,10 @@ __all__ = [
     "AddSource",
     "UpdateSource",
     "RemoveSource",
+    "AddNeutral",
+    "UpdateNeutral",
+    "RemoveNeutral",
+    "RenameNeutral",
     "AddFault",
     "UpdateFault",
     "RemoveFault",
@@ -194,6 +203,9 @@ __all__ = [
     "parse_job_request",
     "finite_or_none",
     "table_dto",
+    "copy_name",
+    "duplication",
+    "removal",
     "series_statistics",
     "ElementRefDTO",
     "DiagnosticDTO",

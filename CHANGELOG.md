@@ -87,6 +87,93 @@ version section when a release is cut.
 
 ### Added
 
+- **Capacitive currents: neutral-point elements, charging currents of cables
+  and lines, voltage levels.** A system with an isolated, resonant-earthed or
+  low-impedance-earthed neutral is described by the capacitance per kilometre
+  of its branches (`BranchType.c_shield_nf_per_km` to the earthing conductor
+  of the branch, `c_earth_nf_per_km` to earth) and a neutral-point element at
+  the bus of the neutral: `gi.IsolatedNeutral`, `gi.ResonantNeutral` (coil
+  current, watt residual), `gi.LowImpedanceNeutral` (current through the
+  neutral), created with `gi.create_isolated_neutral`,
+  `gi.create_resonant_neutral`, `gi.create_low_impedance_neutral` and kept in
+  `Network.neutrals`. Each carries the voltage of its system, the capacitive
+  current of the part that is not modelled and a current spectrum in A for
+  the other frequencies (`harmonic_currents`). `run_fault` derives the
+  charging current of every branch, `j*sqrt(3)*omega*C'*l*U_n`, puts half of
+  it at each end as a current that the phase conductors carry to the fault
+  (exact for a uniform charging current; from remote earth for
+  `c_earth_nf_per_km`), and adds what flows through the neutral. A fault
+  needs no `Source` when an element feeds it. The capacitive part is the same
+  for every neutral treatment. The scaling of a fault applies to sources and
+  to the current of a low-impedance neutral, not to charging and coil
+  currents.
+
+  Several voltage levels on one earthing network: `BranchType.voltage_level`,
+  `Source.voltage_level` and `Fault.voltage_level`. A fault belongs to one
+  level; only the branches of that level carry its phase current and are
+  charged, the others are earthing conductors. `gi.supply_areas(network)`
+  lists which feeding element reaches which branches, with the capacitive
+  earth-fault current, the sum of the coil currents and the detuning. Levels
+  come into play only when a feeding element carries one: a network without
+  neutral-point elements and without a source with a voltage level solves
+  bit for bit as before and keeps the digest of its results.
+
+  `gi.earth_current_contributions(network, fault)` breaks the earth current
+  down by the buses the current returns to: every such bus has a reduction
+  factor of its own, `I_E = sum r_S I_S`. In a resonant-earthed system the
+  factor of the fault exceeds 1, because coil current and charging currents
+  cancel in the fault current but return to different buses; the result then
+  carries the info diagnostic `EARTH_CURRENT_EXCEEDS_FAULT_CURRENT`. The
+  derivation, step by step and checked three ways, is on the new page
+  "Capacitive currents and the reduction factor".
+
+  Persistence and service layer: tables `neutrals` and `neutral_harmonics`
+  and the new columns of `branch_types`, `sources` and `faults`; SQLite
+  columns added in place by the migration; the commands `AddNeutral`,
+  `UpdateNeutral`, `RenameNeutral`, `RemoveNeutral` and `voltage_level` on
+  `AddSource` and `AddFault`. `check_network` reports
+  `FAULT_VOLTAGE_LEVEL_AMBIGUOUS`, `NEUTRAL_FREQUENCY_MISMATCH`,
+  `NEUTRAL_FREQUENCY_NOT_SOLVED` and `NEUTRAL_UNKNOWN_BUS`. The path-based
+  phase-current mode refuses a network with neutral-point elements or
+  voltage levels, and a transient study says that it leaves the elements
+  out (`TRANSIENT_WITHOUT_NEUTRALS`).
+
+- **Standard library: every cable of three NKT data sheets, with capacitance
+  and voltage level.** `gi.standard_branch_types()` has 66 types instead of
+  16: all cross-sections of "NA2XS(F)2Y 12/20 kV" (50 to 1000 mm²) and
+  "N2XS(F)2Y 12/20" (35 to 500 mm²), and of "NAYY 1 kV" the four-core cables,
+  the cables with a reduced PEN (3x150+70) and the five-core cables, whose
+  protective conductor is the earthing conductor. The 20 kV types carry the
+  capacitance of the data sheet and the level 20 kV, the LV types 0.4 kV. The
+  sixteen types of the first library keep their formulas; results with them
+  do not move.
+
+- **Standard library: six more earth electrodes.** `gi.standard_bus_types()`
+  has ten presets instead of four, each with its groundfield characteristic:
+  a house ring electrode 15 m x 5 m, a cable distribution cabinet with a rod
+  of 3 m, a transformer station with a ring 5 m x 5 m and a rod of 6 m, the
+  same ring with two rods of 12 m at 5 m joined by bare earth conductors,
+  and substation meshes of 50 m x 100 m and 200 m x 200 m with meshes of
+  10 m x 10 m. The integration builds them with a new electrode kind
+  `"mesh"` (`add_electrode`, `electrode_world`, the characteristic job of the
+  service layer); `scripts/build_standard_bus_types.py` keeps the presets that
+  exist and computes only the missing ones.
+
+- **Service layer: edits of several elements, and the derived tables.**
+  `groundinsight.api.removal(session, items)` and
+  `duplication(session, items, at=None)` build the one command that deletes
+  a selection with everything that refers to it, or copies it;
+  `ProjectSession.remove_elements` and `duplicate_elements` apply them. The
+  GUI built these sequences itself until now; a script and the GUI now do the
+  same thing. `ProjectSession.supply_areas()` and `earth_current(fault)` give
+  the two tables as DTOs.
+
+- **pandapower import: capacitance and voltage level.**
+  `ImportDefaults(derive_capacitance=True)` gives every imported line the
+  capacitance of a phase to earth (`c0_nf_per_km`; for a cable the operating
+  capacitance otherwise; nothing for an overhead line without `c0`) and the
+  imported voltage level.
+
 - **GUI: a file manager for opening and saving.** *Open* and *Save as* show
   the folders and project files (`*.json`) of a folder, walk into a folder
   on a click and up with the breadcrumb or the *up* button, open the file
@@ -404,6 +491,12 @@ version section when a release is cut.
   it; `run_fault` saves that back substitution per frequency.
 
 ### Fixed
+
+- **`Database.save_network` on a file of the legacy schema names the schema.**
+  With `migrate=False` the method queried the network before it checked the
+  layout of the file, so a file that lacked a newer column failed with the
+  SQL error of that column instead of the message that names
+  `migrate_database`. The check now runs first.
 
 - **`~` and environment variables in project paths.** `ProjectSession`
   (`from_file`, `save`), and with it the GUI's *Open* and *Save as* and the
@@ -3814,6 +3907,12 @@ Carried forward:
   ring split, long feeder against the ladder limit, Thévenin single line,
   superposition of two sources, resistive DC chain, the ladder cases through
   the solver, a coupled uniform ring.
+- Capacitances as shunt admittances with a voltage-driven fault: the voltage
+  profile along long lines and the resonance of harmonics in the residual
+  current of an isolated or resonant-earthed system (today the charging
+  currents are impressed, and the current spectrum of a neutral-point
+  element is an input), with the zero-sequence data of transformer and coil
+  that this needs. Neutral-point elements in the transient solvers.
 - Phase-conductor dynamics as states of the state-space transient (the split
   taken from the fundamental leaves about 1 % in rings of mixed
   construction, `TRANSIENT_PHASE_SPLIT`), and an FFT path that couples per

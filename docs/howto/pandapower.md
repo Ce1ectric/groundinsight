@@ -157,6 +157,21 @@ The 110 kV buses, the 110 kV line and the transformer are skipped; the 20 kV
 level is imported with all four buses connected. Without `switch_branch_type`
 the `MV Transformer Bus` would stand alone.
 
+
+## Capacitance and voltage level
+
+For an isolated or resonant-earthed network the import can take over what a
+neutral-point element charges: `ImportDefaults(derive_capacitance=True)` gives
+every line the capacitance of a phase to earth and the imported voltage level.
+It is `c0_nf_per_km` where the line has it; for a cable (`type == "cs"`) the
+operating capacitance `c_nf_per_km` otherwise, which is the same in a cable
+with a radial field; and nothing for an overhead line without `c0_nf_per_km`,
+whose operating capacitance is about twice its capacitance to earth. Add the
+neutral with `gi.create_isolated_neutral`, `gi.create_resonant_neutral` or
+`gi.create_low_impedance_neutral`; `gi.supply_areas(network)` then shows the
+capacitive earth-fault current of the imported network
+([Neutral-point elements and supply areas](../api/supply.md)).
+
 ## Read a short-circuit case
 
 A limit check needs more of the fault current than its RMS value: the peak

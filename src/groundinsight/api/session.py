@@ -57,13 +57,16 @@ import json
 import logging
 import os
 import threading
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+
+import polars as pl
 
 import groundinsight as gi
 from groundinsight.diagnostics import collecting, unique
 
 from .assessment import assess
 from .commands import Command, CommandContext, parse_command, rejection_reason
+from .editing import duplication, removal
 from .examples import EXAMPLES
 from .jobs import JobHandle, JobRunner, snapshot_network
 from .tasks import TaskOutcome, run_task
@@ -92,12 +95,36 @@ from .views import (
     diagram_dto,
     element_tables_dto,
     fault_result_dto,
+    table_dto,
     view_table_dto,
 )
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["DatabaseStore", "MemoryStore", "ProjectError", "ProjectSession", "ProjectStore"]
+
+
+def _lists_as_json(frame: "pl.DataFrame") -> "pl.DataFrame":
+    """
+    A frame whose list columns are JSON text.
+
+    Parameters
+    ----------
+    frame : polars.DataFrame
+        Any frame.
+
+    Returns
+    -------
+    polars.DataFrame
+        The frame with every list column replaced by its JSON form, one text
+        per row -- a cell of a :class:`TableDTO` is a scalar, and names may
+        hold any separator a joined text would use.
+    """
+    lists = [name for name, dtype in frame.schema.items() if dtype.base_type() is pl.List]
+    return frame.with_columns(
+        pl.Series(name, [json.dumps(value, ensure_ascii=False) for value in frame[name].to_list()], dtype=pl.String)
+        for name in lists
+    )
 
 
 class ProjectError(ValueError):
@@ -746,7 +773,7 @@ class ProjectSession:
 
     def export_tables(self, directory: str) -> List[str]:
         """
-        Write the network's ten tables as ``<table>.csv`` files.
+        Write the network's twelve tables as ``<table>.csv`` files.
 
         The tables of :meth:`Network.to_tables
         <groundinsight.Network.to_tables>`, which
@@ -1316,6 +1343,124 @@ class ProjectSession:
             self._revision = entry.after
             return self._command_result(command, records)
 
+    def remove_elements(self, items: List[Tuple[str, str]], title: Optional[str] = None
+                        ) -> Optional[CommandResultDTO]:
+        """
+        Delete buses and branches with everything that refers to them, as one undo step.
+
+        Parameters
+        ----------
+        items : list of (kind, name)
+            ``("bus", name)`` and ``("branch", name)`` pairs.
+        title : str, optional
+            Title of the undo step; see :func:`~groundinsight.api.editing.removal`.
+
+        Returns
+        -------
+        CommandResultDTO or None
+            The result of the applied command; ``None`` if no item exists.
+
+        Raises
+        ------
+        CommandError
+            If the command is rejected; the session is unchanged.
+
+        Examples
+        --------
+        >>> from groundinsight.api import ProjectSession
+        >>> session = ProjectSession.from_example("minimal")
+        >>> _ = session.remove_elements([("bus", "bus2")])
+        >>> session.summary().n_buses, session.summary().n_branches
+        (2, 0)
+        """
+        command = removal(self, items, title)
+        return None if command is None else self.apply(command)
+
+    def duplicate_elements(self, items: List[Tuple[str, str]], at: Optional[Tuple[float, float]] = None,
+                           suffix: str = "copy", title: Optional[str] = None) -> List[Tuple[str, str]]:
+        """
+        Copy buses and branches, as one undo step.
+
+        Parameters
+        ----------
+        items : list of (kind, name)
+            ``("bus", name)`` and ``("branch", name)`` pairs.
+        at : tuple of float, optional
+            Where the centre of the copied buses goes, in diagram coordinates.
+        suffix : str
+            The word for "copy" in the names of the copies.
+        title : str, optional
+            Title of the undo step; see
+            :func:`~groundinsight.api.editing.duplication`.
+
+        Returns
+        -------
+        list of (kind, name)
+            The copies, buses first; empty if no item exists.
+
+        Raises
+        ------
+        CommandError
+            If the command is rejected; the session is unchanged.
+
+        Examples
+        --------
+        >>> from groundinsight.api import ProjectSession
+        >>> session = ProjectSession.from_example("minimal")
+        >>> session.duplicate_elements([("bus", "bus3")])
+        [('bus', 'bus3 copy')]
+        """
+        command, created = duplication(self, items, at, suffix, title)
+        if command is not None:
+            self.apply(command)
+        return created
+
+    def supply_areas(self) -> TableDTO:
+        """
+        The supply areas of the network (:func:`groundinsight.supply_areas`).
+
+        Returns
+        -------
+        TableDTO
+            One row per area: voltage level, feeding elements, branches, the
+            capacitive earth-fault current, the sum of the coil currents and
+            the detuning. A table cell is a scalar: the list columns
+            (``feeding_elements``, ``buses``, ``branches``) hold their names
+            as a JSON list in text.
+
+        Raises
+        ------
+        ValueError
+            If the neutral-point elements of one area name different nominal
+            frequencies.
+        """
+        with self._lock:
+            return table_dto("supply_areas", _lists_as_json(gi.supply_areas(self._network)))
+
+    def earth_current(self, fault: str) -> TableDTO:
+        """
+        The earth current of a fault by the buses its current returns to.
+
+        Parameters
+        ----------
+        fault : str
+            Name of the fault.
+
+        Returns
+        -------
+        TableDTO
+            The table of :func:`groundinsight.earth_current_contributions`;
+            the column ``sources`` holds the names as a JSON list in text.
+
+        Raises
+        ------
+        ValueError
+            If the fault does not exist, the network cannot be solved, or a
+            voltage source feeds the fault.
+        """
+        with self._lock:
+            return table_dto("earth_current", _lists_as_json(gi.earth_current_contributions(self._network, fault)))
+
     def undo(self) -> Optional[CommandResultDTO]:
         """
         Revert the last applied command.
@@ -1412,7 +1557,7 @@ class ProjectSession:
 
     def tables(self) -> NetworkTablesDTO:
         """
-        The network's input as the ten tables of ``Network.to_tables``.
+        The network's input as the twelve tables of ``Network.to_tables``.
 
         Returns
         -------

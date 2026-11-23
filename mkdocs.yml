@@ -194,6 +194,7 @@ nav:
       - Impedance formulas and where they come from: explanation/formulas.md
       - Phase currents in rings and meshes: explanation/phase-currents.md
       - Reduction factors and earthing impedance: explanation/reduction-factors.md
+      - Capacitive currents and the reduction factor: explanation/capacitive-currents.md
       - Touch voltage and transferred potential: explanation/touch-and-transfer.md
       - Splitting the network, location response: explanation/decomposition.md
       - "Direct current (f = 0)": explanation/dc.md
@@ -236,6 +237,7 @@ nav:
           - Analysis: api/analysis.md
           - Fault-location decomposition: api/decomposition.md
           - Location response: api/response.md
+          - Neutral-point elements and supply areas: api/supply.md
           - Reference cases: api/reference.md
           - Standard library of types: api/library.md
           - Statistics and classification: api/statistics.md

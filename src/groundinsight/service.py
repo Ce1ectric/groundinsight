@@ -49,6 +49,40 @@ logger = logging.getLogger(__name__)
 __all__ = ["solve"]
 
 
+def solved_overlay(network: Network, fault: str, *, phase_current_mode: str = "auto") -> Network:
+    """
+    The network solved for ``fault`` on an overlay, with its assembled system.
+
+    Internal API: for analyses that read the assembled system after the
+    solve (:mod:`groundinsight.analysis.contributions`); not exported from
+    ``groundinsight`` and free to change in any release.
+
+    Parameters
+    ----------
+    network : Network
+        The network; it is not changed.
+    fault : str
+        Name of the fault.
+    phase_current_mode : {"auto", "paths"}, optional
+        As for :func:`groundinsight.run_fault`.
+
+    Returns
+    -------
+    Network
+        The overlay of :func:`solve` after the solve; its
+        ``electrical_network`` is the assembled system. The caller drops it
+        (``overlay.electrical_network = None``) when done.
+
+    Raises
+    ------
+    ValueError
+        As :func:`groundinsight.run_fault`.
+    """
+    overlay = _overlay(network)
+    run_fault(overlay, fault, phase_current_mode=phase_current_mode)
+    return overlay
+
+
 def _overlay(network: Network) -> Network:
     """
     A network object that shares the elements of ``network`` but not its state.

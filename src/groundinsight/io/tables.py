@@ -6,7 +6,7 @@ Networks as tables: build one from spreadsheet-style tables, export one.
 The people who use groundinsight keep their networks in spreadsheets and in
 exports of network-planning tools; one ``create_*`` call per element is no
 way to bring such a network in. This module maps a
-network onto ten tables with a pinned schema each -- :data:`TABLE_SCHEMAS`,
+network onto twelve tables with a pinned schema each -- :data:`TABLE_SCHEMAS`,
 the same schema a GUI table editor works on -- and back:
 
 * :func:`network_from_tables` builds a :class:`Network` from Polars frames,
@@ -61,7 +61,10 @@ import polars as pl
 from pydantic import BaseModel, ValidationError
 
 from ..models.characteristic import EarthingCharacteristic
-from ..models.core_models import Branch, BranchType, Bus, BusType, Fault, Network, Source
+from ..models.core_models import (
+    Branch, BranchType, Bus, BusType, Fault, IsolatedNeutral, LowImpedanceNeutral, Network,
+    ResonantNeutral, Source,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +122,9 @@ TABLE_SCHEMAS: Dict[str, Dict[str, Any]] = {
         "cross_section_mm2": _FLOAT,
         "theta_initial_C": _FLOAT,
         "theta_final_C": _FLOAT,
+        "c_shield_nf_per_km": _FLOAT,
+        "c_earth_nf_per_km": _FLOAT,
+        "voltage_level": _FLOAT,
     },
     "buses": {
         "name": _TEXT,
@@ -146,6 +152,7 @@ TABLE_SCHEMAS: Dict[str, Dict[str, Any]] = {
         "i_k_a": _FLOAT,
         "r_to_x": _FLOAT,
         "kappa": _FLOAT,
+        "voltage_level": _FLOAT,
         "description": _TEXT,
     },
     "source_values": {
@@ -160,9 +167,25 @@ TABLE_SCHEMAS: Dict[str, Dict[str, Any]] = {
         "bus": _TEXT,
         "t_k_s": _FLOAT,
         "n_factor": _FLOAT,
+        "voltage_level": _FLOAT,
         "description": _TEXT,
     },
     "fault_scalings": {"fault": _TEXT, "frequency_Hz": _FLOAT, "scaling": _FLOAT},
+    "neutrals": {
+        "name": _TEXT,
+        "kind": _TEXT,
+        "bus": _TEXT,
+        "voltage_level": _FLOAT,
+        "nominal_frequency": _FLOAT,
+        "coil_current": _FLOAT,
+        "active_residual_current": _FLOAT,
+        "current_real": _FLOAT,
+        "current_imag": _FLOAT,
+        "remaining_capacitive_current": _FLOAT,
+        "active": _BOOL,
+        "description": _TEXT,
+    },
+    "neutral_harmonics": {"neutral": _TEXT, "frequency_Hz": _FLOAT, "real": _FLOAT, "imag": _FLOAT},
 }
 """Column layout of every table, in output order, with its Polars dtype.
 
@@ -176,7 +199,11 @@ frequency columns are ``frequency_Hz``. In ``source_values`` the column
 (A, V or Ohm). The ``characteristic`` column of ``bus_types`` and ``buses``
 holds an :class:`~groundinsight.EarthingCharacteristic` as its JSON
 (``model_dump_json``) -- a grid over ``rho`` and ``f`` is not a cell value --
-and is empty for none."""
+and is empty for none. A row of ``neutrals`` is a neutral-point element:
+``kind`` is ``"isolated"``, ``"resonant"`` or ``"low_impedance"``, the columns
+of the other kinds stay empty, ``current_real``/``current_imag`` are the
+current of a low-impedance neutral in A; ``neutral_harmonics`` holds the
+``harmonic_currents`` of the elements."""
 
 REQUIRED_COLUMNS: Dict[str, Tuple[str, ...]] = {
     "network": ("name",),
@@ -194,6 +221,8 @@ REQUIRED_COLUMNS: Dict[str, Tuple[str, ...]] = {
     "source_values": ("source", "quantity", "frequency_Hz", "real"),
     "faults": ("name", "bus"),
     "fault_scalings": ("fault", "frequency_Hz", "scaling"),
+    "neutrals": ("name", "kind", "bus", "voltage_level"),
+    "neutral_harmonics": ("neutral", "frequency_Hz", "real"),
 }
 """Columns a table must have. A missing optional column, and an empty cell in
 one, mean the model default -- or ``None`` where the model field accepts
@@ -204,6 +233,7 @@ REQUIRED_TABLES: Tuple[str, ...] = ("frequencies", "bus_types", "buses")
 empty (and the network name to ``"network"``)."""
 
 _QUANTITIES = {"current": ("current",), "voltage": ("voltage", "impedance")}
+_NEUTRAL_KINDS = {"isolated": IsolatedNeutral, "resonant": ResonantNeutral, "low_impedance": LowImpedanceNeutral}
 _TRUE = {"true", "1", "yes"}
 _FALSE = {"false", "0", "no"}
 _MAX_LISTED = 50
@@ -965,6 +995,7 @@ def _build(
             except ValueError as exc:
                 problems.add("sources", str(exc), row)
 
+    _build_neutrals(frames, network, bus_names, problems)
     # --- faults and their scalings ----------------------------------------------
     fault_rows = _unique_names(frames["faults"], "faults", "name", problems)
     scalings: Dict[str, Dict[float, float]] = {}
@@ -1022,6 +1053,145 @@ def _build(
         elif network is not None and active in network.faults:
             network.set_active_fault(active, keep_results=True)
     return network
+
+
+def _neutral_harmonics(
+    frames: Dict[str, Optional[pl.DataFrame]], names: Any, problems: _Problems
+) -> Dict[str, Dict[float, complex]]:
+    """
+    The rows of ``neutral_harmonics`` per element.
+
+    Parameters
+    ----------
+    frames : dict of str to polars.DataFrame or None
+        The coerced tables.
+    names : container of str
+        Names of the rows of ``neutrals``.
+    problems : _Problems
+        Receives an unknown element and a frequency given twice.
+
+    Returns
+    -------
+    dict of str to dict of float to complex
+        ``harmonic_currents`` per element name.
+    """
+    collected: Dict[str, Dict[float, complex]] = {}
+    for row, record in _rows(frames["neutral_harmonics"]):
+        if _skip_row(record, "neutral_harmonics", row, problems):
+            continue
+        owner, frequency = record["neutral"], record["frequency_Hz"]
+        if owner not in names:
+            problems.add("neutral_harmonics", f"neutral {owner!r} is not in neutrals.", row, "neutral")
+        elif frequency in collected.setdefault(owner, {}):
+            problems.add("neutral_harmonics", f"neutral {owner!r} has two currents at {frequency:g} Hz.",
+                         row, "frequency_Hz")
+        else:
+            collected[owner][frequency] = complex(record["real"], record["imag"] or 0.0)
+    return collected
+
+
+def _build_neutrals(
+    frames: Dict[str, Optional[pl.DataFrame]], network: Optional[Network], bus_names: Any, problems: _Problems
+) -> None:
+    """
+    Add the neutral-point elements of the tables to the network.
+
+    Parameters
+    ----------
+    frames : dict of str to polars.DataFrame or None
+        The coerced tables.
+    network : Network or None
+        The network under construction; ``None`` if it could not be created
+        (the rows are still checked).
+    bus_names : container of str
+        Names of the rows of ``buses``.
+    problems : _Problems
+        Receives every problem.
+    """
+    names = _unique_names(frames["neutrals"], "neutrals", "name", problems)
+    harmonics = _neutral_harmonics(frames, names, problems)
+    seen = set()
+    for row, record in _rows(frames["neutrals"]):
+        name = record["name"]
+        if _skip_row(record, "neutrals", row, problems) or name in seen:
+            continue
+        seen.add(name)
+        neutral = _neutral_from_row(record, row, bus_names, harmonics.get(name, {}), problems)
+        if neutral is not None and network is not None and record["bus"] in network.buses:
+            try:
+                network.add_neutral(neutral)
+            except ValueError as exc:
+                problems.add("neutrals", str(exc), row)
+
+
+def _neutral_from_row(
+    record: Dict[str, Any], row: int, bus_names: Any, harmonics: Dict[float, complex], problems: _Problems
+) -> Optional[BaseModel]:
+    """
+    One neutral-point element from its row of ``neutrals``.
+
+    Parameters
+    ----------
+    record : dict
+        The coerced row.
+    row : int
+        1-based row, for messages.
+    bus_names : container of str
+        Names of the rows of ``buses``.
+    harmonics : dict of float to complex
+        Its rows of ``neutral_harmonics``.
+    problems : _Problems
+        Receives an unknown kind, an unknown bus, a low-impedance neutral
+        without current and every validation error.
+
+    Returns
+    -------
+    pydantic.BaseModel or None
+        The element, or ``None`` if the row has a problem.
+    """
+    name = record["name"]
+    model = _NEUTRAL_KINDS.get(record["kind"])
+    if model is None:
+        problems.add("neutrals", f"kind {record['kind']!r} is not one of {sorted(_NEUTRAL_KINDS)}.", row, "kind")
+        return None
+    if record["bus"] not in bus_names:
+        problems.add("neutrals", f"bus {record['bus']!r} is not in buses (neutral {name!r}).", row, "bus")
+        return None
+    fixed: Dict[str, Any] = {"harmonic_currents": harmonics}
+    if model is LowImpedanceNeutral:
+        if record.get("current_real") is None:
+            problems.add("neutrals", f"the low_impedance neutral {name!r} needs its current in A "
+                         "(current_real, current_imag).", row, "current_real")
+            return None
+        fixed["current"] = complex(record["current_real"], record.get("current_imag") or 0.0)
+    return _model(model, record, "neutrals", row, problems, **fixed)
+
+
+def _neutral_rows(network: Network) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """The rows of the tables ``neutrals`` and ``neutral_harmonics`` of a network."""
+    elements: List[Dict[str, Any]] = []
+    harmonics: List[Dict[str, Any]] = []
+    for name, neutral in network.neutrals.items():
+        current = getattr(neutral, "current", None)
+        elements.append({
+            "name": name,
+            "kind": neutral.kind,
+            "bus": neutral.bus,
+            "voltage_level": neutral.voltage_level,
+            "nominal_frequency": neutral.nominal_frequency,
+            "coil_current": getattr(neutral, "coil_current", None),
+            "active_residual_current": getattr(neutral, "active_residual_current", None),
+            "current_real": None if current is None else float(current.real),
+            "current_imag": None if current is None else float(current.imag),
+            "remaining_capacitive_current": neutral.remaining_capacitive_current,
+            "active": neutral.active,
+            "description": neutral.description,
+        })
+        harmonics.extend(
+            {"neutral": name, "frequency_Hz": float(frequency), "real": float(value.real), "imag": float(value.imag)}
+            for frequency, value in neutral.harmonic_currents.items()
+        )
+    return elements, harmonics
 
 
 def _type_rows(
@@ -1150,6 +1320,7 @@ def network_to_tables(network: Network) -> Dict[str, pl.DataFrame]:
                 "i_k_a": source.i_k_a,
                 "r_to_x": source.r_to_x,
                 "kappa": source.kappa,
+                "voltage_level": source.voltage_level,
                 "description": source.description,
             }
         )
@@ -1175,6 +1346,7 @@ def network_to_tables(network: Network) -> Dict[str, pl.DataFrame]:
                 "bus": fault.bus,
                 "t_k_s": fault.t_k_s,
                 "n_factor": fault.n_factor,
+                "voltage_level": fault.voltage_level,
                 "description": fault.description,
             }
         )
@@ -1182,6 +1354,7 @@ def network_to_tables(network: Network) -> Dict[str, pl.DataFrame]:
             rows["fault_scalings"].append(
                 {"fault": name, "frequency_Hz": float(frequency), "scaling": float(scaling)}
             )
+    rows["neutrals"], rows["neutral_harmonics"] = _neutral_rows(network)
     return {
         table: pl.DataFrame(rows[table], schema=schema)
         if rows[table]

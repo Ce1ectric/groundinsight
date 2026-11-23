@@ -902,15 +902,54 @@ def _phase_impedance_formula(row) -> Optional[str]:
     return f"({r!r} + I * {x!r}) * l"
 
 
-def _branch_type_for_line(defaults, row, cache: Dict[str, Any]):
+def _positive_number(value: Any) -> Optional[float]:
+    """A strictly positive, finite number, or ``None`` (a missing cell, NaN, zero)."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def _line_capacitance(row) -> Dict[str, float]:
+    """
+    The capacitance fields of the branch type of an imported line.
+
+    Parameters
+    ----------
+    row : pandas.Series
+        A row of ``net.line``.
+
+    Returns
+    -------
+    dict of str to float
+        ``c_shield_nf_per_km`` for a cable (``type == "cs"``): its
+        ``c0_nf_per_km``, or without it the operating capacitance
+        ``c_nf_per_km`` (equal in a cable with a radial field).
+        ``c_earth_nf_per_km`` for an overhead line (``"ol"``) that has
+        ``c0_nf_per_km``. Empty otherwise: the operating capacitance of an
+        overhead line is not its capacitance to earth.
+    """
+    kind = str(row.get("type") or "")
+    zero_sequence = _positive_number(row.get("c0_nf_per_km"))
+    if kind == "ol":
+        return {"c_earth_nf_per_km": zero_sequence} if zero_sequence else {}
+    value = zero_sequence or (_positive_number(row.get("c_nf_per_km")) if kind == "cs" else None)
+    return {"c_shield_nf_per_km": value} if value else {}
+
+
+def _branch_type_for_line(defaults, row, cache: Dict[str, Any], voltage_level_kV: Optional[float] = None):
     """
     The :class:`BranchType` an imported line gets.
 
-    Without ``defaults.derive_phase_impedance`` this is
-    ``defaults.default_branch_type``, unchanged. With it, a variant carrying a
-    per-line ``phase_impedance_formula`` derived from the pandapower line data
-    is used; variants are cached by formula, so a net with three cable types
-    produces three branch types rather than one per line.
+    Without ``defaults.derive_phase_impedance`` and
+    ``defaults.derive_capacitance`` this is ``defaults.default_branch_type``,
+    unchanged. With the first, a variant carrying a per-line
+    ``phase_impedance_formula`` derived from the pandapower line data is
+    used; with the second, one carrying the line's capacitance and the
+    imported voltage level. Variants are cached by what they change, so a net
+    with three cable types produces three branch types rather than one per
+    line.
 
     Parameters
     ----------
@@ -919,27 +958,35 @@ def _branch_type_for_line(defaults, row, cache: Dict[str, Any]):
     row : pandas.Series
         A row of ``net.line``.
     cache : Dict[str, Any]
-        Formula -> derived ``BranchType``, shared across one import.
+        What a variant changes -> derived ``BranchType``, shared across one
+        import.
+    voltage_level_kV : float, optional
+        The imported voltage level, for ``derive_capacitance``.
 
     Returns
     -------
     BranchType
         The type to assign.
     """
-    if not getattr(defaults, "derive_phase_impedance", False):
+    update: Dict[str, Any] = {}
+    suffix = "phase"
+    if getattr(defaults, "derive_phase_impedance", False):
+        formula = _phase_impedance_formula(row)
+        if formula is not None:
+            update["phase_impedance_formula"] = formula
+    if getattr(defaults, "derive_capacitance", False):
+        update.update(_line_capacitance(row))
+        if voltage_level_kV is not None:
+            update["voltage_level"] = float(voltage_level_kV)
+        suffix = "line"
+    if not update:
         return defaults.default_branch_type
-    formula = _phase_impedance_formula(row)
-    if formula is None:
-        return defaults.default_branch_type
-    if formula not in cache:
+    # The phase formula alone keys (and names) the variant as it always did.
+    key = update["phase_impedance_formula"] if suffix == "phase" else repr(sorted(update.items()))
+    if key not in cache:
         base = defaults.default_branch_type
-        cache[formula] = base.model_copy(
-            update={
-                "name": f"{base.name}_phase{len(cache) + 1}",
-                "phase_impedance_formula": formula,
-            }
-        )
-    return cache[formula]
+        cache[key] = base.model_copy(update={"name": f"{base.name}_{suffix}{len(cache) + 1}", **update})
+    return cache[key]
 
 
 def _check_voltage_level_consistency(defaults, voltage_level_kV: float) -> None:
@@ -1208,7 +1255,7 @@ def from_pandapower(
         if int(idx) in open_switches:
             branch_type = phase_open_type
         else:
-            branch_type = _branch_type_for_line(defaults, row, derived_types)
+            branch_type = _branch_type_for_line(defaults, row, derived_types, voltage_level_kV)
         branch = Branch(
             name=line_name_by_index[int(idx)],
             description=str(row.get("name") or "") or None,

@@ -33,7 +33,6 @@ limit = 10
 "analysis/thermal.py::check_conductor_limits" = 13
 "analysis/thermal.py::check_node_limits" = 23
 "api/jobs.py::JobRunner._run_in_process" = 18
-"checks.py::_check_faults" = 11
 "checks.py::_check_impedances" = 13
 "checks.py::_check_sources" = 20
 "checks.py::_check_topology" = 35

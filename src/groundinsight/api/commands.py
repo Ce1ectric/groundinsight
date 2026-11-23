@@ -83,6 +83,10 @@ __all__ = [
     "RemoveBusType",
     "RemoveFault",
     "RemoveSource",
+    "AddNeutral",
+    "UpdateNeutral",
+    "RemoveNeutral",
+    "RenameNeutral",
     "RemoveView",
     "RenameBranch",
     "RenameBranchType",
@@ -920,6 +924,8 @@ class AddSource(Command):
         RMS phasors per frequency, as plain numbers or ``{"real", "imag"}``.
     i_k_a, r_to_x, kappa : float, optional
         IEC 60909 characteristics (metadata, not solved).
+    voltage_level : float, optional
+        Nominal voltage in kV of the system the source feeds.
     description : str, optional
         Free text.
     """
@@ -934,6 +940,7 @@ class AddSource(Command):
     i_k_a: Optional[float] = None
     r_to_x: Optional[float] = None
     kappa: Optional[float] = None
+    voltage_level: Optional[float] = None
     description: Optional[str] = None
 
     @property
@@ -960,6 +967,7 @@ class AddSource(Command):
                 "i_k_a": self.i_k_a,
                 "r_to_x": self.r_to_x,
                 "kappa": self.kappa,
+                "voltage_level": self.voltage_level,
                 "description": self.description,
             }
         )
@@ -1055,6 +1063,202 @@ class RemoveSource(Command):
         _restore_order(context.network, "sources", order)
 
 
+# ---------------------------------------------------------------------------
+# neutral-point elements
+# ---------------------------------------------------------------------------
+
+_NEUTRAL_CLASSES = {
+    "isolated": gi.IsolatedNeutral,
+    "resonant": gi.ResonantNeutral,
+    "low_impedance": gi.LowImpedanceNeutral,
+}
+
+
+def _neutral_from(data: Dict[str, Any], label: str):
+    """
+    Build a neutral-point element of the class its ``kind`` names.
+
+    Parameters
+    ----------
+    data : dict
+        Field values; ``None`` stands for the model default, and fields the
+        class of ``kind`` does not have are left out (so a change of kind
+        drops what belonged to the former one).
+    label : str
+        Label of the command, for the message.
+
+    Returns
+    -------
+    IsolatedNeutral or ResonantNeutral or LowImpedanceNeutral
+        The validated element.
+
+    Raises
+    ------
+    CommandError
+        If ``kind`` names no class.
+    """
+    model = _NEUTRAL_CLASSES.get(data.get("kind"))
+    if model is None:
+        raise CommandError(f"{label}: kind {data.get('kind')!r} is not one of {', '.join(_NEUTRAL_CLASSES)}")
+    return model.model_validate(
+        {key: value for key, value in data.items() if key in model.model_fields and value is not None}
+    )
+
+
+class AddNeutral(Command):
+    """
+    Add a neutral-point element (``Network.add_neutral``).
+
+    Attributes
+    ----------
+    name : str
+        Name of the new element.
+    bus : str
+        The bus at which the neutral is treated.
+    kind : {"isolated", "resonant", "low_impedance"}
+        The neutral treatment (:class:`~groundinsight.IsolatedNeutral`,
+        :class:`~groundinsight.ResonantNeutral`,
+        :class:`~groundinsight.LowImpedanceNeutral`).
+    voltage_level : float
+        Nominal voltage of the system in kV.
+    nominal_frequency : float
+        Frequency of the system in Hz.
+    coil_current, active_residual_current : float, optional
+        Coil current and watt residual of a resonant neutral in A.
+    current : Phasor, optional
+        Current through a low-impedance neutral in A.
+    remaining_capacitive_current : float
+        Capacitive current in A of the part of the system that is not
+        modelled.
+    harmonic_currents : dict of float to Phasor, optional
+        Current spectrum in A at the other frequencies.
+    active : bool
+        ``False`` keeps the element out of every solve.
+    description : str, optional
+        Free text.
+    """
+
+    op: Literal["add_neutral"] = "add_neutral"
+    name: str
+    bus: str
+    kind: Literal["isolated", "resonant", "low_impedance"]
+    voltage_level: float
+    nominal_frequency: float = 50.0
+    coil_current: Optional[float] = None
+    active_residual_current: Optional[float] = None
+    current: Optional[Phasor] = None
+    remaining_capacitive_current: float = 0.0
+    harmonic_currents: Optional[Dict[float, Phasor]] = None
+    active: bool = True
+    description: Optional[str] = None
+
+    @property
+    def label(self) -> str:
+        """
+        ``add neutral '<name>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"add neutral '{self.name}'"
+
+    def _apply(self, context: CommandContext) -> None:
+        data = self.model_dump(exclude={"op", "dto_schema_version", "current", "harmonic_currents"})
+        data["harmonic_currents"] = _phasor_map(self.harmonic_currents) or {}
+        if self.current is not None:
+            data["current"] = _phasor_map({0.0: self.current})[0.0]
+        context.network.add_neutral(_neutral_from(data, self.label))
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        context.network.remove_neutral(self.name)
+
+
+class UpdateNeutral(_UpdateFields):
+    """
+    Change fields of a neutral-point element, all or nothing.
+
+    A complete replacement is validated through the class of its ``kind``
+    and swapped in with ``Network.add_neutral(..., overwrite=True)``, which
+    keeps the position; undo swaps the former object back. ``kind`` may
+    change: the fields of the former class that the new one does not have
+    are dropped.
+    """
+
+    op: Literal["update_neutral"] = "update_neutral"
+    _KIND: ClassVar[str] = "neutral"
+
+    @field_validator("fields")
+    @classmethod
+    def _normalise(cls, fields: Dict[str, Any]) -> Dict[str, Any]:
+        """Frequency keys as ``float``, phasors in JSON form."""
+        normalised = dict(fields)
+        if "harmonic_currents" in normalised:
+            normalised["harmonic_currents"] = _frequency_map(normalised["harmonic_currents"], phasors=True)
+        if "current" in normalised:
+            normalised["current"] = _phasor_value(normalised["current"])
+        return normalised
+
+    def _apply(self, context: CommandContext) -> None:
+        network = context.network
+        old = network.neutrals.get(self.name)
+        if old is None:
+            raise CommandError(f"{self.label}: neutral '{self.name}' does not exist")
+        self._require_fields()
+        self._refuse_rename()
+        known = set().union(*(model.model_fields for model in _NEUTRAL_CLASSES.values()))
+        unknown = sorted(set(self.fields) - known)
+        if unknown:
+            raise CommandError(f"{self.label}: a neutral has no field {', '.join(map(repr, unknown))}")
+        data = old.model_dump()
+        data.update(self.fields)
+        network.add_neutral(_neutral_from(data, self.label), overwrite=True)
+        self._undo = old
+
+    def _revert(self, context: CommandContext) -> None:
+        context.network.add_neutral(self._undo, overwrite=True)
+
+
+class RemoveNeutral(Command):
+    """
+    Remove a neutral-point element (``Network.remove_neutral``).
+
+    Attributes
+    ----------
+    name : str
+        The element.
+    """
+
+    op: Literal["remove_neutral"] = "remove_neutral"
+    name: str
+
+    @property
+    def label(self) -> str:
+        """
+        ``remove neutral '<name>'``.
+
+        Returns
+        -------
+        str
+            The label in the undo history.
+        """
+        return f"remove neutral '{self.name}'"
+
+    def _apply(self, context: CommandContext) -> None:
+        network = context.network
+        if self.name not in network.neutrals:
+            raise CommandError(f"{self.label}: it does not exist")
+        order = list(network.neutrals)
+        self._undo = (network.remove_neutral(self.name), order)
+
+    def _revert(self, context: CommandContext) -> None:
+        removed, order = self._undo
+        context.network.add_neutral(removed)
+        _restore_order(context.network, "neutrals", order)
+
+
 class AddFault(Command):
     """
     Add a fault (``Network.add_fault``).
@@ -1071,6 +1275,8 @@ class AddFault(Command):
         IEC 60909 short-circuit duration in s.
     n_factor : float
         IEC 60909 AC heat factor.
+    voltage_level : float, optional
+        Voltage level in kV of the system the fault is in.
     description : str, optional
         Free text.
     """
@@ -1081,6 +1287,7 @@ class AddFault(Command):
     scalings: Optional[Dict[float, float]] = None
     t_k_s: Optional[float] = None
     n_factor: float = 1.0
+    voltage_level: Optional[float] = None
     description: Optional[str] = None
 
     @property
@@ -1103,6 +1310,7 @@ class AddFault(Command):
                 "scalings": dict(self.scalings or {}),
                 "t_k_s": self.t_k_s,
                 "n_factor": self.n_factor,
+                "voltage_level": self.voltage_level,
                 "description": self.description,
             }
         )
@@ -1708,6 +1916,29 @@ def _rename_source(network: gi.Network, old: str, new: str) -> None:
     _restore_order(network, "sources", order)
 
 
+def _rename_neutral(network: gi.Network, old: str, new: str) -> None:
+    """
+    Rename a neutral-point element: removed, and added back as a renamed copy.
+
+    Parameters
+    ----------
+    network : Network
+        The network.
+    old, new : str
+        Former and new name; checked by the caller.
+    """
+    order = [new if name == old else name for name in network.neutrals]
+    copy = _renamed_copy(network.neutrals[old], new)
+    removed = network.remove_neutral(old)
+    try:
+        network.add_neutral(copy)
+    except Exception:  # pragma: no cover - the copy validated already
+        network.add_neutral(removed)
+        _restore_order(network, "neutrals", [old if n == new else n for n in order])
+        raise
+    _restore_order(network, "neutrals", order)
+
+
 class _Rename(Command):
     """
     Base of the rename commands: one element and, with it, its diagram entry.
@@ -1820,6 +2051,22 @@ class RenameSource(_Rename):
 
     def _revert(self, context: CommandContext) -> None:
         _rename_source(context.network, self.new_name, self.name)
+
+
+class RenameNeutral(_Rename):
+    """Rename a neutral-point element (a renamed copy replaces it, at the same position)."""
+
+    op: Literal["rename_neutral"] = "rename_neutral"
+    _KIND: ClassVar[str] = "neutral"
+    _COLLECTION: ClassVar[str] = "neutrals"
+
+    def _apply(self, context: CommandContext) -> None:
+        self._check(context)
+        _rename_neutral(context.network, self.name, self.new_name)
+        self._undo = True
+
+    def _revert(self, context: CommandContext) -> None:
+        _rename_neutral(context.network, self.new_name, self.name)
 
 
 class RenameFault(_Rename):
@@ -2694,6 +2941,9 @@ COMMAND_TYPES = (
     AddSource,
     UpdateSource,
     RemoveSource,
+    AddNeutral,
+    UpdateNeutral,
+    RemoveNeutral,
     AddFault,
     UpdateFault,
     RemoveFault,
@@ -2707,6 +2957,7 @@ COMMAND_TYPES = (
     RenameBus,
     RenameBranch,
     RenameSource,
+    RenameNeutral,
     RenameFault,
     RenameBusType,
     RenameBranchType,

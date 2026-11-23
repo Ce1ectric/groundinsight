@@ -9,6 +9,7 @@ functions assume that the network is already fully built (buses, branches,
 faults, sources, paths) and orchestrate repeated :func:`run_fault` calls.
 """
 
+from .contributions import EARTH_CURRENT_SCHEMA, earth_current_contributions
 from .decomposition import Cut, CutAnalysis, analyze_cuts
 from .reference import REFERENCE_CASES, ReferenceCase, run_reference_cases
 from .response import BusResponse, bus_response
@@ -43,6 +44,8 @@ __all__ = [
     "Cut",
     "CutAnalysis",
     "analyze_cuts",
+    "EARTH_CURRENT_SCHEMA",
+    "earth_current_contributions",
     "REFERENCE_CASES",
     "ReferenceCase",
     "run_reference_cases",

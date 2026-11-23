@@ -468,6 +468,11 @@ class BranchTypeDB(Base):
     cross_section_mm2 = Column(Float, nullable=True)
     theta_initial_C = Column(Float, nullable=True)
     theta_final_C = Column(Float, nullable=True)
+    # Capacitance per phase (to the earthing conductor, to earth) and the
+    # voltage level of the phase conductors
+    c_shield_nf_per_km = Column(Float, nullable=True)
+    c_earth_nf_per_km = Column(Float, nullable=True)
+    voltage_level = Column(Float, nullable=True)
 
     def to_pydantic(self):
         """
@@ -494,6 +499,9 @@ class BranchTypeDB(Base):
             cross_section_mm2=self.cross_section_mm2,
             theta_initial_C=(self.theta_initial_C if self.theta_initial_C is not None else 20.0),
             theta_final_C=self.theta_final_C,
+            c_shield_nf_per_km=self.c_shield_nf_per_km,
+            c_earth_nf_per_km=self.c_earth_nf_per_km,
+            voltage_level=self.voltage_level,
         )
 
     @classmethod
@@ -527,6 +535,9 @@ class BranchTypeDB(Base):
             cross_section_mm2=branch_type.cross_section_mm2,
             theta_initial_C=branch_type.theta_initial_C,
             theta_final_C=branch_type.theta_final_C,
+            c_shield_nf_per_km=branch_type.c_shield_nf_per_km,
+            c_earth_nf_per_km=branch_type.c_earth_nf_per_km,
+            voltage_level=branch_type.voltage_level,
         )
 
 
@@ -761,6 +772,8 @@ class FaultDB(Base):
     # IEC 60909-0 short-circuit duration and AC heat factor
     t_k_s = Column(Float, nullable=True)
     n_factor = Column(Float, nullable=True)
+    # Voltage level of the system the fault is in (kV)
+    voltage_level = Column(Float, nullable=True)
 
     network = relationship("NetworkDB", back_populates="faults")
 
@@ -786,6 +799,7 @@ class FaultDB(Base):
             # NULL here; fall back to the far-from-generator default
             # instead of failing validation on None.
             n_factor=1.0 if self.n_factor is None else self.n_factor,
+            voltage_level=self.voltage_level,
         )
         fault.mark_active(self.active)
         return fault
@@ -820,6 +834,7 @@ class FaultDB(Base):
             active=fault.active,
             t_k_s=fault.t_k_s,
             n_factor=fault.n_factor,
+            voltage_level=fault.voltage_level,
         )
 
 
@@ -861,6 +876,8 @@ class SourceDB(Base):
     i_k_a = Column(Float, nullable=True)
     r_to_x = Column(Float, nullable=True)
     kappa = Column(Float, nullable=True)
+    # Voltage level of the system the source feeds (kV)
+    voltage_level = Column(Float, nullable=True)
 
     network = relationship("NetworkDB", back_populates="sources")
 
@@ -924,6 +941,7 @@ class SourceDB(Base):
             i_k_a=self.i_k_a,
             r_to_x=self.r_to_x,
             kappa=self.kappa,
+            voltage_level=self.voltage_level,
         )
 
     @classmethod
@@ -958,6 +976,7 @@ class SourceDB(Base):
             i_k_a=source.i_k_a,
             r_to_x=source.r_to_x,
             kappa=source.kappa,
+            voltage_level=source.voltage_level,
         )
 
 
@@ -1143,6 +1162,11 @@ class NetworkDB(Base):
     # :func:`groundinsight.database.migration.migrate_database`.
     frequencies = Column(JSON)  # Store list of frequencies
     results = Column(JSON, nullable=True)  # {fault_name: Result} serialised as JSON
+    # The neutral-point elements, {name: element} as their JSON. One column
+    # instead of a table per class: an element has no rows of its own that
+    # another table refers to, and its bus is checked when the network is
+    # rebuilt.
+    neutrals = Column(JSON, nullable=True)
     # Plain column rather than a foreign key into ``faults``: the faults table
     # now points back at ``networks``, and declaring both directions would make
     # the two tables mutually dependent for schema creation. The value is only
@@ -1201,6 +1225,7 @@ class NetworkDB(Base):
             branches={branch.name: branch.to_pydantic() for branch in self.branches},
             faults={fault.name: fault.to_pydantic() for fault in self.faults},
             sources={source.name: source.to_pydantic() for source in self.sources},
+            neutrals=self.neutrals or {},
             paths={path.name: path.to_pydantic() for path in self.paths},
             active_fault=self.active_fault_name,
             results=_results_from_json(self.results),
@@ -1226,5 +1251,6 @@ class NetworkDB(Base):
             description=network.description,
             frequencies=network.frequencies,
             results=_results_to_json(network.results),
+            neutrals={name: neutral.model_dump(mode="json") for name, neutral in network.neutrals.items()} or None,
             active_fault_name=network.active_fault,
         )

@@ -767,6 +767,8 @@ class TransientStudy:
             phase current of a meshed network divides between routes of
             different R/L ratio, so the split the coupling uses -- exact at
             ``f_eval`` -- differs at the other frequencies in the waveform.
+            Code ``TRANSIENT_WITHOUT_NEUTRALS``: the network has
+            neutral-point elements, which take no part in a transient.
         """
         block_bytes = _validated_block_bytes(fft_block_bytes)
         if solver not in ("fft", "state_space"):
@@ -774,6 +776,7 @@ class TransientStudy:
                 f"Unknown transient solver: '{solver}'. "
                 "Supported: 'fft', 'state_space'."
             )
+        self._warn_neutrals_left_out()
         self._hooks = StudyHooks(
             "TransientStudy.solve", 0, progress, should_cancel
         )
@@ -791,6 +794,33 @@ class TransientStudy:
     # ------------------------------------------------------------------
     # internals
     # ------------------------------------------------------------------
+
+    def _warn_neutrals_left_out(self) -> None:
+        """
+        Say that neutral-point elements take no part in a transient.
+
+        The transient solvers apply the waveforms bound to the sources. The
+        charging currents of the branches and the current through a neutral
+        are derived for the stationary solve only; a study on a network with
+        such an element would otherwise leave them out without a word.
+
+        Warns
+        -----
+        ModelAssumptionWarning
+            ``TRANSIENT_WITHOUT_NEUTRALS`` (elements: the active
+            neutral-point elements).
+        """
+        names = [name for name, neutral in self.network.neutrals.items() if neutral.active]
+        if names:
+            emit(
+                ModelAssumptionWarning,
+                f"The transient solvers apply the waveforms of the sources only: the neutral-point "
+                f"element(s) {', '.join(repr(name) for name in names)} and the charging currents of "
+                f"the branches take no part in this study.",
+                code="TRANSIENT_WITHOUT_NEUTRALS",
+                elements=[("neutral", name) for name in names],
+                stacklevel=3,
+            )
 
     def _solve_fft(
         self,

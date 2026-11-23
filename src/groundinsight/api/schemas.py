@@ -386,7 +386,7 @@ class TableDTO(BaseDTO):
 
 class NetworkTablesDTO(BaseDTO):
     """
-    The input of a network as ten tables.
+    The input of a network as twelve tables.
 
     The tables are those of :meth:`Network.to_tables
     <groundinsight.Network.to_tables>`.
@@ -398,7 +398,7 @@ class NetworkTablesDTO(BaseDTO):
     tables : dict of str to TableDTO
         ``network``, ``frequencies``, ``bus_types``, ``branch_types``,
         ``buses``, ``branches``, ``sources``, ``source_values``, ``faults``,
-        ``fault_scalings`` -- in that order and with the pinned schema of
+        ``fault_scalings``, ``neutrals``, ``neutral_harmonics`` -- in that order and with the pinned schema of
         :data:`groundinsight.io.TABLE_SCHEMAS`. The type tables also list the
         session's catalogue types that no element uses yet.
     """
@@ -1632,7 +1632,7 @@ class CharacterizeRequestDTO(BaseDTO):
     ----------
     task : "characterize"
         Discriminator.
-    electrode : {"ring", "foundation", "rod"}
+    electrode : {"ring", "foundation", "rod", "mesh"}
         The electrode kind.
     dimensions : dict of str to float
         Overrides of its dimensions (``radius_m``, ``size_m``, ...).
@@ -1668,7 +1668,7 @@ class CharacterizeRequestDTO(BaseDTO):
     """
 
     task: Literal["characterize"] = "characterize"
-    electrode: Literal["ring", "foundation", "rod"] = "ring"
+    electrode: Literal["ring", "foundation", "rod", "mesh"] = "ring"
     dimensions: Dict[str, float] = Field(default_factory=dict)
     soil: Literal["homogeneous", "two_layer"] = "homogeneous"
     rho_1: float = Field(default=100.0, gt=0, allow_inf_nan=False)

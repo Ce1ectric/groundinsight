@@ -452,6 +452,9 @@ than one characteristic per electrode.
         - Branch
         - BranchType
         - Source
+        - IsolatedNeutral
+        - ResonantNeutral
+        - LowImpedanceNeutral
         - Fault
         - Network
         - Path

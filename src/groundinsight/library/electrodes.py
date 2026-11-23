@@ -42,15 +42,16 @@ def standard_bus_types() -> Dict[str, BusType]:
     Returns
     -------
     dict of str to BusType
-        A substation ring electrode with rods, a house foundation electrode
-        and two driven rods, each with its groundfield characteristic; a
-        fresh dictionary on every call.
+        Ten electrodes, each with its groundfield characteristic: ring and
+        mesh electrodes of substations and transformer stations (with rods),
+        the foundation and the ring electrode of a house, and single driven
+        rods; a fresh dictionary on every call.
 
     Examples
     --------
     >>> import groundinsight as gi
     >>> sorted(gi.standard_bus_types())[:2]
-    ['House foundation 10 x 10 m', 'Rod 2.5 m']
+    ['Cable distribution cabinet, rod 3 m', 'House foundation 10 x 10 m']
     """
     text = resources.files(__package__).joinpath("data", _DATA).read_text(encoding="utf-8")
     types = [BusType.model_validate(entry) for entry in json.loads(text)["bus_types"]]

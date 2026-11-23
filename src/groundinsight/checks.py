@@ -67,6 +67,7 @@ from .models.core_models import (
     Source,
     validate_frequencies,
 )
+from .supply import fault_level, supply_areas
 from .utils.impedance_calculator import check_passive_impedance
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,25 @@ CHECK_CODES: Dict[str, Tuple[str, str]] = {
         "A source names a bus that does not exist; the solver would ignore it.",
     ),
     "FAULT_UNKNOWN_BUS": (_ERROR, "A fault names a bus that does not exist."),
+    "NEUTRAL_UNKNOWN_BUS": (
+        _ERROR,
+        "A neutral-point element names a bus that does not exist.",
+    ),
+    "NEUTRAL_FREQUENCY_MISMATCH": (
+        _ERROR,
+        "The neutral-point elements of one supply area name different nominal "
+        "frequencies.",
+    ),
+    "NEUTRAL_FREQUENCY_NOT_SOLVED": (
+        _WARNING,
+        "The nominal frequency of a neutral-point element is not a network "
+        "frequency; its capacitances are not charged.",
+    ),
+    "FAULT_VOLTAGE_LEVEL_AMBIGUOUS": (
+        _ERROR,
+        "The feeding elements of several voltage levels reach the fault bus "
+        "and the fault does not say which level it is in.",
+    ),
     "FAULT_BUS_INACTIVE": (_ERROR, "A fault sits on an inactive bus."),
     "SOURCE_BUS_INACTIVE": (
         _WARNING,
@@ -346,6 +366,22 @@ def _check_frequencies(report: _Report) -> None:
     report.frequencies = usable
 
 
+def _feeding_neutrals(network) -> bool:
+    """Whether a network has an active neutral-point element (it feeds a fault like a source does)."""
+    neutrals = getattr(network, "neutrals", None) or {}
+    return any(getattr(neutral, "active", False) for neutral in neutrals.values())
+
+
+def _nothing_reaches(report: "_Report", fault: str) -> bool:
+    """Whether a network with sources (and no neutral-point element) has none that reaches ``fault``."""
+    return bool(
+        report.sources
+        and report.consistent
+        and not _feeding_neutrals(report.network)
+        and not report.network.sources_reaching(fault)
+    )
+
+
 def _check_excitation(report: _Report) -> None:
     """The network-level conditions ``run_fault`` rejects outright."""
     if not any(bus.active for bus in report.buses.values()):
@@ -355,7 +391,7 @@ def _check_excitation(report: _Report) -> None:
             "system to solve.",
             [("network", report.name)],
         )
-    if not report.sources:
+    if not report.sources and not _feeding_neutrals(report.network):
         report.add(
             "NO_SOURCE",
             f"Network '{report.name}' defines no source; every potential would "
@@ -370,6 +406,72 @@ def _check_excitation(report: _Report) -> None:
             "gi.create_fault(...).",
             [("network", report.name)],
         )
+
+
+def _check_neutrals(report: _Report) -> bool:
+    """
+    Every neutral-point element stands on a bus, at a frequency the network solves.
+
+    Parameters
+    ----------
+    report : _Report
+        Receives ``NEUTRAL_UNKNOWN_BUS`` and ``NEUTRAL_FREQUENCY_NOT_SOLVED``.
+
+    Returns
+    -------
+    bool
+        ``False`` if an element names a bus that does not exist.
+    """
+    sound = True
+    for name, neutral in (getattr(report.network, "neutrals", None) or {}).items():
+        if neutral.bus not in report.buses:
+            report.add(
+                "NEUTRAL_UNKNOWN_BUS",
+                f"Neutral '{name}' sits on bus '{neutral.bus}', which is not in "
+                f"network '{report.name}'.",
+                [("neutral", name), ("bus", neutral.bus)],
+            )
+            sound = False
+        elif neutral.active and not any(
+            math.isclose(neutral.nominal_frequency, f, rel_tol=1e-9) for f in report.frequencies
+        ):
+            report.add(
+                "NEUTRAL_FREQUENCY_NOT_SOLVED",
+                f"Neutral '{name}' has the nominal frequency "
+                f"{neutral.nominal_frequency:g} Hz, which the network does not solve "
+                f"({_render(report.frequencies)}): the capacitances of its supply area "
+                "are not charged and only its harmonic currents feed a fault.",
+                [("neutral", name)],
+            )
+    return sound
+
+
+def _check_supply(report: _Report) -> None:
+    """
+    Neutral-point elements and voltage levels: what ``run_fault`` refuses or passes over.
+
+    Parameters
+    ----------
+    report : _Report
+        Receives the findings of :func:`_check_neutrals`,
+        ``NEUTRAL_FREQUENCY_MISMATCH`` and ``FAULT_VOLTAGE_LEVEL_AMBIGUOUS``.
+    """
+    network = report.network
+    if not (_check_neutrals(report) and report.consistent):
+        return
+    try:
+        supply_areas(network)
+    except ValueError as exc:
+        report.add("NEUTRAL_FREQUENCY_MISMATCH", str(exc), [("network", report.name)])
+        return
+    for name in report.checked_faults:
+        fault = report.faults[name]
+        if fault.bus not in report.buses:
+            continue
+        try:
+            fault_level(network, name)
+        except ValueError as exc:
+            report.add("FAULT_VOLTAGE_LEVEL_AMBIGUOUS", str(exc), [("fault", name), ("bus", fault.bus)])
 
 
 def _check_references(report: _Report) -> None:
@@ -673,11 +775,7 @@ def _check_faults(report: _Report) -> None:
                     "scaling, or none at all (factor 1.0 everywhere).",
                     [("fault", name)],
                 )
-        if (
-            report.sources
-            and report.consistent
-            and not report.network.sources_reaching(name)
-        ):
+        if _nothing_reaches(report, name):
             report.add(
                 "FAULT_NOT_REACHED",
                 f"No source reaches fault '{name}' over active buses and "
@@ -891,5 +989,6 @@ def check_network(network: Network, *, fault: Optional[str] = None) -> List[Diag
     report.run("characteristic", _check_characteristics)
     report.run("source", _check_sources)
     report.run("fault", _check_faults)
+    report.run("supply", _check_supply)
     report.run("topology", _check_topology)
     return unique(report.records)

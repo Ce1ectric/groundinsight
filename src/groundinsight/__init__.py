@@ -45,6 +45,8 @@ from .models.core_models import (
     BusType,
     ComplexNumber,
     Fault,
+    IsolatedNeutral,
+    LowImpedanceNeutral,
     Network,
     NetworkFrequencyOrderWarning,
     Path,
@@ -53,6 +55,7 @@ from .models.core_models import (
     Result,
     ResultBranch,
     ResultBus,
+    ResonantNeutral,
     Source,
     TransientModelWarning,
 )
@@ -87,6 +90,9 @@ from .network_operations import (
     create_fault,
     create_source,
     create_voltage_source,
+    create_isolated_neutral,
+    create_resonant_neutral,
+    create_low_impedance_neutral,
     build_electrical_network,
     run_fault,
     create_network_assistant,
@@ -95,6 +101,7 @@ from .network_operations import (
 )
 from .service import solve
 from .checks import check_network
+from .supply import SUPPLY_AREAS_SCHEMA, supply_areas
 from .progress import StudyCancelled
 from .pathfinder import (
     PathfinderSettings,
@@ -149,6 +156,8 @@ from .analysis import (
     Cut,
     CutAnalysis,
     analyze_cuts,
+    EARTH_CURRENT_SCHEMA,
+    earth_current_contributions,
     BusResponse,
     bus_response,
     REFERENCE_CASES,
@@ -199,6 +208,9 @@ __all__ = [
     "BranchType",
     "Fault",
     "Source",
+    "IsolatedNeutral",
+    "ResonantNeutral",
+    "LowImpedanceNeutral",
     "Path",
     "Result",
     "ResultBus",
@@ -213,12 +225,18 @@ __all__ = [
     "create_fault",
     "create_source",
     "create_voltage_source",
+    "create_isolated_neutral",
+    "create_resonant_neutral",
+    "create_low_impedance_neutral",
     "build_electrical_network",
     "run_fault",
     # Side-effect-free solve: same numbers as run_fault, network untouched.
     "solve",
     # Pre-flight check: every problem as a Diagnostic, never an exception.
     "check_network",
+    # Voltage levels and what feeds them (neutral-point elements, charging currents).
+    "supply_areas",
+    "SUPPLY_AREAS_SCHEMA",
     # Raised by a study whose should_cancel() callback returned true.
     "StudyCancelled",
     "plot_bus_voltages",
@@ -270,6 +288,8 @@ __all__ = [
     "Cut",
     "CutAnalysis",
     "analyze_cuts",
+    "earth_current_contributions",
+    "EARTH_CURRENT_SCHEMA",
     "BusResponse",
     "bus_response",
     "REFERENCE_CASES",

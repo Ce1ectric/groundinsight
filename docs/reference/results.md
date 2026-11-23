@@ -114,6 +114,29 @@ report.
 
 <!-- result-table: res_fault -->
 
+### `supply_areas(network)`
+
+One row per supply area — a voltage level as far as the phase conductors of a
+feeding element reach; nothing is solved. Columns (`gi.SUPPLY_AREAS_SCHEMA`):
+`area`, `voltage_level_kV`, `feeding_elements` and `neutral` (`isolated`,
+`resonant`, `low_impedance`, `source`, joined by `+`), `buses`, `branches`,
+`length_km`, and at the nominal frequency `I_C_branches_A`, `I_C_remaining_A`,
+`I_CE_A` (their sum, $\sqrt3\,\omega\,C_E\,U_n$ plus the part not modelled),
+`I_coil_A`, `I_active_A`, `I_residual_A` and `detuning` =
+$(I_{CE} - I_\mathrm{coil})/I_{CE}$. The current columns are `null` for an
+area fed by sources only: a prescribed current charges nothing.
+
+### `earth_current_contributions(network, fault)`
+
+One row per frequency and bus at which a feeding element takes its current
+out of the earthing network (`gi.EARTH_CURRENT_SCHEMA`): `frequency_Hz`,
+`bus_name`, `remote_earth` (a charging current from capacitances to earth),
+`sources`, the current `I_S_A` / `I_S_degree` after the fault scaling, the
+reduction factor of that location `r_S` / `r_S_degree`, and the contribution
+`I_E_A` / `I_E_degree` = $r_S\,I_S$. The contributions of one frequency add up
+as phasors to `I_E_A` of `res_fault`, the currents to `I_F_A`
+([Capacitive currents](../explanation/capacitive-currents.md#superposition)).
+
 ## Studies
 
 ### `SweepResult.buses()`, `.branches()`, `.impedances()`, `.cuts()`

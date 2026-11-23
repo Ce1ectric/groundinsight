@@ -65,6 +65,17 @@ class ImportDefaults(BaseModel):
         depend on the soil and the cable geometry, neither of which
         pandapower carries -- so they stay at ``default_branch_type``.
         Defaults to ``False``, which reproduces the previous behaviour.
+    derive_capacitance : bool
+        Give every imported line its capacitance and the imported voltage
+        level (``BranchType.c_shield_nf_per_km`` / ``c_earth_nf_per_km``,
+        ``voltage_level``), so that a neutral-point element charges it. The
+        capacitance that counts in an earth fault is the one of a phase to
+        earth: ``c0_nf_per_km`` where the line has it. For a cable (type
+        ``"cs"``) without it the operating capacitance ``c_nf_per_km`` is
+        taken -- the two are equal in a cable with a radial field -- and goes
+        to the screen; an overhead line (``"ol"``) gets its ``c0_nf_per_km``
+        to earth and nothing without it, because its operating capacitance is
+        about twice its capacitance to earth. Defaults to ``False``.
 
     Examples
     --------
@@ -95,6 +106,7 @@ class ImportDefaults(BaseModel):
     switch_branch_type: Optional[BranchType] = None
     switch_length_km: float = 0.001
     derive_phase_impedance: bool = False
+    derive_capacitance: bool = False
 
     @field_validator("rho")
     @classmethod

@@ -12,6 +12,7 @@ Each quantity is checked on two ways:
   and the maxima of ``res_fault`` against the maxima of ``res_buses``.
 """
 
+import contextlib
 import math
 import warnings
 
@@ -238,15 +239,16 @@ def test_a_database_without_the_new_columns_is_migrated(tmp_path):
     net = _network()
     with gi.Database(path) as database:
         database.save_network(net)
-    with sqlite3.connect(path) as conn:  # the layout of 2026.11.1
+    with contextlib.closing(sqlite3.connect(path)) as conn:  # the layout of 2026.11.1
         for table, column in (("buses", "characteristic"), ("buses", "k_touch"),
                               ("buses", "k_transfer"), ("bus_types", "characteristic")):
             conn.execute(f'ALTER TABLE "{table}" DROP COLUMN "{column}"')
+        conn.commit()
     with gi.Database(path) as database:
         again = database.load_network(net.name)
     assert again.buses["S1"].impedance == net.buses["S1"].impedance
     assert again.buses["S1"].characteristic is None and again.buses["S1"].k_touch is None
-    with sqlite3.connect(path) as conn:
+    with contextlib.closing(sqlite3.connect(path)) as conn:
         bus_columns = {row[1] for row in conn.execute("PRAGMA table_info(buses)")}
         type_columns = {row[1] for row in conn.execute("PRAGMA table_info(bus_types)")}
     assert {"characteristic", "k_touch", "k_transfer"} <= bus_columns

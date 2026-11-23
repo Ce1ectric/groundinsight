@@ -121,6 +121,7 @@ from groundinsight.utils.impedance_calculator import (
     short_circuit_mask,
 )
 from groundinsight.diagnostics import InputWarning, ModelAssumptionWarning, emit, note
+from groundinsight.supply import Feeding, feeding
 
 
 logger = logging.getLogger(__name__)
@@ -979,9 +980,14 @@ class _NetworkTables:
             (b.length if b.length and b.length > 0 else 1.0 for b in branches),
             dtype=float, count=count,
         )
+        # Branches of another voltage level than the fault's: earthing
+        # conductors only, their phase conductor carries nothing here.
+        self.phase_blocked = np.isin(
+            np.array(self.branch_names, dtype=object), list(electrical.feeding.blocked)
+        )
 
         vsources = [
-            s for s in network.sources.values() if s.source_type == "voltage"
+            s for s in electrical.sources.values() if s.source_type == "voltage"
         ]
         self.vs_names = [s.name for s in vsources]
         self.vs_bus_name = [s.bus for s in vsources]
@@ -1257,6 +1263,12 @@ class ElectricalNetwork:
         self.network = network
         self.auto_phase_currents = auto_phase_currents
         self._input_checks = input_checks
+        # What feeds the active fault (groundinsight.supply.feeding): the
+        # sources of its voltage level and the ones derived from the
+        # neutral-point elements and the capacitances. Without any of those
+        # ``sources`` is the network's own dictionary.
+        self.feeding: Feeding = Feeding(active=False, level=None, sources=network.sources)
+        self.sources: Dict[str, Source] = network.sources
         self.bus_indices = {}
         # Nodal admittance matrix per frequency, CSC (the solver's matrices).
         self.Y_sparse: Dict[float, csc_matrix] = {}
@@ -1396,10 +1408,35 @@ class ElectricalNetwork:
         This method assigns indices to buses, constructs admittance matrices,
         and builds voltage and current vectors for each frequency.
         """
+        self._resolve_feeding()
         self._assign_bus_indices()
         self._validate_frequency_coverage()
         self._construct_Y_matrices()
         self._construct_vectors()
+
+    def _resolve_feeding(self) -> None:
+        """
+        Determine what feeds the active fault.
+
+        Raises
+        ------
+        ValueError
+            As :func:`groundinsight.supply.feeding`; also if the network uses
+            neutral-point elements or voltage levels with
+            ``phase_current_mode="paths"``, which knows neither.
+        """
+        fault = self.network.active_fault
+        if fault is None or fault not in self.network.faults:
+            return
+        self.feeding = feeding(self.network, fault)
+        self.sources = self.feeding.sources
+        if self.feeding.active and not self.auto_phase_currents:
+            raise ValueError(
+                "Neutral-point elements and voltage levels need the phase-conductor network: "
+                "use phase_current_mode='auto' (the default). The path-based mode knows neither "
+                "the charging currents of the branches nor which branches carry the phase "
+                "conductor of a level."
+            )
 
     def _assign_bus_indices(self):
         """
@@ -1510,7 +1547,7 @@ class ElectricalNetwork:
                 f"branch '{branch.name}' (mutual impedance)",
             )
 
-        for source in self.network.sources.values():
+        for source in self.sources.values():
             if source.source_type != "voltage":
                 continue
             if source.bus not in self.bus_indices:
@@ -1596,7 +1633,7 @@ class ElectricalNetwork:
                 formula_str=branch.type.self_impedance_formula,
             )
 
-        for source in self.network.sources.values():
+        for source in self.sources.values():
             if source.source_type != "voltage":
                 continue
             if source.bus not in self.bus_indices:
@@ -1707,7 +1744,7 @@ class ElectricalNetwork:
                 branch.self_impedance.get(freq), f"branch '{branch.name}'"
             )
 
-        for source in self.network.sources.values():
+        for source in self.sources.values():
             if source.source_type != "voltage":
                 continue
             if source.bus not in self.bus_indices:
@@ -2173,7 +2210,7 @@ class ElectricalNetwork:
             effective = np.zeros(self.num_buses, dtype=complex)
             total_injection = 0j
             for source_name in sources_with_path:
-                source = self.network.sources[source_name]
+                source = self.sources[source_name]
                 if source.bus not in self.bus_indices:
                     continue
                 bus_idx = self.bus_indices[source.bus]
@@ -2186,8 +2223,11 @@ class ElectricalNetwork:
                     current, injection = loops[source_name]
                 total_source_current += current
                 total_injection += injection
-                i_vector[bus_idx] += injection
-                effective[bus_idx] += current
+                # A current from remote earth (an overhead line charges the
+                # soil along its route) is not taken at the bus.
+                at_bus = self._takes_at_bus(source_name)
+                i_vector[bus_idx] += at_bus * injection
+                effective[bus_idx] += at_bus * current
 
             i_vector[fault_bus_idx] -= total_injection
             effective[fault_bus_idx] -= total_source_current
@@ -2229,7 +2269,7 @@ class ElectricalNetwork:
             The active fault.
         """
         for name, freqs in self._sources_without_phase_path.items():
-            source = self.network.sources[name]
+            source = self.sources[name]
             emit(
                 ModelAssumptionWarning,
                 f"Source '{name}' at bus '{source.bus}' reaches fault "
@@ -2281,7 +2321,7 @@ class ElectricalNetwork:
         frequencies = [float(f) for f in self.network.frequencies]
         solved = set(frequencies)
         for name in sources_with_path:
-            source = self.network.sources[name]
+            source = self.sources[name]
             if source.bus not in self.bus_indices:
                 continue
             table = source.values if source.source_type == "current" else source.voltage
@@ -2377,9 +2417,9 @@ class ElectricalNetwork:
         voltage_sources = [
             name
             for name in sources_with_path
-            if self.network.sources[name].source_type == "voltage"
-            and self.network.sources[name].bus in self.bus_indices
-            and self.network.sources[name].bus != fault.bus
+            if self.sources[name].source_type == "voltage"
+            and self.sources[name].bus in self.bus_indices
+            and self.sources[name].bus != fault.bus
         ]
         if not voltage_sources:
             return
@@ -2516,6 +2556,10 @@ class ElectricalNetwork:
             The complex injection, or ``None`` if the
         source has no value at the requested frequency.
         """
+        if source.name in self.feeding.unscaled:
+            # Charging and coil currents hang on voltage and capacitance, not
+            # on the line impedance to the fault the scaling stands for.
+            scaling = 1.0
         if source.source_type == "current":
             current = source.values.get(freq) if source.values is not None else None
             if current is None:
@@ -2561,6 +2605,8 @@ class ElectricalNetwork:
             Source names that contribute to the active fault.
         """
         fault_name = self.network.active_fault
+        if self.feeding.active:
+            return self._feeding_sources(fault_name)
         if self.auto_phase_currents:
             return self.network.sources_reaching(fault_name)
 
@@ -2583,10 +2629,40 @@ class ElectricalNetwork:
 
         sources = set()
         for path in self.network.paths.values():
-            if path.fault == fault_name and path.source in self.network.sources:
+            if path.fault == fault_name and path.source in self.sources:
                 sources.add(path.source)
-        # Preserve insertion order of self.network.sources for determinism
-        return [s for s in self.network.sources if s in sources]
+        # Preserve insertion order of self.sources for determinism
+        return [s for s in self.sources if s in sources]
+
+    def _feeding_sources(self, fault_name: str) -> List[str]:
+        """
+        The sources of :attr:`feeding` that reach the fault.
+
+        Parameters
+        ----------
+        fault_name : str
+            The active fault.
+
+        Returns
+        -------
+        list of str
+            The derived sources -- they stand in the supply area of the
+            fault by construction -- and the network's own sources that
+            reach the fault bus over active elements, in the order of
+            :attr:`sources`.
+        """
+        from groundinsight.pathfinder import PathFinder  # local import
+
+        fault_bus = self.network.faults[fault_name].bus
+        pathfinder = PathFinder(self.network)
+        return [
+            name for name, source in self.sources.items()
+            if name in self.feeding.derived or pathfinder.reaches(source.bus, fault_bus)
+        ]
+
+    def _takes_at_bus(self, source_name: str) -> float:
+        """``1.0`` for a source that takes its current at the earthing node of its bus, ``0.0`` for remote earth."""
+        return 0.0 if source_name in self.feeding.remote else 1.0
 
     def compute_phase_currents(
         self, freq: float, sources_with_path
@@ -2663,7 +2739,7 @@ class ElectricalNetwork:
         }
 
         for source_name in sources_with_path:
-            source = self.network.sources[source_name]
+            source = self.sources[source_name]
             scaling = fault.scaling_at(freq)
             i_src_complex = self._source_injection(source, freq, scaling)
             if i_src_complex is None:
@@ -2846,6 +2922,11 @@ class ElectricalNetwork:
         broken = proxied & with_conductor & shield_open
         by_length = proxied & ~invert
         admittance[by_length] = 1.0 / tables.proxy_length[rows][by_length]
+        blocked = tables.phase_blocked[rows]
+        if blocked.any():
+            admittance[blocked] = 0.0
+            proxied = proxied & ~blocked
+            broken = broken & ~blocked
         return admittance, proxied, broken
 
     def _compute_phase_currents_auto(
@@ -2966,7 +3047,7 @@ class ElectricalNetwork:
             and self.bus_indices.get(source.bus) is not None
             and self.bus_indices[source.bus] != fault_idx
             and in_component[self.bus_indices[source.bus]]
-            for source in self.network.sources.values()
+            for source in self.sources.values()
         )
         return meshed or thevenin
 
@@ -3010,31 +3091,32 @@ class ElectricalNetwork:
             return None
         return x
 
-    def _solve_coupled(
-        self, freq: float, sources_with_path
-    ) -> Optional[Tuple[Dict[str, complex], Dict[str, Tuple[complex, complex]]]]:
+    def _coupled_stamps(self, freq: float):
         """
-        Assemble and solve the coupled system of one frequency.
+        The coupled system of one frequency without electrodes and sources.
 
-        See :meth:`_compute_phase_currents_auto` for the model. The system is
-        assembled in the physical frame (``+I_F`` into the earth node of the
-        fault bus); the phase currents it returns are signed from -> to like
-        those of the phase network.
+        See :meth:`_compute_phase_currents_auto` for the model.
 
         Parameters
         ----------
         freq : float
             Frequency in Hz.
-        sources_with_path : Iterable[str]
-            Sources contributing to the active fault.
 
         Returns
         -------
-        tuple of (dict, dict) or None
-            Phase current per branch, and per Thevenin source in the phase
-            network its loop current and the injection of the earth-side
-            system that carries it; ``None`` when nothing feeds the phase
-            network or the system is singular.
+        stamps : _CoupledStamps
+            Shields and phase conductors of every branch of the solve.
+        node : numpy.ndarray
+            Phase node per bus: the fault's is its earth node (the fault
+            bond), ``-1`` outside the phase component of the fault bus.
+        in_component : numpy.ndarray
+            Buses of that component.
+        size : int
+            Number of nodes (earth nodes, then phase nodes).
+        phase : numpy.ndarray
+            Per branch: whether its phase conductor is part of the system.
+        y_pp, y_sp : numpy.ndarray
+            Per branch: phase admittance and the coupling term ``-k * y_pp``.
         """
         fault = self.network.faults[self.network.active_fault]
         fault_idx = self.bus_indices[fault.bus]
@@ -3080,6 +3162,175 @@ class ElectricalNetwork:
         stamps.pair(p_a, p_b, p_a, p_b, y_pp)
         stamps.pair(ends_a, ends_b, p_a, p_b, y_sp)
         stamps.pair(p_a, p_b, ends_a, ends_b, y_sp)
+        return stamps, node, in_component, size, phase, y_pp, y_sp
+
+    def source_locations(
+        self, freq: float
+    ) -> List[Tuple[str, bool, List[str], complex, Optional[complex]]]:
+        r"""
+        Where the fault current of one frequency returns to, with the factor of each place.
+
+        Internal API: used by
+        :func:`groundinsight.analysis.contributions.earth_current_contributions`;
+        not exported from ``groundinsight`` and free to change in any release.
+
+        One solve of the coupled system with one ampere at the earth node of
+        the fault bus gives every factor by reciprocity,
+        ``r_S = (x(p_S) - x(e_S)) / x(e_F)`` -- see the module docstring of
+        the analysis.
+
+        Parameters
+        ----------
+        freq : float
+            Frequency in Hz.
+
+        Returns
+        -------
+        list of tuple
+            Per location with a current at ``freq``, in bus order, the
+            earthing node before remote earth: bus name, whether the current
+            comes from remote earth, the names of the sources there, their
+            current after the fault scaling, and the reduction factor of the
+            location (``None`` where the system is singular or the fault bus
+            has no earthing impedance).
+
+        Raises
+        ------
+        ValueError
+            If a voltage source feeds the fault: its current is not
+            prescribed, so its share is not defined.
+        """
+        currents = self._location_currents(freq)
+        if not currents:
+            return []
+        fault_idx = self.bus_indices[self.network.faults[self.network.active_fault].bus]
+        stamps, node, in_component, size, _, _, _ = self._coupled_stamps(freq)
+        x = self._unit_fault_response(freq, stamps, size, fault_idx)
+        names_by_index = {index: name for name, index in self.bus_indices.items()}
+        locations = []
+        for (bus, remote), (names, current) in sorted(currents.items()):
+            factor: Optional[complex] = None
+            if x is not None:
+                at_phase = x[node[bus]] if in_component[bus] else x[fault_idx]
+                at_earth = 0.0 if remote else x[bus]
+                factor = complex((at_phase - at_earth) / x[fault_idx])
+            locations.append((names_by_index[bus], remote, names, complex(current), factor))
+        return locations
+
+    def _location_currents(self, freq: float) -> Dict[Tuple[int, bool], Tuple[List[str], complex]]:
+        """
+        The current of one frequency per place it is taken at.
+
+        Parameters
+        ----------
+        freq : float
+            Frequency in Hz.
+
+        Returns
+        -------
+        dict
+            ``(bus index, from remote earth)`` to the names of the sources
+            there and the sum of their currents after the fault scaling;
+            places without current are left out.
+
+        Raises
+        ------
+        ValueError
+            If a voltage source feeds the fault.
+        """
+        scaling = self.network.faults[self.network.active_fault].scaling_at(freq)
+        currents: Dict[Tuple[int, bool], Tuple[List[str], complex]] = {}
+        for name in self._sources_with_path_to_active_fault():
+            source = self.sources[name]
+            if source.source_type == "voltage":
+                raise ValueError(
+                    f"Source '{name}' is a voltage source: its current follows from the "
+                    "whole network, so its share of the earth current is not defined. "
+                    "The breakdown by source location needs prescribed currents."
+                )
+            bus = self.bus_indices.get(source.bus)
+            current = self._source_injection(source, freq, scaling)
+            if bus is None or not current:
+                continue
+            key = (bus, name in self.feeding.remote)
+            names, total = currents.get(key, ([], 0j))
+            currents[key] = (names + [name], total + current)
+        return currents
+
+    def _unit_fault_response(
+        self, freq: float, stamps: _CoupledStamps, size: int, fault_idx: int
+    ) -> Optional[np.ndarray]:
+        """
+        Node potentials of the coupled system for one ampere into the earth node of the fault bus.
+
+        Parameters
+        ----------
+        freq : float
+            Frequency in Hz.
+        stamps : _CoupledStamps
+            The system of :meth:`_coupled_stamps`.
+        size : int
+            Its number of nodes.
+        fault_idx : int
+            Row of the fault bus.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            Earth node potentials followed by the phase nodes; ``None`` if
+            the system is singular, the solution not finite or the fault bus
+            has no earthing impedance.
+        """
+        tables = self._network_tables()
+        column = tables.column[float(freq)]
+        rhs = np.zeros(size, dtype=complex)
+        rhs[fault_idx] = 1.0
+        matrix = stamps.matrix(size, bus_admittances(tables.bus_z, tables.bus_present)[:, column])
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", MatrixRankWarning)
+                factor = splu(matrix)
+                x = factor.solve(rhs)
+                x = x + factor.solve(rhs - matrix @ x)
+        except (RuntimeError, MatrixRankWarning):
+            return None
+        usable = bool(np.all(np.isfinite(x))) and x[fault_idx] != 0
+        return x if usable else None
+
+    def _solve_coupled(
+        self, freq: float, sources_with_path
+    ) -> Optional[Tuple[Dict[str, complex], Dict[str, Tuple[complex, complex]]]]:
+        """
+        Assemble and solve the coupled system of one frequency.
+
+        See :meth:`_compute_phase_currents_auto` for the model. The system is
+        assembled in the physical frame (``+I_F`` into the earth node of the
+        fault bus); the phase currents it returns are signed from -> to like
+        those of the phase network.
+
+        Parameters
+        ----------
+        freq : float
+            Frequency in Hz.
+        sources_with_path : Iterable[str]
+            Sources contributing to the active fault.
+
+        Returns
+        -------
+        tuple of (dict, dict) or None
+            Phase current per branch, and per Thevenin source in the phase
+            network its loop current and the injection of the earth-side
+            system that carries it; ``None`` when nothing feeds the phase
+            network or the system is singular.
+        """
+        fault = self.network.faults[self.network.active_fault]
+        fault_idx = self.bus_indices[fault.bus]
+        n = self.num_buses
+        tables = self._network_tables()
+        column = tables.column[float(freq)]
+        rows = np.flatnonzero(tables.branch_in_net)
+        stamps, node, in_component, size, phase, y_pp, y_sp = self._coupled_stamps(freq)
+        ends_a, ends_b = tables.branch_from[rows], tables.branch_to[rows]
 
         rhs = np.zeros(size, dtype=complex)
         thevenin = self._coupled_sources(
@@ -3153,7 +3404,7 @@ class ElectricalNetwork:
         """
         scaling = self.network.faults[self.network.active_fault].scaling_at(freq)
         thevenin: Dict[str, Tuple[int, int, complex, complex]] = {}
-        for name, source in self.network.sources.items():
+        for name, source in self.sources.items():
             bus = self.bus_indices.get(source.bus)
             if bus is None:
                 continue
@@ -3166,7 +3417,7 @@ class ElectricalNetwork:
             if norton is None:
                 continue
             rhs[phase_node] += norton
-            rhs[bus] -= norton
+            rhs[bus] -= self._takes_at_bus(name) * norton
             if y_src is not None and in_component[bus]:
                 thevenin[name] = (phase_node, int(bus), norton, y_src)
         return thevenin
@@ -3296,7 +3547,7 @@ class ElectricalNetwork:
         # That is not an early exit: every source then fails the membership test
         # below and gets told why, instead of the function returning zeros.
         for source_name in sources_with_path:
-            source = self.network.sources[source_name]
+            source = self.sources[source_name]
             src_idx = self.bus_indices.get(source.bus)
             if src_idx is None or src_idx == fault_bus_idx:
                 continue
@@ -4294,6 +4545,8 @@ class ElectricalNetwork:
                 elements=[("fault", fault_name), ("bus", fault_bus)],
             )
 
+        self._note_factor_above_one(fault_name, factors)
+
         result = self.network.results[fault_name]
         result.reduction_factor = ResultReductionFactor(
             fault_bus=fault_bus,
@@ -4305,6 +4558,38 @@ class ElectricalNetwork:
         )
         self.network.results[fault_name] = result
         self.results = result
+
+    def _note_factor_above_one(self, fault_name: str, factors: Dict[float, Optional[float]]) -> None:
+        """
+        Say where to look when the earth current exceeds the fault current.
+
+        With neutral-point elements a fault is fed from many buses. Where
+        their currents cancel in the fault current -- a coil against the
+        charging currents -- but return to different buses, ``r`` exceeds 1:
+        the fault current is then not the current that loads the earthing
+        network. The note points at the table that shows which is.
+
+        Parameters
+        ----------
+        fault_name : str
+            The active fault.
+        factors : dict of float to float or None
+            The reduction factor per frequency.
+        """
+        if not self.feeding.active:
+            return
+        above = [freq for freq, value in factors.items() if value is not None and value > 1.0]
+        if above:
+            note(
+                ModelAssumptionWarning,
+                f"The earth current of fault '{fault_name}' exceeds its fault current at "
+                f"{render_frequencies(above)} (r > 1): the currents that feed the fault cancel "
+                f"in the fault current but return to different buses of the earthing "
+                f"network. gi.earth_current_contributions(network, '{fault_name}') lists the "
+                f"current and the reduction factor of every feeding bus.",
+                code="EARTH_CURRENT_EXCEEDS_FAULT_CURRENT",
+                elements=[("fault", fault_name)],
+            )
 
     def _is_excited(self, freq: float) -> bool:
         """

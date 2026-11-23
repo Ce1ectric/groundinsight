@@ -48,6 +48,10 @@ public name with its page.
   (`Cut`, `analyze_cuts`).
 - [Location response](response.md) — a station characterised without its own
   electrode (`bus_response`).
+- [Neutral-point elements and supply areas](supply.md) — isolated, resonant and
+  low-impedance neutrals, the charging currents of cables and lines
+  (`supply_areas`) and the earth current by source location
+  (`earth_current_contributions`).
 - [Reference cases](reference.md) — the closed-form cases the solver is
   checked against (`run_reference_cases`).
 - [Standard library of types](library.md) — cables and earth electrodes

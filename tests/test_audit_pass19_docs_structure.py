@@ -346,6 +346,7 @@ EXPLANATION_PAGES = [
     "explanation/formulas.md",
     "explanation/phase-currents.md",
     "explanation/reduction-factors.md",
+    "explanation/capacitive-currents.md",
     "explanation/touch-and-transfer.md",
     "explanation/decomposition.md",
     "explanation/dc.md",

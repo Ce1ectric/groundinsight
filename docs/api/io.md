@@ -237,7 +237,7 @@ worst.
 
 ## Networks as tables
 
-`gi.network_from_tables(...)` builds a network from ten tables — Polars
+`gi.network_from_tables(...)` builds a network from twelve tables — Polars
 frames, CSV files or a directory of `<table>.csv` files — and
 `Network.to_tables()` exports one in exactly that form. The schema is pinned
 in `groundinsight.io.TABLE_SCHEMAS` (column order and dtype); required
@@ -247,13 +247,15 @@ the model default (`None` where the field accepts it).
 - `network`: **`name`**, `description`, `active_fault` — one row.
 - `frequencies`: **`frequency_Hz`** — one row per frequency, in solve order.
 - `bus_types`: **`name`**, `description`, **`system_type`**, **`voltage_level`**, **`impedance_formula`**, `R_formula`, `L_formula`, `C_formula`, `earthing_conductor_material`, `earthing_conductor_cross_section_mm2`, `earthing_conductor_theta_initial_C`, `earthing_conductor_theta_final_C`, `earthing_conductor_current_split`, `electrode_material`, `electrode_cross_section_mm2`, `electrode_theta_initial_C`, `electrode_theta_final_C`, `electrode_current_split`, `characteristic` (an `EarthingCharacteristic` as JSON text)
-- `branch_types`: **`name`**, `description`, **`grounding_conductor`**, **`self_impedance_formula`**, **`mutual_impedance_formula`**, `phase_impedance_formula`, `R_self_formula`, `L_self_formula`, `C_self_formula`, `R_mutual_formula`, `M_mutual_formula`, `conductor_material`, `cross_section_mm2`, `theta_initial_C`, `theta_final_C`
+- `branch_types`: **`name`**, `description`, **`grounding_conductor`**, **`self_impedance_formula`**, **`mutual_impedance_formula`**, `phase_impedance_formula`, `R_self_formula`, `L_self_formula`, `C_self_formula`, `R_mutual_formula`, `M_mutual_formula`, `conductor_material`, `cross_section_mm2`, `theta_initial_C`, `theta_final_C`, `c_shield_nf_per_km`, `c_earth_nf_per_km`, `voltage_level`
 - `buses`: **`name`**, **`type`** (a `bus_types` name), `specific_earth_resistance` (Ω·m), `active`, `description`, `characteristic` (as for `bus_types`; overrides the type's)
 - `branches`: **`name`**, **`type`** (a `branch_types` name), **`from_bus`**, **`to_bus`**, **`length`** (km), `specific_earth_resistance`, `parallel_coefficient`, `active`, `description`
-- `sources`: **`name`**, **`bus`**, `source_type` (`current` or `voltage`), `i_k_a`, `r_to_x`, `kappa`, `description`
+- `sources`: **`name`**, **`bus`**, `source_type` (`current` or `voltage`), `i_k_a`, `r_to_x`, `kappa`, `voltage_level`, `description`
 - `source_values`: **`source`**, **`quantity`**, **`frequency_Hz`**, **`real`**, `imag` — long format, one row per source, quantity and frequency; `quantity` is `current` for a current source and `voltage` / `impedance` for a Thevenin source; the values are RMS phasors in A, V or Ω.
-- `faults`: **`name`**, **`bus`**, `t_k_s`, `n_factor`, `description`
+- `faults`: **`name`**, **`bus`**, `t_k_s`, `n_factor`, `voltage_level`, `description`
 - `fault_scalings`: **`fault`**, **`frequency_Hz`**, **`scaling`** — long format; a fault without rows scales every frequency with 1.0.
+- `neutrals`: **`name`**, **`kind`**, **`bus`**, **`voltage_level`**, `nominal_frequency`, `coil_current`, `active_residual_current`, `current_real`, `current_imag`, `remaining_capacitive_current`, `active`, `description` — the neutral-point elements; `kind` is `isolated`, `resonant` or `low_impedance`, the columns of the other kinds stay empty.
+- `neutral_harmonics`: **`neutral`**, **`frequency_Hz`**, **`real`**, `imag` — long format; the `harmonic_currents` of the elements in A.
 
 Only `frequencies`, `bus_types` and `buses` are required. The tables hold
 *input* only: the impedance dictionaries are evaluated from the type

@@ -98,6 +98,7 @@ OPERATIONAL: Dict[Tuple[str, str], Tuple[int, str]] = {
     ("models/core_models.py", "Network.add_branch"): (1, "overwrite=True was requested"),
     ("models/core_models.py", "Network.add_fault"): (1, "overwrite=True was requested"),
     ("models/core_models.py", "Network.add_source"): (1, "overwrite=True was requested"),
+    ("models/core_models.py", "Network.add_neutral"): (1, "overwrite=True was requested"),
     ("models/core_models.py", "Network.res_all_impedances"): (
         3, "rows missing from a reporting table, visible in the table"),
     ("network_operations.py", "_resolve_phase_current_mode"): (
@@ -211,8 +212,10 @@ def test_the_inventory_counts_sixty_two_sites_before_and_thirty_eight_after():
     """62 sites were inventoried; 24 became structured warnings. Two of them
     -- EARTH_GROUP_SPREAD and the failed solve without coupling of
     REDUCTION_FACTOR_UNDEFINED -- went with the reduction factors they
-    qualified, when there became one reduction factor, U_E / (Z_E * I_F)."""
-    assert sum(count for count, _ in OPERATIONAL.values()) == 38
+    qualified, when there became one reduction factor, U_E / (Z_E * I_F).
+    One operational site came later: the overwrite notice of
+    ``Network.add_neutral``, the one every ``add_*`` method has."""
+    assert sum(count for count, _ in OPERATIONAL.values()) == 38 + 1
     converted_sites = sum(
         len([site for site in sites if site[0] == CONVERTED[code][1]])
         for code, sites in _emitted_codes().items()

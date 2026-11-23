@@ -46,6 +46,7 @@ import numpy as np
 from pydantic import (
     BaseModel,
     ConfigDict,
+    Field,
     PrivateAttr,
     ValidationInfo,
     computed_field,
@@ -54,7 +55,7 @@ from pydantic import (
     model_validator,
 )
 from typing import (
-    TYPE_CHECKING, Any, ClassVar, Dict, FrozenSet, List, Literal, Optional, Tuple, Union,
+    TYPE_CHECKING, Annotated, Any, ClassVar, Dict, FrozenSet, List, Literal, Optional, Tuple, Union,
 )
 from groundinsight.diagnostics import (
     Diagnostic,
@@ -1308,6 +1309,30 @@ def _formula_context(kind: str, info: ValidationInfo) -> str:
 
 
 # user interface
+def _positive_voltage_level(value: Optional[float]) -> Optional[float]:
+    """
+    A voltage level in kV, or ``None``.
+
+    Parameters
+    ----------
+    value : float, optional
+        The value to check.
+
+    Returns
+    -------
+    float or None
+        ``value`` unchanged.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is given and not a finite, strictly positive number.
+    """
+    if value is not None and not (math.isfinite(value) and value > 0):
+        raise ValueError(f"voltage_level must be a positive voltage in kV, got {value!r}.")
+    return value
+
+
 class BusType(_ReadOnlyType):
     """
     Represents the type of a bus, including its default impedance formula.
@@ -1840,6 +1865,21 @@ class BranchType(_ReadOnlyType):
         Maximum permissible conductor temperature in °C. Defaults to the
         material value in
         :data:`groundinsight.analysis.thermal.IEC60949_MATERIALS`.
+    c_shield_nf_per_km : float, optional
+        Capacitance of one phase conductor to the **earthing conductor of the
+        branch** (cable screen, earth wire) in nF/km. For a cable with a
+        radial field this is the operating capacitance of the data sheet. In
+        an earth fault of a network with a neutral-point element its charging
+        current leaves the earthing network at the two ends of the branch.
+    c_earth_nf_per_km : float, optional
+        Capacitance of one phase conductor to **earth** in nF/km (an overhead
+        line). Its charging current comes out of the soil along the line: in
+        the node model from remote earth, not from a station.
+    voltage_level : float, optional
+        Nominal voltage in kV of the system whose phase conductors the branch
+        carries. With it, a fault of one voltage level sees the branches of
+        the other levels as earthing conductors only; ``None`` belongs to
+        every level. See :func:`groundinsight.supply_areas`.
 
     Notes
     -----
@@ -1883,6 +1923,21 @@ class BranchType(_ReadOnlyType):
     cross_section_mm2: Optional[float] = None
     theta_initial_C: float = 20.0
     theta_final_C: Optional[float] = None
+    c_shield_nf_per_km: Optional[float] = None
+    c_earth_nf_per_km: Optional[float] = None
+    voltage_level: Optional[float] = None
+
+    @field_validator("c_shield_nf_per_km", "c_earth_nf_per_km")
+    def _validate_capacitance(cls, value, info: ValidationInfo):
+        """Reject a negative or non-finite capacitance."""
+        if value is not None and not (math.isfinite(value) and value >= 0):
+            raise ValueError(f"{info.field_name} must be finite and not negative, got {value!r}.")
+        return value
+
+    @field_validator("voltage_level")
+    def _validate_voltage_level(cls, value):
+        """Reject a voltage level that is not a positive number."""
+        return _positive_voltage_level(value)
 
     @field_validator("self_impedance_formula", "mutual_impedance_formula")
     def validate_impedance_formula(cls, value, info: ValidationInfo):
@@ -2354,6 +2409,10 @@ class Fault(_NetworkElement):
         situation for grounding studies. Values below ``1.0`` apply when
         the fault is near a generator and the AC component decays during
         ``T_k``.
+    voltage_level : float, optional
+        Voltage level in kV of the system the fault is in. Needed only where
+        the fault bus carries several levels that are fed (a substation, a
+        distribution substation); see :func:`groundinsight.supply_areas`.
 
     Notes
     -----
@@ -2389,7 +2448,13 @@ class Fault(_NetworkElement):
     scalings: Dict[float, float] = {}  # Scaling factors for sources
     t_k_s: Optional[float] = None  # IEC 60909-0 short-circuit duration T_k [s]
     n_factor: float = 1.0  # IEC 60909-0 AC heat factor n
+    voltage_level: Optional[float] = None  # kV, the system the fault is in
     _active: bool = PrivateAttr(default=False)
+
+    @field_validator("voltage_level")
+    def _validate_voltage_level(cls, value):
+        """Reject a voltage level that is not a positive number."""
+        return _positive_voltage_level(value)
 
     @field_validator("t_k_s")
     @classmethod
@@ -2613,6 +2678,12 @@ class Source(_NetworkElement):
         over ``r_to_x`` when both are set, which lets a topology-aware
         value (e.g. pandapower's method C) override the closed-form
         ``1.02 + 0.98 * exp(-3 * R/X)``. Physically bounded to ``(1, 2]``.
+    voltage_level : float, optional
+        Nominal voltage in kV of the system the source feeds. With it the
+        source feeds only faults of that level, over the branches of that
+        level; ``None`` feeds every fault it reaches. A source carries a
+        prescribed current: the capacitances of its system are not charged
+        (see :class:`IsolatedNeutral` for the elements that do).
 
     Notes
     -----
@@ -2676,6 +2747,12 @@ class Source(_NetworkElement):
     i_k_a: Optional[float] = None  # initial symmetrical SC current I_k'' [A]
     r_to_x: Optional[float] = None  # R/X of the short-circuit loop [-]
     kappa: Optional[float] = None  # IEC 60909-0 peak factor [-]
+    voltage_level: Optional[float] = None  # kV, the system the source feeds
+
+    @field_validator("voltage_level")
+    def _validate_voltage_level(cls, value):
+        """Reject a voltage level that is not a positive number."""
+        return _positive_voltage_level(value)
 
     @field_validator("i_k_a")
     @classmethod
@@ -2781,6 +2858,328 @@ class Source(_NetworkElement):
 
     def __str__(self):
         return f"Source(name={self.name}, bus={self.bus}, type={self.source_type})"
+
+
+class _Neutral(_NetworkElement):
+    r"""
+    Base of the neutral-point elements.
+
+    :class:`IsolatedNeutral`, :class:`ResonantNeutral` and
+    :class:`LowImpedanceNeutral` share it. A neutral-point element stands at the bus where the neutral of a system
+    is treated and gives that system its voltage. In an earth fault of the
+    system the phase-to-earth capacitances of its branches are charged
+    (``BranchType.c_shield_nf_per_km``, ``c_earth_nf_per_km``), and the
+    element adds what flows through the neutral. All of it is a superposition
+    of current sources in the sense of :class:`Source` -- a current taken
+    from the earthing network at a bus, carried by the phase conductors to
+    the fault and put back there -- so the capacitive part is the same for
+    every neutral treatment; only the current at the bus of the element
+    differs.
+
+    Phasors refer to the voltage that drives the fault: a capacitive current
+    is ``+j`` times its magnitude, a coil current ``-j`` times, a current in
+    phase with the voltage is real.
+
+    Attributes
+    ----------
+    name : str
+        The name of the element.
+    description : str, optional
+        A brief description.
+    bus : str
+        The bus at which the neutral of the system is treated.
+    voltage_level : float
+        Nominal line-to-line voltage of the system in kV.
+    nominal_frequency : float
+        The frequency of the system in Hz, default 50.
+    remaining_capacitive_current : float
+        Capacitive earth-fault current in A of the part of the system that
+        is not modelled; taken at ``bus``.
+    harmonic_currents : dict of float to ComplexNumber
+        Current spectrum in A at frequencies other than the nominal one,
+        default none. The classes say where it flows.
+    active : bool
+        ``False`` takes the element out of every solve.
+    """
+
+    model_config = ConfigDict(ser_json_inf_nan="constants", validate_assignment=True)
+
+    _COLLECTION: ClassVar[str] = "neutrals"
+    _KIND: ClassVar[str] = "neutral"
+    _BUS_REFERENCES: ClassVar[Tuple[str, ...]] = ("bus",)
+
+    name: str
+    description: Optional[str] = None
+    bus: str
+    voltage_level: float  # kV, nominal voltage of the system
+    nominal_frequency: float = 50.0  # Hz
+    remaining_capacitive_current: float = 0.0  # A at the nominal frequency
+    harmonic_currents: Dict[float, ComplexNumber] = {}  # {frequency: A}
+    active: bool = True
+
+    @field_validator("voltage_level")
+    def _validate_voltage_level(cls, value):
+        """Reject a voltage level that is not a positive number."""
+        return _positive_voltage_level(value)
+
+    @field_validator("nominal_frequency")
+    def _validate_nominal_frequency(cls, value):
+        """Reject a nominal frequency that is not a positive number."""
+        if not (math.isfinite(value) and value > 0):
+            raise ValueError(f"nominal_frequency must be a positive frequency in Hz, got {value!r}.")
+        return value
+
+    @field_validator("remaining_capacitive_current")
+    def _validate_remaining_current(cls, value):
+        """Reject a negative or non-finite magnitude."""
+        return _magnitude("remaining_capacitive_current", value)
+
+    @field_validator("harmonic_currents", mode="before")
+    def _coerce_harmonic_keys(cls, value):
+        """Take ``None`` as no harmonics and the keys as frequencies in Hz."""
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            return value
+        coerced: Dict[float, Any] = {}
+        for key, current in value.items():
+            try:
+                frequency = float(key)
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"harmonic_currents: key {key!r} is not a frequency in Hz.") from error
+            if not (math.isfinite(frequency) and frequency >= 0):
+                raise ValueError(f"harmonic_currents: {frequency!r} Hz is not a frequency.")
+            if frequency in coerced:
+                raise ValueError(f"harmonic_currents: the frequency {frequency} Hz is given twice.")
+            coerced[frequency] = current
+        return coerced
+
+    @model_validator(mode="after")
+    def _fundamental_is_not_a_harmonic(self):
+        """
+        Refuse an entry of ``harmonic_currents`` at the nominal frequency.
+
+        Returns
+        -------
+        _Neutral
+            The validated element.
+
+        Raises
+        ------
+        ValueError
+            If ``harmonic_currents`` has a key at ``nominal_frequency``: the
+            current there follows from the capacitances and the element's
+            own fields.
+        """
+        if self.nominal_frequency in self.harmonic_currents:
+            raise ValueError(
+                f"{type(self).__name__} '{self.name}': harmonic_currents has a value at the "
+                f"nominal frequency {self.nominal_frequency:g} Hz. The current there follows "
+                "from the capacitances of the branches and the fields of the element; "
+                "harmonic_currents takes the other frequencies."
+            )
+        return self
+
+    def __str__(self):
+        return f"{type(self).__name__}(name={self.name}, bus={self.bus}, voltage_level={self.voltage_level})"
+
+
+def _magnitude(field: str, value: float) -> float:
+    """
+    A current magnitude in A.
+
+    Parameters
+    ----------
+    field : str
+        Name of the field, for the message.
+    value : float
+        The value to check.
+
+    Returns
+    -------
+    float
+        ``value`` unchanged.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is negative or not finite.
+    """
+    if not (math.isfinite(value) and value >= 0):
+        raise ValueError(f"{field} is a magnitude in A and must be finite and not negative, got {value!r}.")
+    return value
+
+
+class IsolatedNeutral(_Neutral):
+    r"""
+    An isolated neutral: nothing flows through the neutral point.
+
+    The earth-fault current of the system is the charging current of its
+    phase-to-earth capacitances,
+
+    $$
+    I_{CE} = \sqrt{3}\,\omega\,C_E\,U_n ,
+    $$
+
+    with ``U_n`` the ``voltage_level`` of this element. Each branch of the
+    supply area contributes ``j*sqrt(3)*omega*C'*l*U_n``, half at each of its
+    ends (see :func:`groundinsight.supply_areas`).
+
+    Attributes
+    ----------
+    name : str
+        The name of the element.
+    description : str, optional
+        A brief description.
+    bus : str
+        The bus at which the neutral of the system is (the substation).
+    voltage_level : float
+        Nominal line-to-line voltage of the system in kV.
+    nominal_frequency : float
+        The frequency of the system in Hz, default 50. The capacitances are
+        charged at this frequency.
+    remaining_capacitive_current : float
+        Capacitive earth-fault current in A of the part of the system that
+        is not modelled (other feeders). It is taken at ``bus``, where the
+        screens of those feeders end.
+    harmonic_currents : dict of float to ComplexNumber
+        Fault current in A at other frequencies, default none. In an isolated
+        system it is capacitive as well: it is distributed over the branches
+        like the charging current at the nominal frequency.
+    active : bool
+        ``False`` takes the element out of every solve.
+    kind : {'isolated'}
+        Tag of the class in files.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> neutral = gi.IsolatedNeutral(name="20 kV", bus="UW", voltage_level=20.0)
+    >>> neutral.kind, neutral.remaining_capacitive_current
+    ('isolated', 0.0)
+    """
+
+    kind: Literal["isolated"] = "isolated"
+
+
+class ResonantNeutral(_Neutral):
+    r"""
+    An arc-suppression coil (resonant earthing).
+
+    The coil carries ``coil_current`` lagging the driving voltage by 90° and
+    the watt residual in phase with it; both are taken from the earthing
+    network **at the bus of the coil**. The capacitive currents of the
+    branches are those of an isolated neutral. Coil and capacitances cancel
+    in the fault current, not in the earthing network -- see the explanation
+    "Capacitive currents" in the documentation.
+
+    Attributes
+    ----------
+    name : str
+        The name of the element.
+    description : str, optional
+        A brief description.
+    bus : str
+        The bus at which the coil is connected.
+    voltage_level : float
+        Nominal line-to-line voltage of the system in kV.
+    nominal_frequency : float
+        The frequency of the system in Hz, default 50.
+    coil_current : float
+        Current of the coil in A at ``voltage_level/sqrt(3)`` and the nominal
+        frequency -- the value the coil is set to. The detuning follows from
+        it and the capacitive current of the supply area
+        (:func:`groundinsight.supply_areas`).
+    active_residual_current : float
+        Watt residual current in A (losses of coil and network), default 0.
+    remaining_capacitive_current : float
+        Capacitive earth-fault current in A of the part of the system that
+        is not modelled; taken at ``bus``.
+    harmonic_currents : dict of float to ComplexNumber
+        Residual current in A at other frequencies, default none. It is
+        capacitive current that the coil compensates with ``1/h**2`` of its
+        share at the nominal frequency (``h`` the harmonic order); the
+        capacitive part is distributed over the branches, the coil's part
+        taken at ``bus``.
+    active : bool
+        ``False`` takes the element out of every solve.
+    kind : {'resonant'}
+        Tag of the class in files.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> coil = gi.ResonantNeutral(name="coil", bus="UW", voltage_level=20.0, coil_current=28.6,
+    ...                           active_residual_current=0.8)
+    >>> coil.kind, coil.coil_current
+    ('resonant', 28.6)
+    """
+
+    kind: Literal["resonant"] = "resonant"
+    coil_current: float
+    active_residual_current: float = 0.0
+
+    @field_validator("coil_current", "active_residual_current")
+    def _validate_magnitudes(cls, value, info: ValidationInfo):
+        """Reject a negative or non-finite magnitude."""
+        return _magnitude(info.field_name, value)
+
+
+class LowImpedanceNeutral(_Neutral):
+    r"""
+    A neutral earthed through a resistor or reactor (low-impedance earthing).
+
+    Attributes
+    ----------
+    name : str
+        The name of the element.
+    description : str, optional
+        A brief description.
+    bus : str
+        The bus at which the neutral is earthed.
+    voltage_level : float
+        Nominal line-to-line voltage of the system in kV.
+    nominal_frequency : float
+        The frequency of the system in Hz, default 50.
+    current : ComplexNumber
+        Current through the neutral in A at the nominal frequency for a fault
+        at the busbar, e.g. the rated current of the resistor. Real for a
+        resistor; a reactor gives a lagging (negative imaginary) part. The
+        scaling of the fault (``Fault.scalings``) applies to it.
+    remaining_capacitive_current : float
+        Capacitive earth-fault current in A of the part of the system that
+        is not modelled; taken at ``bus``.
+    harmonic_currents : dict of float to ComplexNumber
+        Current through the neutral in A at other frequencies, default none;
+        scaled with the fault like ``current``.
+    active : bool
+        ``False`` takes the element out of every solve.
+    kind : {'low_impedance'}
+        Tag of the class in files.
+
+    Notes
+    -----
+    The capacitances of the supply area are charged with the full
+    displacement voltage ``voltage_level/sqrt(3)``, also where the fault
+    scaling reduces the current through the neutral. That is an upper bound
+    of a share that is small next to the current of the neutral.
+
+    Examples
+    --------
+    >>> import groundinsight as gi
+    >>> neutral = gi.LowImpedanceNeutral(name="R", bus="UW", voltage_level=20.0, current=1000.0)
+    >>> neutral.kind, complex(neutral.current)
+    ('low_impedance', (1000+0j))
+    """
+
+    kind: Literal["low_impedance"] = "low_impedance"
+    current: ComplexNumber
+
+
+#: The neutral-point elements a network keeps, told apart by ``kind``.
+NeutralElement = Annotated[
+    Union[IsolatedNeutral, ResonantNeutral, LowImpedanceNeutral], Field(discriminator="kind")
+]
 
 
 class ResultBus(BaseModel):
@@ -3385,10 +3784,17 @@ _DIGEST_FIELDS: Dict[str, Tuple[str, ...]] = {
         "name", "active", "from_bus", "to_bus", "type", "parallel_coefficient",
         "self_impedance", "mutual_impedance", "phase_impedance",
     ),
-    "Source": ("name", "bus", "source_type", "values", "voltage", "source_impedance"),
-    "Fault": ("name", "bus", "scalings"),
-    "Network": ("frequencies", "buses", "branches", "sources", "faults"),
+    "Source": ("name", "bus", "source_type", "values", "voltage", "source_impedance", "voltage_level"),
+    "Fault": ("name", "bus", "scalings", "voltage_level"),
+    "Network": ("frequencies", "buses", "branches", "sources", "faults", "neutrals"),
 }
+
+#: The fields of a neutral-point element the solver reads, per class; the
+#: common ones first. ``description`` is the only field outside it.
+_NEUTRAL_DIGEST_FIELDS: Tuple[str, ...] = (
+    "bus", "kind", "voltage_level", "nominal_frequency", "remaining_capacitive_current", "active",
+    "coil_current", "active_residual_current",
+)
 
 #: The fields a stored result does *not* read, with the reason. A test keeps
 #: the two tables complete, so a new field has to be classified before it
@@ -3406,7 +3812,7 @@ _DIGEST_EXEMPT_FIELDS: Dict[str, Dict[str, str]] = {
     },
     "Branch": {
         "description": "metadata",
-        "length": "enters through the derived impedances",
+        "length": "enters through the derived impedances, and with a capacitance of the type directly",
         "specific_earth_resistance": "enters through the derived impedances",
         "R_self": "transient solvers only",
         "L_self": "transient solvers only",
@@ -3462,6 +3868,58 @@ def _impedance_record(
             floats.extend((freq + 0.0, value.real + 0.0, value.imag + 0.0))
         else:
             floats.extend((freq + 0.0, float(value) + 0.0, 0.0))
+
+
+def _charging_record(branch: "Branch", strings: List[str]) -> None:
+    """
+    Append capacitance, voltage level and length of a branch to a digest record.
+
+    Only where the type carries one of them: a branch without adds nothing,
+    so the digest of every result computed before these fields existed stays
+    current.
+
+    Parameters
+    ----------
+    branch : Branch
+        The branch.
+    strings : List[str]
+        Receives the marker and the four values.
+    """
+    charging = (branch.type.c_shield_nf_per_km, branch.type.c_earth_nf_per_km, branch.type.voltage_level)
+    if any(value is not None for value in charging):
+        strings.append("C")
+        strings.extend(repr(value) for value in (*charging, branch.length))
+
+
+def _level_record(voltage_level: Optional[float], strings: List[str]) -> None:
+    """Append the voltage level of a source or fault to a digest record, if it has one."""
+    if voltage_level is not None:
+        strings.extend(("U", repr(voltage_level)))
+
+
+def _neutral_records(neutrals: Dict[str, Any], strings: List[str], floats: List[float]) -> None:
+    """
+    Append the neutral-point elements to a digest record, if there are any.
+
+    Parameters
+    ----------
+    neutrals : dict
+        ``Network.neutrals``.
+    strings : List[str]
+        Receives names and scalar fields (``_NEUTRAL_DIGEST_FIELDS``).
+    floats : List[float]
+        Receives the phasors.
+    """
+    if not neutrals:
+        return
+    strings.append("|neutrals")
+    for name in sorted(neutrals):
+        neutral = neutrals[name]
+        strings.append(name)
+        strings.extend(repr(getattr(neutral, field, None)) for field in _NEUTRAL_DIGEST_FIELDS)
+        current = getattr(neutral, "current", None)
+        _impedance_record(None if current is None else {0.0: current}, strings, floats)
+        _impedance_record(neutral.harmonic_currents, strings, floats)
 
 
 def _digest_update(digest: "hashlib._Hash", strings: List[str], floats: List[float]) -> None:
@@ -3607,6 +4065,9 @@ class Network(ValidatedAssignmentModel):
         Faults keyed by name.
     sources : dict of str to Source
         Sources keyed by name.
+    neutrals : dict of str to IsolatedNeutral or ResonantNeutral or LowImpedanceNeutral
+        Neutral-point elements keyed by name; they give their system its
+        voltage and charge the capacitances of its branches.
     results : dict of str to Result
         Per-fault calculation results keyed by fault name.
     paths : dict of str to Path
@@ -3664,6 +4125,7 @@ class Network(ValidatedAssignmentModel):
     branches: Dict[str, Branch] = {}
     faults: Dict[str, Fault] = {}
     sources: Dict[str, Source] = {}
+    neutrals: Dict[str, NeutralElement] = {}
     results: Dict[str, Result] = {}  # Stores results per fault
     paths: Dict[str, Path] = {}
     active_fault: Optional[str] = None  # Name of the active fault
@@ -3770,7 +4232,7 @@ class Network(ValidatedAssignmentModel):
     def _link_elements(self) -> None:
         """Point every element held by this network at it."""
         link = _NetworkLink(self)
-        for collection in (self.buses, self.branches, self.sources, self.faults):
+        for collection in (self.buses, self.branches, self.sources, self.faults, self.neutrals):
             for element in collection.values():
                 private = getattr(element, "__pydantic_private__", None)
                 if private is not None:
@@ -3823,7 +4285,7 @@ class Network(ValidatedAssignmentModel):
         """
         if name == "frequencies":
             self._rederive_all()
-        elif name in ("buses", "branches", "sources", "faults"):
+        elif name in ("buses", "branches", "sources", "faults", "neutrals"):
             self._link_elements()
 
     def _rederive_all(self) -> None:
@@ -4341,6 +4803,68 @@ class Network(ValidatedAssignmentModel):
                 source.name,
             )
 
+    def add_neutral(self, neutral: "_Neutral", overwrite: bool = False):
+        """
+        Add a neutral-point element to the network.
+
+        Parameters
+        ----------
+        neutral : IsolatedNeutral or ResonantNeutral or LowImpedanceNeutral
+            The element to add.
+        overwrite : bool, optional
+            If True, replaces an element of the same name. Defaults to False.
+
+        Raises
+        ------
+        ValueError
+            If an element of the same name exists and ``overwrite`` is false,
+            or if its bus is not in the network.
+
+        Examples
+        --------
+        >>> net.add_neutral(gi.IsolatedNeutral(name="20 kV", bus="UW", voltage_level=20.0))  # doctest: +SKIP
+        """
+        if neutral.bus not in self.buses:
+            raise ValueError(f"bus '{neutral.bus}' is not in the network '{self.name}'")
+        replacing = neutral.name in self.neutrals
+        if replacing and not overwrite:
+            raise ValueError(
+                f"Neutral with name '{neutral.name}' already exists in the network '{self.name}'. "
+                "If you want to overwrite, set overwrite=True."
+            )
+        self._claim(neutral)
+        self.neutrals[neutral.name] = neutral
+        self._adopt(neutral)
+        if replacing:
+            logger.warning("Neutral '%s' already exists in the network. Overwriting.", neutral.name)
+
+    def remove_neutral(self, name: str) -> "_Neutral":
+        """
+        Remove a neutral-point element.
+
+        Parameters
+        ----------
+        name : str
+            Name of the element.
+
+        Returns
+        -------
+        IsolatedNeutral or ResonantNeutral or LowImpedanceNeutral
+            The removed element; it no longer belongs to the network.
+
+        Raises
+        ------
+        ValueError
+            If the element does not exist.
+
+        Examples
+        --------
+        >>> net.remove_neutral("20 kV")  # doctest: +SKIP
+        """
+        neutral = self._lookup("neutrals", name)
+        del self.neutrals[name]
+        return neutral
+
     def _warn_source_frequencies_outside(self, source: "Source") -> None:
         """
         Announce source values at frequencies the network is not solved at.
@@ -4425,6 +4949,7 @@ class Network(ValidatedAssignmentModel):
             _impedance_record(branch.self_impedance, strings, floats)
             _impedance_record(branch.mutual_impedance, strings, floats)
             _impedance_record(branch.phase_impedance, strings, floats)
+            _charging_record(branch, strings)
         strings.append("|sources")
         for name in sorted(self.sources):
             source = self.sources[name]
@@ -4432,6 +4957,8 @@ class Network(ValidatedAssignmentModel):
             _impedance_record(source.values, strings, floats)
             _impedance_record(source.voltage, strings, floats)
             _impedance_record(source.source_impedance, strings, floats)
+            _level_record(source.voltage_level, strings)
+        _neutral_records(self.neutrals, strings, floats)
         digest = hashlib.blake2b(digest_size=16)
         _digest_update(digest, strings, floats)
         return digest.digest()
@@ -4465,6 +4992,7 @@ class Network(ValidatedAssignmentModel):
         strings = [definition.name, definition.bus]
         floats: List[float] = []
         _impedance_record(definition.scalings, strings, floats)
+        _level_record(definition.voltage_level, strings)
         digest = hashlib.blake2b(common, digest_size=16)
         _digest_update(digest, strings, floats)
         return f"{_DIGEST_SCHEME}:{digest.hexdigest()}"
@@ -4588,7 +5116,8 @@ class Network(ValidatedAssignmentModel):
         """
         elements = getattr(self, collection)
         if name not in elements:
-            kind = {"buses": "Bus", "branches": "Branch", "sources": "Source", "faults": "Fault"}[collection]
+            kind = {"buses": "Bus", "branches": "Branch", "sources": "Source", "faults": "Fault",
+                    "neutrals": "Neutral"}[collection]
             raise ValueError(
                 f"{kind} '{name}' does not exist in the network '{self.name}'."
             )
@@ -4767,16 +5296,14 @@ class Network(ValidatedAssignmentModel):
         >>> net.remove_bus("spare")  # doctest: +SKIP
         """
         bus = self._lookup("buses", name)
-        users = (
-            [f"branch '{n}'" for n, b in self.branches.items() if name in (b.from_bus, b.to_bus)]
-            + [f"source '{n}'" for n, src in self.sources.items() if src.bus == name]
-            + [f"fault '{n}'" for n, flt in self.faults.items() if flt.bus == name]
-        )
+        users = [f"branch '{n}'" for n, b in self.branches.items() if name in (b.from_bus, b.to_bus)]
+        for kind, collection in (("source", self.sources), ("neutral", self.neutrals), ("fault", self.faults)):
+            users += [f"{kind} '{n}'" for n, element in collection.items() if element.bus == name]
         if users:
             raise ValueError(
                 f"Bus '{name}' cannot be removed: {', '.join(users)} still "
                 f"refer{'s' if len(users) == 1 else ''} to it. Remove them first "
-                "(remove_branch, remove_source, remove_fault) or reconnect them "
+                "(remove_branch, remove_source, remove_neutral, remove_fault) or reconnect them "
                 "(update_branch(..., from_bus=..., to_bus=...))."
             )
         del self.buses[name]

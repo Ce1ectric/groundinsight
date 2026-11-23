@@ -1339,6 +1339,8 @@ ELECTRODES: Dict[str, Dict[str, float]] = {
     "ring": {"radius_m": 2.5, "depth_m": 0.6, "rods": 4, "rod_length_m": 2.5, "rod_circle_m": 1.5},
     "foundation": {"size_m": 10.0, "depth_m": 0.8, "meshes": 2},
     "rod": {"length_m": 2.5, "depth_m": 0.0},
+    "mesh": {"length_m": 50.0, "width_m": 100.0, "depth_m": 0.8, "mesh_m": 10.0,
+             "rods": 0, "rod_length_m": 6.0, "rod_distance_m": 0.0},
 }
 
 
@@ -1354,17 +1356,25 @@ def add_electrode(world: Any, kind: str, *, name: str, position: Tuple[float, fl
     ----------
     world : groundfield.World
         The world.
-    kind : {"ring", "foundation", "rod"}
+    kind : {"ring", "foundation", "rod", "mesh"}
         A ring electrode (station) with driven rods inside, bonded to it; a
-        square foundation electrode with a mesh (house); a single rod.
+        square foundation electrode with a mesh (house); a single rod; a
+        rectangular mesh electrode of ``length_m`` x ``width_m`` with meshes
+        of about ``mesh_m`` (one mesh is a rectangular ring), optionally with
+        rods bonded to it.
     name : str
-        Name of the main electrode; rods of a ring are ``<name>_rod<k>``.
+        Name of the main electrode; rods are ``<name>_rod<k>``, the bare
+        strips that join outlying rods to a mesh ``<name>_strip<k>``.
     position : tuple of float
         Centre ``(x, y)`` in m.
     **dimensions : float
         Overrides of :data:`ELECTRODES`: ``radius_m``, ``depth_m``,
         ``rods``, ``rod_length_m``, ``rod_circle_m``; ``size_m``,
-        ``meshes``; ``length_m``.
+        ``meshes``; ``length_m``; for a mesh ``length_m``, ``width_m``,
+        ``mesh_m``, ``rods``, ``rod_length_m`` and ``rod_distance_m`` --
+        ``0`` puts the rods at the corners, a distance puts them outside the
+        mesh on its axes, each joined to it by a bare strip at the depth of
+        the mesh.
 
     Returns
     -------
@@ -1398,6 +1408,8 @@ def add_electrode(world: Any, kind: str, *, name: str, position: Tuple[float, fl
                             size=(d["size_m"], d["size_m"]), n_x=n, n_y=n)
     elif kind == "rod":
         gf.create_electrode(world, "rod", name=name, position=(x, y, d["depth_m"]), length=d["length_m"])
+    elif kind == "mesh":
+        _add_mesh(gf, world, name, x, y, d)
     else:
         gf.create_electrode(world, "ring", name=name, center=(x, y, d["depth_m"]), radius=d["radius_m"])
         for k in range(int(d["rods"])):
@@ -1410,13 +1422,82 @@ def add_electrode(world: Any, kind: str, *, name: str, position: Tuple[float, fl
     return name
 
 
+def _mesh_rod_places(d: Dict[str, float]) -> List[Tuple[float, float]]:
+    """
+    Where the rods of a mesh electrode stand, relative to its centre.
+
+    Parameters
+    ----------
+    d : dict
+        The dimensions of the mesh.
+
+    Returns
+    -------
+    list of (float, float)
+        ``rods`` places: the corners (first one, then the opposite one, then
+        the other two) for ``rod_distance_m == 0``, otherwise the points
+        ``rod_distance_m`` outside the mesh on its axes (x first, then y).
+    """
+    half_x, half_y = d["length_m"] / 2.0, d["width_m"] / 2.0
+    distance = d["rod_distance_m"]
+    if distance > 0:
+        places = [(half_x + distance, 0.0), (-half_x - distance, 0.0),
+                  (0.0, half_y + distance), (0.0, -half_y - distance)]
+    else:
+        places = [(half_x, half_y), (-half_x, -half_y), (half_x, -half_y), (-half_x, half_y)]
+    count = int(d["rods"])
+    if count > len(places):
+        raise ValueError(f"a mesh electrode takes at most {len(places)} rods, got {count}")
+    return places[:count]
+
+
+def _add_mesh(gf: Any, world: Any, name: str, x: float, y: float, d: Dict[str, float]) -> None:
+    """
+    Add a rectangular mesh electrode with its rods to a world.
+
+    Parameters
+    ----------
+    gf : module
+        groundfield.
+    world : groundfield.World
+        The world.
+    name : str
+        Name of the mesh.
+    x, y : float
+        Its centre in m.
+    d : dict
+        Its dimensions (:data:`ELECTRODES` ``"mesh"`` with the overrides).
+
+    Raises
+    ------
+    ValueError
+        For more rods than places.
+    """
+    half_x, half_y, depth = d["length_m"] / 2.0, d["width_m"] / 2.0, d["depth_m"]
+    gf.create_electrode(world, "grid_mesh", name=name, corner=(x - half_x, y - half_y, depth),
+                        size=(d["length_m"], d["width_m"]),
+                        n_x=max(1, round(d["length_m"] / d["mesh_m"])),
+                        n_y=max(1, round(d["width_m"] / d["mesh_m"])))
+    for k, (dx, dy) in enumerate(_mesh_rod_places(d)):
+        rod = f"{name}_rod{k}"
+        gf.create_electrode(world, "rod", name=rod, length=d["rod_length_m"], position=(x + dx, y + dy, depth))
+        gf.create_conductor(world, name=f"{name}_bond{k}", start=name, end=rod)
+        if d["rod_distance_m"] > 0:
+            # a bare earth conductor from the edge of the mesh to the rod: part of the electrode
+            edge = (x + math.copysign(half_x, dx) if dx else x, y + math.copysign(half_y, dy) if dy else y)
+            strip = f"{name}_strip{k}"
+            gf.create_electrode(world, "strip", name=strip, start=(edge[0], edge[1], depth),
+                                end=(x + dx, y + dy, depth))
+            gf.create_conductor(world, name=f"{name}_strip_bond{k}", start=name, end=strip)
+
+
 def electrode_world(kind: str, *, name: str = "E", **dimensions: float) -> Callable[[Any], Any]:
     """
     A ``build_world`` for :func:`characterize`: one electrode alone, at the origin.
 
     Parameters
     ----------
-    kind : {"ring", "foundation", "rod"}
+    kind : {"ring", "foundation", "rod", "mesh"}
         As in :func:`add_electrode`.
     name : str
         Name of the electrode.

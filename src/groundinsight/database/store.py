@@ -464,6 +464,9 @@ class Database:
         groundinsight.database.crud.save_network : The transaction itself.
         """
         with self.session() as session:
+            # Before the first query: a file of the legacy schema is named
+            # as such instead of failing on whichever column it lacks.
+            crud.ensure_current_schema(session)
             if session.get(NetworkDB, network.name) is not None and not overwrite:
                 raise ValueError(
                     f"Network '{network.name}' already exists. Use "
