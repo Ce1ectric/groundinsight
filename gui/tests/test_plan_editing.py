@@ -196,3 +196,57 @@ async def test_paste_without_a_copy_does_nothing(user: User):
     before = _state(page.session)
     _fire(user, "key", action="paste")
     assert _state(page.session) == before and page.session.history() == []
+
+
+async def test_the_context_menus_are_in_the_language_of_the_page(user: User):
+    await _page(user)
+    menus = _canvas(user)._props["menus"]
+    assert set(menus) == {"bus", "branch", "group", "pane"}
+    assert [entry["label"] for entry in menus["bus"]] == [
+        "Bearbeiten …", "Duplizieren", "Fehler hier setzen", "Einspeisung hier setzen", "In Tabelle zeigen", "Löschen"]
+    assert [entry["action"] for entry in menus["branch"]] == [
+        "open", "duplicate", "open_switch", "close_switch", "show_row", "delete"]
+    assert [entry["action"] for entry in menus["pane"]] == ["place_bus", "paste", "select_all", "fit"]
+    assert all("_" not in entry["label"] for entries in menus.values() for entry in entries)
+
+
+async def test_the_context_menu_of_a_bus(user: User):
+    page = await _page(user)
+    session = page.session
+    _fire(user, "menu", action="fault", kind="bus", name="bus2")
+    assert [f.bus for f in session.network.faults.values()] == ["bus3", "bus2"]
+    _fire(user, "menu", action="source", kind="bus", name="bus2")
+    source = next(s for s in session.network.sources.values() if s.bus == "bus2")
+    assert {f: complex(v) for f, v in source.values.items()} == {50.0: 1000.0}
+    steps = len(session.history())
+    _fire(user, "menu", action="source", kind="bus", name="bus2")  # it has one already
+    assert len(session.history()) == steps
+    await user.should_see("hat schon eine Einspeisung")
+    _fire(user, "menu", action="duplicate", kind="bus", name="bus2")
+    assert "bus2 Kopie" in session.network.buses
+    _fire(user, "menu", action="open", kind="bus", name="bus2")
+    await user.should_see(marker="element-dialog")
+
+
+async def test_the_context_menu_of_a_branch_switches_it_and_shows_its_row(user: User):
+    page = await _page(user)
+    session = page.session
+    _fire(user, "menu", action="open_switch", kind="branch", name="b23")
+    assert session.network.branches["b23"].active is False
+    _fire(user, "menu", action="close_switch", kind="branch", name="b23")
+    assert session.network.branches["b23"].active is True and len(session.history()) == 2
+    _fire(user, "menu", action="show_row", kind="branch", name="b23")
+    assert page.tab == "network" and page.selected["branches"] == "b23"
+
+
+async def test_the_context_menu_of_the_pane_and_of_a_group(user: User):
+    page = await _page(user)
+    session = page.session
+    _fire(user, "menu", action="place_bus", kind="pane", name=None, x=400, y=260)
+    assert (session.diagram_model.nodes["B1"].x, session.diagram_model.nodes["B1"].y) == (400.0, 260.0)
+    assert page.plan.tool == "select"  # the menu places one bus, the tool stays
+    _fire(user, "select_many", items=[{"kind": "bus", "name": "bus2"}, {"kind": "bus", "name": "B1"}])
+    _fire(user, "menu", action="delete", kind="group", name=None)
+    assert "bus2" not in session.network.buses and "B1" not in session.network.buses
+    _fire(user, "menu", action="select_all", kind="pane", name=None)
+    assert ("bus", "bus1") in page.plan.selection and ("bus", "bus3") in page.plan.selection

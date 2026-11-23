@@ -20,6 +20,9 @@ auto layout                 ``AutoLayout`` (library, or positions from elkjs)
 Ctrl/Cmd+C, then +V         one ``Batch``: a ``PlaceBus`` per copied bus (with
 (or Ctrl/Cmd+D)             its own characteristic and its infeed), an
                             ``AddBranch`` per copied branch
+right click                 the context menu: the gestures above for the
+                            element under the pointer, ``UpdateBranch`` for
+                            its switch, ``AddSource`` for an infeed
 *Esc*                       no command: the selection tool, nothing selected
 Ctrl/Cmd+A                  no command: every bus and branch selected
 ==========================  ==================================================
@@ -80,6 +83,25 @@ DEFAULT_BRANCH_LENGTH_KM = 1.0
 
 #: Current of a newly drawn infeed at every network frequency, in A.
 DEFAULT_SOURCE_A = 1000.0
+
+#: The context menus of the canvas: per group the entries ``(action, text
+#: key, options)``. ``Mod`` is Ctrl or Cmd; ``when`` shows an entry only for
+#: an element that is in (``"active"``) or out of service (``"inactive"``).
+CONTEXT_MENUS: Dict[str, List[Tuple[str, str, Dict[str, Any]]]] = {
+    "bus": [("open", "edit", {}), ("duplicate", "menu_duplicate", {"key": "Mod+D"}),
+            ("fault", "menu_fault", {"rule": True}), ("source", "menu_source", {}),
+            ("show_row", "menu_show_row", {"rule": True}),
+            ("delete", "delete", {"danger": True, "rule": True, "key": "Del"})],
+    "branch": [("open", "edit", {}), ("duplicate", "menu_duplicate", {"key": "Mod+D"}),
+               ("open_switch", "menu_open_switch", {"rule": True, "when": "active"}),
+               ("close_switch", "menu_close_switch", {"rule": True, "when": "inactive"}),
+               ("show_row", "menu_show_row", {"rule": True}),
+               ("delete", "delete", {"danger": True, "rule": True, "key": "Del"})],
+    "group": [("duplicate", "menu_duplicate", {"key": "Mod+D"}),
+              ("delete", "delete", {"danger": True, "rule": True, "key": "Del"})],
+    "pane": [("place_bus", "menu_place_bus", {}), ("paste", "menu_paste", {"key": "Mod+V"}),
+             ("select_all", "menu_select_all", {"rule": True, "key": "Mod+A"}), ("fit", "menu_fit", {})],
+}
 
 TOOL_ICONS = {"select": "near_me", "bus": "radio_button_unchecked", "source_bus": "crop_square",
               "branch": "timeline", "fault": "flash_on"}
@@ -220,14 +242,14 @@ class PlanView:
                 colours = self.colouring()
                 self.canvas = NetworkCanvas(self.session.diagram().model_dump(mode="json"),
                                             colours={"nodes": colours.nodes, "edges": colours.edges},
-                                            tool=self.tool).classes(
+                                            tool=self.tool, menus=self._menus()).classes(
                     "w-full rounded border bg-white").style("height: 68vh").mark("canvas")
                 for name, handler in (("place", self._on_place), ("move", self._on_move),
                                       ("connect", self._on_connect), ("fault", self._on_fault),
                                       ("select", self._on_select), ("select_many", self._on_select_many),
                                       ("open", self._on_open),
                                       ("delete", self._on_delete), ("layout", self._on_layout),
-                                      ("key", self._on_key)):
+                                      ("key", self._on_key), ("menu", self._on_menu)):
                     self.canvas.on(name, lambda e, h=handler: h(e.args or {}))
             with ui.column().classes("w-72 gap-1"):
                 self.properties()
@@ -235,6 +257,16 @@ class PlanView:
         # element that fired it, and the canvas renders no slot.
         self.dialog_host = ui.element("div").mark("dialog-host")
         self._sync_selection()
+
+    def _menus(self) -> Dict[str, List[Dict[str, Any]]]:
+        """The context menus with their texts in the page's language."""
+        def entry(action: str, key: str, options: Dict[str, Any]) -> Dict[str, Any]:
+            out = {"action": action, "label": self.t(key), **options}
+            if out.get("key") == "Del":
+                out["key"] = self.t("key_delete")
+            return out
+
+        return {group: [entry(*item) for item in entries] for group, entries in CONTEXT_MENUS.items()}
 
     def _palette(self, summary: Any) -> None:
         """Tools and the types new elements get."""
@@ -642,6 +674,42 @@ class PlanView:
         elif action == "select_all":
             self.select_items([("bus", name) for name in self._names("buses")]
                               + [("branch", name) for name in self._names("branches")])
+
+    def _on_menu(self, args: Dict[str, Any]) -> None:
+        """An entry of a context menu was chosen."""
+        action, kind, name = args.get("action"), args.get("kind"), args.get("name")
+        at = (float(args["x"]), float(args["y"])) if args.get("x") is not None and args.get("y") is not None \
+            else None
+        items = [(kind, name)] if kind in ("bus", "branch") and name else list(self.selection)
+        if action == "open" and len(items) == 1:
+            self._on_open({"kind": kind, "name": name})
+        elif action == "duplicate":
+            self.duplicate(items)
+        elif action == "delete":
+            self._on_delete({"items": [{"kind": k, "name": n} for k, n in items]})
+        elif action == "fault" and kind == "bus":
+            self._on_fault({"bus": name})
+        elif action == "source" and kind == "bus":
+            self._add_source(name)
+        elif action in ("open_switch", "close_switch") and kind == "branch":
+            self.apply(UpdateBranch(name=name, fields={"active": action == "close_switch"}))
+        elif action == "show_row" and len(items) == 1:
+            self.page.show_row(kind, name)
+        elif action == "place_bus" and at is not None:
+            self._on_place({"x": at[0], "y": at[1], "symbol": "bus"})
+        elif action == "paste":
+            self.duplicate(self.clipboard, at)
+        elif action == "select_all":
+            self._on_key({"action": "select_all"})
+
+    def _add_source(self, bus: str) -> None:
+        """An infeed at a bus (1000 A at every frequency), unless it has one."""
+        if any(row["bus"] == bus for row in self.session.table("sources").rows):
+            ui.notify(self.t("bus_has_source", name=bus), type="info")
+            return
+        frequencies = self.session.summary().frequencies
+        self.apply(AddSource(name=free_name("I", self._names("sources")), bus=bus,
+                             values={f: DEFAULT_SOURCE_A for f in frequencies}))
 
     def _on_open(self, args: Dict[str, Any]) -> None:
         """Open the dialog of a double-clicked element."""

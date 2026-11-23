@@ -291,6 +291,36 @@ def test_copy_and_paste_put_a_copy_at_the_pointer(page):
     assert page.errors == []
 
 
+def test_the_context_menu_acts_on_what_was_right_clicked(page):
+    _node(page, "bus2").click(button="right")
+    menu = page.locator(".gi-menu")
+    menu.wait_for()
+    assert menu.locator(".gi-menu-item").all_inner_texts()[0].startswith("Bearbeiten")
+    page.locator("[data-bus='bus2'].gi-sel").wait_for()  # the right click selected it
+    menu.get_by_text("Fehler hier setzen").click()
+    _node(page, "bus2").locator(".gi-flash").wait_for()
+    assert page.locator(".gi-menu").count() == 0
+
+    # A closed branch offers to open its switch, an open one to close it.
+    page.locator("[data-branch='b12'] .gi-edge-hit").click(button="right", force=True)
+    page.locator(".gi-menu").get_by_text("Schalter öffnen").click()
+    page.locator("[data-branch='b12'].gi-off").wait_for()
+    page.locator("[data-branch='b12'] .gi-edge-hit").click(button="right", force=True)
+    assert page.locator(".gi-menu").get_by_text("Schalter schließen").count() == 1
+    page.keyboard.press("Escape")
+    page.locator(".gi-menu").wait_for(state="detached")
+
+    # On the empty pane: a bus where the pointer is.
+    pane = page.locator(".vue-flow__pane").bounding_box()
+    x, y = pane["x"] + pane["width"] * 0.5, pane["y"] + pane["height"] * 0.8
+    page.mouse.click(x, y, button="right")
+    page.locator(".gi-menu").get_by_text("Bus hier setzen").click()
+    _node(page, "B1").wait_for()
+    cx, cy = _centre(_node(page, "B1"))
+    assert abs(cx - x) <= 20 and abs(cy - y) <= 20
+    assert page.errors == []
+
+
 def test_elk_lays_the_network_out_in_the_browser(page):
     before = [_centre(_node(page, n)) for n in ("bus1", "bus2", "bus3")]
     page.get_by_role("button", name="Auto-Layout").click()

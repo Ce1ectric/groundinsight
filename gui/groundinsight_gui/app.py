@@ -1033,6 +1033,20 @@ class ProjectPage:
         if self.session.redo() is not None:
             self._after_change()
 
+    def show_row(self, kind: str, name: str) -> None:
+        """
+        Show an element in its table: the tables tab, its row selected and in view.
+
+        Parameters
+        ----------
+        kind : str
+            ``"bus"``, ``"branch"``, ``"source"``, ``"fault"``, ``"bus_type"``
+            or ``"branch_type"``.
+        name : str
+            The element.
+        """
+        self._goto(kind, name)
+
     def _goto(self, kind: str, name: str) -> None:
         """Show an element of a diagnostic in its table."""
         self.tab = "network"

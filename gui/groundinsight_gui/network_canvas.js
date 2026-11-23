@@ -6,7 +6,8 @@
 // network. It draws what the server sends (props `diagram`, `colours`,
 // `selected`, `tool`) and reports what the user did as events -- `place`,
 // `move`, `connect`, `fault`, `select`, `select_many`, `open`, `delete`,
-// `layout`, `key` -- which the Python side turns into commands of groundinsight.api.
+// `layout`, `key`, `menu` -- which the Python side turns into commands of
+// groundinsight.api.
 // Even a dragged symbol keeps its old place until the session has applied the
 // MoveNodes command and sent the new diagram back.
 //
@@ -15,6 +16,11 @@
 // what it holds is selected (the buses in it and the branches between them).
 // The selection lives on the server like everything else; `selected` is the
 // list it sends back.
+//
+// Context menu: a right click opens the menu of the element under the pointer
+// (of the group, if it belongs to a selection of several; of the pane
+// otherwise). The entries and their texts come from the server (`menus`); a
+// chosen entry goes back as the event `menu` with the element and the place.
 //
 // Coordinates: the diagram stores the centre of a symbol, Vue Flow the top
 // left corner of a node; both conversions happen here, and positions are
@@ -106,6 +112,7 @@ export default {
     tool: { type: String, default: "select" },
     colours: Object,
     selected: { type: Array, default: () => [] },
+    menus: { type: Object, default: () => ({}) },
     flowId: String,
   },
   setup(props) {
@@ -121,6 +128,7 @@ export default {
       active: false,
       clicked: null,
       pointer: null,
+      menu: null,
     };
   },
   mounted() {
@@ -131,12 +139,21 @@ export default {
     // outside the canvas); a text field, a dialog and a menu keep their keys.
     this.onPointer = (event) => {
       this.active = this.$el.contains(event.target);
+      if (this.menu && !(event.target.closest && event.target.closest(".gi-menu"))) {
+        this.menu = null;
+      }
     };
     this.onWindowKey = (event) => {
       const target = event.target;
       const typing = target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
       if (typing || document.querySelector(".q-dialog, .q-menu")) {
         return;
+      }
+      if (this.menu) {
+        this.menu = null;
+        if (event.key === "Escape") {
+          return;  // Escape closes the menu and nothing else
+        }
       }
       if (this.active || event.key === "Escape") {
         this.onKey(event);
@@ -256,6 +273,60 @@ export default {
         this.$emit("connect", { from_bus: connection.source, to_bus: connection.target });
       }
     },
+    onNodeContextMenu({ event, node }) {
+      this.openMenu(event, "bus", node.id, node.data.active);
+    },
+    onEdgeContextMenu({ event, edge }) {
+      this.openMenu(event, "branch", edge.id, edge.data.active);
+    },
+    onSelectionContextMenu({ event }) {
+      this.openMenu(event, "group", null, true);
+    },
+    onPaneContextMenu(event) {
+      this.openMenu(event, "pane", null, true);
+    },
+    openMenu(event, kind, name, active) {
+      event.preventDefault();
+      this.active = true;
+      let group = kind;
+      if (name) {
+        if (this.isSelected(kind, name) && this.selected.length > 1) {
+          group = "group";
+        } else if (!this.isSelected(kind, name)) {
+          this.pick(kind, name, null);  // the menu acts on what it was opened on
+        }
+      }
+      const state = active ? "active" : "inactive";
+      const entries = (this.menus[group] || []).filter((entry) => !entry.when || entry.when === state);
+      if (!entries.length) {
+        return;
+      }
+      const box = this.$el.getBoundingClientRect();
+      const p = this.flow.screenToFlowCoordinate({ x: event.clientX, y: event.clientY });
+      this.menu = {
+        // Inside the canvas: a menu opened at the right or lower edge moves in.
+        left: Math.max(0, Math.min(event.clientX - box.left, box.width - 230)),
+        top: Math.max(0, Math.min(event.clientY - box.top, box.height - 30 * entries.length - 16)),
+        kind: group,
+        name: group === "group" ? null : name,
+        x: snap(p.x, this.grid),
+        y: snap(p.y, this.grid),
+        entries,
+      };
+    },
+    choose(entry) {
+      const menu = this.menu;
+      this.menu = null;
+      if (entry.action === "fit") {
+        this.fit();
+        return;
+      }
+      this.$emit("menu", { action: entry.action, kind: menu.kind, name: menu.name, x: menu.x, y: menu.y });
+    },
+    keyText(key) {
+      const mac = /Mac|iPhone|iPad/.test(navigator.platform || "");
+      return (key || "").replace("Mod+", mac ? "\u2318" : "Ctrl+");
+    },
     onKey(event) {
       // The server's selection, or -- while its answer to a click is still on
       // the way -- the element clicked last.
@@ -328,10 +399,21 @@ export default {
                @nodes-initialized="fitOnce" @selection-end="onSelectionEnd" @selection-drag-stop="onDragStop"
                @node-drag-stop="onDragStop" @pane-click="onPaneClick" @node-click="onNodeClick"
                @edge-click="onEdgeClick" @node-double-click="onNodeDoubleClick"
-               @edge-double-click="onEdgeDoubleClick" @connect="onConnect">
+               @edge-double-click="onEdgeDoubleClick" @connect="onConnect"
+               @node-context-menu="onNodeContextMenu" @edge-context-menu="onEdgeContextMenu"
+               @selection-context-menu="onSelectionContextMenu" @pane-context-menu="onPaneContextMenu"
+               @move-start="menu = null">
         <Background :gap="grid" pattern-color="#d6dbe1" />
         <MiniMap pannable zoomable />
         <Controls :show-interactive="false" :fit-view-params="fitParams" />
       </VueFlow>
+      <div v-if="menu" class="gi-menu" role="menu" :style="{ left: menu.left + 'px', top: menu.top + 'px' }"
+           @contextmenu.prevent>
+        <div v-for="entry in menu.entries" :key="entry.action" role="menuitem" :data-action="entry.action"
+             :class="['gi-menu-item', { 'gi-menu-danger': entry.danger, 'gi-menu-rule': entry.rule }]"
+             @click="choose(entry)">
+          <span>{{ entry.label }}</span><span class="gi-menu-key">{{ keyText(entry.key) }}</span>
+        </div>
+      </div>
     </div>`,
 };

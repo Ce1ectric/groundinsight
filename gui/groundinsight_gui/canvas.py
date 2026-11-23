@@ -39,10 +39,20 @@ EVENTS = {
     "delete": ("items",),
     "layout": ("positions",),
     "key": ("action", "x", "y"),
+    "menu": ("action", "kind", "name", "x", "y"),
 }
 
 CANVAS_CSS = """
-.gi-canvas { width: 100%; height: 100%; outline: none; background: #fbfbfa; }
+.gi-canvas { position: relative; width: 100%; height: 100%; outline: none; background: #fbfbfa; }
+.gi-menu { position: absolute; z-index: 20; min-width: 13rem; padding: 4px 0; background: #fff;
+           border: 1px solid #d6dbe1; border-radius: 6px; box-shadow: 0 6px 18px rgba(31, 42, 54, 0.18);
+           font-size: 13px; color: #1f2a36; user-select: none; }
+.gi-menu-item { display: flex; justify-content: space-between; gap: 1.5rem; padding: 5px 12px; cursor: pointer;
+                white-space: nowrap; }
+.gi-menu-item:hover { background: #e8f0fb; }
+.gi-menu-item.gi-menu-danger { color: #b3261e; }
+.gi-menu-item.gi-menu-rule { border-top: 1px solid #e3e6ea; margin-top: 4px; padding-top: 8px; }
+.gi-menu-key { color: #6b7480; font-size: 12px; }
 .gi-node { position: relative; border: 2px solid #1f2a36; box-sizing: border-box; }
 .gi-node.gi-bus { border-radius: 50%; }
 .gi-node.gi-source_bus { border-radius: 2px; }
@@ -84,11 +94,19 @@ class NetworkCanvas(ui.element, component="network_canvas.js", esm={"groundinsig
         ``{"nodes": {name: css}, "edges": {name: css}}``.
     tool : str
         One of :data:`TOOLS`.
+    menus : dict, optional
+        The context menus: ``"bus"``, ``"branch"``, ``"group"`` (several
+        selected elements) and ``"pane"`` to a list of entries ``{"action",
+        "label"}``, optionally with ``"key"`` (a shortcut shown beside the
+        label, ``Mod`` for Ctrl or Cmd), ``"danger"``, ``"rule"`` (a line
+        above) and ``"when"`` (``"active"`` or ``"inactive"``: only for an
+        element in that state). A chosen entry arrives as the event ``menu``.
     """
 
     def __init__(self, diagram: Dict[str, Any], *, colours: Optional[Dict[str, Any]] = None,
-                 tool: str = "select") -> None:
+                 tool: str = "select", menus: Optional[Dict[str, List[Dict[str, Any]]]] = None) -> None:
         super().__init__()
+        self._props["menus"] = menus or {}
         self._props["diagram"] = diagram
         self._props["colours"] = colours or {"nodes": {}, "edges": {}}
         self._props["tool"] = tool
