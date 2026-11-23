@@ -85,14 +85,17 @@ const BusNode = {
          :data-bus="id" :title="data.note.tip || id">
       <Handle type="target" position="top" class="gi-handle" />
       <Handle type="source" position="top" class="gi-handle" />
-      <span class="gi-label" :style="textStyle(-4)">{{ id }}<span v-if="data.note.value" class="gi-value">{{ data.note.value }}</span></span>
-      <span v-if="data.has_fault" class="gi-flash">&#x26A1;<span class="gi-flash-name">{{ (data.note.faults || []).join(", ") }}</span></span>
+      <span class="gi-label" :style="textStyle(-4)">
+        <span v-if="data.has_fault" class="gi-flash">&#x26A1;<span class="gi-flash-name">{{ (data.note.faults || []).join(", ") }}</span></span>
+        <span class="gi-name">{{ id }}<span v-if="data.note.value" class="gi-value">{{ data.note.value }}</span></span>
+      </span>
       <span v-if="data.has_source" class="gi-infeed">&#x25BC;</span>
     </div>`,
   methods: {
     // The name, and after it the value of the colouring: right of the symbol
     // and above its middle (branches leave through the middle); the gap to
-    // the symbol grows with the text.
+    // the symbol grows with the text. A fault at the bus stands with its
+    // name on a line of its own above the bus name.
     textStyle(dy) {
       return {
         left: "calc(" + (this.data.w + this.data.label_offset[0]) + "px + 5px * var(--gi-s, 1))",

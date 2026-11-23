@@ -65,11 +65,12 @@ CANVAS_CSS = """
    its symbol and grows away from it. Zoomed out further the branch names go
    first (.gi-far), then the bus names and values (.gi-very-far); what is
    selected or under the pointer keeps its name. */
-.gi-label, .gi-flash, .gi-infeed { position: absolute; white-space: nowrap; pointer-events: none;
+.gi-label, .gi-infeed { position: absolute; white-space: nowrap; pointer-events: none;
             line-height: 1.15; text-shadow: 0 0 2px #fbfbfa, 0 0 2px #fbfbfa, 0 0 3px #fbfbfa; }
-.gi-label { font-size: calc(13px * var(--gi-s, 1)); color: #1f2a36; transform: translateY(-100%); }
+.gi-label { display: flex; flex-direction: column; align-items: flex-start;
+            font-size: calc(13px * var(--gi-s, 1)); color: #1f2a36; transform: translateY(-100%); }
 .gi-value { margin-left: 0.45em; font-weight: 600; font-variant-numeric: tabular-nums; }
-.gi-flash { right: 100%; bottom: 100%; font-size: calc(13px * var(--gi-s, 1)); color: #b84a00; font-weight: 600; }
+.gi-flash { color: #b84a00; font-weight: 600; }
 .gi-infeed { left: 50%; bottom: 100%; transform: translateX(-50%); font-size: calc(12px * var(--gi-s, 1));
              color: #0072B2; line-height: 1; }
 .gi-stale .gi-value, .gi-stale .gi-edge-value { opacity: 0.6; font-style: italic; }
@@ -78,7 +79,9 @@ CANVAS_CSS = """
 .gi-far .gi-edge-label { visibility: hidden; }
 .gi-far .gi-edge.gi-sel .gi-edge-label, .gi-far .gi-edge:hover .gi-edge-label { visibility: visible; }
 .gi-very-far .gi-label, .gi-very-far .gi-flash-name { visibility: hidden; }
-.gi-very-far .gi-node.gi-sel .gi-label, .gi-very-far .vue-flow__node:hover .gi-label { visibility: visible; }
+.gi-very-far .gi-flash { visibility: visible; }  /* the flash itself stays: where the faults are */
+.gi-very-far .gi-node.gi-sel .gi-label, .gi-very-far .vue-flow__node:hover .gi-label,
+.gi-very-far .gi-node.gi-sel .gi-flash-name, .gi-very-far .vue-flow__node:hover .gi-flash-name { visibility: visible; }
 .gi-plan-search .q-field__control, .gi-plan-search .q-field__native { min-height: 26px; height: 26px; }
 .gi-plan-search .q-field__native { padding: 0; }
 .gi-plan-search .q-field__marginal { height: 26px; }
