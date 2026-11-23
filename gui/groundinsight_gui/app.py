@@ -58,6 +58,7 @@ from groundinsight.api import (
     RemoveBus,
     RemoveBusType,
     RemoveFault,
+    RemoveNeutral,
     RemoveSource,
     CharacterizeResultDTO,
     SetCharacteristic,
@@ -65,12 +66,14 @@ from groundinsight.api import (
     SetFrequencies,
     SolveAllRequestDTO,
     StudyResultDTO,
+    ColumnDTO,
     TableDTO,
     UpdateBranch,
     UpdateBranchType,
     UpdateBus,
     UpdateBusType,
     UpdateFault,
+    UpdateNeutral,
     UpdateSource,
 )
 
@@ -101,7 +104,7 @@ ACCENT = "#2a78d6"
 MUTED = "#a9c4e8"
 
 #: The element tables shown, in this order.
-TABLES = ("buses", "branches", "sources", "faults", "bus_types", "branch_types")
+TABLES = ("buses", "branches", "sources", "neutrals", "faults", "bus_types", "branch_types")
 
 #: Editable columns per table and how a typed value is read: ``number``
 #: (decimal comma or point), ``bool``, ``text`` (empty means none), ``type``
@@ -125,6 +128,8 @@ EDITABLE = {
         "description": "text",
     },
     "sources": {"bus": "bus", "i_k_a": "number", "r_to_x": "number", "kappa": "number", "description": "text"},
+    "neutrals": {"bus": "bus", "voltage_level": "number", "remaining_capacitive_current": "number",
+                 "active": "bool", "description": "text"},
     "faults": {"bus": "bus", "t_k_s": "number", "n_factor": "number", "description": "text"},
     "bus_types": {"description": "text", "impedance_formula": "formula"},
     "branch_types": {
@@ -139,6 +144,7 @@ UPDATE_COMMANDS = {
     "buses": UpdateBus,
     "branches": UpdateBranch,
     "sources": UpdateSource,
+    "neutrals": UpdateNeutral,
     "faults": UpdateFault,
     "bus_types": UpdateBusType,
     "branch_types": UpdateBranchType,
@@ -148,6 +154,7 @@ REMOVE_COMMANDS = {
     "buses": RemoveBus,
     "branches": RemoveBranch,
     "sources": RemoveSource,
+    "neutrals": RemoveNeutral,
     "faults": RemoveFault,
     "bus_types": RemoveBusType,
     "branch_types": RemoveBranchType,
@@ -155,7 +162,7 @@ REMOVE_COMMANDS = {
 
 #: Tables whose rows have a place in the plan: the element kind of a bus or
 #: branch row; a source and a fault are shown at their bus.
-PLAN_KINDS = {"buses": "bus", "branches": "branch", "sources": "bus", "faults": "bus"}
+PLAN_KINDS = {"buses": "bus", "branches": "branch", "sources": "bus", "neutrals": "bus", "faults": "bus"}
 
 #: The type tables and the catalogue each one shows.
 TYPE_TABLES = {"bus_types": "bus", "branch_types": "branch"}
@@ -165,6 +172,7 @@ KIND_TABLES = {
     "bus": "buses",
     "branch": "branches",
     "source": "sources",
+    "neutral": "neutrals",
     "fault": "faults",
     "bus_type": "bus_types",
     "branch_type": "branch_types",
@@ -681,6 +689,47 @@ class ProjectPage:
                         "flat dense no-caps").mark(f"remove-{table}")
             self.grids[table] = grid
             self.expansions[table] = expansion
+        with ui.expansion(self.t("table_supply_areas"), value=False).classes("w-full bg-white rounded").mark(
+                "supply-areas"):
+            ui.label(self.t("supply_areas_hint")).classes("text-xs text-gray-500")
+            self.supply_view()
+
+    def supply_table(self) -> TableDTO:
+        """
+        The supply areas as the page shows them.
+
+        Returns
+        -------
+        TableDTO
+            ``ProjectSession.supply_areas`` with the lists as text, the
+            neutral treatment in words and the detuning in percent; a table
+            with the reason as its only row if the areas cannot be formed.
+        """
+        try:
+            dto = self.session.supply_areas()
+        except ValueError as exc:
+            return TableDTO(name="supply_areas", columns=[ColumnDTO(name="description", dtype="str")],
+                            rows=[{"description": str(exc)}])
+        shown = ("area", "voltage_level_kV", "neutral", "feeding_elements", "branches", "length_km", "I_CE_A",
+                 "I_coil_A", "I_residual_A", "detuning")
+        rows = []
+        for row in dto.rows:
+            shown_row = {key: row[key] for key in shown}
+            shown_row["neutral"] = " + ".join(self.t(f"neutral_{kind}") for kind in str(row["neutral"]).split("+"))
+            shown_row["feeding_elements"] = ", ".join(json.loads(row["feeding_elements"]))
+            shown_row["branches"] = ", ".join(json.loads(row["branches"]))
+            if row["detuning"] is not None:
+                shown_row["detuning"] = 100.0 * row["detuning"]
+            rows.append(shown_row)
+        columns = [column.model_copy(update={"unit": "%"}) if column.name == "detuning" else column
+                   for column in dto.columns if column.name in shown]
+        return TableDTO(name="supply_areas", columns=columns, rows=rows)
+
+    @ui.refreshable_method
+    def supply_view(self) -> None:
+        """The table of the supply areas (derived, read only)."""
+        ui.aggrid(grid_options(self.supply_table(), self.language, lambda lang: "de-DE" if lang == "de" else "en-US"),
+                  theme="quartz").classes("h-40").mark("grid-supply_areas")
 
     def _type_buttons(self, table: str) -> None:
         """New, edit, copy and from the library, under a type table."""
@@ -837,6 +886,11 @@ class ProjectPage:
                 # The kind of a source in words (the library's value stays in the row).
                 words = ", ".join(f"{value}: '{self.t('source_' + value)}'" for value in ("current", "voltage"))
                 definition[":valueFormatter"] = f"p => ({{{words}}})[p.value] || p.value"
+            elif column.name == "kind" and table == "neutrals":
+                # The neutral treatment in words (the library's value stays in the row).
+                words = ", ".join(f"{value}: '{self.t('neutral_' + value)}'"
+                                  for value in ("isolated", "resonant", "low_impedance"))
+                definition[":valueFormatter"] = f"p => ({{{words}}})[p.value] || p.value"
             if kind in ("type", "bus"):
                 definition["cellEditor"] = "agSelectCellEditor"
                 definition["cellEditorParams"] = {"values": list(choices[kind])}
@@ -966,7 +1020,7 @@ class ProjectPage:
         if row is None:
             ui.notify(self.t("nothing_selected"), type="info")
             return
-        self.show_in_plan(PLAN_KINDS[table], row["bus"] if table in ("sources", "faults") else name)
+        self.show_in_plan(PLAN_KINDS[table], row["bus"] if table in ("sources", "neutrals", "faults") else name)
 
     def show_in_plan(self, kind: str, name: str) -> None:
         """
@@ -1031,6 +1085,7 @@ class ProjectPage:
         self.fault_select.set_options(faults, value=self.fault)
         self._refresh_frequencies()
         self._refresh_toolbar()
+        self.supply_view.refresh()
         self.result_view.refresh()
         self.check_view.refresh()
         self.plan.refresh()
@@ -1353,6 +1408,7 @@ class ProjectPage:
         key_columns = [{"name": name, "dtype": _KEY_FIGURE_DTYPES.get(name, "float")} for name in KEY_FIGURE_COLUMNS]
         ui.aggrid(self._result_grid(key_columns, rows, digits=4, fit="content"), theme="quartz",
                   auto_size_columns=False).classes("h-48").mark("grid-key_figures")
+        self._earth_current_panel(result.fault)
         self._assessment_panel(result.fault)
         self._diagnostics_panel(result.diagnostics, title=self.t("diagnostics"))
         duration = self.durations.get(result.fault)
@@ -1363,6 +1419,36 @@ class ProjectPage:
             f"groundinsight {result.groundinsight_version}",
         ]
         ui.label(" · ".join(parts)).classes("text-xs text-gray-500").mark("result-footer")
+
+    def _earth_current_panel(self, fault: str) -> None:
+        """
+        The earth current of a fault by the buses its current returns to, computed when opened.
+
+        Parameters
+        ----------
+        fault : str
+            The fault of the result shown.
+        """
+        with ui.expansion(self.t("earth_current"), icon="call_split", value=False).classes(
+                "w-full bg-white rounded").mark("earth-current") as expansion:
+            ui.label(self.t("earth_current_hint")).classes("text-xs text-gray-500")
+            holder = ui.column().classes("w-full")
+
+        def show(event: Any) -> None:
+            if not event.value or holder.default_slot.children:
+                return
+            with holder:
+                try:
+                    table = self.session.earth_current(fault)
+                except ValueError as exc:
+                    ui.label(str(exc)).classes("text-sm text-red-800").mark("earth-current-error")
+                    return
+                rows = [{**row, "sources": ", ".join(json.loads(row["sources"]))} for row in table.rows]
+                shown = TableDTO(name=table.name, columns=table.columns, rows=rows)
+                ui.aggrid(grid_options(shown, self.language, lambda lang: "de-DE" if lang == "de" else "en-US"),
+                          theme="quartz").classes("h-56").mark("grid-earth_current")
+
+        expansion.on_value_change(show)
 
     @ui.refreshable_method
     def study_view(self) -> None:

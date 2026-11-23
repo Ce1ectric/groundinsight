@@ -159,6 +159,20 @@ version section when a release is cut.
   service layer); `scripts/build_standard_bus_types.py` keeps the presets that
   exist and computes only the missing ones.
 
+- **GUI: neutral points, supply areas, earth current by source location.**
+  The bus dialog has a tab *Neutral point*: isolated, resonant (coil current,
+  watt residual) or low impedance (current through the neutral), with the
+  voltage of the system, the charging current of the part that is not drawn
+  and a current spectrum for the other frequencies. The plan writes the
+  treatment at the bus; the properties of the bus and the dialog show the
+  supply area with its capacitive earth-fault current, the sum of the coil
+  currents, the detuning and the residual current. The *Network* tab lists
+  the neutral points (editable) and the supply areas; the plan colours by
+  supply area, and the colouring by voltage level includes the branches. The
+  results show the earth current by source location. Sources and faults take
+  a voltage level, the type dialog the capacitances and the voltage level of
+  a branch type.
+
 - **Service layer: edits of several elements, and the derived tables.**
   `groundinsight.api.removal(session, items)` and
   `duplication(session, items, at=None)` build the one command that deletes

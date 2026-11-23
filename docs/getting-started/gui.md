@@ -56,7 +56,7 @@ Double-click `B1`. In the dialog, set *Name* to `station_3` and keep
 text where a number belongs, a name that is taken — is marked at its field
 and nothing is applied.
 
-![The element dialog of the new bus, with the tabs General, Source, Fault and Earthing characteristic](img/gui-dialog.png)
+![The element dialog of the new bus, with the tabs General, Source, Neutral point, Fault and Earthing characteristic](img/gui-dialog.png)
 
 Every change is one step of the service layer: **Undo** and **Redo** in the
 toolbar (Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z) take it back and forth, and a change
@@ -168,6 +168,81 @@ station_3   296.5 V
 
 The numbers are those of the GUI. The project file saved in step 4 gives them
 too: `gi.load_project(path).network`, solved for `F1`, is this network.
+
+## 6. An isolated or resonant-earthed network
+
+In a 20 kV network with an isolated neutral or an arc-suppression coil the
+fault is fed by the charging currents of the cables, not by one source. The
+cables of the standard library carry their capacitance and their voltage
+level; what is left to enter is the treatment of the neutral.
+
+1. Draw the network with a cable of the library (*From the standard library …*
+   on the *Network* tab, or the **+** next to the palette's type fields), for
+   example a substation and three stations on 3, 3 and 4 km of
+   `NA2XS(F)2Y 1x150RM/25 12/20 kV`, and put a fault at the last station. No
+   source bus is needed.
+2. Double-click the substation and open the tab **Neutral point**. Switch on
+   *Neutral-point treatment at this bus*, choose *resonant (arc-suppression
+   coil)* and enter the coil current, 28.57 A, and the watt residual current,
+   0.82 A. *isolated* needs no further value; *low impedance* takes the
+   current through the neutral. Every treatment takes a current spectrum in
+   A for the other frequencies of the network (0 by default) and the
+   charging current of the part of the network that is not drawn.
+   ![The tab Neutral point of the bus dialog: the treatment, the voltage, the coil current and the current spectrum](img/gui-neutral.png)
+
+3. *Apply*. The properties of the substation now show the supply area:
+   capacitive earth-fault current 27.21 A, coil current 28.57 A, detuning
+   −5.0 %, residual current 1.59 A. The same line is in the dialog when it is
+   opened again, and the table *Supply areas* on the *Network* tab lists every
+   area; several coils of one area add up. *Colouring → Supply area* shows
+   which element feeds which cables.
+4. Solve. The tiles show `I_F` = 1.59 A and `r` = 2.21: the fault carries the
+   small residual current, while the coil current returns to the substation
+   and the charging currents to the cable ends. Open *Earth current by source
+   location* under the key figures for the current and the reduction factor of
+   every bus; their phasor sum is `I_E` = 3.52 A.
+   [Capacitive currents and the reduction factor](../explanation/capacitive-currents.md)
+   derives this step by step.
+
+Where several voltage levels share the earthing network — a 110 kV line, the
+20 kV cables, LV cables — give every feeding element its level (the *Source*
+tab has a field for it) and, at a bus where two fed levels meet, the fault its
+level on the *Fault* tab. *Colouring → Voltage level* colours the branches as
+well.
+
+The same with the library:
+
+```python
+cable = gi.standard_branch_types()["NA2XS(F)2Y 1x150RM/25 12/20 kV"]
+station = gi.BusType(name="station", system_type="MV/LV", voltage_level=20.0, impedance_formula="rho/50")
+substation = gi.BusType(name="substation", system_type="HV/MV", voltage_level=20.0, impedance_formula="0.5")
+feeder = gi.create_network(name="feeder", frequencies=[50.0])
+gi.create_bus(name="UW", type=substation, network=feeder)
+for number, (a, b, km) in enumerate((("UW", "S1", 3.0), ("S1", "S2", 3.0), ("S2", "S3", 4.0)), start=1):
+    gi.create_bus(name=b, type=station, network=feeder)
+    gi.create_branch(name=f"K{number}", type=cable, from_bus=a, to_bus=b, length=km, network=feeder)
+gi.create_resonant_neutral(name="coil", bus="UW", voltage_level=20.0, coil_current=28.57,
+                           active_residual_current=0.82, network=feeder)
+gi.create_fault(name="F", bus="S3", network=feeder)
+
+area = gi.supply_areas(feeder).row(0, named=True)
+print(f"I_CE = {area['I_CE_A']:.2f} A, detuning = {100 * area['detuning']:.1f} %, "
+      f"residual = {area['I_residual_A']:.2f} A")
+gi.run_fault(feeder, "F")
+key = feeder.res_fault("F").row(0, named=True)
+print(f"I_F = {key['I_F_A']:.2f} A, I_E = {key['I_E_A']:.2f} A, U_E = {key['U_E_V']:.2f} V, r = {key['r']:.2f}")
+for bus, current, factor in gi.earth_current_contributions(feeder, "F").select("bus_name", "I_S_A", "r_S").rows():
+    print(f"{bus:3s} I_S = {current:5.2f} A, r_S = {factor:.3f}")
+```
+
+```text title="Output"
+I_CE = 27.21 A, detuning = -5.0 %, residual = 1.59 A
+I_F = 1.59 A, I_E = 3.52 A, U_E = 5.12 V, r = 2.21
+UW  I_S = 24.50 A, r_S = 0.340
+S1  I_S =  8.16 A, r_S = 0.315
+S2  I_S =  9.52 A, r_S = 0.246
+S3  I_S =  5.44 A, r_S = 0.000
+```
 
 ## Where to go next
 

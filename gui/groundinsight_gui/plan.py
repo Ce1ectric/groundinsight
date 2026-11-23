@@ -42,6 +42,7 @@ from nicegui import events, ui
 from groundinsight.api import (
     AddBranch,
     AddFault,
+    AddNeutral,
     AddSource,
     AutoLayout,
     Batch,
@@ -51,26 +52,26 @@ from groundinsight.api import (
     MoveNodes,
     PlaceBus,
     ProjectError,
-    RemoveBranch,
-    RemoveBus,
     RemoveFault,
+    RemoveNeutral,
     RemoveSource,
     RenameBranch,
     RenameBus,
     RenameFault,
+    RenameNeutral,
     RenameSource,
-    RouteBranch,
-    SetCharacteristic,
     SetColourScheme,
     UpdateBranch,
     UpdateBus,
     UpdateFault,
+    UpdateNeutral,
     UpdateSource,
+    duplication,
     groundfield_available,
+    removal,
 )
 
 from .canvas import CANVAS_CSS, TOOLS, NetworkCanvas
-from .catalogue import copy_name
 from .colouring import MODES, RESULT_MODES, UTILISATION_MODES, Colouring, colour
 from .formatting import DASH, format_number, format_scale, format_unit, format_value, parse_number
 from .i18n import column_label
@@ -243,8 +244,76 @@ class PlanView:
                 assessment = self.session.assessment(self.page.fault)
             except ProjectError:
                 assessment = None
-        self.colours = colour(self.mode, diagram, result=result, check=check, assessment=assessment)
+        self.colours = colour(self.mode, diagram, result=result, check=check, assessment=assessment,
+                              areas=self._supply_rows() if self.mode == "supply_area" else None,
+                              levels=self._branch_levels() if self.mode == "voltage_level" else None)
         return self.colours
+
+    def _supply_rows(self) -> List[Dict[str, Any]]:
+        """The rows of the session's supply areas; none where they cannot be formed."""
+        try:
+            rows = self.session.supply_areas().rows
+        except ValueError:
+            return []
+        return [{**row, **{key: json.loads(row[key]) for key in ("feeding_elements", "buses", "branches")}}
+                for row in rows]
+
+    def _branch_levels(self) -> Dict[str, Optional[float]]:
+        """Voltage level of the type of every branch, in kV."""
+        of_type = {row["name"]: row.get("voltage_level") for row in self.session.table("branch_types").rows}
+        return {row["name"]: of_type.get(row["type"]) for row in self.session.table("branches").rows}
+
+    def neutral_texts(self) -> Dict[str, List[str]]:
+        """
+        What the plan writes at a bus with a neutral point.
+
+        Returns
+        -------
+        dict of str to list of str
+            Per bus, for each active neutral-point element there:
+            ``"<level> kV · <treatment>"``.
+        """
+        texts: Dict[str, List[str]] = {}
+        language = self.page.language
+        for row in self.session.table("neutrals").rows:
+            if row["active"]:
+                texts.setdefault(row["bus"], []).append(
+                    f"{format_number(row['voltage_level'], language, 4)} kV · {self.t('neutral_' + row['kind'])}")
+        return texts
+
+    def area_text(self, bus: str, level: Optional[float] = None) -> Optional[str]:
+        """
+        The supply area of a bus in one line.
+
+        Parameters
+        ----------
+        bus : str
+            A bus.
+        level : float, optional
+            The voltage level in kV, where several areas meet at the bus;
+            default the first area with a neutral-point element.
+
+        Returns
+        -------
+        str or None
+            Capacitive earth-fault current, coil current, detuning and
+            residual current of the area; ``None`` if no area with a
+            neutral-point element holds the bus.
+        """
+        language = self.page.language
+
+        def shown(value: Optional[float], factor: float = 1.0) -> str:
+            return DASH if value is None else format_number(factor * value, language, 4)
+
+        for row in self._supply_rows():
+            if bus not in row["buses"] or row["I_CE_A"] is None:
+                continue
+            if level is not None and abs(row["voltage_level_kV"] - level) > 1e-9 * level:
+                continue
+            return self.t("neutral_area", level=format_number(row["voltage_level_kV"], language, 4),
+                          ice=shown(row["I_CE_A"]), coil=shown(row["I_coil_A"]),
+                          detuning=shown(row["detuning"], 100.0), rest=shown(row["I_residual_A"]))
+        return None
 
     def annotations(self, colours: Colouring, diagram: Any = None) -> Dict[str, Any]:
         """
@@ -276,6 +345,7 @@ class PlanView:
                 names.setdefault(row["bus"], []).append(row["name"])
         if diagram is None:
             diagram = self.session.diagram()
+        neutral_texts = self.neutral_texts()
         nodes: Dict[str, Dict[str, Any]] = {}
         for node in diagram.nodes:
             note: Dict[str, Any] = {}
@@ -287,6 +357,9 @@ class PlanView:
                 if node.name in at_bus[table]:
                     note[table] = at_bus[table][node.name]
                     tip.append(f"{self.t('kind_' + kind)} {', '.join(note[table])}")
+            if node.name in neutral_texts:
+                note["neutrals"] = neutral_texts[node.name]
+                tip.append(f"{self.t('kind_neutral')} {', '.join(note['neutrals'])}")
             if not node.active:
                 tip.append(self.t("out_of_service"))
             note["tip"] = " · ".join(str(part) for part in tip if part)
@@ -644,6 +717,12 @@ class PlanView:
                     ui.label(column_label(self.page.language, key, format_unit(units.get(key)))).classes(
                         "text-xs text-gray-500 whitespace-nowrap")
                     ui.label(str(text)).classes("text-xs text-right truncate").mark(f"prop-{key}")
+            if kind == "bus":
+                for line in self.neutral_texts().get(name, []):
+                    ui.label(f"{self.t('kind_neutral')}: {line}").classes("text-xs text-gray-700").mark("prop-neutral")
+                area = self.area_text(name)
+                if area is not None:
+                    ui.label(area).classes("text-xs text-gray-700").mark("prop-supply-area")
             with ui.row().classes("gap-1 mt-2 no-wrap items-center"):
                 ui.button(self.t("edit"), icon="edit", on_click=lambda: self.open_dialog(kind, name)).props(
                     "dense no-caps no-wrap").mark("properties-edit")
@@ -765,83 +844,8 @@ class PlanView:
             The copies, buses first.
         """
         items = self._existing(items)
-        if not items:
-            return None, []
-        suffix = self.t("copy_suffix")
-        diagram = self.session.diagram()
-        nodes = {node.name: node for node in diagram.nodes}
-        edges = {edge.name: edge for edge in diagram.edges}
-        bus_rows = {row["name"]: row for row in self.session.table("buses").rows}
-        branch_rows = {row["name"]: row for row in self.session.table("branches").rows}
-        buses = [name for kind, name in items if kind == "bus"]
-        grid = float(diagram.grid_size or 20)
-        dx = dy = 2 * grid
-        if at is not None and buses:
-            dx = round((at[0] - sum(nodes[b].x for b in buses) / len(buses)) / grid) * grid
-            dy = round((at[1] - sum(nodes[b].y for b in buses) / len(buses)) / grid) * grid
-        # A copy on top of a symbol would hide it (a paste with the pointer
-        # still on the original, a second paste at the same place): move on
-        # by two raster steps until every copy has a place of its own.
-        occupied = {(node.x, node.y) for node in nodes.values()}
-        while any((nodes[b].x + dx, nodes[b].y + dy) in occupied for b in buses):
-            dx += 2 * grid
-            dy += 2 * grid
-        taken = {"bus": list(bus_rows), "branch": list(branch_rows), "source": self._names("sources")}
-
-        def name_of(kind: str, original: str) -> str:
-            copy = copy_name(original, taken[kind], suffix)
-            taken[kind].append(copy)
-            return copy
-
-        commands: List[Command] = []
-        copies: Dict[str, str] = {}
-        for name in buses:
-            row, node = bus_rows[name], nodes[name]
-            copies[name] = name_of("bus", name)
-            commands.append(PlaceBus(
-                name=copies[name], type=row["type"], specific_earth_resistance=row["specific_earth_resistance"],
-                active=row["active"], description=row.get("description"), x=node.x + dx, y=node.y + dy,
-                symbol=node.symbol, label_offset=node.label_offset, length=node.length))
-            own = row.get("characteristic")
-            if own:
-                commands.append(SetCharacteristic(target="bus", name=copies[name],
-                                                  characteristic=json.loads(own) if isinstance(own, str) else own))
-        commands += self._source_copies(copies, name_of)
-        created = [("bus", copy) for copy in copies.values()]
-        for name in (n for kind, n in items if kind == "branch"):
-            row = branch_rows[name]
-            copy = name_of("branch", name)
-            commands.append(AddBranch(
-                name=copy, type=row["type"], from_bus=copies.get(row["from_bus"], row["from_bus"]),
-                to_bus=copies.get(row["to_bus"], row["to_bus"]), length=row["length"],
-                specific_earth_resistance=row["specific_earth_resistance"],
-                parallel_coefficient=row["parallel_coefficient"], active=row["active"],
-                description=row.get("description")))
-            waypoints = edges[name].waypoints if name in edges else []
-            if waypoints and row["from_bus"] in copies and row["to_bus"] in copies:
-                commands.append(RouteBranch(name=copy, waypoints=[(x + dx, y + dy) for x, y in waypoints]))
-            created.append(("branch", copy))
-        if len(commands) == 1:
-            return commands[0], created
-        return Batch(title=self.t("duplicate_elements", n=len(items)), commands=commands), created
-
-    def _source_copies(self, copies: Dict[str, str], name_of: Callable[[str, str], str]) -> List[Command]:
-        """The sources at copied buses, added again at the copies."""
-        quantities = {"current": "values", "voltage": "voltage", "impedance": "source_impedance"}
-        commands: List[Command] = []
-        for row in self.session.table("sources").rows:
-            if row["bus"] not in copies:
-                continue
-            phasors: Dict[str, Dict[float, Dict[str, float]]] = {}
-            for value in self.session.table("source_values").rows:
-                if value["source"] == row["name"]:
-                    phasors.setdefault(quantities[value["quantity"]], {})[value["frequency_Hz"]] = {
-                        "real": value["real"], "imag": value["imag"]}
-            commands.append(AddSource(
-                name=name_of("source", row["name"]), bus=copies[row["bus"]], source_type=row["source_type"],
-                i_k_a=row["i_k_a"], r_to_x=row["r_to_x"], kappa=row["kappa"], description=row.get("description"),
-                **phasors))
-        return commands
+        return duplication(self.session, items, at, suffix=self.t("copy_suffix"),
+                           title=self.t("duplicate_elements", n=len(items)))
 
     def duplicate(self, items: List[Tuple[str, str]], at: Optional[Tuple[float, float]] = None) -> bool:
         """
@@ -942,16 +946,7 @@ class PlanView:
             first (faults, sources, branches), so the delete key works on a
             connected bus as one undo step.
         """
-        if kind == "branch":
-            return RemoveBranch(name=name)
-        commands: List[Command] = [RemoveFault(name=r["name"]) for r in self.session.table("faults").rows
-                                   if r["bus"] == name]
-        commands += [RemoveSource(name=r["name"]) for r in self.session.table("sources").rows if r["bus"] == name]
-        commands += [RemoveBranch(name=r["name"]) for r in self.session.table("branches").rows
-                     if name in (r["from_bus"], r["to_bus"])]
-        if not commands:
-            return RemoveBus(name=name)
-        return Batch(title=self.t("delete_bus_with", name=name), commands=commands + [RemoveBus(name=name)])
+        return removal(self.session, [(kind, name)], title=self.t("delete_bus_with", name=name))
 
     def removal_of(self, items: List[Tuple[str, str]]) -> Optional[Command]:
         """
@@ -971,20 +966,9 @@ class PlanView:
             ``None`` for no element.
         """
         items = self._existing(items)
-        if not items:
-            return None
         if len(items) == 1:
             return self.removal(*items[0])
-        buses = [name for kind, name in items if kind == "bus"]
-        branches = [name for kind, name in items if kind == "branch"]
-        branches += [r["name"] for r in self.session.table("branches").rows
-                     if r["name"] not in branches and (r["from_bus"] in buses or r["to_bus"] in buses)]
-        commands: List[Command] = [RemoveFault(name=r["name"]) for r in self.session.table("faults").rows
-                                   if r["bus"] in buses]
-        commands += [RemoveSource(name=r["name"]) for r in self.session.table("sources").rows if r["bus"] in buses]
-        commands += [RemoveBranch(name=name) for name in branches]
-        commands += [RemoveBus(name=name) for name in buses]
-        return Batch(title=self.t("delete_elements", n=len(items)), commands=commands)
+        return removal(self.session, items, title=self.t("delete_elements", n=len(items)))
 
     def _on_delete(self, args: Dict[str, Any]) -> None:
         """Delete the elements the event names; without any, the selection."""
@@ -1271,9 +1255,10 @@ def _text(element: Any) -> Optional[str]:
 
 
 class BusDialog(_ElementDialog):
-    """The bus dialog: general, source, fault, earthing characteristic."""
+    """The bus dialog: general, source, neutral point, fault, earthing characteristic."""
 
-    TABS = ("general", "source", "fault", "characteristic")
+    TABS = ("general", "source", "neutral", "fault", "characteristic")
+    NEUTRAL_KINDS = ("isolated", "resonant", "low_impedance")
     KIND = "bus"
     # Wide enough for the eight columns of the characteristic with their numbers.
     WIDTH = "w-[54rem]"
@@ -1314,6 +1299,9 @@ class BusDialog(_ElementDialog):
         name = sources[0]["name"] if sources else free_name("I", self.plan._names("sources"))
         self.field(ui.input(self.t("source_name"), value=name).classes("w-full"), "source_name").mark(
             "dlg-source-name")
+        level = sources[0].get("voltage_level") if sources else None
+        self.field(ui.input(self.t("source_level"), value="" if level is None else format_number(
+            level, language, 12)).classes("w-full"), "source_voltage").mark("dlg-source-voltage")
         ui.label(self.t("source_values_hint")).classes("text-xs text-gray-500")
         self.source_inputs: Dict[float, Tuple[Any, Any]] = {}
         for f in self.plan.session.summary().frequencies:
@@ -1326,6 +1314,151 @@ class BusDialog(_ElementDialog):
                 imag = self.field(ui.input("Im / A", value=format_number(row.get("imag", 0.0), language, 12)).classes(
                     "grow basis-0 min-w-0"))
                 self.source_inputs[f] = (real, imag)
+
+    def _neutrals(self) -> List[Dict[str, Any]]:
+        return [r for r in self.plan.session.table("neutrals").rows if r["bus"] == self.name]
+
+    def _neutral_fields(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        The fields of a stored neutral-point element, in the form the dialog reads its inputs.
+
+        Parameters
+        ----------
+        row : dict
+            Its row of the table ``neutrals``.
+
+        Returns
+        -------
+        dict
+            Field name to value, as :class:`~groundinsight.api.UpdateNeutral`
+            takes them; only the fields of its kind.
+        """
+        fields: Dict[str, Any] = {
+            "kind": row["kind"], "voltage_level": row["voltage_level"],
+            "nominal_frequency": row["nominal_frequency"],
+            "remaining_capacitive_current": row["remaining_capacitive_current"],
+            "harmonic_currents": {r["frequency_Hz"]: {"real": r["real"], "imag": r["imag"]}
+                                  for r in self.plan.session.table("neutral_harmonics").rows
+                                  if r["neutral"] == row["name"]},
+        }
+        if row["kind"] == "resonant":
+            fields.update(coil_current=row["coil_current"], active_residual_current=row["active_residual_current"])
+        if row["kind"] == "low_impedance":
+            fields["current"] = {"real": row["current_real"], "imag": row["current_imag"]}
+        return fields
+
+    def _tab_neutral(self) -> None:
+        neutrals = self._neutrals()
+        row = neutrals[0] if neutrals else {}
+        stored = self._neutral_fields(row) if neutrals else {}
+        language = self.plan.page.language
+
+        def shown(value: Any, default: Any = "") -> str:
+            value = default if value is None else value
+            return value if isinstance(value, str) else format_number(value, language, 12)
+
+        bus_type = self.plan.session.type_definition("bus", self.row("buses")["type"])
+        self.field(ui.switch(self.t("neutral_here"), value=bool(neutrals)), "has_neutral").mark("dlg-neutral")
+        with ui.row().classes("w-full no-wrap gap-4"):
+            name = row.get("name") or free_name("N", self.plan._names("neutrals"))
+            self.field(ui.input(self.t("neutral_name"), value=name).classes("grow basis-0 min-w-0"),
+                       "neutral_name").mark("dlg-neutral-name")
+            kinds = {kind: self.t(f"neutral_{kind}") for kind in self.NEUTRAL_KINDS}
+            kind = self.field(ui.select(kinds, value=row.get("kind") or "isolated", label=self.t("neutral_kind")).classes(
+                "grow basis-0 min-w-0"), "neutral_kind").mark("dlg-neutral-kind")
+        with ui.row().classes("w-full no-wrap gap-4"):
+            self.field(ui.input(self.t("neutral_voltage"), value=shown(
+                row.get("voltage_level"), bus_type.get("voltage_level"))).classes("grow basis-0 min-w-0"),
+                "neutral_voltage").mark("dlg-neutral-voltage")
+            self.field(ui.input(self.t("neutral_frequency"), value=shown(row.get("nominal_frequency"), 50.0)).classes(
+                "grow basis-0 min-w-0"), "neutral_frequency").mark("dlg-neutral-frequency")
+            self.field(ui.input(self.t("neutral_remaining"), value=shown(
+                row.get("remaining_capacitive_current"), 0.0)).classes("grow basis-0 min-w-0"),
+                "neutral_remaining").mark("dlg-neutral-remaining")
+        with ui.row().classes("w-full no-wrap gap-4").bind_visibility_from(kind, "value", value="resonant"):
+            self.field(ui.input(self.t("neutral_coil"), value=shown(row.get("coil_current"))).classes(
+                "grow basis-0 min-w-0"), "neutral_coil").mark("dlg-neutral-coil")
+            self.field(ui.input(self.t("neutral_active"), value=shown(row.get("active_residual_current"), 0.0)).classes(
+                "grow basis-0 min-w-0"), "neutral_active").mark("dlg-neutral-active")
+        with ui.row().classes("w-full no-wrap gap-4").bind_visibility_from(kind, "value", value="low_impedance"):
+            self.field(ui.input(self.t("neutral_current_re"), value=shown(row.get("current_real"))).classes(
+                "grow basis-0 min-w-0"), "neutral_current_re").mark("dlg-neutral-current-re")
+            self.field(ui.input(self.t("neutral_current_im"), value=shown(row.get("current_imag"), 0.0)).classes(
+                "grow basis-0 min-w-0"), "neutral_current_im").mark("dlg-neutral-current-im")
+        nominal = row.get("nominal_frequency") or 50.0
+        others = [f for f in self.plan.session.summary().frequencies if abs(f - nominal) > 1e-9 * nominal]
+        self.neutral_harmonics: Dict[float, Tuple[Any, Any]] = {}
+        if others:
+            ui.label(self.t("neutral_harmonics_hint")).classes("text-xs text-gray-500")
+        for f in others:
+            value = stored.get("harmonic_currents", {}).get(f, {})
+            with ui.row().classes("w-full items-center gap-4 no-wrap"):
+                ui.label(f"{format_number(f, language, 6)} Hz").classes("w-20 text-sm")
+                mark = format_number(f, "en", 6)
+                real = self.field(ui.input(self.t("neutral_harmonic_re"), value=shown(value.get("real"), 0.0)).classes(
+                    "grow basis-0 min-w-0")).mark(f"dlg-neutral-harmonic-re-{mark}")
+                imag = self.field(ui.input(self.t("neutral_harmonic_im"), value=shown(value.get("imag"), 0.0)).classes(
+                    "grow basis-0 min-w-0")).mark(f"dlg-neutral-harmonic-im-{mark}")
+                self.neutral_harmonics[f] = (real, imag)
+        area = self.plan.area_text(self.name, row.get("voltage_level")) if neutrals else None
+        ui.label(area or self.t("neutral_area_none")).classes("text-xs text-gray-700").mark("dlg-neutral-area")
+
+    def _neutral_commands(self) -> List[Command]:
+        neutrals = self._neutrals()
+        if not self.inputs["has_neutral"].value:
+            return [RemoveNeutral(name=r["name"]) for r in neutrals]
+        current = neutrals[0]["name"] if neutrals else None
+        name = self.new_name(self.inputs["neutral_name"], current, self.plan._names("neutrals"))
+        kind = self.inputs["neutral_kind"].value
+        fields: Dict[str, Any] = {
+            "kind": kind,
+            "voltage_level": self._required("neutral_voltage"),
+            "nominal_frequency": self.number(self.inputs["neutral_frequency"], empty=50.0),
+            "remaining_capacitive_current": self.number(self.inputs["neutral_remaining"], empty=0.0),
+            "harmonic_currents": {
+                f: phasor for f, phasor in (
+                    (f, {"real": self.number(re, empty=0.0), "imag": self.number(im, empty=0.0)})
+                    for f, (re, im) in self.neutral_harmonics.items())
+                if phasor["real"] or phasor["imag"]},
+        }
+        if kind == "resonant":
+            fields["coil_current"] = self._required("neutral_coil")
+            fields["active_residual_current"] = self.number(self.inputs["neutral_active"], empty=0.0)
+        if kind == "low_impedance":
+            fields["current"] = {"real": self._required("neutral_current_re"),
+                                 "imag": self.number(self.inputs["neutral_current_im"], empty=0.0)}
+        if current is None:
+            return [AddNeutral(name=name, bus=self.name, **fields)]
+        stored = self._neutral_fields(neutrals[0])
+        changed = {key: value for key, value in fields.items() if stored.get(key) != value}
+        commands: List[Command] = [UpdateNeutral(name=current, fields=changed)] if changed else []
+        if name != current:
+            commands.append(RenameNeutral(name=current, new_name=name))
+        return commands
+
+    def _required(self, key: str) -> float:
+        """
+        The number of a field that must not stay empty.
+
+        Parameters
+        ----------
+        key : str
+            Key of the input.
+
+        Returns
+        -------
+        float
+            The number.
+
+        Raises
+        ------
+        _FieldError
+            If the field is empty or holds no number.
+        """
+        value = self.number(self.inputs[key])
+        if value is None:
+            raise _FieldError(self.inputs[key], self.t("value_missing"))
+        return value
 
     def _faults(self) -> List[Dict[str, Any]]:
         return [r for r in self.plan.session.table("faults").rows if r["bus"] == self.name]
@@ -1351,6 +1484,9 @@ class BusDialog(_ElementDialog):
             self.field(ui.input(column_label(language, "t_k_s"),
                                 value="" if t_k_s is None else format_number(t_k_s, language, 12)).classes(
                 "grow basis-0 min-w-0"), "t_k_s").mark("dlg-t-k")
+        level = faults[0].get("voltage_level") if faults else None
+        self.field(ui.input(self.t("fault_level"), value="" if level is None else format_number(
+            level, language, 12)).classes("w-full"), "fault_voltage").mark("dlg-fault-voltage")
         ui.label(self.t("fault_scalings_hint")).classes("text-xs text-gray-500")
         self.scaling_inputs: Dict[float, Any] = {}
         for f in self.plan.session.summary().frequencies:
@@ -1423,6 +1559,7 @@ class BusDialog(_ElementDialog):
         if fields:
             commands.append(UpdateBus(name=self.name, fields=fields))
         commands += self._source_commands()
+        commands += self._neutral_commands()
         commands += self._fault_commands()
         if new_name != self.name:
             commands.append(RenameBus(name=self.name, new_name=new_name))
@@ -1436,11 +1573,17 @@ class BusDialog(_ElementDialog):
         name = self.new_name(self.inputs["source_name"], current, self.plan._names("sources"))
         values = {f: {"real": self.number(re, empty=0.0), "imag": self.number(im, empty=0.0)}
                   for f, (re, im) in self.source_inputs.items()}
+        level = self.number(self.inputs["source_voltage"])
         if current is None:
-            return [AddSource(name=name, bus=self.name, values=values)]
+            return [AddSource(name=name, bus=self.name, values=values, voltage_level=level)]
         commands: List[Command] = []
+        fields: Dict[str, Any] = {}
         if self._source_values(current) != values:
-            commands.append(UpdateSource(name=current, fields={"values": values}))
+            fields["values"] = values
+        if level != sources[0].get("voltage_level"):
+            fields["voltage_level"] = level
+        if fields:
+            commands.append(UpdateSource(name=current, fields=fields))
         if name != current:
             commands.append(RenameSource(name=current, new_name=name))
         return commands
@@ -1453,13 +1596,16 @@ class BusDialog(_ElementDialog):
         name = self.new_name(self.inputs["fault_name"], current, self.plan._names("faults"))
         scalings = {f: self.number(box, empty=1.0) for f, box in self.scaling_inputs.items()}
         t_k_s = self.number(self.inputs["t_k_s"])
+        level = self.number(self.inputs["fault_voltage"])
         if current is None:
-            return [AddFault(name=name, bus=self.name, scalings=scalings, t_k_s=t_k_s)]
+            return [AddFault(name=name, bus=self.name, scalings=scalings, t_k_s=t_k_s, voltage_level=level)]
         fields: Dict[str, Any] = {}
         if self._scalings(current) != scalings:
             fields["scalings"] = scalings
         if t_k_s != faults[0]["t_k_s"]:
             fields["t_k_s"] = t_k_s
+        if level != faults[0].get("voltage_level"):
+            fields["voltage_level"] = level
         commands: List[Command] = [UpdateFault(name=current, fields=fields)] if fields else []
         if name != current:
             commands.append(RenameFault(name=current, new_name=name))

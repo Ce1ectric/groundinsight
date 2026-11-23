@@ -23,7 +23,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 __all__ = ["MODES", "NEUTRAL", "UTILISATION_MODES", "Colouring", "LegendEntry", "colour", "utilisation_colour"]
 
 #: The colouring modes, in menu order.
-MODES = ("voltage_level", "type", "group", "infeed_fault", "epr", "u_touch", "i_branch",
+MODES = ("voltage_level", "supply_area", "type", "group", "infeed_fault", "epr", "u_touch", "i_branch",
          "util_epr", "util_touch", "util_thermal", "characteristic", "diagnostics")
 
 #: Modes that need a fault result.
@@ -361,8 +361,34 @@ def _severities(report: Any) -> Dict[Tuple[str, str], str]:
     return worst
 
 
+def _colour_supply_areas(out: "Colouring", areas: List[Dict[str, Any]]) -> None:
+    """
+    Colour buses and branches by the supply area they belong to.
+
+    Parameters
+    ----------
+    out : Colouring
+        The colouring, changed in place: every area its colour, what no
+        feeding element reaches stays neutral.
+    areas : list of dict
+        The rows of ``ProjectSession.supply_areas``.
+    """
+    for index, area in enumerate(areas):
+        shade = PALETTE[index % len(PALETTE)]
+        for bus in area["buses"]:
+            # A bus where two levels meet shows the area listed first.
+            if out.nodes.get(bus) == NEUTRAL:
+                out.nodes[bus] = shade
+        for branch in area["branches"]:
+            if branch in out.edges:
+                out.edges[branch] = shade
+        out.entries.append(LegendEntry(shade, f"{area['voltage_level_kV']:g} kV · {', '.join(area['feeding_elements'])}"))
+    out.entries.append(LegendEntry(NEUTRAL, "legend_unfed", True))
+
+
 def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None,
-           assessment: Any = None) -> Colouring:
+           assessment: Any = None, areas: Optional[List[Dict[str, Any]]] = None,
+           levels: Optional[Dict[str, Optional[float]]] = None) -> Colouring:
     """
     Colour the diagram in one mode.
 
@@ -372,6 +398,12 @@ def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None,
         One of :data:`MODES`.
     diagram : DiagramDTO
         The diagram.
+    areas : list of dict, optional
+        The rows of ``ProjectSession.supply_areas``, which the mode
+        ``"supply_area"`` reads.
+    levels : dict of str to float, optional
+        Voltage level in kV per branch (of its type), which the mode
+        ``"voltage_level"`` colours the branches by.
     result : FaultResultDTO, optional
         The fault result the numerical modes read.
     check : CheckReportDTO, optional
@@ -406,8 +438,15 @@ def colour(mode: str, diagram: Any, *, result: Any = None, check: Any = None,
     edges = {edge.name: NEUTRAL for edge in diagram.edges}
     out = Colouring(mode=mode, nodes=nodes, edges=edges)
     if mode == "voltage_level":
-        out.nodes, out.entries = _categorical(
-            {n.name: n.voltage_level for n in diagram.nodes}, label=lambda v: f"{v:g} kV")
+        # Buses by the level of their type, branches by the level of theirs
+        # (``levels``); a branch without one stays neutral.
+        values = {("bus", n.name): n.voltage_level for n in diagram.nodes}
+        values.update({("branch", name): level for name, level in (levels or {}).items() if level is not None})
+        colours, out.entries = _categorical(values, label=lambda v: f"{v:g} kV")
+        out.nodes = {name: c for (kind, name), c in colours.items() if kind == "bus"}
+        out.edges.update({name: c for (kind, name), c in colours.items() if kind == "branch"})
+    elif mode == "supply_area":
+        _colour_supply_areas(out, areas or [])
     elif mode == "type":
         values: Dict[Any, Any] = {("bus", n.name): n.bus_type for n in diagram.nodes}
         values.update({("branch", e.name): e.branch_type for e in diagram.edges})

@@ -39,10 +39,10 @@ environment; without it the button is disabled and says why.
   environment variables in the path are expanded);
 * network plan: draw the network on a canvas -- buses, buses with an infeed,
   branches dragged from bus to bus, faults -- move symbols on a raster,
-  double-click for the element dialog (general, source, fault, earthing
+  double-click for the element dialog (general, source, neutral point, fault, earthing
   characteristic -- imported from a groundfield BusType JSON or computed with
   groundfield for the bus or its type; branch: general, type parameters,
-  switch), a properties panel, colouring by voltage level, type, earthing
+  switch), a properties panel, colouring by voltage level, supply area, type, earthing
   group, infeed and fault, EPR, touch voltage, shield current, touch-voltage
   utilisation, origin of the earthing impedance or diagnostics, and automatic
   layout (groundinsight's, or elkjs in the browser). Every gesture is one
@@ -53,7 +53,16 @@ environment; without it the button is disabled and says why.
   Escape and Ctrl/Cmd+A work. A numerical colouring writes its value at
   every bus or branch, the fault is chosen and solved above the plan, and a
   search field finds an element by its name. The plan fills the window;
-* network tables: buses, branches, sources, faults and the type catalogue,
+* neutral points: the tab *Neutral point* of the bus dialog takes the
+  treatment of the neutral -- isolated, resonant (coil current, watt
+  residual) or low impedance (current through the neutral) -- with the
+  voltage of the system, the charging current of the part that is not drawn
+  and a current spectrum for the other frequencies; the plan writes it at
+  the bus, the properties show the supply area with its capacitive
+  earth-fault current and the detuning, and the results list the earth
+  current by source location;
+* network tables: buses, branches, sources, neutral points, faults and the
+  type catalogue, and the derived table of the supply areas,
   editable cell by cell; every edit is a command of the service layer and can
   be undone; a rejected edit changes nothing and says why. The frequencies of
   the network can be changed above the tables; a search field filters every

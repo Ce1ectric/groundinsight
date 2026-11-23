@@ -584,3 +584,33 @@ def test_a_solved_ring_coloured_by_its_epr(page):
     assert fill(max(epr, key=epr.get)) == "rgb(253, 231, 37)"  # last stop
     _screenshot(page, "ring_epr")
     assert page.errors == []
+
+
+def test_a_neutral_point_is_entered_in_the_bus_dialog(page):
+    """The tab of the neutral point in a real browser: the fields follow the treatment chosen."""
+    _node(page, "bus1").dblclick()
+    dialog = page.locator(".q-dialog")
+    dialog.wait_for()
+    dialog.get_by_role("tab", name="Sternpunkt").click()
+    switch = dialog.get_by_text("Sternpunktbehandlung an diesem Bus")
+    switch.wait_for()
+    switch.click()
+    coil = dialog.get_by_label("Spulenstrom / A")
+    assert not coil.is_visible()                               # isolated: nothing more to enter
+    dialog.get_by_label("Art der Sternpunktbehandlung").click()
+    page.get_by_role("option", name="gelöscht (Erdschlussspule)").click()
+    coil.wait_for()                                            # the coil has its fields now
+    assert not dialog.get_by_label("Strom durch den Sternpunkt, Re / A").is_visible()
+    dialog.get_by_role("button", name="Übernehmen").click()
+    dialog.get_by_text("Hier wird ein Wert gebraucht").wait_for()   # at the field, the dialog stays
+    coil.fill("28,5")
+    _screenshot(page, "neutral_point_dialog")
+    coil.press("Enter")
+    dialog.wait_for(state="hidden")
+    note = _node(page, "bus1").locator(".gi-neutral")
+    note.wait_for()
+    assert "gelöscht (Erdschlussspule)" in note.inner_text()
+    page.get_by_text("Sternpunkt:", exact=False).first.wait_for()   # the properties panel names it
+    page.keyboard.press("ControlOrMeta+z")                     # one undo step
+    note.wait_for(state="detached")
+    assert page.errors == []

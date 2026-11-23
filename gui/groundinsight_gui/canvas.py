@@ -71,6 +71,7 @@ CANVAS_CSS = """
             font-size: calc(13px * var(--gi-s, 1)); color: #1f2a36; transform: translateY(-100%); }
 .gi-value { margin-left: 0.45em; font-weight: 600; font-variant-numeric: tabular-nums; }
 .gi-flash { color: #b84a00; font-weight: 600; }
+.gi-neutral { display: block; color: #2e6b3a; font-weight: 500; white-space: nowrap; }
 .gi-infeed { left: 50%; bottom: 100%; transform: translateX(-50%); font-size: calc(12px * var(--gi-s, 1));
              color: #0072B2; line-height: 1; }
 .gi-stale .gi-value, .gi-stale .gi-edge-value { opacity: 0.6; font-style: italic; }
@@ -78,7 +79,7 @@ CANVAS_CSS = """
    zooming a large plan repaints but does not lay a thousand texts out again. */
 .gi-far .gi-edge-label { visibility: hidden; }
 .gi-far .gi-edge.gi-sel .gi-edge-label, .gi-far .gi-edge:hover .gi-edge-label { visibility: visible; }
-.gi-very-far .gi-label, .gi-very-far .gi-flash-name { visibility: hidden; }
+.gi-very-far .gi-label, .gi-very-far .gi-flash-name, .gi-very-far .gi-neutral { visibility: hidden; }
 .gi-very-far .gi-flash { visibility: visible; }  /* the flash itself stays: where the faults are */
 .gi-very-far .gi-node.gi-sel .gi-label, .gi-very-far .vue-flow__node:hover .gi-label,
 .gi-very-far .gi-node.gi-sel .gi-flash-name, .gi-very-far .vue-flow__node:hover .gi-flash-name { visibility: visible; }

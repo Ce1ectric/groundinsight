@@ -87,6 +87,7 @@ const BusNode = {
       <Handle type="source" position="top" class="gi-handle" />
       <span class="gi-label" :style="textStyle(-4)">
         <span v-if="data.has_fault" class="gi-flash">&#x26A1;<span class="gi-flash-name">{{ (data.note.faults || []).join(", ") }}</span></span>
+        <span v-if="(data.note.neutrals || []).length" class="gi-neutral">{{ data.note.neutrals.join(", ") }}</span>
         <span class="gi-name">{{ id }}<span v-if="data.note.value" class="gi-value">{{ data.note.value }}</span></span>
       </span>
       <span v-if="data.has_source" class="gi-infeed">&#x25BC;</span>

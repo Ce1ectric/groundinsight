@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from nicegui import ui
 
 import groundinsight as gi
-from groundinsight.api import AddBranchType, AddBusType, UpdateBranchType, UpdateBusType
+from groundinsight.api import AddBranchType, AddBusType, UpdateBranchType, UpdateBusType, copy_name
 
 from .formatting import format_number, parse_number
 from .i18n import column_label
@@ -41,7 +41,8 @@ FIELDS: Dict[str, List[Tuple[str, str]]] = {
                ("self_impedance_formula", "formula"), ("mutual_impedance_formula", "formula"),
                ("phase_impedance_formula", "text"), ("conductor_material", "text"),
                ("cross_section_mm2", "number_or_none"), ("theta_initial_C", "number"),
-               ("theta_final_C", "number_or_none")],
+               ("theta_final_C", "number_or_none"), ("voltage_level", "number_or_none"),
+               ("c_shield_nf_per_km", "number_or_none"), ("c_earth_nf_per_km", "number_or_none")],
 }
 
 #: What a new type starts with.
@@ -50,7 +51,8 @@ NEW_TYPE: Dict[str, Dict[str, Any]] = {
             "impedance_formula": "rho/50"},
     "branch": {"name": "", "description": None, "grounding_conductor": True, "self_impedance_formula": "",
                "mutual_impedance_formula": "", "phase_impedance_formula": None, "conductor_material": None,
-               "cross_section_mm2": None, "theta_initial_C": 20.0, "theta_final_C": None},
+               "cross_section_mm2": None, "theta_initial_C": 20.0, "theta_final_C": None,
+               "voltage_level": None, "c_shield_nf_per_km": None, "c_earth_nf_per_km": None},
 }
 
 _ADD = {"bus": AddBusType, "branch": AddBranchType}
@@ -73,37 +75,6 @@ def library_types(kind: str) -> Dict[str, Any]:
         :func:`groundinsight.standard_branch_types`.
     """
     return gi.standard_bus_types() if kind == "bus" else gi.standard_branch_types()
-
-
-def copy_name(name: str, taken: List[str], suffix: str) -> str:
-    """
-    A free name for a copy: ``<name> <suffix>``, then ``<name> <suffix> 2`` ...
-
-    Parameters
-    ----------
-    name : str
-        The original.
-    taken : list of str
-        Names already in the catalogue.
-    suffix : str
-        The word for "copy" in the page's language.
-
-    Returns
-    -------
-    str
-        The first free name.
-
-    Examples
-    --------
-    >>> copy_name("MSCable", ["MSCable", "MSCable Kopie"], "Kopie")
-    'MSCable Kopie 2'
-    """
-    candidate = f"{name} {suffix}"
-    n = 2
-    while candidate in taken:
-        candidate = f"{name} {suffix} {n}"
-        n += 1
-    return candidate
 
 
 class TypeDialogs:
