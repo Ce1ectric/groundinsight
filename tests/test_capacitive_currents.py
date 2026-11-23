@@ -332,3 +332,52 @@ class TestTransient:
         study = gi.TransientStudy(net, "F")
         study.set_source_waveform("Q", waveforms.step(amplitude=100.0))
         study.solve(t_end=0.02, dt=1e-3)            # silent: warnings are errors in this suite
+
+
+class TestCutCable:
+    """Half the charging current at each end is exact: a cable cut into pieces gives the same potentials."""
+
+    JOINT = gi.BusType(name="joint", system_type="joint", voltage_level=20.0, impedance_formula="nan")
+
+    def _cut(self, pieces: int) -> gi.Network:
+        net = gi.create_network(name="cut", frequencies=[F])
+        gi.create_bus(name="UW", type=UW, network=net)
+        for k, (a, b, km) in enumerate(FEEDER, start=1):
+            gi.create_bus(name=b, type=ONS, network=net)
+            start = a
+            for j in range(1, pieces + 1):
+                end = b if j == pieces else f"M{k}_{j}"
+                if end != b:
+                    gi.create_bus(name=end, type=self.JOINT, network=net)     # no electrode: the screen passes
+                gi.create_branch(name=f"K{k}_{j}", type=CABLE, from_bus=start, to_bus=end, length=km / pieces,
+                                 network=net)
+                start = end
+        return net
+
+    @pytest.mark.parametrize("kind", ["isolated", "resonant", "low_impedance"])
+    @pytest.mark.parametrize("fault_bus", ["S3", "S1"])
+    def test_ten_pieces_per_cable_give_the_potentials_of_the_uncut_feeder(self, kind, fault_bus):
+        solved = []
+        for net in (feeder(), self._cut(10)):
+            if kind == "isolated":
+                gi.create_isolated_neutral(name="N", bus="UW", voltage_level=20.0, network=net)
+            elif kind == "resonant":
+                gi.create_resonant_neutral(name="N", bus="UW", voltage_level=20.0, coil_current=28.57,
+                                           active_residual_current=0.82, network=net)
+            else:
+                gi.create_low_impedance_neutral(name="N", bus="UW", voltage_level=20.0, current=1000.0, network=net)
+            gi.create_fault(name="F", bus=fault_bus, network=net)
+            solved.append(potentials(net))
+        uncut, cut = solved
+        scale = max(abs(value) for value in uncut.values())
+        assert max(abs(cut[bus] - uncut[bus]) for bus in uncut) <= 1e-11 * scale
+
+    def test_the_largest_potential_of_a_resonant_feeder_hardly_depends_on_the_fault_location(self):
+        largest = []
+        for fault_bus in ("S3", "S1"):
+            net = feeder()
+            gi.create_resonant_neutral(name="N", bus="UW", voltage_level=20.0, coil_current=1.05 * abs(charging(10.0)),
+                                       active_residual_current=0.03 * abs(charging(10.0)), network=net)
+            gi.create_fault(name="F", bus=fault_bus, network=net)
+            largest.append(max(abs(value) for value in potentials(net).values()))
+        assert largest == pytest.approx([5.15, 5.09], abs=0.01)

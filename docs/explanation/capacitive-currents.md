@@ -306,9 +306,10 @@ voltages, the nodes at both ends the same currents. Every potential and every
 current outside the section is unchanged.
 
 So for a charging current that is uniform along the branch, **half of it at
-each end is exact, not an approximation.** A test cuts every cable into ten
-pieces with unearthed joints and finds the same potentials to rounding
-($10^{-14}$ relative).
+each end is exact, not an approximation.** A test cuts every cable of a
+feeder into ten pieces with unearthed joints — each piece with its own half
+currents — and finds the potentials of the uncut feeder to rounding, for an
+isolated, a resonant and a low-impedance neutral.
 
 **What "taken at the end" means.** The half current goes from the earthing node
 of the end bus (the screen is bonded there) into the phase conductors and flows
@@ -555,7 +556,9 @@ station has the same 3.0 V with an isolated neutral, a coil or a resistor.
   current* to multiply with $Z_E$, not about a hazard that was overlooked.
 - **A single source with the residual current underestimates.** Entering
   $I_\mathrm{rest}$ as one source at the substation gives 0.79 V for the feeder
-  above; the model gives 5.12 V, and nearly the same for every fault location.
+  above; the model gives 5.12 V. The largest potential in the network hardly
+  depends on where the fault is: 5.15 V for the fault at S3, 5.09 V for a fault
+  at S1, both at station S2.
 - **A single source with $I_{CE}$ overestimates for an isolated neutral:**
   13.5 V instead of 9.1 V.
 - **Not shown:** that these numbers hold for a real system. The model assumes a
@@ -662,7 +665,7 @@ Every formula on this page is a test, and each is checked a second way.
 | (8) $I_E = \sum r_S I_S$ | sum of the table against `res_fault` | three neutral treatments, three fault locations |
 | $r_S$ by reciprocity | against a solve with one ampere from each bus | closed form for two stations |
 | (10) fault current | $\sqrt3\,\omega\,C_E\,U_n$ against the solve | phase currents of a feeder by Kirchhoff's law |
-| section 4, half currents | the same network with the currents written out as sources | every cable cut into ten pieces (study notebook) |
+| section 4, half currents | the same network with the currents written out as sources | every cable cut into ten pieces, three neutral treatments |
 | the written-out network | the independent solver `tests/_reference_mna.py` (branch currents as unknowns) | a nodal system set up by hand (study notebook) |
 | (14), (20), (21) | closed forms against the solve | (20) derived twice on this page |
 | section 6 | $U_E = I_C\,Z_E$, nothing taken at the stations | — |
