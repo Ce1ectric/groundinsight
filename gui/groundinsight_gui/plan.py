@@ -57,6 +57,8 @@ from groundinsight.api import (
     RemoveSource,
     RenameBranch,
     RenameBus,
+    RenameFault,
+    RenameSource,
     RouteBranch,
     SetCharacteristic,
     SetColourScheme,
@@ -70,7 +72,7 @@ from groundinsight.api import (
 from .canvas import CANVAS_CSS, TOOLS, NetworkCanvas
 from .catalogue import copy_name
 from .colouring import MODES, RESULT_MODES, UTILISATION_MODES, Colouring, colour
-from .formatting import DASH, format_number, format_scale, format_value, parse_number
+from .formatting import DASH, format_number, format_scale, format_unit, format_value, parse_number
 from .i18n import column_label
 from .studies import grid_options
 
@@ -523,8 +525,9 @@ class PlanView:
                 self._group_properties()
                 return
             kind, name = self.selected
-            table = "buses" if kind == "bus" else "branches"
-            row = next((r for r in self.session.table(table).rows if r["name"] == name), None)
+            dto = self.session.table("buses" if kind == "bus" else "branches")
+            units = {column.name: column.unit for column in dto.columns}
+            row = next((r for r in dto.rows if r["name"] == name), None)
             ui.label(f"{self.t('kind_' + kind)} {name}").classes("text-base font-medium").mark("properties-title")
             for key, value in (row or {}).items():
                 if key in ("name", "characteristic"):
@@ -536,7 +539,8 @@ class PlanView:
                 else:
                     text = DASH if value is None else value
                 with ui.row().classes("w-full justify-between no-wrap gap-2"):
-                    ui.label(column_label(self.page.language, key)).classes("text-xs text-gray-500")
+                    ui.label(column_label(self.page.language, key, format_unit(units.get(key)))).classes(
+                        "text-xs text-gray-500 whitespace-nowrap")
                     ui.label(str(text)).classes("text-xs text-right truncate").mark(f"prop-{key}")
             with ui.row().classes("gap-1 mt-2"):
                 ui.button(self.t("edit"), icon="edit", on_click=lambda: self.open_dialog(kind, name)).props(
@@ -918,8 +922,33 @@ class PlanView:
             BranchDialog(self, name).open()
 
 
+class _FieldError(ValueError):
+    """
+    An entry of a dialog that cannot be read or accepted, and its field.
+
+    Parameters
+    ----------
+    element : ui.element
+        The input the message belongs to.
+    message : str
+        The message, in the page's language.
+    """
+
+    def __init__(self, element: Any, message: str) -> None:
+        super().__init__(message)
+        self.element = element
+
+
 class _ElementDialog:
-    """Base of the element dialogs: a dialog with tabs and an Apply button."""
+    """
+    Base of the element dialogs: a dialog with tabs and an Apply button.
+
+    The name has the focus when the dialog opens, Enter in a text field
+    applies, Escape cancels. An entry that cannot be read (no number, a name
+    that is missing or taken) is reported at its field, in the page's
+    language, its tab is shown, and nothing is applied; what the library
+    rejects is reported as a notification and the dialog stays open.
+    """
 
     TABS: Tuple[str, ...] = ()
     KIND = ""
@@ -928,6 +957,9 @@ class _ElementDialog:
         self.plan = plan
         self.name = name
         self.inputs: Dict[str, Any] = {}
+        self._fields: List[Tuple[Any, str]] = []
+        self._tab = ""
+        self.panels: Any = None
 
     def t(self, key: str, **values: Any) -> str:
         """The text of ``key`` in the page's language."""
@@ -942,18 +974,103 @@ class _ElementDialog:
         with self.plan.dialog_host, ui.dialog() as self.dialog, ui.card().classes(
                 "w-[40rem] max-w-full").mark("element-dialog"):
             ui.label(self.title()).classes("text-base font-medium")
-            with ui.tabs().classes("w-full") as tabs:
+            with ui.tabs().props("dense").classes("w-full") as tabs:
                 for tab in self.TABS:
                     ui.tab(tab, label=self.t(f"dialog_{tab}")).mark(f"dialog-tab-{tab}")
-            with ui.tab_panels(tabs, value=self.TABS[0]).classes("w-full"):
+            with ui.tab_panels(tabs, value=self.TABS[0]).classes("w-full") as self.panels:
                 for tab in self.TABS:
-                    with ui.tab_panel(tab):
+                    self._tab = tab
+                    with ui.tab_panel(tab).classes("gap-3"):
                         getattr(self, f"_tab_{tab}")()
             with ui.row().classes("w-full justify-end gap-2"):
-                ui.button(self.t("cancel_dialog"), on_click=self.dialog.close).props("flat no-caps")
+                ui.button(self.t("cancel_dialog"), on_click=self.dialog.close).props("flat no-caps").mark(
+                    "dialog-cancel")
                 ui.button(self.t("apply"), on_click=self.submit).props("no-caps").mark("dialog-apply")
         self.dialog.on_value_change(lambda e: None if e.value else self.dialog.delete())
         self.dialog.open()
+
+    def field(self, element: Any, key: Optional[str] = None) -> Any:
+        """
+        Register an input of the dialog.
+
+        Parameters
+        ----------
+        element : ui.element
+            A text field, a select or a switch.
+        key : str, optional
+            The key under which :attr:`inputs` keeps it.
+
+        Returns
+        -------
+        ui.element
+            The element: remembered with its tab (an error shows that tab),
+            and a text field applies the dialog on Enter.
+        """
+        self._fields.append((element, self._tab))
+        if isinstance(element, ui.input):
+            element.on("keydown.enter", self.submit)
+        if key is not None:
+            self.inputs[key] = element
+        return element
+
+    def number(self, element: Any, *, empty: Optional[float] = None) -> Optional[float]:
+        """
+        The number typed into a field.
+
+        Parameters
+        ----------
+        element : ui.input
+            The field.
+        empty : float, optional
+            What an empty field means.
+
+        Returns
+        -------
+        float or None
+            The number.
+
+        Raises
+        ------
+        _FieldError
+            If the text is no number.
+        """
+        value = element.value
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return empty
+        try:
+            return parse_number(value)
+        except ValueError:
+            raise _FieldError(element, self.t("not_a_number", value=str(value).strip())) from None
+
+    def new_name(self, element: Any, current: Optional[str], taken: List[str]) -> str:
+        """
+        The name typed into a name field.
+
+        Parameters
+        ----------
+        element : ui.input
+            The field.
+        current : str or None
+            The name the element has now (it may keep it).
+        taken : list of str
+            The names of its kind in the network.
+
+        Returns
+        -------
+        str
+            The name, stripped.
+
+        Raises
+        ------
+        _FieldError
+            If it is empty or another element has it.
+        """
+        name = str(element.value or "").strip()
+        if not name:
+            raise _FieldError(element, self.t("name_missing"))
+        if name != current and name in taken:
+            raise _FieldError(element, self.t("name_taken"))
+        return name
 
     def title(self) -> str:
         """The dialog title."""
@@ -963,21 +1080,38 @@ class _ElementDialog:
         """The commands of the changed fields."""
         raise NotImplementedError
 
+    def after_apply(self, commands: List[Command]) -> None:
+        """
+        Follow what the applied commands renamed.
+
+        Parameters
+        ----------
+        commands : list of Command
+            The commands that were applied.
+        """
+        renamed = next((c for c in commands if isinstance(c, (RenameBus, RenameBranch))), None)
+        if renamed is not None:
+            self.plan.select(self.KIND, renamed.new_name)
+
     def submit(self) -> None:
         """Apply the changes as one undo step and close."""
+        for element, _ in self._fields:
+            if getattr(element, "error", None):
+                element.error = None
         try:
             commands = self.commands()
-        except ValueError as exc:
-            ui.notify(f"{self.t('edit_rejected')}: {exc}", type="negative", multi_line=True)
+        except _FieldError as exc:
+            exc.element.error = str(exc)
+            tab = next((tab for element, tab in self._fields if element is exc.element), None)
+            if tab and self.panels is not None:
+                self.panels.set_value(tab)
             return
         if commands:
             command = commands[0] if len(commands) == 1 else Batch(
                 title=self.t("edit_element", name=self.name), commands=commands)
-            renamed = next((c for c in commands if isinstance(c, (RenameBus, RenameBranch))), None)
             if not self.plan.apply(command):
                 return
-            if renamed is not None:
-                self.plan.select(self.KIND, renamed.new_name)
+            self.after_apply(commands)
         self.dialog.close()
 
     def changed(self, row: Dict[str, Any], fields: Dict[str, Callable[[Any], Any]]) -> Dict[str, Any]:
@@ -989,7 +1123,7 @@ class _ElementDialog:
         row : dict
             The current values.
         fields : dict of str to callable
-            Field name to the reader of its input value.
+            Field name to the reader of its input element.
 
         Returns
         -------
@@ -998,21 +1132,25 @@ class _ElementDialog:
         """
         out = {}
         for field, read in fields.items():
-            value = read(self.inputs[field].value)
+            value = read(self.inputs[field])
             if value != row.get(field):
                 out[field] = value
         return out
 
 
-def _number(value: Any) -> Optional[float]:
-    """A number input as float; empty is ``None``."""
-    if value is None or (isinstance(value, str) and not value.strip()):
-        return None
-    return parse_number(value)
+def _value(element: Any) -> Any:
+    """The value of a select."""
+    return element.value
 
 
-def _text(value: Any) -> Optional[str]:
+def _flag(element: Any) -> bool:
+    """The value of a switch."""
+    return bool(element.value)
+
+
+def _text(element: Any) -> Optional[str]:
     """A text input; empty is ``None``."""
+    value = element.value
     return str(value) if value is not None and str(value).strip() else None
 
 
@@ -1029,13 +1167,17 @@ class BusDialog(_ElementDialog):
     def _tab_general(self) -> None:
         row = self.row("buses")
         summary = self.plan.session.summary()
-        self.inputs["name"] = ui.input(self.t("name"), value=self.name).mark("dlg-name")
-        self.inputs["type"] = ui.select(summary.bus_types, value=row["type"], label=self.t("type")).mark("dlg-type")
-        self.inputs["specific_earth_resistance"] = ui.input(
-            "ρ / Ω·m", value=format_number(row["specific_earth_resistance"], self.plan.page.language, 12)).mark(
-            "dlg-rho")
-        self.inputs["active"] = ui.switch(self.t("active"), value=row["active"]).mark("dlg-active")
-        self.inputs["description"] = ui.input(self.t("description"), value=row.get("description") or "")
+        self.field(ui.input(self.t("name"), value=self.name).props("autofocus").classes("w-full"), "name").mark(
+            "dlg-name")
+        with ui.row().classes("w-full no-wrap gap-4"):
+            self.field(ui.select(summary.bus_types, value=row["type"], label=self.t("type")).classes(
+                "grow basis-0 min-w-0"), "type").mark("dlg-type")
+            self.field(ui.input("ρ / Ω·m", value=format_number(
+                row["specific_earth_resistance"], self.plan.page.language, 12)).classes("grow basis-0 min-w-0"),
+                "specific_earth_resistance").mark("dlg-rho")
+        self.field(ui.switch(self.t("active"), value=row["active"]), "active").mark("dlg-active")
+        self.field(ui.input(self.t("description"), value=row.get("description") or "").classes("w-full"),
+                   "description")
 
     def _sources(self) -> List[Dict[str, Any]]:
         return [r for r in self.plan.session.table("sources").rows if r["bus"] == self.name]
@@ -1048,17 +1190,23 @@ class BusDialog(_ElementDialog):
 
     def _tab_source(self) -> None:
         sources = self._sources()
+        language = self.plan.page.language
         values = self._source_values(sources[0]["name"]) if sources else {}
-        self.inputs["has_source"] = ui.switch(self.t("source_here"), value=bool(sources)).mark("dlg-source")
+        self.field(ui.switch(self.t("source_here"), value=bool(sources)), "has_source").mark("dlg-source")
+        name = sources[0]["name"] if sources else free_name("I", self.plan._names("sources"))
+        self.field(ui.input(self.t("source_name"), value=name).classes("w-full"), "source_name").mark(
+            "dlg-source-name")
         ui.label(self.t("source_values_hint")).classes("text-xs text-gray-500")
         self.source_inputs: Dict[float, Tuple[Any, Any]] = {}
         for f in self.plan.session.summary().frequencies:
             row = values.get(f, {})
-            with ui.row().classes("items-center gap-2 no-wrap"):
-                ui.label(f"{format_number(f, self.plan.page.language, 6)} Hz").classes("w-20 text-sm")
+            with ui.row().classes("w-full items-center gap-4 no-wrap"):
+                ui.label(f"{format_number(f, language, 6)} Hz").classes("w-20 text-sm")
                 default = 0.0 if sources else DEFAULT_SOURCE_A
-                real = ui.input("Re / A", value=format_number(row.get("real", default), self.plan.page.language, 12))
-                imag = ui.input("Im / A", value=format_number(row.get("imag", 0.0), self.plan.page.language, 12))
+                real = self.field(ui.input("Re / A", value=format_number(row.get("real", default), language, 12)).classes(
+                    "grow basis-0 min-w-0"))
+                imag = self.field(ui.input("Im / A", value=format_number(row.get("imag", 0.0), language, 12)).classes(
+                    "grow basis-0 min-w-0"))
                 self.source_inputs[f] = (real, imag)
 
     def _faults(self) -> List[Dict[str, Any]]:
@@ -1072,21 +1220,27 @@ class BusDialog(_ElementDialog):
     def _tab_fault(self) -> None:
         faults = self._faults()
         language = self.plan.page.language
-        self.inputs["has_fault"] = ui.switch(self.t("fault_here"), value=bool(faults)).mark("dlg-fault")
-        if faults:
-            ui.label(", ".join(r["name"] for r in faults)).classes("text-sm text-gray-600")
+        self.field(ui.switch(self.t("fault_here"), value=bool(faults)), "has_fault").mark("dlg-fault")
+        if len(faults) > 1:
+            ui.label(self.t("fault_others", names=", ".join(r["name"] for r in faults[1:]))).classes(
+                "text-xs text-gray-500")
+        name = faults[0]["name"] if faults else free_name("F", self.plan._names("faults"))
         scalings = self._scalings(faults[0]["name"]) if faults else {}
         t_k_s = faults[0]["t_k_s"] if faults else None
-        self.inputs["t_k_s"] = ui.input(column_label(language, "t_k_s"),
-                                        value="" if t_k_s is None else format_number(t_k_s, language, 12)).mark(
-            "dlg-t-k")
+        with ui.row().classes("w-full no-wrap gap-4"):
+            self.field(ui.input(self.t("fault_name"), value=name).classes("grow basis-0 min-w-0"),
+                       "fault_name").mark("dlg-fault-name")
+            self.field(ui.input(column_label(language, "t_k_s"),
+                                value="" if t_k_s is None else format_number(t_k_s, language, 12)).classes(
+                "grow basis-0 min-w-0"), "t_k_s").mark("dlg-t-k")
         ui.label(self.t("fault_scalings_hint")).classes("text-xs text-gray-500")
         self.scaling_inputs: Dict[float, Any] = {}
         for f in self.plan.session.summary().frequencies:
-            with ui.row().classes("items-center gap-2 no-wrap"):
+            with ui.row().classes("w-full items-center gap-4 no-wrap"):
                 ui.label(f"{format_number(f, language, 6)} Hz").classes("w-20 text-sm")
-                self.scaling_inputs[f] = ui.input(column_label(language, "scaling"), value=format_number(
-                    scalings.get(f, 1.0), language, 12)).mark(f"dlg-scaling-{format_number(f, 'en', 6)}")
+                self.scaling_inputs[f] = self.field(ui.input(column_label(language, "scaling"), value=format_number(
+                    scalings.get(f, 1.0), language, 12)).classes("grow")).mark(
+                    f"dlg-scaling-{format_number(f, 'en', 6)}")
 
     def _tab_characteristic(self) -> None:
         self.characteristic_view()
@@ -1105,18 +1259,21 @@ class BusDialog(_ElementDialog):
             if dto.extrapolated:
                 ui.label(self.t("char_extrapolated")).classes("text-xs text-amber-800")
             language = self.plan.page.language
-            ui.aggrid(grid_options(dto.table, language, lambda lang: "de-DE" if lang == "de" else "en-US"),
-                      theme="quartz").classes("h-48").mark("char-table")
-        with ui.row().classes("gap-2 items-center"):
+            options = grid_options(dto.table, language, lambda lang: "de-DE" if lang == "de" else "en-US")
+            # Eight narrow columns: all of them in the width of the dialog.
+            options["defaultColDef"] = {**options["defaultColDef"], "minWidth": 62}
+            ui.aggrid(options, theme="quartz").classes("w-full h-64").mark("char-table")
+        with ui.row().classes("w-full gap-2 items-center"):
             ui.upload(label=self.t("char_import"), auto_upload=True, on_upload=self._import).props(
-                "accept=.json flat dense").classes("w-64").mark("char-upload")
+                "accept=.json flat dense").classes("gi-upload w-72").mark("char-upload")
             compute = ui.button(self.t("char_compute"), icon="calculate", on_click=self._compute).props(
                 "dense no-caps").mark("char-compute")
-            if not groundfield_available():
-                compute.disable()
-                compute.tooltip(self.t("char_needs_groundfield"))
             if dto is not None and dto.origin == "bus":
                 ui.button(self.t("char_clear"), on_click=self._clear).props("flat dense no-caps").mark("char-clear")
+        if not groundfield_available():
+            compute.disable()
+            # In words: a disabled button reports no hover, so a tooltip on it never shows.
+            ui.label(self.t("char_needs_groundfield")).classes("text-xs text-gray-500").mark("char-compute-reason")
 
     async def _import(self, event: events.UploadEventArguments) -> None:
         """Attach the uploaded groundfield BusType document to this bus."""
@@ -1143,48 +1300,68 @@ class BusDialog(_ElementDialog):
     def commands(self) -> List[Command]:
         """Field updates, source and fault, then the rename."""
         row = self.row("buses")
+        new_name = self.new_name(self.inputs["name"], self.name, self.plan._names("buses"))
         commands: List[Command] = []
-        fields = self.changed(row, {"type": lambda v: v, "specific_earth_resistance": _number,
-                                    "active": bool, "description": _text})
+        fields = self.changed(row, {"type": _value, "specific_earth_resistance": self.number,
+                                    "active": _flag, "description": _text})
         if fields:
             commands.append(UpdateBus(name=self.name, fields=fields))
         commands += self._source_commands()
         commands += self._fault_commands()
-        new_name = (self.inputs["name"].value or "").strip()
         if new_name != self.name:
             commands.append(RenameBus(name=self.name, new_name=new_name))
         return commands
 
     def _source_commands(self) -> List[Command]:
         sources = self._sources()
-        wanted = bool(self.inputs["has_source"].value)
-        if not wanted:
+        if not self.inputs["has_source"].value:
             return [RemoveSource(name=r["name"]) for r in sources]
-        values = {f: {"real": _number(re.value) or 0.0, "imag": _number(im.value) or 0.0}
+        current = sources[0]["name"] if sources else None
+        name = self.new_name(self.inputs["source_name"], current, self.plan._names("sources"))
+        values = {f: {"real": self.number(re, empty=0.0), "imag": self.number(im, empty=0.0)}
                   for f, (re, im) in self.source_inputs.items()}
-        if not sources:
-            return [AddSource(name=free_name("I", self.plan._names("sources")), bus=self.name, values=values)]
-        if self._source_values(sources[0]["name"]) == values:
-            return []
-        return [UpdateSource(name=sources[0]["name"], fields={"values": values})]
+        if current is None:
+            return [AddSource(name=name, bus=self.name, values=values)]
+        commands: List[Command] = []
+        if self._source_values(current) != values:
+            commands.append(UpdateSource(name=current, fields={"values": values}))
+        if name != current:
+            commands.append(RenameSource(name=current, new_name=name))
+        return commands
 
     def _fault_commands(self) -> List[Command]:
         faults = self._faults()
-        wanted = bool(self.inputs["has_fault"].value)
-        if not wanted:
+        if not self.inputs["has_fault"].value:
             return [RemoveFault(name=r["name"]) for r in faults]
-        scalings = {f: _number(box.value) for f, box in self.scaling_inputs.items()}
-        scalings = {f: 1.0 if v is None else v for f, v in scalings.items()}
-        t_k_s = _number(self.inputs["t_k_s"].value)
-        if not faults:
-            return [AddFault(name=free_name("F", self.plan._names("faults")), bus=self.name,
-                             scalings=scalings, t_k_s=t_k_s)]
+        current = faults[0]["name"] if faults else None
+        name = self.new_name(self.inputs["fault_name"], current, self.plan._names("faults"))
+        scalings = {f: self.number(box, empty=1.0) for f, box in self.scaling_inputs.items()}
+        t_k_s = self.number(self.inputs["t_k_s"])
+        if current is None:
+            return [AddFault(name=name, bus=self.name, scalings=scalings, t_k_s=t_k_s)]
         fields: Dict[str, Any] = {}
-        if self._scalings(faults[0]["name"]) != scalings:
+        if self._scalings(current) != scalings:
             fields["scalings"] = scalings
         if t_k_s != faults[0]["t_k_s"]:
             fields["t_k_s"] = t_k_s
-        return [UpdateFault(name=faults[0]["name"], fields=fields)] if fields else []
+        commands: List[Command] = [UpdateFault(name=current, fields=fields)] if fields else []
+        if name != current:
+            commands.append(RenameFault(name=current, new_name=name))
+        return commands
+
+    def after_apply(self, commands: List[Command]) -> None:
+        """
+        Follow a renamed bus in the selection and a renamed fault in the fault choice.
+
+        Parameters
+        ----------
+        commands : list of Command
+            The commands that were applied.
+        """
+        super().after_apply(commands)
+        renamed = next((c for c in commands if isinstance(c, RenameFault)), None)
+        if renamed is not None:
+            self.plan.page.fault_renamed(renamed.name, renamed.new_name)
 
 
 class BranchDialog(_ElementDialog):
@@ -1202,39 +1379,56 @@ class BranchDialog(_ElementDialog):
         summary = self.plan.session.summary()
         buses = self.plan._names("buses")
         language = self.plan.page.language
-        self.inputs["name"] = ui.input(self.t("name"), value=self.name).mark("dlg-name")
-        self.inputs["type"] = ui.select(summary.branch_types, value=row["type"], label=self.t("type")).mark(
-            "dlg-type")
-        self.inputs["length"] = ui.input(self.t("length_km"), value=format_number(row["length"], language, 12)).mark(
-            "dlg-length")
-        self.inputs["from_bus"] = ui.select(buses, value=row["from_bus"], label=self.t("from_bus")).mark("dlg-from")
-        self.inputs["to_bus"] = ui.select(buses, value=row["to_bus"], label=self.t("to_bus")).mark("dlg-to")
-        self.inputs["description"] = ui.input(self.t("description"), value=row.get("description") or "")
+        self.field(ui.input(self.t("name"), value=self.name).props("autofocus").classes("w-full"), "name").mark(
+            "dlg-name")
+        with ui.row().classes("w-full no-wrap gap-4"):
+            self.field(ui.select(summary.branch_types, value=row["type"], label=self.t("type")).classes(
+                "grow basis-0 min-w-0"), "type").mark("dlg-type")
+            self.field(ui.input(self.t("length_km"), value=format_number(row["length"], language, 12)).classes(
+                "grow basis-0 min-w-0"), "length").mark("dlg-length")
+        with ui.row().classes("w-full no-wrap gap-4"):
+            self.field(ui.select(buses, value=row["from_bus"], label=self.t("from_bus")).classes(
+                "grow basis-0 min-w-0"), "from_bus").mark("dlg-from")
+            self.field(ui.select(buses, value=row["to_bus"], label=self.t("to_bus")).classes(
+                "grow basis-0 min-w-0"), "to_bus").mark("dlg-to")
+        self.field(ui.input(self.t("description"), value=row.get("description") or "").classes("w-full"),
+                   "description")
 
     def _tab_type_parameters(self) -> None:
         row = self.row("branches")
-        type_row = next(r for r in self.plan.session.table("branch_types").rows if r["name"] == row["type"])
+        language = self.plan.page.language
+        table = self.plan.session.table("branch_types")
+        units = {column.name: column.unit for column in table.columns}
+        type_row = next(r for r in table.rows if r["name"] == row["type"])
+        ui.label(self.t("type_parameters_hint", name=row["type"])).classes("text-xs text-gray-500")
         for key, value in type_row.items():
             if value is None or key == "name":
                 continue
+            if isinstance(value, bool):
+                shown = self.t("yes") if value else self.t("no")
+            elif isinstance(value, (int, float)):
+                shown = format_number(value, language, 6)
+            else:
+                shown = str(value)
             with ui.row().classes("w-full justify-between no-wrap gap-3"):
-                ui.label(column_label(self.plan.page.language, key)).classes("text-xs text-gray-500")
-                ui.label(str(value)).classes("text-xs font-mono text-right break-all").mark(f"type-{key}")
+                ui.label(column_label(language, key, format_unit(units.get(key)))).classes(
+                    "text-xs text-gray-500 whitespace-nowrap")
+                ui.label(shown).classes("text-xs font-mono text-right break-all").mark(f"type-{key}")
 
     def _tab_switch(self) -> None:
         row = self.row("branches")
-        self.inputs["active"] = ui.switch(self.t("switch_closed"), value=row["active"]).mark("dlg-active")
+        self.field(ui.switch(self.t("switch_closed"), value=row["active"]), "active").mark("dlg-active")
         ui.label(self.t("switch_hint")).classes("text-xs text-gray-500")
 
     def commands(self) -> List[Command]:
         """Field updates, then the rename."""
         row = self.row("branches")
+        new_name = self.new_name(self.inputs["name"], self.name, self.plan._names("branches"))
         commands: List[Command] = []
-        fields = self.changed(row, {"type": lambda v: v, "length": _number, "from_bus": lambda v: v,
-                                    "to_bus": lambda v: v, "active": bool, "description": _text})
+        fields = self.changed(row, {"type": _value, "length": self.number, "from_bus": _value,
+                                    "to_bus": _value, "active": _flag, "description": _text})
         if fields:
             commands.append(UpdateBranch(name=self.name, fields=fields))
-        new_name = (self.inputs["name"].value or "").strip()
         if new_name != self.name:
             commands.append(RenameBranch(name=self.name, new_name=new_name))
         return commands

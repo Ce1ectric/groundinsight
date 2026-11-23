@@ -210,6 +210,9 @@ body { background: #f6f6f4; }
 .gi-panels .q-tab-panel > * { flex-shrink: 0; }
 .gi-panels .q-tab-panel.gi-plan-panel { padding: 4px 0 0 0; }
 .gi-panels .q-tab-panel.gi-plan-panel > * { flex-shrink: 1; }
+/* The upload field as a plain button: no size and percent line, no file list. */
+.gi-upload .q-uploader__subtitle, .gi-upload .q-uploader__list { display: none; }
+.gi-upload .q-uploader__header-content { padding: 2px 6px; }
 .gi-num { font-variant-numeric: tabular-nums; }
 .gi-tile { min-width: 0; }
 """
@@ -1114,6 +1117,18 @@ class ProjectPage:
         self.result_view.refresh()
         self.plan.refresh()
 
+    def fault_renamed(self, old: str, new: str) -> None:
+        """
+        Keep a renamed fault chosen.
+
+        Parameters
+        ----------
+        old, new : str
+            The fault's name before and after the rename.
+        """
+        if self.fault == old or self.fault not in self.session.fault_names():
+            self.fault_select.set_value(new)  # reports the change: result view and plan follow
+
     def _busy(self) -> bool:
         """Whether a job of this page is running."""
         return self.handle is not None and not self.handle.done
@@ -1335,8 +1350,10 @@ class ProjectPage:
                 extra["branch_type"] = ui.select(summary.branch_types, value=summary.branch_types[0]
                                                  if summary.branch_types else None,
                                                  label=self.t("new_branch_type")).classes("w-full")
-            ui.button(self.t("apply"), on_click=lambda: self._io(action, path.value, extra, dialog)).props(
-                "no-caps").mark("io-apply")
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button(self.t("cancel_dialog"), on_click=dialog.close).props("flat no-caps").mark("io-cancel")
+                ui.button(self.t("apply"), on_click=lambda: self._io(action, path.value, extra, dialog)).props(
+                    "no-caps").mark("io-apply")
         dialog.on_value_change(lambda e: None if e.value else dialog.delete())
         dialog.open()
 

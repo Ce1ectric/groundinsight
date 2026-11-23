@@ -207,6 +207,26 @@ def test_double_click_opens_the_dialog_and_apply_changes_the_bus(page):
     assert page.errors == []
 
 
+def test_the_dialog_takes_the_keyboard_and_reports_a_wrong_entry_at_its_field(page):
+    _node(page, "bus2").dblclick()
+    dialog = page.locator(".q-dialog")
+    dialog.wait_for()
+    page.wait_for_timeout(400)
+    # The name has the focus: typing replaces nothing else.
+    assert page.evaluate("document.activeElement.getAttribute('aria-label')") == "Name"
+    rho = dialog.get_by_label("ρ / Ω·m")
+    rho.fill("abc")
+    rho.press("Enter")
+    dialog.get_by_text("Keine Zahl: abc").wait_for()  # under the field, not in a toast
+    assert page.locator(".q-notification").count() == 0
+    _screenshot(page, "dialog_field_error")
+    rho.fill("412")
+    rho.press("Enter")
+    dialog.wait_for(state="hidden")
+    page.get_by_text("412", exact=True).first.wait_for()  # the properties panel
+    assert page.errors == []
+
+
 def test_delete_removes_a_connected_bus(page):
     _node(page, "bus3").click()
     page.keyboard.press("Delete")  # at once: the canvas knows what was clicked

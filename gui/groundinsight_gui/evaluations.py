@@ -80,7 +80,10 @@ class EvaluationTabs:
                     dialog.close()
                     self.page.show_tab(f"v{n}")
 
-            ui.button(self.t("apply"), on_click=create).props("no-caps").mark("view-create")
+            title.props("autofocus").on("keydown.enter", create)
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button(self.t("cancel_dialog"), on_click=dialog.close).props("flat no-caps").mark("view-cancel")
+                ui.button(self.t("apply"), on_click=create).props("no-caps").mark("view-create")
         dialog.on_value_change(lambda e: None if e.value else dialog.delete())
         dialog.open()
 
@@ -198,6 +201,8 @@ class EvaluationTabs:
                 if self.page.apply(UpdateView(view=view.model_copy(update={"blocks": blocks}).model_dump(mode="json"))):
                     dialog.close()
 
-            ui.button(self.t("apply"), on_click=create).props("no-caps").mark("block-create")
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button(self.t("cancel_dialog"), on_click=dialog.close).props("flat no-caps").mark("block-cancel")
+                ui.button(self.t("apply"), on_click=create).props("no-caps").mark("block-create")
         dialog.on_value_change(lambda e: None if e.value else dialog.delete())
         dialog.open()

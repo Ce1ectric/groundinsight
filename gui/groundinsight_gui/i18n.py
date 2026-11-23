@@ -29,6 +29,13 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "delete_elements": "{n} Elemente löschen",
         "duplicate_elements": "{n} Elemente duplizieren",
         "key_delete": "Entf",
+        "not_a_number": "Keine Zahl: {value}",
+        "name_missing": "Name fehlt",
+        "name_taken": "Diesen Namen gibt es schon",
+        "source_name": "Name der Einspeisung",
+        "fault_name": "Name des Fehlers",
+        "fault_others": "Weitere Fehler an diesem Bus: {names} (in der Tabelle Fehler bearbeiten)",
+        "type_parameters_hint": "Werte des Typs {name}; geändert werden sie im Reiter Netz unter Zweigtypen.",
         "value_epr": "EPR",
         "value_u_touch": "UvT",
         "value_i_branch": "Schirmstrom",
@@ -355,6 +362,13 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "delete_elements": "delete {n} elements",
         "duplicate_elements": "duplicate {n} elements",
         "key_delete": "Del",
+        "not_a_number": "Not a number: {value}",
+        "name_missing": "A name is needed",
+        "name_taken": "This name is taken",
+        "source_name": "Name of the infeed",
+        "fault_name": "Name of the fault",
+        "fault_others": "More faults at this bus: {names} (edit them in the table Faults)",
+        "type_parameters_hint": "Values of the type {name}; they are changed in the tab Network under branch types.",
         "value_epr": "EPR",
         "value_u_touch": "UvT",
         "value_i_branch": "shield current",
@@ -1013,7 +1027,8 @@ def column_label(language: str, column: str, unit: Optional[str] = None) -> str:
     label = COLUMN_LABELS[language].get(column)
     if label is None:
         label = _readable(column)
-    return f"{label} [{unit}]" if unit else label
+    # A label that names its unit already is not given it twice.
+    return f"{label} [{unit}]" if unit and not label.rstrip().endswith("]") else label
 
 
 #: Unit suffixes of the library's column names and how a header writes them.
