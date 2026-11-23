@@ -51,6 +51,7 @@ const FIT_MAX_ZOOM = 1.0;
 // Texts keep their size on screen below this zoom, up to this factor ...
 const TEXT_FULL_ZOOM = 0.85;
 const TEXT_MAX_SCALE = 2.6;
+const TEXT_STEP_MS = 160;
 // ... branch names are hidden below FAR, bus names and values below VERY_FAR
 // (they would overlap: buses of a laid out plan are 160 px apart).
 const FAR_ZOOM = 0.45;
@@ -226,6 +227,7 @@ export default {
     window.removeEventListener("pointermove", this.onPointerMove, true);
     window.removeEventListener("keydown", this.onWindowKey);
     this.stopZoomWatch();
+    window.clearTimeout(this.textTimer);
   },
   watch: {
     // The server has answered a click: its selection replaces the stand-in.
@@ -293,12 +295,33 @@ export default {
       if (!element || !element.style) {
         return;
       }
-      const scale = zoom >= TEXT_FULL_ZOOM ? 1 : Math.min(TEXT_FULL_ZOOM / zoom, TEXT_MAX_SCALE);
-      element.style.setProperty("--gi-s", scale.toFixed(3));
+      // The size of the texts follows a zoom gesture in steps, not with every
+      // wheel event: each step restyles every text of the plan, and a plan of
+      // a thousand buses would lose frames. In between the texts simply zoom
+      // with the plan.
+      this.textZoom = zoom;
+      if (!this.textTimer) {
+        this.applyTextScale();
+        this.textTimer = window.setTimeout(() => {
+          this.textTimer = null;
+          this.applyTextScale();
+        }, TEXT_STEP_MS);
+      }
       // Reactive, but changing only when a threshold is crossed: the class
       // binding of the root must know them, or its next patch would drop them.
       this.far = zoom < FAR_ZOOM;
       this.veryFar = zoom < VERY_FAR_ZOOM;
+    },
+    applyTextScale() {
+      const zoom = this.textZoom;
+      if (!this.$el || !this.$el.style || !zoom) {
+        return;
+      }
+      const scale = zoom >= TEXT_FULL_ZOOM ? 1 : Math.min(TEXT_FULL_ZOOM / zoom, TEXT_MAX_SCALE);
+      const text = scale.toFixed(2);
+      if (this.$el.style.getPropertyValue("--gi-s") !== text) {
+        this.$el.style.setProperty("--gi-s", text);
+      }
     },
     isSelected(kind, name) {
       return (this.selected || []).some((s) => s.kind === kind && s.name === name);

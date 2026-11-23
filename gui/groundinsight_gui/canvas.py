@@ -73,10 +73,12 @@ CANVAS_CSS = """
 .gi-infeed { left: 50%; bottom: 100%; transform: translateX(-50%); font-size: calc(12px * var(--gi-s, 1));
              color: #0072B2; line-height: 1; }
 .gi-stale .gi-value, .gi-stale .gi-edge-value { opacity: 0.6; font-style: italic; }
-.gi-far .gi-edge-label { display: none; }
-.gi-far .gi-edge.gi-sel .gi-edge-label, .gi-far .gi-edge:hover .gi-edge-label { display: inline; }
-.gi-very-far .gi-label, .gi-very-far .gi-flash-name { display: none; }
-.gi-very-far .gi-node.gi-sel .gi-label, .gi-very-far .vue-flow__node:hover .gi-label { display: inline; }
+/* Hidden, not removed: the texts keep their place in the layout, so crossing a threshold while
+   zooming a large plan repaints but does not lay a thousand texts out again. */
+.gi-far .gi-edge-label { visibility: hidden; }
+.gi-far .gi-edge.gi-sel .gi-edge-label, .gi-far .gi-edge:hover .gi-edge-label { visibility: visible; }
+.gi-very-far .gi-label, .gi-very-far .gi-flash-name { visibility: hidden; }
+.gi-very-far .gi-node.gi-sel .gi-label, .gi-very-far .vue-flow__node:hover .gi-label { visibility: visible; }
 .gi-plan-search .q-field__control, .gi-plan-search .q-field__native { min-height: 26px; height: 26px; }
 .gi-plan-search .q-field__native { padding: 0; }
 .gi-plan-search .q-field__marginal { height: 26px; }
