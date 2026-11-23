@@ -4,7 +4,7 @@ The network canvas element: a Vue Flow drawing of the session's diagram.
 
 The element only carries data across: the :class:`DiagramDTO
 <groundinsight.api.DiagramDTO>` of the session, the colours of the chosen
-colouring, the selected element and the active tool go to the browser as
+colouring, the selected elements and the active tool go to the browser as
 props; what the user does there comes back as events (see
 ``network_canvas.js``) that :mod:`groundinsight_gui.plan` turns into
 commands. The browser decides nothing about the network -- a dragged symbol
@@ -16,7 +16,7 @@ the vendored bundle in ``static/vueflow`` (no CDN at run time).
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from nicegui import ui
 
@@ -33,9 +33,10 @@ EVENTS = {
     "move": ("positions",),
     "connect": ("from_bus", "to_bus"),
     "fault": ("bus",),
-    "select": ("kind", "name"),
+    "select": ("kind", "name", "add"),
+    "select_many": ("items",),
     "open": ("kind", "name"),
-    "delete": ("kind", "name"),
+    "delete": ("items",),
     "layout": ("positions",),
 }
 
@@ -90,7 +91,7 @@ class NetworkCanvas(ui.element, component="network_canvas.js", esm={"groundinsig
         self._props["diagram"] = diagram
         self._props["colours"] = colours or {"nodes": {}, "edges": {}}
         self._props["tool"] = tool
-        self._props["selected"] = None
+        self._props["selected"] = []
         self._props["flow-id"] = f"gi-flow-{self.id}"
 
     @property
@@ -104,9 +105,15 @@ class NetworkCanvas(ui.element, component="network_canvas.js", esm={"groundinsig
         return self._props["diagram"]
 
     @property
+    def selection(self) -> List[Dict[str, Any]]:
+        """The selected elements, each ``{"kind", "name"}``."""
+        return list(self._props["selected"])
+
+    @property
     def selected(self) -> Optional[Dict[str, Any]]:
-        """The selected element, ``{"kind", "name"}``, or ``None``."""
-        return self._props["selected"]
+        """The selected element, ``{"kind", "name"}``; ``None`` for none or several."""
+        items = self._props["selected"]
+        return items[0] if len(items) == 1 else None
 
     def show(self, diagram: Dict[str, Any], colours: Dict[str, Any]) -> None:
         """
@@ -144,7 +151,7 @@ class NetworkCanvas(ui.element, component="network_canvas.js", esm={"groundinsig
 
     def select(self, kind: Optional[str], name: Optional[str]) -> None:
         """
-        Mark an element as selected (``None`` clears).
+        Mark one element as selected (``None`` clears).
 
         Parameters
         ----------
@@ -153,7 +160,18 @@ class NetworkCanvas(ui.element, component="network_canvas.js", esm={"groundinsig
         name : str or None
             The element.
         """
-        self._props["selected"] = {"kind": kind, "name": name} if kind and name else None
+        self.select_items([(kind, name)] if kind and name else [])
+
+    def select_items(self, items: Sequence[Tuple[str, str]]) -> None:
+        """
+        Mark several elements as selected.
+
+        Parameters
+        ----------
+        items : sequence of (kind, name)
+            The elements; empty clears the selection.
+        """
+        self._props["selected"] = [{"kind": kind, "name": name} for kind, name in items]
         self.update()
 
     def fit(self) -> None:

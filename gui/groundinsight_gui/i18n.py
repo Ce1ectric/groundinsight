@@ -22,6 +22,11 @@ LANGUAGES = ("de", "en")
 STRINGS: Dict[str, Dict[str, str]] = {
     "de": {
         "app_title": "groundinsight",
+        "selection_count": "{n} Elemente ausgewählt",
+        "selection_buses": "{n} Busse",
+        "selection_branches": "{n} Zweige",
+        "selection_hint": "Ziehen verschiebt die Gruppe, Entf löscht sie. Umschalt+Klick nimmt ein Element dazu oder heraus.",
+        "delete_elements": "{n} Elemente löschen",
         "new": "Neu",
         "open": "Öffnen",
         "save": "Speichern",
@@ -320,6 +325,11 @@ STRINGS: Dict[str, Dict[str, str]] = {
     },
     "en": {
         "app_title": "groundinsight",
+        "selection_count": "{n} elements selected",
+        "selection_buses": "{n} buses",
+        "selection_branches": "{n} branches",
+        "selection_hint": "Dragging moves the group, Delete removes it. Shift+click adds an element or takes it out.",
+        "delete_elements": "delete {n} elements",
         "new": "New",
         "open": "Open",
         "save": "Save",

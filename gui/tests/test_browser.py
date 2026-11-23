@@ -215,6 +215,49 @@ def test_delete_removes_a_connected_bus(page):
     assert page.errors == []
 
 
+def _selected(page):
+    return sorted(page.locator(".gi-node.gi-sel").evaluate_all("ns => ns.map(n => n.dataset.bus)"))
+
+
+def test_shift_click_and_a_frame_select_several_and_the_group_moves_and_goes(page):
+    _node(page, "bus1").click()
+    _node(page, "bus2").click(modifiers=["Shift"])
+    page.get_by_text("2 Elemente ausgewählt").wait_for()
+    assert _selected(page) == ["bus1", "bus2"]
+    _node(page, "bus1").click(modifiers=["Shift"])  # takes it out again
+    page.locator("[data-bus='bus1']:not(.gi-sel)").wait_for()
+    assert _selected(page) == ["bus2"]
+
+    # A frame, drawn with Shift held, around bus2 and bus3.
+    (x2, y2), (x3, y3) = _centre(_node(page, "bus2")), _centre(_node(page, "bus3"))
+    page.keyboard.down("Shift")
+    page.mouse.move(min(x2, x3) - 40, min(y2, y3) - 60)
+    page.mouse.down()
+    page.mouse.move(max(x2, x3) + 40, max(y2, y3) + 60, steps=10)
+    page.mouse.up()
+    page.keyboard.up("Shift")
+    page.get_by_text("3 Elemente ausgewählt").wait_for()  # two buses and the branch between them
+    assert _selected(page) == ["bus2", "bus3"]
+
+    # Dragging one of them moves both, by the same amount.
+    before = [_centre(_node(page, n)) for n in ("bus1", "bus2", "bus3")]
+    page.mouse.move(x2, y2)
+    page.mouse.down()
+    for k in range(1, 11):
+        page.mouse.move(x2, y2 + 8 * k)
+    page.mouse.up()
+    page.wait_for_timeout(600)
+    after = [_centre(_node(page, n)) for n in ("bus1", "bus2", "bus3")]
+    assert after[0] == before[0]
+    assert after[1][1] - before[1][1] == pytest.approx(after[2][1] - before[2][1], abs=1) and after[1][1] > before[1][1] + 40
+    assert _selected(page) == ["bus2", "bus3"]
+
+    page.keyboard.press("Delete")
+    _node(page, "bus3").wait_for(state="detached")
+    assert page.locator(".vue-flow__node").count() == 1 and page.locator("[data-branch]").count() == 0
+    assert page.errors == []
+
+
 def test_elk_lays_the_network_out_in_the_browser(page):
     before = [_centre(_node(page, n)) for n in ("bus1", "bus2", "bus3")]
     page.get_by_role("button", name="Auto-Layout").click()

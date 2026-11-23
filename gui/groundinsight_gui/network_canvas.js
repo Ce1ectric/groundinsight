@@ -5,10 +5,16 @@
 // The component holds no project state and makes no decision about the
 // network. It draws what the server sends (props `diagram`, `colours`,
 // `selected`, `tool`) and reports what the user did as events -- `place`,
-// `move`, `connect`, `fault`, `select`, `open`, `delete`, `layout` -- which
-// the Python side turns into commands of groundinsight.api. Even a dragged
-// symbol keeps its old place until the session has applied the MoveNodes
-// command and sent the new diagram back.
+// `move`, `connect`, `fault`, `select`, `select_many`, `open`, `delete`,
+// `layout` -- which the Python side turns into commands of groundinsight.api.
+// Even a dragged symbol keeps its old place until the session has applied the
+// MoveNodes command and sent the new diagram back.
+//
+// Selection: a click selects one element; with Shift, Ctrl or Cmd it adds the
+// element or takes it away. Shift and a drag on the pane draw a frame, and
+// what it holds is selected (the buses in it and the branches between them).
+// The selection lives on the server like everything else; `selected` is the
+// list it sends back.
 //
 // Coordinates: the diagram stores the centre of a symbol, Vue Flow the top
 // left corner of a node; both conversions happen here, and positions are
@@ -99,7 +105,7 @@ export default {
     diagram: Object,
     tool: { type: String, default: "select" },
     colours: Object,
-    selected: Object,
+    selected: { type: Array, default: () => [] },
     flowId: String,
   },
   setup(props) {
@@ -111,6 +117,7 @@ export default {
       edgeTypes: markRaw({ line: markRaw(LineEdge) }),
       fitted: false,
       fitParams: FIT,
+      multiKeys: ["Shift", "Meta", "Control"],
       active: false,
       clicked: null,
     };
@@ -134,6 +141,12 @@ export default {
   unmounted() {
     window.removeEventListener("pointerdown", this.onPointer, true);
     window.removeEventListener("keydown", this.onWindowKey);
+  },
+  watch: {
+    // The server has answered a click: its selection replaces the stand-in.
+    selected() {
+      this.clicked = null;
+    },
   },
   computed: {
     grid() {
@@ -168,9 +181,10 @@ export default {
   },
   methods: {
     isSelected(kind, name) {
-      return !!this.selected && this.selected.kind === kind && this.selected.name === name;
+      return (this.selected || []).some((s) => s.kind === kind && s.name === name);
     },
     onDragStop(event) {
+      // A selected symbol drags the whole selection along; all of them move in one command.
       const positions = {};
       for (const node of event.nodes) {
         const [x, y] = centre(node);
@@ -187,19 +201,36 @@ export default {
         this.$emit("select", { kind: null, name: null });
       }
     },
-    onNodeClick({ node }) {
+    onNodeClick({ event, node }) {
       if (this.tool === "fault") {
         this.$emit("fault", { bus: node.id });
       } else if (this.tool === "select") {
-        this.clicked = { kind: "bus", name: node.id };
-        this.$emit("select", this.clicked);
+        this.pick("bus", node.id, event);
       }
     },
-    onEdgeClick({ edge }) {
+    onEdgeClick({ event, edge }) {
       if (this.tool === "select") {
-        this.clicked = { kind: "branch", name: edge.id };
-        this.$emit("select", this.clicked);
+        this.pick("branch", edge.id, event);
       }
+    },
+    pick(kind, name, event) {
+      const add = !!event && (event.shiftKey || event.metaKey || event.ctrlKey);
+      // `clicked` stands in for the selection until the server has answered,
+      // so that Delete works at once; a click that adds has no such stand-in.
+      this.clicked = add ? null : { kind, name };
+      this.$emit("select", { kind, name, add });
+    },
+    onSelectionEnd() {
+      // The frame is done: Vue Flow has marked the buses inside it.
+      const buses = new Set(this.flow.getSelectedNodes.value.map((n) => n.id));
+      const items = [...buses].map((name) => ({ kind: "bus", name }));
+      for (const e of (this.diagram && this.diagram.edges) || []) {
+        if (buses.has(e.from_bus) && buses.has(e.to_bus)) {
+          items.push({ kind: "branch", name: e.name });
+        }
+      }
+      this.clicked = null;
+      this.$emit("select_many", { items });
     },
     onNodeDoubleClick({ node }) {
       this.$emit("open", { kind: "bus", name: node.id });
@@ -215,10 +246,10 @@ export default {
     onKey(event) {
       // The server's selection, or -- while its answer to a click is still on
       // the way -- the element clicked last.
-      const target = (this.selected && this.selected.name) ? this.selected : this.clicked;
-      if ((event.key === "Delete" || event.key === "Backspace") && target && target.name) {
+      const items = this.clicked ? [this.clicked] : (this.selected || []);
+      if ((event.key === "Delete" || event.key === "Backspace") && items.length) {
         this.clicked = null;
-        this.$emit("delete", { kind: target.kind, name: target.name });
+        this.$emit("delete", { items: items.map((s) => ({ kind: s.kind, name: s.name })) });
       }
     },
     fitOnce() {
@@ -263,9 +294,10 @@ export default {
   template: `
     <div :class="['gi-canvas', 'gi-tool-' + tool]" tabindex="0">
       <VueFlow :id="flowId" :nodes="nodes" :edges="edges" :node-types="nodeTypes" :edge-types="edgeTypes"
-               connection-mode="loose" :delete-key-code="null" :selection-key-code="null"
-               :multi-selection-key-code="null" :zoom-on-double-click="false" :min-zoom="0.1" :max-zoom="4"
-               @nodes-initialized="fitOnce"
+               connection-mode="loose" :delete-key-code="null"
+               :selection-key-code="tool === 'select' ? 'Shift' : null"
+               :multi-selection-key-code="multiKeys" :zoom-on-double-click="false" :min-zoom="0.1" :max-zoom="4"
+               @nodes-initialized="fitOnce" @selection-end="onSelectionEnd" @selection-drag-stop="onDragStop"
                @node-drag-stop="onDragStop" @pane-click="onPaneClick" @node-click="onNodeClick"
                @edge-click="onEdgeClick" @node-double-click="onNodeDoubleClick"
                @edge-double-click="onEdgeDoubleClick" @connect="onConnect">

@@ -13,13 +13,15 @@ drag bus to bus, *Branch*   ``AddBranch`` (the palette's branch type, 1 km)
 click a bus with *Fault*    ``AddFault`` (scaling 1 at every frequency)
 drag a symbol               ``MoveNodes``
 *Delete*                    ``RemoveBranch``, or for a bus a ``Batch`` that
-                            removes its faults, sources and branches first
+                            removes its faults, sources and branches first;
+                            for several selected elements one ``Batch``
 dialog *Apply*              one ``Batch`` of every change (rename last)
 auto layout                 ``AutoLayout`` (library, or positions from elkjs)
 ==========================  ==================================================
 
 so a rejected gesture changes nothing and every accepted one is one undo
-step. New elements get the first free name of their kind (``B1``, ``L1``,
+step. Several elements are selected with Shift, Ctrl or Cmd and a click, or
+with Shift and a dragged frame; a selected group is moved and deleted as one. New elements get the first free name of their kind (``B1``, ``L1``,
 ``I1``, ``F1``, ...), which the dialog renames.
 """
 
@@ -117,7 +119,7 @@ class PlanView:
         self.page = page
         self.tool = "select"
         self.mode = "type"
-        self.selected: Optional[Tuple[str, str]] = None
+        self.selection: List[Tuple[str, str]] = []
         self.bus_type: Optional[str] = None
         self.branch_type: Optional[str] = None
         self.canvas: Optional[NetworkCanvas] = None
@@ -134,6 +136,11 @@ class PlanView:
     def t(self, key: str, **values: Any) -> str:
         """The text of ``key`` in the page's language."""
         return self.page.t(key, **values)
+
+    @property
+    def selected(self) -> Optional[Tuple[str, str]]:
+        """The selected element ``(kind, name)``; ``None`` for none or several."""
+        return self.selection[0] if len(self.selection) == 1 else None
 
     def apply(self, command: Command) -> bool:
         """
@@ -205,7 +212,8 @@ class PlanView:
                     "w-full rounded border bg-white").style("height: 68vh").mark("canvas")
                 for name, handler in (("place", self._on_place), ("move", self._on_move),
                                       ("connect", self._on_connect), ("fault", self._on_fault),
-                                      ("select", self._on_select), ("open", self._on_open),
+                                      ("select", self._on_select), ("select_many", self._on_select_many),
+                                      ("open", self._on_open),
                                       ("delete", self._on_delete), ("layout", self._on_layout)):
                     self.canvas.on(name, lambda e, h=handler: h(e.args or {}))
             with ui.column().classes("w-72 gap-1"):
@@ -297,9 +305,7 @@ class PlanView:
         colours = self.colouring()
         self.canvas.show(self.session.diagram().model_dump(mode="json"),
                          {"nodes": colours.nodes, "edges": colours.edges})
-        if self.selected is not None and self.selected[1] not in self._names(
-                "buses" if self.selected[0] == "bus" else "branches"):
-            self.selected = None
+        self.selection = self._existing(self.selection)
         self._sync_selection()
         self.legend.refresh()
         self.properties.refresh()
@@ -322,7 +328,7 @@ class PlanView:
 
     def select(self, kind: Optional[str], name: Optional[str], *, from_table: bool = False) -> None:
         """
-        Select an element in the plan (and, unless it came from there, in its table).
+        Select one element in the plan (and, unless it came from there, in its table).
 
         Parameters
         ----------
@@ -333,25 +339,51 @@ class PlanView:
         from_table : bool
             The selection came from a table row.
         """
-        self.selected = (kind, name) if kind and name else None
+        self.select_items([(kind, name)] if kind and name else [], from_table=from_table)
+
+    def select_items(self, items: List[Tuple[str, str]], *, from_table: bool = False) -> None:
+        """
+        Select several elements in the plan.
+
+        Parameters
+        ----------
+        items : list of (kind, name)
+            The elements, in the order they were picked; elements the network
+            does not have are left out.
+        from_table : bool
+            The selection came from a table row.
+        """
+        self.selection = self._existing(items)
         self._sync_selection()
         self.properties.refresh()
         if self.selected is not None and not from_table:
+            kind, name = self.selected
             self.page.select_row({"bus": "buses", "branch": "branches"}[kind], name)
+
+    def _existing(self, items: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+        """The items that are buses or branches of the network, without repeats."""
+        names = {"bus": set(self._names("buses")), "branch": set(self._names("branches"))}
+        out: List[Tuple[str, str]] = []
+        for kind, name in items:
+            if name in names.get(kind, ()) and (kind, name) not in out:
+                out.append((kind, name))
+        return out
 
     def _sync_selection(self) -> None:
         """Show the selection on the canvas."""
         if self.canvas is not None:
-            kind, name = self.selected if self.selected else (None, None)
-            self.canvas.select(kind, name)
+            self.canvas.select_items(self.selection)
 
     @ui.refreshable_method
     def properties(self) -> None:
         """The fields of the selected element, with edit and delete."""
         with ui.card().classes("w-full p-3 gap-1").props("flat bordered").mark("properties"):
-            if self.selected is None:
+            if not self.selection:
                 ui.label(self.t("properties")).classes("text-xs uppercase tracking-wide text-gray-500")
                 ui.label(self.t("nothing_selected_plan")).classes("text-sm text-gray-500")
+                return
+            if len(self.selection) > 1:
+                self._group_properties()
                 return
             kind, name = self.selected
             table = "buses" if kind == "bus" else "branches"
@@ -375,6 +407,21 @@ class PlanView:
                 ui.button(self.t("delete"), icon="delete", on_click=lambda: self._on_delete(
                     {"kind": kind, "name": name})).props("dense flat no-caps color=negative").mark(
                     "properties-delete")
+
+    def _group_properties(self) -> None:
+        """What is selected when it is more than one element, and the group's delete."""
+        buses = sum(1 for kind, _ in self.selection if kind == "bus")
+        branches = len(self.selection) - buses
+        ui.label(self.t("selection_count", n=len(self.selection))).classes("text-base font-medium").mark(
+            "properties-count")
+        parts = [f"1 {self.t('kind_bus')}" if buses == 1 else self.t("selection_buses", n=buses) if buses else "",
+                 f"1 {self.t('kind_branch')}" if branches == 1 else self.t("selection_branches", n=branches)
+                 if branches else ""]
+        ui.label(", ".join(p for p in parts if p)).classes("text-xs text-gray-500")
+        ui.label(self.t("selection_hint")).classes("text-xs text-gray-500")
+        with ui.row().classes("gap-1 mt-2"):
+            ui.button(self.t("delete"), icon="delete", on_click=lambda: self._on_delete({})).props(
+                "dense flat no-caps color=negative").mark("properties-delete")
 
     # -- canvas events -----------------------------------------------------------
 
@@ -419,8 +466,26 @@ class PlanView:
                             scalings={f: 1.0 for f in frequencies}))
 
     def _on_select(self, args: Dict[str, Any]) -> None:
-        """Select what was clicked (or nothing)."""
-        self.select(args.get("kind"), args.get("name"))
+        """Select what was clicked (or nothing); with a modifier key, add it or take it away."""
+        kind, name = args.get("kind"), args.get("name")
+        if not (kind and name):
+            self.select_items([])
+        elif not args.get("add"):
+            self.select(kind, name)
+        elif (kind, name) in self.selection:
+            self.select_items([item for item in self.selection if item != (kind, name)])
+        else:
+            self.select_items([*self.selection, (kind, name)])
+
+    def _on_select_many(self, args: Dict[str, Any]) -> None:
+        """Select what a dragged frame holds."""
+        self.select_items(self._items(args))
+
+    @staticmethod
+    def _items(args: Dict[str, Any]) -> List[Tuple[str, str]]:
+        """The ``(kind, name)`` pairs an event names in its ``items``."""
+        return [(str(item.get("kind")), str(item.get("name"))) for item in (args.get("items") or [])
+                if isinstance(item, dict) and item.get("kind") and item.get("name")]
 
     def _on_open(self, args: Dict[str, Any]) -> None:
         """Open the dialog of a double-clicked element."""
@@ -456,11 +521,47 @@ class PlanView:
             return RemoveBus(name=name)
         return Batch(title=self.t("delete_bus_with", name=name), commands=commands + [RemoveBus(name=name)])
 
+    def removal_of(self, items: List[Tuple[str, str]]) -> Optional[Command]:
+        """
+        The command that deletes several elements from the plan.
+
+        Parameters
+        ----------
+        items : list of (kind, name)
+            Buses and branches.
+
+        Returns
+        -------
+        Command or None
+            For one element :meth:`removal`; for several one ``Batch`` that
+            removes the faults and sources at the buses, then every branch
+            named or ending at one of the buses (once), then the buses.
+            ``None`` for no element.
+        """
+        items = self._existing(items)
+        if not items:
+            return None
+        if len(items) == 1:
+            return self.removal(*items[0])
+        buses = [name for kind, name in items if kind == "bus"]
+        branches = [name for kind, name in items if kind == "branch"]
+        branches += [r["name"] for r in self.session.table("branches").rows
+                     if r["name"] not in branches and (r["from_bus"] in buses or r["to_bus"] in buses)]
+        commands: List[Command] = [RemoveFault(name=r["name"]) for r in self.session.table("faults").rows
+                                   if r["bus"] in buses]
+        commands += [RemoveSource(name=r["name"]) for r in self.session.table("sources").rows if r["bus"] in buses]
+        commands += [RemoveBranch(name=name) for name in branches]
+        commands += [RemoveBus(name=name) for name in buses]
+        return Batch(title=self.t("delete_elements", n=len(items)), commands=commands)
+
     def _on_delete(self, args: Dict[str, Any]) -> None:
-        """Delete the selected element."""
-        kind, name = args.get("kind"), args.get("name")
-        if kind in ("bus", "branch") and name and self.apply(self.removal(kind, name)):
-            self.select(None, None)
+        """Delete the elements the event names; without any, the selection."""
+        items = self._items(args)
+        if not items and args.get("kind") and args.get("name"):
+            items = [(args["kind"], args["name"])]
+        command = self.removal_of(items or self.selection)
+        if command is not None and self.apply(command):
+            self.select_items([])
 
     def _on_layout(self, args: Dict[str, Any]) -> None:
         """Take the layout elkjs computed in the browser."""
@@ -558,9 +659,9 @@ class _ElementDialog:
         if commands:
             command = commands[0] if len(commands) == 1 else Batch(
                 title=self.t("edit_element", name=self.name), commands=commands)
+            renamed = next((c for c in commands if isinstance(c, (RenameBus, RenameBranch))), None)
             if not self.plan.apply(command):
                 return
-            renamed = next((c for c in commands if isinstance(c, (RenameBus, RenameBranch))), None)
             if renamed is not None:
                 self.plan.select(self.KIND, renamed.new_name)
         self.dialog.close()
