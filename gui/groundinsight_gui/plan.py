@@ -17,6 +17,8 @@ drag a symbol               ``MoveNodes``
                             for several selected elements one ``Batch``
 dialog *Apply*              one ``Batch`` of every change (rename last)
 auto layout                 ``AutoLayout`` (library, or positions from elkjs)
+*Esc*                       no command: the selection tool, nothing selected
+Ctrl/Cmd+A                  no command: every bus and branch selected
 ==========================  ==================================================
 
 so a rejected gesture changes nothing and every accepted one is one undo
@@ -125,6 +127,7 @@ class PlanView:
         self.canvas: Optional[NetworkCanvas] = None
         self.dialog_host: Optional[Any] = None
         self.type_selects: Dict[str, Any] = {}
+        self.tool_toggle: Optional[Any] = None
 
     # -- helpers ------------------------------------------------------------------
 
@@ -214,7 +217,8 @@ class PlanView:
                                       ("connect", self._on_connect), ("fault", self._on_fault),
                                       ("select", self._on_select), ("select_many", self._on_select_many),
                                       ("open", self._on_open),
-                                      ("delete", self._on_delete), ("layout", self._on_layout)):
+                                      ("delete", self._on_delete), ("layout", self._on_layout),
+                                      ("key", self._on_key)):
                     self.canvas.on(name, lambda e, h=handler: h(e.args or {}))
             with ui.column().classes("w-72 gap-1"):
                 self.properties()
@@ -227,8 +231,8 @@ class PlanView:
         """Tools and the types new elements get."""
         with ui.column().classes("w-56 gap-1 bg-white rounded border p-2").mark("palette"):
             ui.label(self.t("palette")).classes("text-xs uppercase tracking-wide text-gray-500")
-            ui.toggle({tool: self.t(f"tool_{tool}") for tool in TOOLS}, value=self.tool,
-                      on_change=lambda e: self.set_tool(e.value)).props(
+            self.tool_toggle = ui.toggle({tool: self.t(f"tool_{tool}") for tool in TOOLS}, value=self.tool,
+                                         on_change=lambda e: self.set_tool(e.value)).props(
                 "dense no-caps spread").classes("flex-col w-full").mark("tools")
             self.type_selects = {}
             for kind in ("bus", "branch"):
@@ -258,6 +262,8 @@ class PlanView:
         if self.canvas is not None:
             self.canvas.set_tool(tool)
             self.tool_hint.set_text(self.t(f"tool_hint_{tool}"))
+            if self.tool_toggle.value != tool:
+                self.tool_toggle.set_value(tool)  # the tool was not picked in the palette
 
     @ui.refreshable_method
     def legend(self) -> None:
@@ -486,6 +492,16 @@ class PlanView:
         """The ``(kind, name)`` pairs an event names in its ``items``."""
         return [(str(item.get("kind")), str(item.get("name"))) for item in (args.get("items") or [])
                 if isinstance(item, dict) and item.get("kind") and item.get("name")]
+
+    def _on_key(self, args: Dict[str, Any]) -> None:
+        """A key of the canvas that is no command: Escape, select all."""
+        action = args.get("action")
+        if action == "escape":
+            self.set_tool("select")
+            self.select_items([])
+        elif action == "select_all":
+            self.select_items([("bus", name) for name in self._names("buses")]
+                              + [("branch", name) for name in self._names("branches")])
 
     def _on_open(self, args: Dict[str, Any]) -> None:
         """Open the dialog of a double-clicked element."""

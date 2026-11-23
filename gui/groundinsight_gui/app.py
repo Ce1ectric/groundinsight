@@ -176,6 +176,25 @@ MAX_LABELLED_BARS = 40
 #: Element buttons shown per diagnostic before the rest is summarised.
 MAX_ELEMENT_LINKS = 6
 
+#: Keys that act on the whole page: undo, redo and save, with Ctrl or Cmd.
+#: A text field keeps its own undo, and an open dialog its keys; saving is
+#: taken from the browser everywhere (it would save the HTML page).
+_SHORTCUTS_JS = """
+<script>
+window.addEventListener("keydown", (event) => {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+  const key = event.key.toLowerCase();
+  const action = key === "z" ? (event.shiftKey ? "redo" : "undo") : key === "y" ? "redo" : key === "s" ? "save" : null;
+  if (!action) return;
+  const target = event.target;
+  const typing = target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
+  if (action !== "save" && (typing || document.querySelector(".q-dialog"))) return;
+  event.preventDefault();
+  emitEvent("gi_shortcut", { action: action });
+});
+</script>
+"""
+
 _CSS = """
 body { background: #f6f6f4; }
 .gi-num { font-variant-numeric: tabular-nums; }
@@ -354,6 +373,8 @@ class ProjectPage:
     def build(self) -> None:
         """Create the page content and the job poller."""
         ui.add_css(_CSS)
+        ui.add_head_html(_SHORTCUTS_JS)
+        ui.on("gi_shortcut", lambda e: self.shortcut(e.args or {}))
         ui.colors(primary=ACCENT)
         self.root()
         ui.timer(0.2, self._poll)
@@ -982,6 +1003,25 @@ class ProjectPage:
         self.progress_label.set_text(f"{label} · {self.t('running')}")
         self._update_busy()
         return True
+
+    async def shortcut(self, args: Dict[str, Any]) -> None:
+        """
+        A key combination of the page: undo, redo, save.
+
+        Parameters
+        ----------
+        args : dict
+            ``{"action": "undo" | "redo" | "save"}``, as the browser sends it.
+        """
+        if self.session is None:
+            return
+        action = args.get("action")
+        if action == "undo":
+            self._undo()
+        elif action == "redo":
+            self._redo()
+        elif action == "save":
+            await self._save()
 
     def _undo(self) -> None:
         """Undo the last command."""

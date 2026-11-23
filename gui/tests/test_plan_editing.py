@@ -93,3 +93,35 @@ async def test_a_selected_group_moves_as_one_step(user: User):
     assert session.history() == ["move 2 node(s)"]
     # The group stays selected after the move.
     assert page.plan.selection == [("bus", "bus2"), ("bus", "bus3")]
+
+
+async def test_escape_goes_back_to_the_selection_tool_and_clears_the_selection(user: User):
+    page = await _page(user)
+    page.plan.set_tool("bus")
+    _fire(user, "select", kind="bus", name="bus2")
+    _fire(user, "key", action="escape")
+    assert page.plan.tool == "select" and _canvas(user).tool == "select"
+    assert page.plan.selection == []
+    # The palette shows the tool that is active.
+    assert next(iter(user.find(marker="tools").elements)).value == "select"
+
+
+async def test_select_all_takes_every_bus_and_branch(user: User):
+    page = await _page(user)
+    _fire(user, "key", action="select_all")
+    assert page.plan.selection == [("bus", "bus1"), ("bus", "bus2"), ("bus", "bus3"),
+                                   ("branch", "b12"), ("branch", "b23")]
+
+
+async def test_the_undo_and_redo_shortcuts_are_the_buttons(user: User):
+    page = await _page(user)
+    session = page.session
+    before = _state(session)
+    _fire(user, "place", x=400, y=200, symbol="bus")
+    after = _state(session)
+    await page.shortcut({"action": "undo"})
+    assert _state(session) == before
+    await page.shortcut({"action": "redo"})
+    assert _state(session) == after
+    await page.shortcut({"action": "redo"})  # nothing left to redo: no error, no change
+    assert _state(session) == after and session.history() == ["place bus 'B1'"]

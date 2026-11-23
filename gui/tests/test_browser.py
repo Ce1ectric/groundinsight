@@ -258,6 +258,24 @@ def test_shift_click_and_a_frame_select_several_and_the_group_moves_and_goes(pag
     assert page.errors == []
 
 
+def test_escape_undo_redo_and_select_all_from_the_keyboard(page):
+    _tool(page, "Bus")
+    pane = page.locator(".vue-flow__pane").bounding_box()
+    page.mouse.click(pane["x"] + pane["width"] * 0.5, pane["y"] + pane["height"] * 0.8)
+    _node(page, "B1").wait_for()
+    page.keyboard.press("Escape")
+    page.locator(".gi-canvas.gi-tool-select").wait_for()
+    page.locator("[data-bus='B1']:not(.gi-sel)").wait_for()  # and nothing is selected
+    page.keyboard.press("ControlOrMeta+z")
+    _node(page, "B1").wait_for(state="detached")
+    page.keyboard.press("ControlOrMeta+Shift+z")
+    _node(page, "B1").wait_for()
+    page.mouse.click(pane["x"] + 30, pane["y"] + 30)  # the canvas has the keys again
+    page.keyboard.press("ControlOrMeta+a")
+    page.get_by_text("6 Elemente ausgewählt").wait_for()  # four buses, two branches
+    assert page.errors == []
+
+
 def test_elk_lays_the_network_out_in_the_browser(page):
     before = [_centre(_node(page, n)) for n in ("bus1", "bus2", "bus3")]
     page.get_by_role("button", name="Auto-Layout").click()

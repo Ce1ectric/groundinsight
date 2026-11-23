@@ -6,7 +6,7 @@
 // network. It draws what the server sends (props `diagram`, `colours`,
 // `selected`, `tool`) and reports what the user did as events -- `place`,
 // `move`, `connect`, `fault`, `select`, `select_many`, `open`, `delete`,
-// `layout` -- which the Python side turns into commands of groundinsight.api.
+// `layout`, `key` -- which the Python side turns into commands of groundinsight.api.
 // Even a dragged symbol keeps its old place until the session has applied the
 // MoveNodes command and sent the new diagram back.
 //
@@ -123,15 +123,21 @@ export default {
     };
   },
   mounted() {
-    // The delete key belongs to the canvas when it was clicked last. Listening
-    // on the window, not on the canvas element, keeps it working when a
-    // redraw from the server has taken the focus away from the clicked node.
+    // The keys belong to the canvas when it was clicked last. Listening on
+    // the window, not on the canvas element, keeps them working when a redraw
+    // from the server has taken the focus away from the clicked node. Escape
+    // works from anywhere on the page (the tool was picked in the palette,
+    // outside the canvas); a text field, a dialog and a menu keep their keys.
     this.onPointer = (event) => {
       this.active = this.$el.contains(event.target);
     };
     this.onWindowKey = (event) => {
-      const tag = (event.target && event.target.tagName) || "";
-      if (this.active && !["INPUT", "TEXTAREA", "SELECT"].includes(tag) && !event.target.isContentEditable) {
+      const target = event.target;
+      const typing = target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
+      if (typing || document.querySelector(".q-dialog, .q-menu")) {
+        return;
+      }
+      if (this.active || event.key === "Escape") {
         this.onKey(event);
       }
     };
@@ -247,9 +253,17 @@ export default {
       // The server's selection, or -- while its answer to a click is still on
       // the way -- the element clicked last.
       const items = this.clicked ? [this.clicked] : (this.selected || []);
-      if ((event.key === "Delete" || event.key === "Backspace") && items.length) {
+      const mod = (event.metaKey || event.ctrlKey) && !event.altKey;
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      if ((key === "Delete" || key === "Backspace") && items.length) {
         this.clicked = null;
         this.$emit("delete", { items: items.map((s) => ({ kind: s.kind, name: s.name })) });
+      } else if (key === "Escape") {
+        this.clicked = null;
+        this.$emit("key", { action: "escape" });
+      } else if (mod && key === "a") {
+        event.preventDefault();  // not the text of the page
+        this.$emit("key", { action: "select_all" });
       }
     },
     fitOnce() {
