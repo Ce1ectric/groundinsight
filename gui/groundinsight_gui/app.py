@@ -37,6 +37,7 @@ Limits, by design: no paste from spreadsheets, no formula editor beyond a
 text cell; a page reload starts a new session.
 """
 
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -925,7 +926,31 @@ class ProjectPage:
         self.selected[table] = name
         grid = self.grids.get(table)
         if grid is not None:
-            grid.run_row_method(name, "setSelected", True)
+            self._select_grid_row(grid, name)
+
+    @staticmethod
+    def _select_grid_row(grid: Any, name: str) -> None:
+        """
+        Select a row of a grid in the browser.
+
+        The grid may still be taking its rows when the selection arrives -- a
+        grid rebuilt for new choices, a row added by the same gesture. The
+        browser therefore asks for the row a few times instead of reporting
+        one that is not there yet as an error.
+
+        Parameters
+        ----------
+        grid : ui.aggrid
+            The grid.
+        name : str
+            The row id, an element name.
+        """
+        # Through the grid's client: the call needs no UI slot (it also comes from a canvas event).
+        grid.client.run_javascript(
+            f"(function select(tries) {{ const grid = getElement({grid.id}); "
+            f"const row = grid && grid.api && grid.api.getRowNode({json.dumps(name)}); "
+            "if (row) { row.setSelected(true); } "
+            "else if (tries > 0) { setTimeout(() => select(tries - 1), 120); } })(5);")
 
     def _filter_tables(self, value: Optional[str]) -> None:
         """Show only the rows that contain the text of the search field, in every table."""
@@ -1160,7 +1185,7 @@ class ProjectPage:
         names = [row["name"] for row in self.session.table(table).rows]
         grid = self.grids[table]
         # Fire and forget: selection and scrolling happen in the browser.
-        grid.run_row_method(name, "setSelected", True)
+        self._select_grid_row(grid, name)
         if name in names:
             grid.run_grid_method("ensureIndexVisible", names.index(name), "middle")
         ui.run_javascript(f"getHtmlElement({grid.id})?.scrollIntoView({{block: 'center'}})")

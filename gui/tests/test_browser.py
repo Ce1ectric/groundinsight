@@ -297,6 +297,29 @@ def test_the_browser_asks_before_a_page_with_unsaved_changes_is_left(page):
     assert asked == ["beforeunload"]
 
 
+def test_an_element_drawn_or_clicked_in_the_plan_is_the_selected_row_of_its_table(page):
+    page.get_by_role("tab", name="Netz", exact=True).click()  # the tables exist in the browser
+    page.locator(".ag-row").first.wait_for()
+    page.get_by_role("tab", name="Netzplan").click()
+    _tool(page, "Zweig")
+    x0, y0 = _centre(_node(page, "bus1"))
+    x1, y1 = _centre(_node(page, "bus3"))
+    page.mouse.move(x0, y0)
+    page.mouse.down()
+    page.mouse.move(x1, y1, steps=15)
+    page.mouse.up()
+    page.locator("[data-branch='L1']").wait_for()  # the new branch is selected in the plan ...
+    page.get_by_role("tab", name="Netz", exact=True).click()
+    page.locator(".ag-row-selected", has_text="L1").wait_for()  # ... and is the selected row of the branches
+    page.get_by_role("tab", name="Netzplan").click()
+    _tool(page, "Auswahl")
+    _node(page, "bus2").click()
+    page.get_by_text("Bus bus2", exact=True).wait_for()
+    page.get_by_role("tab", name="Netz", exact=True).click()
+    page.locator(".ag-row-selected", has_text="bus2").first.wait_for()
+    assert page.errors == []  # no row asked for before the grid had it
+
+
 def _selected(page):
     return sorted(page.locator(".gi-node.gi-sel").evaluate_all("ns => ns.map(n => n.dataset.bus)"))
 
