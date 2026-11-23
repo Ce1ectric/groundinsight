@@ -125,3 +125,74 @@ async def test_the_undo_and_redo_shortcuts_are_the_buttons(user: User):
     assert _state(session) == after
     await page.shortcut({"action": "redo"})  # nothing left to redo: no error, no change
     assert _state(session) == after and session.history() == ["place bus 'B1'"]
+
+
+async def test_copy_and_paste_duplicate_buses_with_their_fields_and_the_branch_between(user: User):
+    import groundinsight as gi
+    from groundinsight.api import EXAMPLES, UpdateBus
+
+    page = await _page(user)
+    session = page.session
+    session.apply(UpdateBus(name="bus2", fields={"specific_earth_resistance": 250.0, "description": "Station"}))
+    before = _state(session)
+    _fire(user, "select_many", items=[{"kind": "bus", "name": "bus2"}, {"kind": "bus", "name": "bus3"},
+                                      {"kind": "branch", "name": "b23"}])
+    _fire(user, "key", action="copy")
+    assert _state(session) == before  # copying changes nothing
+    _fire(user, "key", action="paste")
+    assert session.history()[-1] == "3 Elemente duplizieren" and len(session.history()) == 2
+    copy2, copy3 = session.network.buses["bus2 Kopie"], session.network.buses["bus3 Kopie"]
+    original = session.network.buses["bus2"]
+    assert (copy2.type.name, copy2.specific_earth_resistance, copy2.description) == (
+        original.type.name, 250.0, "Station")
+    assert copy3.impedance == session.network.buses["bus3"].impedance
+    branch = session.network.branches["b23 Kopie"]
+    assert (branch.from_bus, branch.to_bus) == ("bus2 Kopie", "bus3 Kopie")
+    assert (branch.type.name, branch.length) == (session.network.branches["b23"].type.name,
+                                                 session.network.branches["b23"].length)
+    # Beside the originals, by the same offset, on the raster.
+    nodes, grid = session.diagram_model.nodes, session.diagram_model.grid_size
+    offsets = {(nodes[f"{n} Kopie"].x - nodes[n].x, nodes[f"{n} Kopie"].y - nodes[n].y) for n in ("bus2", "bus3")}
+    assert offsets == {(2 * grid, 2 * grid)}
+    # The fault at bus3 is not copied: a fault location is set on purpose.
+    assert [f.bus for f in session.network.faults.values()] == ["bus3"]
+    # The copies are selected, ready to be dragged to their place.
+    assert page.plan.selection == [("bus", "bus2 Kopie"), ("bus", "bus3 Kopie"), ("branch", "b23 Kopie")]
+    # Second way: the copied bus derives the impedance of a bus built with the library.
+    fresh = EXAMPLES["minimal"]()
+    twin = gi.create_bus(name="x", type=fresh.buses["bus2"].type, specific_earth_resistance=250.0, network=fresh)
+    assert copy2.impedance == twin.impedance
+    session.undo()
+    assert _state(session) == before
+
+
+async def test_paste_at_the_pointer_and_a_second_paste_gets_new_names(user: User):
+    page = await _page(user)
+    session = page.session
+    _fire(user, "select", kind="bus", name="bus1")
+    _fire(user, "key", action="copy")
+    _fire(user, "key", action="paste", x=500, y=260)
+    node = session.diagram_model.nodes["bus1 Kopie"]
+    assert (node.x, node.y) == (500.0, 260.0)
+    # bus1 feeds the network: the copy brings its infeed along, with the same current.
+    sources = {s.bus: s for s in session.network.sources.values()}
+    assert sources["bus1 Kopie"].values == sources["bus1"].values
+    _fire(user, "key", action="paste", x=600, y=260)
+    assert "bus1 Kopie 2" in session.network.buses
+
+
+async def test_a_copied_branch_alone_is_a_parallel_branch_and_duplicate_does_both_steps(user: User):
+    page = await _page(user)
+    session = page.session
+    _fire(user, "select", kind="branch", name="b12")
+    _fire(user, "key", action="duplicate")
+    parallel = session.network.branches["b12 Kopie"]
+    assert (parallel.from_bus, parallel.to_bus) == ("bus1", "bus2")
+    assert len(session.history()) == 1 and page.plan.selection == [("branch", "b12 Kopie")]
+
+
+async def test_paste_without_a_copy_does_nothing(user: User):
+    page = await _page(user)
+    before = _state(page.session)
+    _fire(user, "key", action="paste")
+    assert _state(page.session) == before and page.session.history() == []

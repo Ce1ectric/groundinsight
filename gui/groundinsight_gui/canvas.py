@@ -38,7 +38,7 @@ EVENTS = {
     "open": ("kind", "name"),
     "delete": ("items",),
     "layout": ("positions",),
-    "key": ("action",),
+    "key": ("action", "x", "y"),
 }
 
 CANVAS_CSS = """

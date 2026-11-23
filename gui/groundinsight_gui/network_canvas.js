@@ -120,6 +120,7 @@ export default {
       multiKeys: ["Shift", "Meta", "Control"],
       active: false,
       clicked: null,
+      pointer: null,
     };
   },
   mounted() {
@@ -141,11 +142,17 @@ export default {
         this.onKey(event);
       }
     };
+    // Where the pointer is over the plan (null outside it): where a paste goes.
+    this.onPointerMove = (event) => {
+      this.pointer = this.$el.contains(event.target) ? { x: event.clientX, y: event.clientY } : null;
+    };
     window.addEventListener("pointerdown", this.onPointer, true);
+    window.addEventListener("pointermove", this.onPointerMove, true);
     window.addEventListener("keydown", this.onWindowKey);
   },
   unmounted() {
     window.removeEventListener("pointerdown", this.onPointer, true);
+    window.removeEventListener("pointermove", this.onPointerMove, true);
     window.removeEventListener("keydown", this.onWindowKey);
   },
   watch: {
@@ -264,6 +271,13 @@ export default {
       } else if (mod && key === "a") {
         event.preventDefault();  // not the text of the page
         this.$emit("key", { action: "select_all" });
+      } else if (mod && key === "c" && items.length) {
+        this.$emit("key", { action: "copy" });
+      } else if (mod && (key === "v" || key === "d")) {
+        event.preventDefault();  // not the browser's bookmark dialog
+        // At the pointer while it is over the plan, else beside the originals.
+        const at = this.pointer ? this.flow.screenToFlowCoordinate(this.pointer) : {};
+        this.$emit("key", { action: key === "v" ? "paste" : "duplicate", x: at.x, y: at.y });
       }
     },
     fitOnce() {

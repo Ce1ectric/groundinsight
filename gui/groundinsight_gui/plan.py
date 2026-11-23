@@ -17,6 +17,9 @@ drag a symbol               ``MoveNodes``
                             for several selected elements one ``Batch``
 dialog *Apply*              one ``Batch`` of every change (rename last)
 auto layout                 ``AutoLayout`` (library, or positions from elkjs)
+Ctrl/Cmd+C, then +V         one ``Batch``: a ``PlaceBus`` per copied bus (with
+(or Ctrl/Cmd+D)             its own characteristic and its infeed), an
+                            ``AddBranch`` per copied branch
 *Esc*                       no command: the selection tool, nothing selected
 Ctrl/Cmd+A                  no command: every bus and branch selected
 ==========================  ==================================================
@@ -51,6 +54,8 @@ from groundinsight.api import (
     RemoveSource,
     RenameBranch,
     RenameBus,
+    RouteBranch,
+    SetCharacteristic,
     SetColourScheme,
     UpdateBranch,
     UpdateBus,
@@ -60,6 +65,7 @@ from groundinsight.api import (
 )
 
 from .canvas import CANVAS_CSS, TOOLS, NetworkCanvas
+from .catalogue import copy_name
 from .colouring import MODES, RESULT_MODES, UTILISATION_MODES, Colouring, colour
 from .formatting import DASH, format_number, format_scale, parse_number
 from .i18n import column_label
@@ -128,6 +134,9 @@ class PlanView:
         self.dialog_host: Optional[Any] = None
         self.type_selects: Dict[str, Any] = {}
         self.tool_toggle: Optional[Any] = None
+        # What Ctrl/Cmd+C took: names, not values -- a paste copies the
+        # elements as they are then, and leaves out what was deleted since.
+        self.clipboard: List[Tuple[str, str]] = []
 
     # -- helpers ------------------------------------------------------------------
 
@@ -493,10 +502,141 @@ class PlanView:
         return [(str(item.get("kind")), str(item.get("name"))) for item in (args.get("items") or [])
                 if isinstance(item, dict) and item.get("kind") and item.get("name")]
 
+    def duplication(self, items: List[Tuple[str, str]],
+                    at: Optional[Tuple[float, float]] = None) -> Tuple[Optional[Command], List[Tuple[str, str]]]:
+        """
+        The command that copies elements of the plan, and what it creates.
+
+        A bus is copied with its fields, its symbol, its own earthing
+        characteristic and its infeed (a source bus without a source would
+        feed nothing); a fault is not copied, a fault location is set on
+        purpose. A branch is copied with its fields; each end goes to the
+        copy of its bus if that bus is copied too, else it stays -- so a
+        branch copied alone is a parallel branch. Copies are named
+        ``<name> Kopie``, ``<name> Kopie 2``, ... (``copy`` in English).
+
+        Parameters
+        ----------
+        items : list of (kind, name)
+            Buses and branches.
+        at : tuple of float, optional
+            Where the centre of the copied buses goes (diagram coordinates);
+            default two raster steps right of and below the originals.
+
+        Returns
+        -------
+        command : Command or None
+            One command (a ``Batch`` for more than one step); ``None`` for no
+            element.
+        created : list of (kind, name)
+            The copies, buses first.
+        """
+        items = self._existing(items)
+        if not items:
+            return None, []
+        suffix = self.t("copy_suffix")
+        diagram = self.session.diagram()
+        nodes = {node.name: node for node in diagram.nodes}
+        edges = {edge.name: edge for edge in diagram.edges}
+        bus_rows = {row["name"]: row for row in self.session.table("buses").rows}
+        branch_rows = {row["name"]: row for row in self.session.table("branches").rows}
+        buses = [name for kind, name in items if kind == "bus"]
+        grid = float(diagram.grid_size or 20)
+        dx = dy = 2 * grid
+        if at is not None and buses:
+            dx = round((at[0] - sum(nodes[b].x for b in buses) / len(buses)) / grid) * grid
+            dy = round((at[1] - sum(nodes[b].y for b in buses) / len(buses)) / grid) * grid
+        taken = {"bus": list(bus_rows), "branch": list(branch_rows), "source": self._names("sources")}
+
+        def name_of(kind: str, original: str) -> str:
+            copy = copy_name(original, taken[kind], suffix)
+            taken[kind].append(copy)
+            return copy
+
+        commands: List[Command] = []
+        copies: Dict[str, str] = {}
+        for name in buses:
+            row, node = bus_rows[name], nodes[name]
+            copies[name] = name_of("bus", name)
+            commands.append(PlaceBus(
+                name=copies[name], type=row["type"], specific_earth_resistance=row["specific_earth_resistance"],
+                active=row["active"], description=row.get("description"), x=node.x + dx, y=node.y + dy,
+                symbol=node.symbol, label_offset=node.label_offset, length=node.length))
+            own = row.get("characteristic")
+            if own:
+                commands.append(SetCharacteristic(target="bus", name=copies[name],
+                                                  characteristic=json.loads(own) if isinstance(own, str) else own))
+        commands += self._source_copies(copies, name_of)
+        created = [("bus", copy) for copy in copies.values()]
+        for name in (n for kind, n in items if kind == "branch"):
+            row = branch_rows[name]
+            copy = name_of("branch", name)
+            commands.append(AddBranch(
+                name=copy, type=row["type"], from_bus=copies.get(row["from_bus"], row["from_bus"]),
+                to_bus=copies.get(row["to_bus"], row["to_bus"]), length=row["length"],
+                specific_earth_resistance=row["specific_earth_resistance"],
+                parallel_coefficient=row["parallel_coefficient"], active=row["active"],
+                description=row.get("description")))
+            waypoints = edges[name].waypoints if name in edges else []
+            if waypoints and row["from_bus"] in copies and row["to_bus"] in copies:
+                commands.append(RouteBranch(name=copy, waypoints=[(x + dx, y + dy) for x, y in waypoints]))
+            created.append(("branch", copy))
+        if len(commands) == 1:
+            return commands[0], created
+        return Batch(title=self.t("duplicate_elements", n=len(items)), commands=commands), created
+
+    def _source_copies(self, copies: Dict[str, str], name_of: Callable[[str, str], str]) -> List[Command]:
+        """The sources at copied buses, added again at the copies."""
+        quantities = {"current": "values", "voltage": "voltage", "impedance": "source_impedance"}
+        commands: List[Command] = []
+        for row in self.session.table("sources").rows:
+            if row["bus"] not in copies:
+                continue
+            phasors: Dict[str, Dict[float, Dict[str, float]]] = {}
+            for value in self.session.table("source_values").rows:
+                if value["source"] == row["name"]:
+                    phasors.setdefault(quantities[value["quantity"]], {})[value["frequency_Hz"]] = {
+                        "real": value["real"], "imag": value["imag"]}
+            commands.append(AddSource(
+                name=name_of("source", row["name"]), bus=copies[row["bus"]], source_type=row["source_type"],
+                i_k_a=row["i_k_a"], r_to_x=row["r_to_x"], kappa=row["kappa"], description=row.get("description"),
+                **phasors))
+        return commands
+
+    def duplicate(self, items: List[Tuple[str, str]], at: Optional[Tuple[float, float]] = None) -> bool:
+        """
+        Copy elements of the plan and select the copies.
+
+        Parameters
+        ----------
+        items : list of (kind, name)
+            Buses and branches.
+        at : tuple of float, optional
+            Where the centre of the copied buses goes; see :meth:`duplication`.
+
+        Returns
+        -------
+        bool
+            Whether anything was copied.
+        """
+        command, created = self.duplication(items, at)
+        if command is None or not self.apply(command):
+            return False
+        self.select_items(created)
+        return True
+
     def _on_key(self, args: Dict[str, Any]) -> None:
-        """A key of the canvas that is no command: Escape, select all."""
+        """A key of the canvas: Escape, select all, copy, paste, duplicate."""
         action = args.get("action")
-        if action == "escape":
+        at = (float(args["x"]), float(args["y"])) if args.get("x") is not None and args.get("y") is not None \
+            else None
+        if action == "copy":
+            self.clipboard = list(self.selection)
+        elif action == "paste":
+            self.duplicate(self.clipboard, at)
+        elif action == "duplicate":
+            self.duplicate(self.selection, at)
+        elif action == "escape":
             self.set_tool("select")
             self.select_items([])
         elif action == "select_all":

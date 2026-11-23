@@ -276,6 +276,21 @@ def test_escape_undo_redo_and_select_all_from_the_keyboard(page):
     assert page.errors == []
 
 
+def test_copy_and_paste_put_a_copy_at_the_pointer(page):
+    _node(page, "bus2").click()
+    page.get_by_text("Bus bus2", exact=True).wait_for()  # the server knows the selection
+    page.keyboard.press("ControlOrMeta+c")
+    pane = page.locator(".vue-flow__pane").bounding_box()
+    x, y = pane["x"] + pane["width"] * 0.5, pane["y"] + pane["height"] * 0.8
+    page.mouse.move(x, y)
+    page.keyboard.press("ControlOrMeta+v")
+    _node(page, "bus2 Kopie").wait_for()
+    cx, cy = _centre(_node(page, "bus2 Kopie"))
+    assert abs(cx - x) <= 20 and abs(cy - y) <= 20  # on the raster next to the pointer
+    page.locator("[data-bus='bus2 Kopie'].gi-sel").wait_for()
+    assert page.errors == []
+
+
 def test_elk_lays_the_network_out_in_the_browser(page):
     before = [_centre(_node(page, n)) for n in ("bus1", "bus2", "bus3")]
     page.get_by_role("button", name="Auto-Layout").click()
