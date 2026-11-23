@@ -109,21 +109,29 @@ const LineEdge = {
   name: "GiLineEdge",
   props: ["id", "data", "selected", "sourceNode", "targetNode"],
   computed: {
+    // Parallel branches run side by side: the shift of this one at right
+    // angles to the pair ([0, 0] alone, and for a routed branch, which keeps
+    // its route).
+    offset() {
+      if (!this.data.shift || (this.data.waypoints || []).length) {
+        return [0, 0];
+      }
+      // The normal of the pair, not of this branch: two branches drawn in
+      // opposite directions between the same buses still move apart.
+      const a = centre(this.sourceNode);
+      const b = centre(this.targetNode);
+      const [p, q] = this.data.reversed ? [b, a] : [a, b];
+      const length = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+      return [-(q[1] - p[1]) / length * this.data.shift, (q[0] - p[0]) / length * this.data.shift];
+    },
     points() {
       const a = centre(this.sourceNode);
       const b = centre(this.targetNode);
-      const waypoints = this.data.waypoints || [];
-      // Parallel branches run side by side; a routed branch keeps its route.
-      if (this.data.shift && !waypoints.length) {
-        // The normal of the pair, not of this branch: two branches drawn in
-        // opposite directions between the same buses still move apart.
-        const [p, q] = this.data.reversed ? [b, a] : [a, b];
-        const length = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
-        const nx = -(q[1] - p[1]) / length * this.data.shift;
-        const ny = (q[0] - p[0]) / length * this.data.shift;
+      const [nx, ny] = this.offset;
+      if (nx || ny) {
         return [[a[0] + nx, a[1] + ny], [b[0] + nx, b[1] + ny]];
       }
-      return [a, ...waypoints, b];
+      return [a, ...(this.data.waypoints || []), b];
     },
     path() {
       return this.points.map((p, i) => (i ? "L" : "M") + p[0] + " " + p[1]).join(" ");
@@ -141,8 +149,16 @@ const LineEdge = {
       const y = (a[1] + b[1]) / 2 + this.data.label_offset[1];
       const vertical = Math.abs(b[1] - a[1]) > Math.abs(b[0] - a[0]);
       const gap = (dx, dy) => ({ transform: "translate(calc(" + dx + "px * var(--gi-s, 1)), calc(" + dy + "px * var(--gi-s, 1)))" });
-      return vertical
-        ? { x, y, anchor: "end", baseline: "middle", style: gap(-7, 0) }
+      // Of two parallel branches the one moved up or right carries its text
+      // on that side, so the two texts do not meet between the lines.
+      const [nx, ny] = this.offset;
+      if (vertical) {
+        return nx > 0
+          ? { x, y, anchor: "start", baseline: "middle", style: gap(7, 0) }
+          : { x, y, anchor: "end", baseline: "middle", style: gap(-7, 0) };
+      }
+      return ny < 0
+        ? { x, y, anchor: "middle", baseline: "auto", style: gap(0, -6) }
         : { x, y, anchor: "middle", baseline: "hanging", style: gap(0, 6) };
     },
   },

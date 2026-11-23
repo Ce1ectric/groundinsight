@@ -466,6 +466,10 @@ def test_parallel_branches_are_drawn_side_by_side(page):
     zoom = page.evaluate("document.querySelector('.vue-flow__transformationpane').getBoundingClientRect().width"
                          " / document.querySelector('.vue-flow__transformationpane').offsetWidth")
     assert apart == pytest.approx(12 * zoom, abs=1.5)
+    # Their names stand on the outer sides, not on top of each other between the lines.
+    names = [page.locator(f"[data-branch='{name}'] .gi-edge-label").bounding_box() for name in ("b12", "L1")]
+    upper, lower = sorted(names, key=lambda box: box["y"])
+    assert upper["y"] + upper["height"] <= lower["y"] + 1
     # Each of them can be clicked.
     _tool(page, "Auswahl")
     page.locator("[data-branch='L1'] .gi-edge-line").click(force=True)

@@ -412,8 +412,8 @@ version section when a release is cut.
 - **GUI: the tile of the reduction factor read "R = IE / IF".** The tile
   titles were set in upper case by style, which turned the reduction factor
   `r` into an `R`; they are shown as written.
-- **GUI: a column header named its unit twice** ("Ik'' [A] [A]" in the
-  sources table).
+- **GUI: a column header named its unit twice** (the initial short-circuit
+  current of the sources table carried `[A]` two times).
 - **Changing the frequencies keeps the fault scalings complete.**
   `api.SetFrequencies` gives a fault with scalings the scaling 1.0 at every
   new frequency and drops the scaling of a removed one (undo restores
