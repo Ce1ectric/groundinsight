@@ -367,7 +367,7 @@ class PlanView:
                                       ("delete", self._on_delete), ("layout", self._on_layout),
                                       ("key", self._on_key), ("menu", self._on_menu)):
                     self.canvas.on(name, lambda e, h=handler: h(e.args or {}))
-            with ui.column().classes("w-72 gap-1 overflow-auto"):
+            with ui.column().classes("w-72 shrink-0 gap-1 overflow-auto"):
                 self.properties()
         # Dialogs are created here: an event handler runs in the slot of the
         # element that fired it, and the canvas renders no slot.
@@ -386,7 +386,7 @@ class PlanView:
 
     def _palette(self, summary: Any) -> None:
         """Tools and the types new elements get."""
-        with ui.column().classes("w-56 gap-1 bg-white rounded border p-2 overflow-auto").mark("palette"):
+        with ui.column().classes("w-56 shrink-0 gap-1 bg-white rounded border p-2 overflow-auto").mark("palette"):
             ui.label(self.t("palette")).classes("text-xs uppercase tracking-wide text-gray-500")
             self.tool_toggle = ui.toggle({tool: self.t(f"tool_{tool}") for tool in TOOLS}, value=self.tool,
                                          on_change=lambda e: self.set_tool(e.value)).props(
@@ -644,14 +644,14 @@ class PlanView:
                     ui.label(column_label(self.page.language, key, format_unit(units.get(key)))).classes(
                         "text-xs text-gray-500 whitespace-nowrap")
                     ui.label(str(text)).classes("text-xs text-right truncate").mark(f"prop-{key}")
-            with ui.row().classes("gap-1 mt-2"):
+            with ui.row().classes("gap-1 mt-2 no-wrap items-center"):
                 ui.button(self.t("edit"), icon="edit", on_click=lambda: self.open_dialog(kind, name)).props(
-                    "dense no-caps").mark("properties-edit")
+                    "dense no-caps no-wrap").mark("properties-edit")
                 ui.button(icon="table_view", on_click=lambda: self.page.show_row(kind, name)).props(
                     f'dense flat aria-label="{self.t("menu_show_row")}"').tooltip(self.t("menu_show_row")).mark(
                     "properties-show-row")
                 ui.button(self.t("delete"), icon="delete", on_click=lambda: self._on_delete(
-                    {"kind": kind, "name": name})).props("dense flat no-caps color=negative").mark(
+                    {"kind": kind, "name": name})).props("dense flat no-caps no-wrap color=negative").mark(
                     "properties-delete")
 
     def _group_properties(self) -> None:
@@ -1057,6 +1057,8 @@ class _ElementDialog:
 
     TABS: Tuple[str, ...] = ()
     KIND = ""
+    #: Tailwind width of the dialog card.
+    WIDTH = "w-[40rem]"
 
     def __init__(self, plan: PlanView, name: str) -> None:
         self.plan = plan
@@ -1077,7 +1079,7 @@ class _ElementDialog:
     def open(self) -> None:
         """Build and open the dialog (in the plan's dialog host; deleted when closed)."""
         with self.plan.dialog_host, ui.dialog() as self.dialog, ui.card().classes(
-                "w-[40rem] max-w-full").mark("element-dialog"):
+                f"{self.WIDTH} max-w-none").style("max-width: 95vw").mark("element-dialog"):
             ui.label(self.title()).classes("text-base font-medium")
             with ui.tabs().props("dense").classes("w-full") as tabs:
                 for tab in self.TABS:
@@ -1264,6 +1266,8 @@ class BusDialog(_ElementDialog):
 
     TABS = ("general", "source", "fault", "characteristic")
     KIND = "bus"
+    # Wide enough for the eight columns of the characteristic with their numbers.
+    WIDTH = "w-[54rem]"
 
     def title(self) -> str:
         """``Bus <name>``."""
@@ -1365,8 +1369,6 @@ class BusDialog(_ElementDialog):
                 ui.label(self.t("char_extrapolated")).classes("text-xs text-amber-800")
             language = self.plan.page.language
             options = grid_options(dto.table, language, lambda lang: "de-DE" if lang == "de" else "en-US")
-            # Eight narrow columns: all of them in the width of the dialog.
-            options["defaultColDef"] = {**options["defaultColDef"], "minWidth": 62}
             ui.aggrid(options, theme="quartz").classes("w-full h-64").mark("char-table")
         with ui.row().classes("w-full gap-2 items-center"):
             ui.upload(label=self.t("char_import"), auto_upload=True, on_upload=self._import).props(
