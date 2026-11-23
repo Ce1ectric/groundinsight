@@ -44,20 +44,43 @@ In the **Tools** palette on the left:
    the canvas to the right of `bus_fault`. A bus `B1` appears.
 2. Choose **Branch**, keep *Type of new branches* at `MSCable`, and drag from
    `bus_fault` to `B1`. A 1 km cable `L1` connects them.
-3. Choose **Select** again. A click selects an element and shows it in the
-   *Properties* panel on the right; dragging moves a symbol on the raster.
+3. Choose **Select** again (or press Esc). A click selects an element and
+   shows it in the *Properties* panel on the right; dragging moves a symbol
+   on the raster.
 
 ![The plan with the new bus B1 and the cable L1, which is selected](img/gui-drawn.png)
 
 Double-click `B1`. In the dialog, set *Name* to `station_3` and keep
-ρ = 100 Ω·m; **Apply**. Double-click the cable `L1`, set *Name* to `cable_2`
-and *Length / km* to `3`; **Apply**.
+ρ = 100 Ω·m; **Apply** (or Enter). Double-click the cable `L1`, set *Name* to
+`cable_2` and *Length / km* to `3`; **Apply**. An entry that cannot be read —
+text where a number belongs, a name that is taken — is marked at its field
+and nothing is applied.
 
 ![The element dialog of the new bus, with the tabs General, Source, Fault and Earthing characteristic](img/gui-dialog.png)
 
 Every change is one step of the service layer: **Undo** and **Redo** in the
-toolbar take it back and forth, and a change the library refuses — a
-duplicate name, a negative length — is not applied and says why.
+toolbar (Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z) take it back and forth, and a change
+the library refuses — a negative length — is not applied and says why.
+
+The plan is edited like a drawing:
+
+- Shift (or Ctrl/Cmd) and a click add an element to the selection or take it
+  away; Shift and a drag draw a frame around several. A selected group is
+  moved by dragging one of its symbols and deleted with Delete — one step
+  each.
+- Ctrl/Cmd+C and Ctrl/Cmd+V copy the selection to where the pointer is,
+  Ctrl/Cmd+D beside the original: a bus with its fields and its infeed, a
+  branch with its fields. A branch copied without its buses is a parallel
+  branch, drawn beside the first.
+- A right click opens the menu of the element under the pointer — edit,
+  duplicate, set a fault or an infeed, open or close the switch, show in
+  the table, delete — and on the empty pane: place a bus here, paste, select
+  all, show the whole plan.
+
+  ![The context menu of a bus: Edit, Duplicate, Set a fault here, Set an infeed here, Show in the table, Delete](img/gui-menu.png)
+- *Find an element* above the plan takes a name and moves that bus or branch
+  into the middle; *Show in the plan* under the tables of the *Network* tab
+  does the same for the selected row.
 
 !!! tip "Other types"
 
@@ -69,14 +92,27 @@ duplicate name, a negative length — is not applied and says why.
 
 ## 3. Put a fault at the new station
 
-Choose **Fault** and click `station_3`. The fault `F1` carries a scaling of
-1 at every frequency, so the infeed's harmonics flow to it as well. (The
-fault of the template scales 50 Hz only.)
+Choose **Fault** and click `station_3` (or right-click it and choose *Set a
+fault here*). The fault `F1` carries a scaling of 1 at every frequency, so
+the infeed's harmonics flow to it as well. (The fault of the template scales
+50 Hz only.) Its name, its duration and its scalings are on the *Fault* tab
+of the bus dialog.
 
 ## 4. Solve and read the results
 
-**Calculation → Solve the fault** opens the *Results* tab. Choose `F1` under
-*Fault* and press **Run**.
+Above the plan, choose `F1` in the fault field and press **Run**. The plan
+stays in front and shows the result: every bus is coloured by its earth
+potential rise and carries the value after its name.
+
+![The plan coloured by the EPR, from 33 V at bus_fault to 326 V at bus_source](img/gui-epr.png)
+
+**Colouring** in the toolbar switches to another quantity — the touch
+voltage, the shield current of every branch, the utilisation of a limit — or
+back to the types. After an edit that changes the result, the values turn
+grey and the legend says *stale* until the fault is run again.
+
+The *Results* tab has the details (**Calculation → Solve the fault** runs the
+fault from there):
 
 ![The results of F1: key figures, EPR per bus, the key figures per frequency](img/gui-results.png)
 
@@ -89,16 +125,12 @@ the calculation. The line at the bottom names the revision of the network and
 its input digest: after an edit the result is marked stale until you run it
 again.
 
-Back in the *Network plan*, **Colouring → Result: EPR (RMS)** colours every
-bus by its EPR; the fit button of the canvas (bottom left) shows the whole
-network.
-
-![The plan coloured by the EPR, from 33 V at bus_fault to 326 V at bus_source](img/gui-epr.png)
-
-**Save as** opens the file manager: walk to a folder, type a name and save.
-The project file holds network, plan, evaluation tabs and the assessment
-criteria in one JSON file that the library reads with `gi.load_project`;
-**Open** lists the project files of a folder the same way.
+**Save as** (or Ctrl/Cmd+S for a project that has a file) opens the file
+manager: walk to a folder, type a name and save. The project file holds
+network, plan, evaluation tabs and the assessment criteria in one JSON file
+that the library reads with `gi.load_project`; **Open** lists the project
+files of a folder the same way. A project with unsaved changes — the dot
+beside its name — is not replaced or closed without a question.
 
 ## 5. The same network with the library
 

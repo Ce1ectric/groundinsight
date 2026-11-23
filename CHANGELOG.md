@@ -241,6 +241,37 @@ version section when a release is cut.
   impedance, diagnostics, with a legend) and *Auto layout* (groundinsight's
   layout, or elkjs in the browser). Every gesture is a command of the service
   layer; the browser decides nothing about the network.
+- **GUI: the plan is edited like a drawing.** Several elements are selected
+  with Shift, Ctrl or Cmd and a click or with Shift and a dragged frame, and
+  moved or deleted as one undo step; Ctrl/Cmd+C and +V (or +D) copy buses
+  with their fields, their own characteristic and their infeed, and
+  branches (a branch copied alone is a parallel branch); a right click opens
+  a context menu on a bus, a branch, a selection and the pane; Ctrl/Cmd+Z,
+  Shift+Ctrl/Cmd+Z, Ctrl/Cmd+S, Escape and Ctrl/Cmd+A work as expected.
+  Parallel branches are drawn side by side.
+- **GUI: results on the plan.** A numerical colouring writes its value
+  after the name of each bus or branch, greyed and marked *stale* in the
+  legend once an input has changed; fault marks carry the fault's name and
+  tooltips name type, value, faults and sources. The fault is chosen and
+  solved from the plan, which then shows the EPR without a change of tab.
+  Names keep their size on screen while the plan is zoomed out and are
+  hidden only where they would overlap; the fit leaves room for them.
+- **GUI: the plan is the main view.** A flat toolbar and tab row, and a
+  page as high as the window: the plan starts at 150 px instead of 264 and
+  ends at the bottom edge, at 1280 x 800 too. The title names the project
+  file, its tooltip the path.
+- **GUI: finding an element.** *Show in the plan* under the tables (the
+  element selected and moved into the middle), *Show in the table* in the
+  properties and the context menu, a search field over the tables and one
+  in the plan.
+- **GUI: dialogs.** The name has the focus, Enter applies; a wrong number,
+  a missing name and a name that is taken are reported at their field in
+  the language of the page. The fault and the infeed of a bus are named and
+  renamed in the bus dialog; evaluation tabs are renamed; every dialog has
+  *Cancel*. Properties and type parameters carry their units.
+- **GUI: unsaved changes.** A template, *Open* and an import ask before
+  they replace a project with unsaved changes (cancel, discard, save and go
+  on); the browser asks before the page is left or reloaded.
 - **More study jobs in the service layer.** `CutsRequestDTO`
   (`analyze_cuts`), `BusResponseRequestDTO` (`bus_response`, with an
   electrode sweep), `ThermalRequestDTO` (`check_conductor_limits` /
@@ -378,6 +409,11 @@ version section when a release is cut.
   (`from_file`, `save`), and with it the GUI's *Open* and *Save as* and the
   command line, expand `~/projekt.json` and `$HOME/projekt.json`; before,
   the path was taken literally and failed with "No such file or directory".
+- **GUI: the tile of the reduction factor read "R = IE / IF".** The tile
+  titles were set in upper case by style, which turned the reduction factor
+  `r` into an `R`; they are shown as written.
+- **GUI: a column header named its unit twice** ("Ik'' [A] [A]" in the
+  sources table).
 - **Changing the frequencies keeps the fault scalings complete.**
   `api.SetFrequencies` gives a fault with scalings the scaling 1.0 at every
   new frequency and drops the scaling of a removed one (undo restores

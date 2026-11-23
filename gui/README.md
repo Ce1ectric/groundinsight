@@ -47,11 +47,17 @@ environment; without it the button is disabled and says why.
   utilisation, origin of the earthing impedance or diagnostics, and automatic
   layout (groundinsight's, or elkjs in the browser). Every gesture is one
   command of the service layer and one undo step; plan and tables share the
-  selection;
+  selection. Several elements are selected with Shift and a click or a
+  dragged frame and moved, copied (Ctrl/Cmd+C, +V, +D) or deleted as one; a
+  right click opens a context menu; Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z, Ctrl/Cmd+S,
+  Escape and Ctrl/Cmd+A work. A numerical colouring writes its value at
+  every bus or branch, the fault is chosen and solved above the plan, and a
+  search field finds an element by its name. The plan fills the window;
 * network tables: buses, branches, sources, faults and the type catalogue,
   editable cell by cell; every edit is a command of the service layer and can
   be undone; a rejected edit changes nothing and says why. The frequencies of
-  the network can be changed above the tables;
+  the network can be changed above the tables; a search field filters every
+  table, and a row is shown in the plan;
 * type catalogue: new types, editing every field of a type (a rename
   included, its elements follow), copies, and types from groundinsight's
   standard library -- 20 kV cable systems and NAYY cables from data sheets,
