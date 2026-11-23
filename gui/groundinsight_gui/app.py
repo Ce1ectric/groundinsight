@@ -370,6 +370,7 @@ class ProjectPage:
         self.last_directory: Optional[Path] = None
         self.dialog_host: Any = None
         self.view_ids: List[str] = []
+        self.view_titles: List[str] = []
         self.durations: Dict[str, Optional[float]] = {}
         self.selected: Dict[str, Optional[str]] = {table: None for table in TABLES}
         self.grids: Dict[str, Any] = {}
@@ -596,6 +597,7 @@ class ProjectPage:
             ui.tab("results", label=self.t("tab_results"), icon="bar_chart").mark("tab-results")
             ui.tab("check", label=self.t("tab_check"), icon="fact_check").mark("tab-check")
             self.view_ids = self.evaluations.ids()
+            self.view_titles = [view.title for view in self.evaluations.views()]
             for view in self.evaluations.views():
                 ui.tab(view.id, label=view.title, icon="insights").mark(f"tab-{view.id}")
             ui.button(icon="add", on_click=self.evaluations.add_tab).props(
@@ -808,6 +810,10 @@ class ProjectPage:
                     definition["cellDataType"] = False  # a text editor: accepts a decimal comma
             elif column.dtype == "bool":
                 definition["cellDataType"] = "boolean"
+            elif column.name == "source_type":
+                # The kind of a source in words (the library's value stays in the row).
+                words = ", ".join(f"{value}: '{self.t('source_' + value)}'" for value in ("current", "voltage"))
+                definition[":valueFormatter"] = f"p => ({{{words}}})[p.value] || p.value"
             if kind in ("type", "bus"):
                 definition["cellEditor"] = "agSelectCellEditor"
                 definition["cellEditorParams"] = {"values": list(choices[kind])}
@@ -981,8 +987,9 @@ class ProjectPage:
         self.result_view.refresh()
         self.check_view.refresh()
         self.plan.refresh()
-        if self.evaluations.ids() != self.view_ids:
-            self.root.refresh()  # a tab was added or removed (or undone)
+        views = self.evaluations.views()
+        if [v.id for v in views] != self.view_ids or [v.title for v in views] != self.view_titles:
+            self.root.refresh()  # a tab was added, removed or renamed (or that was undone)
         else:
             self.view_panel.refresh()
 
@@ -1186,14 +1193,28 @@ class ProjectPage:
         self.run_all_button.set_enabled(not busy)
         self.cancel_button.set_visibility(busy)
         self.progress.set_visibility(busy)
+        self.plan.set_busy(busy)
 
     def _run(self) -> None:
         """Solve the chosen fault as a job."""
+        self.run_fault()
+
+    def run_fault(self) -> bool:
+        """
+        Solve the chosen fault as a job.
+
+        Returns
+        -------
+        bool
+            Whether the job was started (not without a fault, not while
+            another job runs).
+        """
         if self._busy() or self.fault is None:
-            return
+            return False
         self.handle = self.session.submit_solve(self.fault)
         self.progress_label.set_text(self.t("running"))
         self._update_busy()
+        return True
 
     def _run_all(self) -> None:
         """Solve every fault as one job, cancellable between faults."""
@@ -1242,7 +1263,7 @@ class ProjectPage:
             self.progress_label.set_text("")
             self.result_view.refresh()
             self._refresh_toolbar()
-            self.plan.refresh()
+            self.plan.after_solve()
             self.view_panel.refresh()  # the evaluation tabs read the stored results
         else:
             message = {
@@ -1279,7 +1300,7 @@ class ProjectPage:
                 rms_rows = [row for row in result.buses.rows if row["is_rms"]]
                 columns = [c for c in result.buses.columns if c.name in ("bus_name", "EPR_V", "I_bus_A", "I_inj_A")]
                 ui.aggrid(self._result_grid(columns, rms_rows, digits=4), theme="quartz").classes(
-                    "h-72").mark("grid-bus_results")
+                    "h-80").mark("grid-bus_results")
         ui.label(self.t("key_figures")).classes("text-sm font-medium text-gray-700")
         rows = [row.model_dump(exclude={"dto_schema_version"}) for row in result.key_figures.rows]
         key_columns = [{"name": name, "dtype": _KEY_FIGURE_DTYPES.get(name, "float")} for name in KEY_FIGURE_COLUMNS]
@@ -1449,7 +1470,9 @@ class ProjectPage:
         with ui.element("div").classes("grid gap-3 w-full grid-cols-2 md:grid-cols-3 xl:grid-cols-6"):
             for key, value, unit, note in tiles:
                 with ui.card().classes("gi-tile p-3 gap-0").props("flat bordered"):
-                    ui.label(self.t(f"tile_{key}")).classes("text-xs uppercase tracking-wide text-gray-500")
+                    # As written: upper case by style would turn the reduction factor r into an R.
+                    ui.label(self.t(f"tile_{key}")).classes("text-xs tracking-wide text-gray-500").mark(
+                        f"tile-{key}-label")
                     with ui.row().classes("items-baseline gap-1"):
                         ui.label(format_number(value, self.language)).classes(
                             "text-2xl font-semibold gi-num text-gray-900").mark(f"tile-{key}")
@@ -1521,6 +1544,8 @@ class ProjectPage:
                 )
             definitions.append(definition)
         default = {"minWidth": 70} if fit == "content" else {"flex": 1, "minWidth": 80}
+        # A long header takes a second line instead of ending in dots.
+        default.update({"wrapHeaderText": True, "autoHeaderHeight": True})
         return {"defaultColDef": default, "columnDefs": definitions, "rowData": rows}
 
     def _assessment_panel(self, fault: str) -> None:

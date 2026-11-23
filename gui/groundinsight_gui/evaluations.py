@@ -15,7 +15,7 @@ this module only draws them.
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from nicegui import ui
 
@@ -66,12 +66,35 @@ class EvaluationTabs:
 
     def add_tab(self) -> None:
         """Ask for a title and add an empty tab."""
+        self._title_dialog(None)
+
+    def rename_tab(self, view: ViewDTO) -> None:
+        """
+        Ask for another title of a tab.
+
+        Parameters
+        ----------
+        view : ViewDTO
+            The tab.
+        """
+        self._title_dialog(view)
+
+    def _title_dialog(self, view: Optional[ViewDTO]) -> None:
+        """The dialog with the title of a new tab, or of a tab that is renamed."""
+        heading = self.t("view_new") if view is None else self.t("view_rename")
         with self.page.dialog_host, ui.dialog() as dialog, ui.card().classes("w-[28rem]").mark("view-dialog"):
-            ui.label(self.t("view_new")).classes("text-base font-medium")
-            title = ui.input(self.t("view_title"), value=self.t("view_default_title")).classes("w-full").mark(
-                "view-title")
+            ui.label(heading).classes("text-base font-medium")
+            title = ui.input(self.t("view_title"),
+                             value=self.t("view_default_title") if view is None else view.title).classes(
+                "w-full").mark("view-title")
 
             def create() -> None:
+                if view is not None:
+                    renamed = view.model_copy(update={"title": title.value or view.title})
+                    if renamed.title == view.title or self.page.apply(UpdateView(view=renamed.model_dump(mode="json"))):
+                        dialog.close()
+                        self.page.show_tab(view.id)
+                    return
                 taken = set(self.ids())
                 n = 1
                 while f"v{n}" in taken:
@@ -98,6 +121,9 @@ class EvaluationTabs:
         """
         with ui.row().classes("w-full items-center gap-2"):
             ui.label(view.title).classes("text-lg font-medium")
+            ui.button(icon="edit", on_click=lambda: self.rename_tab(view)).props(
+                f'flat dense round size=sm aria-label="{self.t("view_rename")}"').tooltip(
+                self.t("view_rename")).mark(f"view-rename-{view.id}")
             ui.space()
             ui.button(self.t("block_add"), icon="add_chart",
                       on_click=lambda: self.block_dialog(view)).props("no-caps").mark(f"block-add-{view.id}")

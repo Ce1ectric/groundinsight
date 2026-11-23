@@ -159,6 +159,11 @@ class PlanView:
         self.type_selects: Dict[str, Any] = {}
         self.tool_toggle: Optional[Any] = None
         self.search: Optional[Any] = None
+        self.fault_select: Optional[Any] = None
+        self.run_button: Optional[Any] = None
+        self.spinner: Optional[Any] = None
+        # A solve started from the plan shows its result in the plan when it ends.
+        self.show_result = False
         # What Ctrl/Cmd+C took: names, not values -- a paste copies the
         # elements as they are then, and leaves out what was deleted since.
         self.clipboard: List[Tuple[str, str]] = []
@@ -324,16 +329,31 @@ class PlanView:
             with ui.column().classes("grow gap-1 min-w-0 min-h-0"):
                 diagram = self.session.diagram()
                 colours = self.colouring(diagram)
-                with ui.row().classes("w-full items-center no-wrap gap-2"):
-                    with ui.element("div").classes("grow min-w-0 overflow-hidden"):
+                # The legend, and at the right the fault with its solve and the search. In a window too
+                # narrow for both the controls move to a second line: the legend is never cut.
+                with ui.row().classes("w-full items-center gap-x-2 gap-y-1"):
+                    with ui.element("div").classes("min-w-0"):
                         self.legend()
-                    # Type a name: the element is selected and moved into the middle.
-                    # No floating label: the row stays as low as the legend, the plan as high as it can be.
-                    self.search = ui.select(self._search_options(), with_input=True,
-                                            on_change=self._on_search).props(
-                        "dense outlined hide-dropdown-icon options-dense "
-                        f'placeholder="{self.t("plan_search")}" aria-label="{self.t("plan_search")}"').classes(
-                        "gi-plan-search w-52").mark("plan-search")
+                    with ui.row().classes("items-center no-wrap gap-2 ml-auto"):
+                        # The fault the plan shows, and its solve: without a change of tab.
+                        self.spinner = ui.spinner(size="sm").mark("plan-busy")
+                        self.spinner.set_visibility(False)
+                        self.fault_select = ui.select(self.session.fault_names(), value=self.page.fault,
+                                                      on_change=self._on_fault_choice).props(
+                            f'dense outlined options-dense aria-label="{self.t("fault")}"').classes(
+                            "gi-plan-search w-32 shrink-0").mark("plan-fault")
+                        with self.fault_select.add_slot("prepend"):
+                            ui.icon("flash_on", size="xs").classes("text-amber-800")
+                        self.run_button = ui.button(self.t("run"), icon="play_arrow", on_click=self.run).props(
+                            "dense no-caps no-wrap unelevated").classes("gi-plan-run px-2 shrink-0").tooltip(
+                            self.t("calc_solve")).mark("plan-run")
+                        # Type a name: the element is selected and moved into the middle. No floating
+                        # label: the row stays as low as the legend, the plan as high as it can be.
+                        self.search = ui.select(self._search_options(), with_input=True,
+                                                on_change=self._on_search).props(
+                            "dense outlined hide-dropdown-icon options-dense "
+                            f'placeholder="{self.t("plan_search")}" aria-label="{self.t("plan_search")}"').classes(
+                            "gi-plan-search w-40 shrink-0").mark("plan-search")
                 self.canvas = NetworkCanvas(diagram.model_dump(mode="json"),
                                             colours={"nodes": colours.nodes, "edges": colours.edges},
                                             tool=self.tool, menus=self._menus(),
@@ -406,15 +426,15 @@ class PlanView:
     def legend(self) -> None:
         """Colouring mode and its legend."""
         colours = self.colours if self.colours is not None else self.colouring()
-        with ui.row().classes("w-full items-center gap-3 no-wrap").mark("legend"):
+        with ui.row().classes("items-center gap-3 no-wrap whitespace-nowrap").mark("legend"):
             ui.icon("palette").classes("text-gray-500")
             ui.label(self.t(f"colour_{self.mode}")).classes("text-sm font-medium").mark("colour-mode")
             if colours.scale is not None:
                 low, high, unit = colours.scale
                 low_text, high_text = format_scale(low, high, self.page.language)
                 ui.label(f"{low_text} {unit}").classes("text-xs").mark("legend-min")
-                ui.element("div").style(f"width: 160px; height: 10px; border-radius: 3px; "
-                                        f"background: {colours.gradient}")
+                ui.element("div").classes("shrink-0").style(
+                    f"width: 120px; height: 10px; border-radius: 3px; background: {colours.gradient}")
                 ui.label(f"{high_text} {unit}").classes("text-xs").mark("legend-max")
                 if self.result_stale:
                     ui.label(self.t("stale_short")).classes(
@@ -451,6 +471,8 @@ class PlanView:
         self._refresh_type_selects()
         if self.search is not None:
             self.search.set_options(self._search_options(), value=None)
+        if self.fault_select is not None:
+            self.fault_select.set_options(self.session.fault_names(), value=self.page.fault)
         diagram = self.session.diagram()
         colours = self.colouring(diagram)
         self.canvas.show(diagram.model_dump(mode="json"),
@@ -510,6 +532,45 @@ class PlanView:
         if self.selected is not None and not from_table:
             kind, name = self.selected
             self.page.select_row({"bus": "buses", "branch": "branches"}[kind], name)
+
+    def _on_fault_choice(self, event: Any) -> None:
+        """Another fault was chosen over the plan: the page's one choice of a fault follows."""
+        if event.value and event.value != self.page.fault:
+            self.page.fault_select.set_value(event.value)
+
+    def run(self) -> None:
+        """Solve the chosen fault from the plan; the plan shows the result when the job ends."""
+        if self.page.fault is None:
+            ui.notify(self.t("no_fault"), type="warning")
+            return
+        self.show_result = self.page.run_fault()
+
+    def set_busy(self, busy: bool) -> None:
+        """
+        Show that a job runs.
+
+        Parameters
+        ----------
+        busy : bool
+            Whether a job of the page is running.
+        """
+        if self.spinner is not None:
+            self.spinner.set_visibility(busy)
+            self.run_button.set_enabled(not busy)
+
+    def after_solve(self) -> None:
+        """
+        A fault was solved: after a solve from the plan, show its result there.
+
+        A colouring by a result stays; any other one gives way to the EPR, so
+        the numbers appear where the solve was started.
+        """
+        if self.show_result and self.mode not in RESULT_MODES:
+            self.show_result = False
+            self.set_mode("epr")
+        else:
+            self.show_result = False
+            self.refresh()
 
     def _search_options(self) -> Dict[str, str]:
         """What the search of the plan offers: every bus and branch by name."""

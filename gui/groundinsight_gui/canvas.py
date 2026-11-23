@@ -79,6 +79,8 @@ CANVAS_CSS = """
 .gi-very-far .gi-node.gi-sel .gi-label, .gi-very-far .vue-flow__node:hover .gi-label { display: inline; }
 .gi-plan-search .q-field__control, .gi-plan-search .q-field__native { min-height: 26px; height: 26px; }
 .gi-plan-search .q-field__native { padding: 0; }
+.gi-plan-search .q-field__marginal { height: 26px; }
+.gi-plan-run.q-btn { min-height: 26px; height: 26px; font-size: 13px; }
 .gi-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
            padding: 0 15%; text-align: center; color: #6b7480; font-size: 14px; pointer-events: none; z-index: 4; }
 .gi-handle { position: absolute !important; inset: 0 !important; width: 100% !important;

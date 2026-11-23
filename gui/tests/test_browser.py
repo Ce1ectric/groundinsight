@@ -125,6 +125,14 @@ def _tool(page, label):
     page.locator(f".gi-canvas.gi-tool-{TOOLS[label]}").wait_for()
 
 
+def _solve_in_the_results_tab(page) -> None:
+    """Results tab, Run, wait for the result (the plan has a Run button of its own)."""
+    page.get_by_role("tab", name="Ergebnisse").click()
+    page.get_by_role("button", name="Alle Fehlerorte").wait_for()  # the results tab is in front
+    page.locator(".q-btn:not(.gi-plan-run)", has_text="Rechnen").click()
+    page.get_by_text("Revision", exact=False).first.wait_for(timeout=60000)
+
+
 def _screenshot(page, name: str) -> None:
     """Save a screenshot and compare it with this platform's reference."""
     SCREENS.mkdir(exist_ok=True)
@@ -427,9 +435,7 @@ def test_parallel_branches_are_drawn_side_by_side(page):
 
 
 def test_the_result_is_written_at_the_buses_and_the_tooltip_names_the_element(page):
-    page.get_by_role("tab", name="Ergebnisse").click()
-    page.get_by_role("button", name="Rechnen").click()
-    page.get_by_text("Revision", exact=False).first.wait_for(timeout=60000)
+    _solve_in_the_results_tab(page)
     tile = page.locator(".gi-tile").first.inner_text().split("\n")[1]  # EPR at the fault location, bus3
     page.get_by_role("tab", name="Netzplan").click()
     page.get_by_role("button", name="Einfärben").click()
@@ -490,13 +496,25 @@ def test_finding_an_element_from_the_table_and_by_its_name(page):
     assert page.errors == []
 
 
+def test_solving_from_the_plan_shows_the_result_in_the_plan(page):
+    page.get_by_role("button", name="Rechnen").click()  # the plan's own
+    value = _node(page, "bus3").locator(".gi-value")
+    value.wait_for(timeout=60000)
+    # Still the plan, now coloured by the EPR; the tiles of the results tab show the same number.
+    assert page.get_by_role("tab", name="Netzplan").get_attribute("aria-selected") == "true"
+    page.get_by_text("Ergebnis: EPR (RMS)").first.wait_for()
+    shown = value.inner_text()
+    page.get_by_role("tab", name="Ergebnisse").click()
+    page.locator(".gi-tile").first.wait_for()
+    assert shown == page.locator(".gi-tile").first.inner_text().split("\n")[1] + " V"
+    assert page.errors == []
+
+
 def test_a_solved_ring_coloured_by_its_epr(page):
     page.get_by_role("button", name="Neu").click()
     page.get_by_text("MS-Ring", exact=True).click()
     page.locator(".vue-flow__node[data-id='b20']").wait_for()
-    page.get_by_role("tab", name="Ergebnisse").click()
-    page.get_by_role("button", name="Rechnen").click()
-    page.get_by_text("Revision", exact=False).first.wait_for(timeout=60000)
+    _solve_in_the_results_tab(page)
     page.get_by_role("tab", name="Netzplan").click()
     page.get_by_role("button", name="Einfärben").click()
     page.get_by_text("Ergebnis: EPR (RMS)").click()
